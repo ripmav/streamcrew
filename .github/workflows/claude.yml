@@ -3,6 +3,8 @@ name: Claude Code Review
 # Claude only runs when someone mentions @claude on a pull request
 # (PR comment, review comment or review) and then reviews that pull request.
 # There is no automatic review on every push and no handling of issues.
+# Every request gets a progress comment that is updated with the result,
+# also when there are no findings.
 
 on:
   issue_comment:
@@ -26,11 +28,29 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write # Progress and result comment via GITHUB_TOKEN
       issues: read
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
+      # Note: these comments deliberately avoid the words "Claude" and "@claude",
+      # so the review command does not mistake them for its own earlier comments
+      # and they never look like a new trigger.
+      - name: Post progress comment
+        id: progress
+        continue-on-error: true
+        env:
+          ACTOR: ${{ github.actor }}
+        run: |
+          body="🔍 **Review läuft** (angefordert von \`$ACTOR\`). Dieser Kommentar wird mit dem Ergebnis aktualisiert. [Workflow-Log]($RUN_URL)"
+          id=$(gh api "repos/$REPO/issues/$PR/comments" -f body="$body" --jq '.id')
+          echo "comment_id=$id" >> "$GITHUB_OUTPUT"
+
       - name: Checkout pull request
         uses: actions/checkout@v4
         with:
@@ -48,5 +68,35 @@ jobs:
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number || github.event.issue.number }}'
-          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
+          # The code-review command reads and comments on the PR via gh,
+          # so its tools must be allowed explicitly (see the plugin's allowed-tools).
+          claude_args: >-
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*)"
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
+
+      - name: Update progress comment with result
+        if: always()
+        env:
+          SINCE: ${{ github.event.comment.created_at || github.event.review.submitted_at }}
+          OUTCOME: ${{ steps.claude-review.outcome }}
+          COMMENT_ID: ${{ steps.progress.outputs.comment_id }}
+        run: |
+          # Count what the review posted after the request: bot comments except this
+          # workflow's own github-actions[bot] comments.
+          filter='.[] | select(.user.type == "Bot" and .user.login != "github-actions[bot]" and .created_at >= $ENV.SINCE) | .id'
+          summary=$(gh api --paginate "repos/$REPO/issues/$PR/comments" --jq "$filter" | wc -l)
+          inline=$(gh api --paginate "repos/$REPO/pulls/$PR/comments" --jq "$filter" | wc -l)
+          if [ "$OUTCOME" != "success" ]; then
+            body="❌ **Review fehlgeschlagen** (Status: $OUTCOME). Details im [Workflow-Log]($RUN_URL)."
+          elif [ "$inline" -gt 0 ]; then
+            body="✅ **Review abgeschlossen:** $inline Befund(e) als Inline-Kommentare. [Workflow-Log]($RUN_URL)"
+          elif [ "$summary" -gt 0 ]; then
+            body="✅ **Review abgeschlossen:** keine Befunde, siehe Zusammenfassung des Review-Werkzeugs. [Workflow-Log]($RUN_URL)"
+          else
+            body="✅ **Review abgeschlossen:** keine Befunde. Das Review-Werkzeug hat keinen eigenen Kommentar hinterlassen, zum Beispiel weil der PR als trivial eingestuft oder bereits früher geprüft wurde. [Workflow-Log]($RUN_URL)"
+          fi
+          if [ -n "$COMMENT_ID" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$COMMENT_ID" -f body="$body" > /dev/null
+          else
+            gh pr comment "$PR" --repo "$REPO" --body "$body"
+          fi
