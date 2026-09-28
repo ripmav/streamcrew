@@ -61,7 +61,7 @@
 
 **Folgearbeiten:**
 
-- [ ] `docs/spec/README.md` mit Vorlage und diesen Regeln anlegen (Roadmap 0.1)
+- [x] [`docs/spec/README.md`](../spec/README.md) mit diesen Regeln und die Vorlage [`docs/spec/TEMPLATE.md`](../spec/TEMPLATE.md) angelegt (2026-09-28)
 - [ ] Rechtliche Einschätzung einholen, spätestens vor Gate O
 - [ ] Optional: schriftliche Erlaubnis bei Blazing Cacti anfragen
 - [ ] Herkunfts-Review vor der Veröffentlichung (Gate O)
