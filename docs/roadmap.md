@@ -211,7 +211,10 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
     - eigener Review-Prompt im Workflow statt des Plugin-Befehls, damit ohne Vorprüfung
     - Claude nur mit Lese-Werkzeugen und Inline-Kommentaren
     - Ergebnis als strukturierte Ausgabe, die den Fortschrittskommentar ersetzt
-  - Offen: der Nachweis im ersten `@claude`-Lauf nach dem Merge. Workflows auf Kommentar-Ereignisse laufen immer in der Fassung aus `main`.
+  - Prompt und Schema liegen in `.github/claude/`. Der Workflow liest sie aus dem Commit, aus dem er selbst stammt, nie aus dem PR-Checkout.
+  - Offen: der Nachweis in einem echten Lauf. Die Workflow-Fassung hängt vom Ereignis ab:
+    - `@claude` als PR-Kommentar (`issue_comment`) nutzt die Fassung aus `main`.
+    - `@claude` in einem Review oder Inline-Kommentar nutzt die Fassung aus dem Merge-Commit des PRs. Damit lässt sich PR #9 schon vor dem Merge testen.
 - [ ] `anthropics/claude-code-action` in `claude.yml` auf einen Commit-SHA pinnen: Renovate schlägt das selbst vor; erst nach dem Review-Nachweis mergen. `actions/checkout` ist dort seit PR #9 gepinnt ([Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md)) (S)
 - [ ] `GOPRIVATE=github.com/ripmav/*` und CI-Token für den Zugriff auf private Repositories und Release-Artefakte einrichten ([ADR-0009](adr/0009-repositories-und-hosting.md)) (S)
 
@@ -1161,3 +1164,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-28 | Code-ADR-0001 akzeptiert; Vermerk „Ergänzt durch“ in ADR-0002 und ADR-0009. Claude-Review in PR #8 getestet: Die `Skill`-Freigabe wirkt, der Plugin-Befehl bricht aber in seiner Vorprüfung ab, vermutlich wegen des Fortschrittskommentars. Befund in Phase 1.1 festgehalten, Lösung offen. |
 | 2026-09-28 | Renovate-Konfiguration nach Vorbild von `recipe-reader` neu gefasst: `renovate.json` im Repository-Root statt `.github/renovate.json5`, ein Pull Request je Ökosystem mit Scope und Label, keine PR-Limits, Commit-Typen nach `config:recommended`, Sicherheitsupdates mit Label `security`. Ergänzt um `go`-Direktive, Werkzeugversionen in Workflows und die Docker-Regel. Code-ADR-0001, Plan und README angepasst. |
 | 2026-09-28 | Claude-Review auf einen eigenen Prompt umgestellt (PR #9): kein Plugin-Befehl und damit keine Vorprüfung mehr; Claude nur lesend ohne Shell, der Kontext wird vorab gesammelt; Befunde als Inline-Kommentare; Zusammenfassung und Befundliste als strukturierte Ausgabe, die den Fortschrittskommentar ersetzt. Plan §11.3 angepasst. Nachweis nach dem Merge offen. |
+| 2026-09-28 | Review-Prompt und Ausgabe-Schema nach `.github/claude/` ausgelagert; der Workflow liest sie aus dem Commit des Workflows, nicht aus dem PR-Checkout. Korrektur: Nur `issue_comment` nutzt die Workflow-Fassung aus `main`, Reviews und Inline-Kommentare nutzen die aus dem Merge-Commit des PRs. PR #9 lässt sich daher per Review mit `@claude` vor dem Merge testen. |

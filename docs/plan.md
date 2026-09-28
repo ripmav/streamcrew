@@ -1065,7 +1065,9 @@ Aus den globalen Regeln, verbindlich für alle Repos:
 - **Plattform:** GitHub Actions; Releases in GitHub Releases (ADR-0009).
 - **KI-Review** (`.github/workflows/claude.yml`):
   - **Auslöser:** Claude Code (GitHub-App) reagiert nur, wenn `@claude` in einem Pull Request erwähnt wird: als Kommentar, Review-Kommentar oder Review. Auslösen dürfen nur Owner, Mitglieder und Collaborators. Es gibt kein automatisches Review bei jedem Push und keine Reaktion auf Issues.
-  - **Prompt:** Das Review folgt einem eigenen Prompt im Workflow, keinem Plugin-Befehl. Jede Anfrage wird vollständig geprüft, auch wiederholte Anfragen im selben PR.
+  - **Prompt:** Das Review folgt einem eigenen Prompt, keinem Plugin-Befehl. Jede Anfrage wird vollständig geprüft, auch wiederholte Anfragen im selben PR.
+    - Prompt und Ausgabe-Schema liegen in `.github/claude/` (`review-prompt.md`, `review-schema.json`).
+    - Der Workflow liest beide aus dem Commit, aus dem er selbst stammt (`github.workflow_sha`), nie aus dem PR-Checkout. Ein PR kann so die Anweisungen für sein eigenes Review nicht ändern.
     - Geprüft wird auf Fehler und Sicherheitsprobleme sowie auf die Projektregeln (§11.1, §11.4, ADRs, Herkunftsregeln aus ADR-0001).
     - Was Linter und CI schon prüfen, wird nicht gemeldet.
     - Jeder Befund wird vor dem Melden am Code verifiziert.
