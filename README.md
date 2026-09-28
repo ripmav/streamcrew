@@ -45,6 +45,33 @@ scripts/fuzz.sh         # alle Fuzz-Ziele kurz laufen lassen (FUZZTIME, Standard
 - `.github/workflows/docs.yml` prüft die internen Links aller Markdown-Dateien.
 - Weitere Konventionen stehen in Plan §11.1: Branches, Commits, Herkunftsregeln, ADR-Prozess.
 
+## Abhängigkeiten
+
+[Renovate](https://docs.renovatebot.com/) hält die Abhängigkeiten aktuell. Dependabot wird nicht verwendet. Renovate läuft als GitHub-App und liest `renovate.json` ([Code-ADR-0001](docs/adr/code/0001-go-toolchain-und-linting.md)).
+
+- **Zeitplan:** Pull Requests kommen montags vor 6 Uhr (Europe/Berlin), ohne Limit, wie viele gleichzeitig offen sind. Die Gruppierung begrenzt sie ohnehin auf einen je Ökosystem plus dessen Major-Updates.
+- **Ein Pull Request je Ökosystem**, damit sich jedes einzeln übernehmen oder zurückhalten lässt:
+
+  | Scope und Label | Inhalt |
+  |---|---|
+  | `(go)` / `go` | alle Go-Module, dazu die `go`-Direktive in `go.mod`; danach läuft `go mod tidy` |
+  | `(actions)` / `github-actions` | alle Actions, dazu die Werkzeugversionen in den Workflows (golangci-lint, `go-licenses`) |
+  | `(docker)` / `docker` | Basis-Images, sobald es ein Dockerfile gibt |
+
+  Beispiel für einen Titel: `fix(go): update go modules`. Jeder Pull Request trägt zusätzlich das Label `dependencies`.
+- **Major-Updates** kommen als zweiter Pull Request ihres Ökosystems (`renovate/major-…`), weil sie Codeänderungen brauchen können.
+- **Commit-Typen:** Updates von Go-Modulen sind `fix:`. Pins, Action-Updates und die `go`-Direktive sind `chore:` (Voreinstellung von `config:recommended`).
+- **Dependency Dashboard:** Das Issue listet alles, was Renovate kennt. Ein Häkchen dort öffnet den Pull Request sofort, statt bis Montag zu warten.
+- **Logs:** Die Protokolle der Läufe liegen auf [developer.mend.io](https://developer.mend.io), nicht unter Actions.
+
+**Sicherheitsupdates** warten nicht auf Montag. Renovate prüft bei jedem Lauf alle Abhängigkeiten gegen die [OSV](https://osv.dev)-Datenbank; die App läuft mehrmals täglich. Gibt es eine korrigierte Version, öffnet Renovate sofort einen Pull Request mit dem Label `security`. Das ersetzt `govulncheck` nicht, das zusätzlich erkennt, ob der verwundbare Code überhaupt aufgerufen wird, und die Standardbibliothek abdeckt.
+
+**Gepinnte Actions:** Actions sind auf Commit-SHAs gepinnt, mit der lesbaren Version daneben (`actions/checkout@<sha> # v7.0.1`). Ein Tag lässt sich auf anderen Code umhängen, ein Digest nicht. Renovate hebt die Digests an.
+
+Ein Update, das `ci.yml` ändert, startet die CI von selbst. Änderungen nur an anderen Workflows lassen sich von Hand prüfen:
+
+    gh workflow run ci.yml --ref <renovate-branch>
+
 ## Lizenz
 
 [Apache-2.0](LICENSE) ([ADR-0002](docs/adr/0002-lizenz-des-projekts.md)). Jede Quelldatei beginnt mit `SPDX-License-Identifier: Apache-2.0`.

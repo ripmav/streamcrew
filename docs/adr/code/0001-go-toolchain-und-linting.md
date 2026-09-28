@@ -18,7 +18,7 @@
   - nur Abhängigkeiten, deren Lizenz mit Apache-2.0 kompatibel ist; die CI prüft das
 - [ADR-0009](../0009-repositories-und-hosting.md) legt fest:
   - GitHub Actions als CI
-  - automatische Abhängigkeits-Updates; für Go-Projekte hat der Projektinhaber Renovate vorgegeben, Dependabot wird nicht verwendet
+  - automatische Abhängigkeits-Updates; für Go-Projekte hat der Projektinhaber Renovate vorgegeben, Dependabot wird nicht verwendet. Vorbild für die Konfiguration ist das Projekt `recipe-reader` desselben Inhabers.
   - begrenzte Actions-Minuten im privaten Repository, wobei macOS-Runner mehrfach zählen
 - Verweise zwischen Plan, Roadmap, ADRs und Spezifikationen dürfen nicht ins Leere zeigen (Verweis-Konvention in [`../README.md`](../README.md)).
 - Plan §11.1 legt Konventionen fest, die sich maschinell prüfen lassen, etwa: kein `init()`, keine globalen Variablen, Doc-Kommentare für exportierte Bezeichner.
@@ -28,7 +28,7 @@
 1. **Go-Version:**
    - Die `go`-Direktive in `go.mod` nennt die neueste stabile Patch-Version, derzeit `go 1.27.1`.
    - Eine `toolchain`-Zeile gibt es nur, wenn sie von der `go`-Direktive abweicht.
-   - Neue Go-Releases schlägt Renovate als eigenen Pull Request vor (Gruppe „Go“). Die lokale Toolchain wird danach von Hand aktualisiert.
+   - Neue Go-Releases hebt Renovate in der `go`-Direktive an, im Pull Request für die Go-Module. Die lokale Toolchain wird danach von Hand aktualisiert.
    - Die CI liest die Version aus `go.mod` (`go-version-file`). Lokal und in der CI läuft damit dieselbe Version.
 2. **golangci-lint v2** mit der Konfiguration in `.golangci.yml`:
    - Basis ist `default: standard` (`errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`) mit diesen Ergänzungen:
@@ -47,7 +47,7 @@
    - Von den Ausschluss-Voreinstellungen gelten nur `common-false-positives` und `std-error-handling`. Generierter Code wird nachsichtig geprüft (`generated: lax`).
    - Die CI pinnt die Version in `ci.yml` (derzeit 2.14.0), Renovate schlägt neue Versionen vor. Lokal läuft stets die neueste Version.
    - Kein `//nolint` und keine Lockerung der Konfiguration ohne Freigabe durch den Projektinhaber.
-3. **SPDX-Header in anderen Dateien:** Shell-Skripte und YAML-Dateien tragen den Header als Kommentar. Das ist Konvention und wird nicht maschinell geprüft.
+3. **SPDX-Header in anderen Dateien:** Shell-Skripte und YAML-Dateien tragen den Header als Kommentar. Das ist Konvention und wird nicht maschinell geprüft. JSON-Dateien wie `renovate.json` kennen keine Kommentare und bleiben ohne Header.
 4. **Pre-Commit-Checkliste als Skript `scripts/check.sh`:**
    - Es führt die Schritte aus Plan §11.1 in der festgelegten Reihenfolge aus, inklusive `go install golang.org/x/vuln/cmd/govulncheck@latest`.
    - Danach zeigt es an, welche Dateien `go fix` und `gofmt` geändert haben.
@@ -75,19 +75,23 @@
      - `permissions: contents: read`
      - `persist-credentials: false` beim Checkout
      - Werkzeuge, die sich mit `go install` oder `go run` holen lassen (`govulncheck`, `go-licenses`), laufen ohne eigene Action.
-6. **Abhängigkeits-Updates mit Renovate** (`.github/renovate.json5`, Renovate-GitHub-App); Dependabot wird nicht verwendet:
-   - Basis `config:recommended`, wöchentlich montags früh (Europe/Berlin), mit Dependency Dashboard als Issue
-   - Gruppen:
-     - „Go modules“: Minor- und Patch-Updates der Go-Module; Major-Updates kommen einzeln
-     - „Go“: die `go`-Direktive in `go.mod` (`rangeStrategy: bump`)
-     - „CI“: Actions und Werkzeugversionen in den Workflows
-   - Erfasst werden auch:
-     - die golangci-lint-Version der golangci-lint-Action (eingebauter github-actions-Manager)
-     - per Regex-Manager Werkzeuge, die mit `go run <modul>@<version>` in Workflows und Skripten gepinnt sind, etwa `go-licenses`
-   - Nach Go-Updates laufen `go mod tidy` und die Anpassung von Importpfaden bei Major-Updates (`gomodTidy`, `gomodUpdateImportPaths`).
-   - `helpers:pinGitHubActionDigests`: Actions bleiben auf Commit-SHAs gepinnt, noch nicht gepinnte schlägt Renovate zum Pinnen vor.
-   - Neue Releases werden erst nach drei Tagen vorgeschlagen (`minimumReleaseAge`). Sicherheitsupdates aus der OSV-Datenbank kommen sofort und außerhalb des Zeitplans.
-   - Commit-Präfixe nach Conventional Commits: `build(deps)` für Go, `ci(deps)` für die CI
+6. **Abhängigkeits-Updates mit Renovate** (`renovate.json` im Repository-Root, Renovate-GitHub-App); Dependabot wird nicht verwendet. Die Konfiguration folgt dem Projekt `recipe-reader`:
+   - **Basis und Zeitplan:**
+     - `config:recommended` und `helpers:pinGitHubActionDigests`: Actions bleiben auf Commit-SHAs gepinnt, noch nicht gepinnte schlägt Renovate zum Pinnen vor.
+     - montags vor 6 Uhr (Europe/Berlin)
+     - kein Limit für gleichzeitige oder stündliche Pull Requests; die Gruppen begrenzen die Zahl ohnehin
+     - Dependency Dashboard als Issue
+   - **Ein Pull Request je Ökosystem**, damit sich jedes einzeln übernehmen oder zurückhalten lässt. Scope im Titel und zweites Label neben `dependencies`:
+
+     | Gruppe | Scope und Label | Inhalt |
+     |---|---|---|
+     | `go modules` | `go` | Go-Module mit `go mod tidy` danach (`gomodTidy`); außerdem die `go`-Direktive (`rangeStrategy: bump`) |
+     | `github actions` | `actions` / `github-actions` | Actions; außerdem die golangci-lint-Version der golangci-lint-Action und per Regex-Manager Werkzeuge, die mit `go run <modul>@<version>` gepinnt sind, etwa `go-licenses` |
+     | `docker images` | `docker` | Basis-Images, auf Digest gepinnt (`pinDigests`); greift, sobald es ein Dockerfile gibt (Roadmap Phase 1.4) |
+
+   - **Major-Updates** kommen als zweiter Pull Request ihres Ökosystems, weil sie Codeänderungen brauchen können.
+   - **Commit-Typen:** die Voreinstellung von `config:recommended`. Updates von Go-Modulen sind `fix(go)`. Pins, Actions und die `go`-Direktive sind `chore`.
+   - **Sicherheitsupdates** aus der OSV-Datenbank kommen sofort, einzeln und außerhalb des Zeitplans, mit dem Label `security`.
 
 ## Betrachtete Alternativen
 
@@ -98,6 +102,7 @@
 | Linter `modernize` in golangci-lint | doppelt zu `go fix`, das seit Go 1.26 dieselben Modernisierungen ausführt und in Checkliste und CI läuft |
 | Dependabot | für Go-Projekte vom Projektinhaber ausgeschlossen; erkennt außerdem weder die `go`-Direktive noch Werkzeugversionen in Workflows |
 | Renovate selbst betrieben (GitHub Action) | braucht ein eigenes Token als Secret und kostet Actions-Minuten; die GitHub-App ist einfacher |
+| Eigene Renovate-Konfiguration statt der aus `recipe-reader` | Vorgabe des Projektinhabers: gleiche Konventionen in seinen Projekten. Übernommen sind nur die Ergänzungen, die streamcrew-Regeln verlangen: die `go`-Direktive und Werkzeugversionen in Workflows. |
 | Taskfile oder Makefile | zusätzliches Werkzeug bzw. unter Windows unüblich; für eine feste Befehlskette reicht ein Bash-Skript. Ein Taskfile kann mit den Build-Varianten ([ADR-0006](../0006-core-als-bibliothek-fuer-selbststart.md)) später kommen. |
 | Git-Hook statt Skript | `go fix` und `gofmt` ändern Dateien nach dem Staging; der Commit enthielte den ungeprüften Stand |
 | Build als Job-Matrix oder auf nativen Runnern | sechs Jobs kosten mindestens sechs Minuten; macOS-Runner zählen mehrfach ([ADR-0009](../0009-repositories-und-hosting.md)) |
