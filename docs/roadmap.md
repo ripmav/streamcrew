@@ -195,7 +195,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
   - Build-Matrix linux/windows/darwin × amd64/arm64
 - [ ] Dependency-Updates automatisieren (Renovate oder Dependabot) (S)
 - [x] Claude-Code-Review nur auf `@claude`-Erwähnung in Pull Requests, mit Fortschritts- und Ergebniskommentar (`.github/workflows/claude.yml`; kein automatisches Review, keine Issues) (S), erledigt 2026-09-28
-- [ ] Claude-Review so korrigieren, dass das Review tatsächlich läuft; Ursache per Diagnose im Workflow-Log ermitteln (verweigerter Werkzeugaufruf) (S)
+- [ ] Claude-Review so korrigieren, dass das Review tatsächlich läuft. Ursache laut Diagnose: Das Werkzeug `Skill` wurde verweigert, über das Claude Code den Plugin-Befehl ausführt. Es ist jetzt gezielt für `code-review:code-review` freigegeben; der Nachweis im nächsten Review-Lauf steht aus (S)
 - [ ] `GOPRIVATE=github.com/ripmav/*` und CI-Token für den Zugriff auf private Repositories und Release-Artefakte einrichten ([ADR-0009](adr/0009-repositories-und-hosting.md)) (S)
 
 ### 1.2 Architekturentscheidungen
@@ -1138,3 +1138,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-28 | `docs/spec/README.md` (Regeln, Ablauf, Index) und `docs/spec/TEMPLATE.md` angelegt. Automatisches Löschen gemergter Branches in ADR-0009, Plan §11.1 und Roadmap 0.4 dokumentiert. |
 | 2026-09-28 | Claude-Review nachgebessert (PR #5): `gh`-Werkzeuge für den Review-Befehl freigegeben; jede `@claude`-Anfrage bekommt einen Fortschrittskommentar, der mit dem Ergebnis aktualisiert wird, auch ohne Befunde. |
 | 2026-09-28 | Claude-Review-Diagnose (PR #6): Im zweiten Test wurde erneut ein Werkzeugaufruf verweigert, das Review lief also nicht wirklich. Das Log zeigt jetzt die Namen der benutzten und verweigerten Werkzeuge; der Ergebniskommentar meldet dann „unvollständig“ statt „keine Befunde“. |
+| 2026-09-28 | Ursache gefunden (Diagnose in PR #7): Claude Code führt den Plugin-Befehl über das Werkzeug `Skill` aus, und genau dieses war nicht freigegeben. Freigabe gezielt nur für `Skill(code-review:code-review)`; die Diagnose zeigt jetzt auch Skill-Namen. |
