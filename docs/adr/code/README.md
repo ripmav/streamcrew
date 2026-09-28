@@ -8,5 +8,6 @@ Es gelten dieselben Konventionen und dieselbe Vorlage ([`../TEMPLATE.md`](../TEM
 
 | Nr. | Titel | Status | Datum |
 |---|---|---|---|
+| [0001](0001-go-toolchain-und-linting.md) | Go-Toolchain und Linting | Vorgeschlagen | 2026-09-28 |
 
-Noch gibt es keine Code-ADRs. Die geplanten stehen im ADR-Backlog von [`plan.md`](../../plan.md) (§12.2).
+Die geplanten Code-ADRs stehen im ADR-Backlog von [`plan.md`](../../plan.md) (§12.2).

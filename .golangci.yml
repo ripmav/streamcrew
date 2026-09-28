@@ -1,0 +1,56 @@
+# golangci-lint v2 configuration. Linter selection and rationale:
+# docs/adr/code/0001-go-toolchain-und-linting.md
+version: "2"
+
+linters:
+  # errcheck, govet, ineffassign, staticcheck, unused
+  default: standard
+  enable:
+    - bodyclose        # HTTP response bodies are closed
+    - contextcheck     # context is passed on instead of recreated
+    - copyloopvar      # no redundant loop variable copies (Go 1.22+ semantics)
+    - errname          # error types/variables follow Go naming (FooError, ErrFoo)
+    - errorlint        # errors.Is/As instead of == and type assertions, %w wrapping
+    - exhaustive       # switch statements over enums cover every value
+    - forbidigo        # no fmt.Print*/print/println; use log/slog or an explicit writer
+    - gochecknoglobals # no mutable package-level state (plan §11.1)
+    - gochecknoinits   # no init() (plan §11.1)
+    - gocritic         # general correctness, style and performance checks
+    - godot            # doc comments end with a period
+    - goheader         # SPDX license header in every file (ADR-0002)
+    - gosec            # security checks
+    - intrange         # range over int (Go 1.22+)
+    - misspell         # common English misspellings
+    - nilerr           # no nil return after a non-nil error check
+    - noctx            # HTTP requests carry a context
+    - nolintlint       # //nolint only for a specific linter and with a reason
+    - perfsprint       # cheaper alternatives to fmt.Sprintf
+    - revive           # golint successor, including doc comments on exported identifiers
+    - sloglint         # consistent log/slog usage
+    - unconvert        # no unnecessary conversions
+    - unparam          # no unused function parameters or results
+    - usestdlibvars    # stdlib constants instead of literals (http.MethodGet, …)
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+    goheader:
+      template: "SPDX-License-Identifier: Apache-2.0"
+    misspell:
+      locale: US
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+  exclusions:
+    generated: lax
+    presets:
+      - common-false-positives
+      - std-error-handling
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/ripmav/streamcrew
