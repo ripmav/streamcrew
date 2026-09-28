@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-28 |
-| **Entscheidung durch** | Projektinhaber (ripmav), Annahme steht aus |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | [ADR-0002](../0002-lizenz-des-projekts.md), [ADR-0009](../0009-repositories-und-hosting.md); Plan §8, §11.1, §11.3; Roadmap Phase 1.1 |
 
 ## Kontext
@@ -123,7 +123,7 @@
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen und in ADR-0002 und ADR-0009 den Vermerk „Ergänzt durch“ eintragen
+- [x] Nach der Annahme den Status setzen und in ADR-0002 und ADR-0009 den Vermerk „Ergänzt durch“ eintragen, erledigt 2026-09-28
 - [ ] Renovate-GitHub-App für `ripmav/streamcrew` installieren (Projektinhaber, Roadmap Phase 1.1)
 - [ ] `claude.yml` auf Commit-SHAs pinnen: Renovate schlägt das selbst vor; erst nach dem Review-Nachweis mergen (Roadmap Phase 1.1)
 - [ ] Native Test-Läufe unter Windows und macOS gezielt ergänzen, sobald plattformabhängiger Code entsteht (Roadmap Phase 1.3)

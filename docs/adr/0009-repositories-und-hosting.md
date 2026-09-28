@@ -6,6 +6,7 @@
 | **Datum** | 2026-09-28 |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | [`starting.md`](../starting.md) (Desktop und Web als eigene Projekte); [ADR-0007](0007-release-artefakte-des-cores.md), [ADR-0008](0008-codename-streamcrew.md); Plan §9, §11.3; Roadmap Phasen 0, 1 und Gate O |
+| **Ergänzt durch** | [Code-ADR-0001](code/0001-go-toolchain-und-linting.md): CI-Workflows und Abhängigkeits-Updates mit Renovate (kein Dependabot) |
 
 ## Kontext
 

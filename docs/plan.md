@@ -1132,7 +1132,7 @@ Es existieren ADR-0001 bis ADR-0011. Alle höheren Nummern in Plan und Roadmap s
 
 | Nr. | Datei | Thema | Phase |
 |---|---|---|---|
-| 0001 | `0001-go-toolchain-und-linting.md` | Go-Version-Policy, golangci-lint-v2-Konfiguration, CI, Renovate; **vorgeschlagen** | 1 |
+| 0001 | `0001-go-toolchain-und-linting.md` | Go-Version-Policy, golangci-lint-v2-Konfiguration, CI, Renovate; **akzeptiert** | 1 |
 | 0002 | `0002-dependency-injection.md` | Composition Root, kein `init()`, keine Globals | 1 |
 | 0003 | `0003-fehler-und-logging.md` | Fehlertypen, Wrapping, slog-Konventionen, Rotation | 1 |
 | 0004 | `0004-nebenlaeufigkeit-und-supervisor.md` | Goroutine-Besitz, Backoff, Shutdown | 1 |
