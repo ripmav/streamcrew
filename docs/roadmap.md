@@ -207,7 +207,12 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
   - Zweite Ursache, noch offen: Der Befehl brach in PR #8 nach 12 s in seiner Vorprüfung ab (2 Haiku-Agents, kein eigener Kommentar). Bei einem vollständigen Lauf ohne Befunde hätte er einen Kommentar „No issues found“ gepostet.
   - Wahrscheinlicher Grund: Die Vorprüfung stoppt, wenn Claude den PR schon kommentiert hat. Dafür hält sie vermutlich den vorab geposteten Fortschrittskommentar. Wiederholte `@claude`-Anfragen würden aus demselben Grund übersprungen.
   - Der Ergebniskommentar meldet einen solchen Abbruch fälschlich als „keine Befunde“.
-- [ ] `claude.yml` auf Commit-SHAs pinnen: Renovate schlägt das selbst vor; erst nach dem Review-Nachweis mergen ([Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md)) (S)
+  - Lösung (PR #9):
+    - eigener Review-Prompt im Workflow statt des Plugin-Befehls, damit ohne Vorprüfung
+    - Claude nur mit Lese-Werkzeugen und Inline-Kommentaren
+    - Ergebnis als strukturierte Ausgabe, die den Fortschrittskommentar ersetzt
+  - Offen: der Nachweis im ersten `@claude`-Lauf nach dem Merge. Workflows auf Kommentar-Ereignisse laufen immer in der Fassung aus `main`.
+- [ ] `anthropics/claude-code-action` in `claude.yml` auf einen Commit-SHA pinnen: Renovate schlägt das selbst vor; erst nach dem Review-Nachweis mergen. `actions/checkout` ist dort seit PR #9 gepinnt ([Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md)) (S)
 - [ ] `GOPRIVATE=github.com/ripmav/*` und CI-Token für den Zugriff auf private Repositories und Release-Artefakte einrichten ([ADR-0009](adr/0009-repositories-und-hosting.md)) (S)
 
 ### 1.2 Architekturentscheidungen
@@ -1155,3 +1160,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-28 | Phase 1.1 umgesetzt: `go.mod` (Go 1.27.1), `.golangci.yml` (golangci-lint 2.14.0 inkl. `goheader`), `scripts/check.sh` und `scripts/fuzz.sh`, CI (`ci.yml`, `docs.yml`), Renovate, `README.md`, Platzhalter `cmd/streamcrew`. Code-ADR-0001 vorgeschlagen. Auf Vorgabe des Projektinhabers Renovate statt Dependabot (kein Dependabot in Go-Projekten); die Renovate-App muss noch installiert werden. CI-Läufe ausgewertet (Laufzeit, Minuten, Cache). `CONTRIBUTING.md` als eigene Aufgabe abgetrennt; Nacharbeiten ergänzt: Renovate-App, `claude.yml` auf Commit-SHAs pinnen, Cache neu bewerten. |
 | 2026-09-28 | Code-ADR-0001 akzeptiert; Vermerk „Ergänzt durch“ in ADR-0002 und ADR-0009. Claude-Review in PR #8 getestet: Die `Skill`-Freigabe wirkt, der Plugin-Befehl bricht aber in seiner Vorprüfung ab, vermutlich wegen des Fortschrittskommentars. Befund in Phase 1.1 festgehalten, Lösung offen. |
 | 2026-09-28 | Renovate-Konfiguration nach Vorbild von `recipe-reader` neu gefasst: `renovate.json` im Repository-Root statt `.github/renovate.json5`, ein Pull Request je Ökosystem mit Scope und Label, keine PR-Limits, Commit-Typen nach `config:recommended`, Sicherheitsupdates mit Label `security`. Ergänzt um `go`-Direktive, Werkzeugversionen in Workflows und die Docker-Regel. Code-ADR-0001, Plan und README angepasst. |
+| 2026-09-28 | Claude-Review auf einen eigenen Prompt umgestellt (PR #9): kein Plugin-Befehl und damit keine Vorprüfung mehr; Claude nur lesend ohne Shell, der Kontext wird vorab gesammelt; Befunde als Inline-Kommentare; Zusammenfassung und Befundliste als strukturierte Ausgabe, die den Fortschrittskommentar ersetzt. Plan §11.3 angepasst. Nachweis nach dem Merge offen. |
