@@ -194,11 +194,16 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
   - kurze Fuzz-Läufe über `scripts/fuzz.sh` (findet alle Fuzz-Ziele automatisch)
   - Cross-Build linux/windows/darwin × amd64/arm64 in einem Job auf ubuntu
   - Actions auf Commit-SHAs gepinnt; wöchentlicher `govulncheck`-Lauf per Zeitplan
-- [x] Dependency-Updates mit Dependabot automatisieren (`gomod` und `github-actions`, wöchentlich, gruppiert) (S), erledigt 2026-09-28
-- [ ] Die CI-Läufe des ersten Pull Requests prüfen: Laufzeit, Minutenverbrauch, Cache (S)
+- [x] Dependency-Updates mit Renovate automatisieren, kein Dependabot (`.github/renovate.json5`: Go-Module, `go`-Direktive, Actions, Werkzeugversionen in Workflows; wöchentlich, gruppiert) (S), erledigt 2026-09-28
+- [ ] Renovate-GitHub-App für `ripmav/streamcrew` installieren; danach das Dependency Dashboard und die ersten Renovate-PRs prüfen (Projektinhaber) (S)
+- [x] Die CI-Läufe des ersten Pull Requests prüfen: Laufzeit, Minutenverbrauch, Cache (S), erledigt 2026-09-28
+  - Laufzeit (PR #8): Checks 70 s, Tests 36 s, Cross-Build 55 s, Linkprüfung 7 s; Gesamtdauer der CI 74 s
+  - Minuten: pro Push mit Go- und Markdown-Änderungen etwa 5 abgerechnete Minuten, weil jeder Job auf volle Minuten aufgerundet wird
+  - Cache: Die drei CI-Jobs teilen sich einen setup-go-Schlüssel. Gespeichert wird nur der Stand des zuerst fertigen Jobs, die anderen melden „Unable to reserve cache“. Ohne Abhängigkeiten ist das unerheblich.
+- [ ] setup-go-Cache mit den ersten Abhängigkeiten neu bewerten, z. B. Cache nur in einem Job speichern (Phase 2) (S)
 - [x] Claude-Code-Review nur auf `@claude`-Erwähnung in Pull Requests, mit Fortschritts- und Ergebniskommentar (`.github/workflows/claude.yml`; kein automatisches Review, keine Issues) (S), erledigt 2026-09-28
 - [ ] Claude-Review so korrigieren, dass das Review tatsächlich läuft. Ursache laut Diagnose: Das Werkzeug `Skill` wurde verweigert, über das Claude Code den Plugin-Befehl ausführt. Es ist jetzt gezielt für `code-review:code-review` freigegeben; der Nachweis im nächsten Review-Lauf steht aus (S)
-- [ ] `claude.yml` auf Commit-SHAs pinnen, sobald der Review-Nachweis vorliegt ([Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md)) (S)
+- [ ] `claude.yml` auf Commit-SHAs pinnen: Renovate schlägt das selbst vor; erst nach dem Review-Nachweis mergen ([Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md)) (S)
 - [ ] `GOPRIVATE=github.com/ripmav/*` und CI-Token für den Zugriff auf private Repositories und Release-Artefakte einrichten ([ADR-0009](adr/0009-repositories-und-hosting.md)) (S)
 
 ### 1.2 Architekturentscheidungen
@@ -1143,4 +1148,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-28 | Claude-Review nachgebessert (PR #5): `gh`-Werkzeuge für den Review-Befehl freigegeben; jede `@claude`-Anfrage bekommt einen Fortschrittskommentar, der mit dem Ergebnis aktualisiert wird, auch ohne Befunde. |
 | 2026-09-28 | Claude-Review-Diagnose (PR #6): Im zweiten Test wurde erneut ein Werkzeugaufruf verweigert, das Review lief also nicht wirklich. Das Log zeigt jetzt die Namen der benutzten und verweigerten Werkzeuge; der Ergebniskommentar meldet dann „unvollständig“ statt „keine Befunde“. |
 | 2026-09-28 | Ursache gefunden (Diagnose in PR #7): Claude Code führt den Plugin-Befehl über das Werkzeug `Skill` aus, und genau dieses war nicht freigegeben. Freigabe gezielt nur für `Skill(code-review:code-review)`; die Diagnose zeigt jetzt auch Skill-Namen. |
-| 2026-09-28 | Phase 1.1 umgesetzt: `go.mod` (Go 1.27.1), `.golangci.yml` (golangci-lint 2.14.0 inkl. `goheader`), `scripts/check.sh` und `scripts/fuzz.sh`, CI (`ci.yml`, `docs.yml`), Dependabot, `README.md`, Platzhalter `cmd/streamcrew`. Code-ADR-0001 vorgeschlagen. `CONTRIBUTING.md` als eigene Aufgabe abgetrennt; Nacharbeiten ergänzt: CI-Läufe prüfen, `claude.yml` auf Commit-SHAs pinnen. |
+| 2026-09-28 | Phase 1.1 umgesetzt: `go.mod` (Go 1.27.1), `.golangci.yml` (golangci-lint 2.14.0 inkl. `goheader`), `scripts/check.sh` und `scripts/fuzz.sh`, CI (`ci.yml`, `docs.yml`), Renovate, `README.md`, Platzhalter `cmd/streamcrew`. Code-ADR-0001 vorgeschlagen. Auf Vorgabe des Projektinhabers Renovate statt Dependabot (kein Dependabot in Go-Projekten); die Renovate-App muss noch installiert werden. CI-Läufe ausgewertet (Laufzeit, Minuten, Cache). `CONTRIBUTING.md` als eigene Aufgabe abgetrennt; Nacharbeiten ergänzt: Renovate-App, `claude.yml` auf Commit-SHAs pinnen, Cache neu bewerten. |
