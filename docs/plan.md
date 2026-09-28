@@ -1013,7 +1013,7 @@ Hinweise:
 
 Aus den globalen Regeln, verbindlich für alle Repos:
 
-- **Branches:** Jede Session hat einen eigenen Branch nach dem Muster `<präfix>/<kurzbeschreibung>` (Conventional-Commit-Präfixe). Niemals direkt auf `main`.
+- **Branches:** Jede Session hat einen eigenen Branch nach dem Muster `<präfix>/<kurzbeschreibung>` (Conventional-Commit-Präfixe). Niemals direkt auf `main`. Nach dem Merge löscht GitHub den Branch automatisch.
 - **Vor jedem Commit**, in dieser Reihenfolge:
   1. `go fix ./...`
   2. `gofmt -w .`
