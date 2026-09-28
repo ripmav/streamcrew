@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# Binaries from "go build" in the repository root
+/streamcrew
+/streamcrew.exe
+
+# Release and build output
+/dist/
+
+# Test and profiling output
+*.test
+*.out
+*.prof

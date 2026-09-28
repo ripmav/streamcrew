@@ -876,9 +876,10 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | Belang | Wahl | Status | Begründung / Hinweis |
 |---|---|---|---|
 | Lizenz | Apache-2.0, SPDX-Kennung je Datei | gesetzt | ADR-0002 |
-| Sprache | Go 1.27 (installiert: go1.27.1), `go`-Direktive stets aktuell | gesetzt | Regel „immer neueste stabile Version“ |
-| Linting | `golangci-lint` v2 (installiert: 2.13.2, inkl. `goheader` für SPDX-Header), `go vet`, `go fix`, `govulncheck` | gesetzt | Pre-Commit-Checkliste |
-| Lizenzprüfung | `github.com/google/go-licenses` in der CI | Kandidat | Kompatibilität der Abhängigkeiten mit Apache-2.0 (ADR-0002) |
+| Sprache | Go 1.27.1 (`go 1.27.1` in `go.mod`), `go`-Direktive stets aktuell | gesetzt | Regel „immer neueste stabile Version“; Code-ADR-0001 |
+| Linting | `golangci-lint` v2 (installiert: 2.14.0, inkl. `goheader` für SPDX-Header), `go vet`, `go fix`, `govulncheck` | gesetzt | Pre-Commit-Checkliste; Linter-Auswahl in Code-ADR-0001 |
+| Lizenzprüfung | `github.com/google/go-licenses` in der CI, Allowlist Apache-2.0-kompatibler Lizenzen | gesetzt | Kompatibilität der Abhängigkeiten mit Apache-2.0 (ADR-0002, Code-ADR-0001) |
+| Abhängigkeits-Updates | Renovate (GitHub-App), wöchentlich, ein Pull Request je Ökosystem; kein Dependabot | gesetzt | Vorgabe des Projektinhabers für Go-Projekte, Konfiguration nach Vorbild von `recipe-reader`; Code-ADR-0001, ADR-0009 |
 | Hosting, CI, Releases | GitHub (privat), GitHub Actions, GitHub Releases | gesetzt | ADR-0009 |
 | CLI | `alecthomas/kong` | gesetzt | `starting.md` |
 | TUI | `charm.land/bubbletea/v2` + Bubbles/Lip Gloss v2 | gesetzt | `starting.md`; v2 hat neuen Importpfad |
@@ -982,8 +983,10 @@ streamcrew/
 │   │   └── code/                  # 0001-<titel>.md …
 │   └── spec/                      # Verhaltensspezifikationen mit Quellennachweis (ADR-0001)
 ├── testdata/                      # Fixtures, Golden Files
+├── scripts/                       # check.sh (Pre-Commit-Checkliste), fuzz.sh (kurze Fuzz-Läufe)
+├── .github/                       # Workflows (CI, Docs, Claude-Review)
 ├── LICENSE                        # Apache-2.0 (ADR-0002); NOTICE folgt zu Gate O
-├── Dockerfile  .goreleaser.yaml  .golangci.yml  buf.yaml  buf.gen.yaml  sqlc.yaml
+├── Dockerfile  .goreleaser.yaml  .golangci.yml  renovate.json  buf.yaml  buf.gen.yaml  sqlc.yaml
 └── go.mod
 ```
 
@@ -1022,7 +1025,7 @@ Aus den globalen Regeln, verbindlich für alle Repos:
   5. `govulncheck ./...`
   6. `go test ./...`
 
-  Findings werden nicht unterdrückt (kein `//nolint` ohne Freigabe).
+  `scripts/check.sh` führt die Schritte in dieser Reihenfolge aus. Findings werden nicht unterdrückt (kein `//nolint` ohne Freigabe; `nolintlint` verlangt dann Linter und Begründung).
 - **Attribution:** Commit- und PR-Footer `Assisted-by: <Modell> (<Effort>) via <Tool>`.
 - **Lizenz-Header:** Jede Quelldatei beginnt mit `// SPDX-License-Identifier: Apache-2.0` (bzw. dem Kommentarformat der Sprache); der Linter `goheader` setzt das durch (ADR-0002).
 - **Herkunft (ADR-0001):**
@@ -1061,8 +1064,20 @@ Aus den globalen Regeln, verbindlich für alle Repos:
 
 - **Plattform:** GitHub Actions; Releases in GitHub Releases (ADR-0009).
 - **KI-Review:** Claude Code (GitHub-App) reagiert nur, wenn `@claude` in einem Pull Request erwähnt wird: als Kommentar, Review-Kommentar oder Review. Dann führt es ein Code-Review dieses PRs aus. Es gibt kein automatisches Review bei jedem Push und keine Reaktion auf Issues; auslösen dürfen nur Owner, Mitglieder und Collaborators (`.github/workflows/claude.yml`). Jede Anfrage bekommt einen Fortschrittskommentar („Review läuft …“ mit Link zum Log). Nach dem Review wird er mit dem Ergebnis aktualisiert: Anzahl der Befunde, „keine Befunde“, „unvollständig“ (wenn Werkzeugaufrufe verweigert wurden) oder „fehlgeschlagen“. Das Log zeigt dazu die Namen der benutzten und der verweigerten Werkzeuge. So gibt es auch ohne Befunde immer eine sichtbare Rückmeldung.
-- **Prüfungen:** Lint (inkl. SPDX-Header), Tests mit `-race`, `govulncheck`, Lizenzprüfung der Abhängigkeiten (`go-licenses`), kurze Fuzz-Läufe, `buf lint`/`buf breaking`, `sqlc diff`.
-- **Builds:** Matrix über linux/windows/darwin und amd64/arm64; Docker-Build mit Smoke-Test.
+- **Prüfungen** (`.github/workflows/ci.yml`, Code-ADR-0001):
+  - `go fix -diff`, `go vet`, Lint inkl. SPDX-Header
+  - Tests mit `-race`, kurze Fuzz-Läufe (`scripts/fuzz.sh`)
+  - `govulncheck`, zusätzlich wöchentlich per Zeitplan
+  - Lizenzprüfung der Abhängigkeiten (`go-licenses`, Allowlist)
+  - später `buf lint`/`buf breaking` und `sqlc diff`
+- **Dokumentation:** `.github/workflows/docs.yml` prüft mit `lychee` offline alle internen Links und Überschriften-Anker in Markdown-Dateien.
+- **Builds:** Cross-Build über linux/windows/darwin und amd64/arm64 in einem Job auf ubuntu, um Actions-Minuten zu sparen; Docker-Build mit Smoke-Test.
+- **Absicherung und Updates:** Fremd-Actions sind auf Commit-SHAs gepinnt. Renovate (GitHub-App, kein Dependabot, `renovate.json` nach Vorbild von `recipe-reader`) öffnet montags vor 6 Uhr je Ökosystem einen Pull Request:
+  - Go-Module samt `go`-Direktive
+  - Actions samt Werkzeugversionen in Workflows (golangci-lint, `go-licenses`)
+  - später Docker-Images
+
+  Major-Updates kommen als eigener Pull Request. Sicherheitsupdates kommen sofort und einzeln.
 - **Releases:** `goreleaser` für den Core (Binaries, Checksummen, SBOM, Container-Images). Dazu kommt das Go-Modul als Quellarchiv als zweites Artefakt am selben Release ([ADR-0007](adr/0007-release-artefakte-des-cores.md)). `fyne-cross` baut die Desktop-App, die den Core aus diesem Release bezieht.
 - **Versionierung:** SemVer; der API-Vertrag ist über sein Protobuf-Paket separat versioniert.
 
@@ -1117,7 +1132,7 @@ Es existieren ADR-0001 bis ADR-0011. Alle höheren Nummern in Plan und Roadmap s
 
 | Nr. | Datei | Thema | Phase |
 |---|---|---|---|
-| 0001 | `0001-go-toolchain-und-linting.md` | Go-Version-Policy, golangci-lint-v2-Konfiguration | 1 |
+| 0001 | `0001-go-toolchain-und-linting.md` | Go-Version-Policy, golangci-lint-v2-Konfiguration, CI, Renovate; **akzeptiert** | 1 |
 | 0002 | `0002-dependency-injection.md` | Composition Root, kein `init()`, keine Globals | 1 |
 | 0003 | `0003-fehler-und-logging.md` | Fehlertypen, Wrapping, slog-Konventionen, Rotation | 1 |
 | 0004 | `0004-nebenlaeufigkeit-und-supervisor.md` | Goroutine-Besitz, Backoff, Shutdown | 1 |
