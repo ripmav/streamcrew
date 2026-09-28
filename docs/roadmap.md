@@ -122,7 +122,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 - [x] ADR-0001 „Neuimplementierung und Nutzung des Originals“ schreiben und entscheiden (S), erledigt 2026-09-27
 - [x] Festlegen, ob `../mixitup` weiter gelesen werden darf: ja, als Hilfestellung nach den Regeln aus ADR-0001, erledigt 2026-09-27
-- [ ] Die Regeln aus ADR-0001 in `docs/spec/README.md` übernehmen, mit einer Vorlage für Spezifikationen mit Quellennachweis (S)
+- [x] Regeln aus ADR-0001 in [`docs/spec/README.md`](spec/README.md) übernommen, mit Vorlage [`docs/spec/TEMPLATE.md`](spec/TEMPLATE.md) für Spezifikationen mit Quellenangabe (S), erledigt 2026-09-28
 - [ ] Rechtliche Einschätzung einholen (extern), spätestens vor Gate O, besser vor Phase 3. Themen:
   - BSL §2 und §3.1–3.5
   - EULA §1 (kein Reverse Engineering)
@@ -157,7 +157,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 ### 0.4 Organisation
 
 - [x] Privates GitHub-Repository `ripmav/streamcrew` angelegt ([ADR-0009](adr/0009-repositories-und-hosting.md)); `LICENSE` im ersten Commit auf `main`, `docs/` per Pull Request (S), erledigt 2026-09-28
-- [ ] `main` schützen und die Branch-Konvention festlegen (S). Branch-Schutz und Rulesets sind für private Repositories im aktuellen GitHub-Plan nicht verfügbar (geprüft 2026-09-28). Bis zur Veröffentlichung oder einem Plan-Upgrade gilt die Regel per Konvention (Arbeit nur auf Branches, Merge per Pull Request), optional abgesichert durch einen lokalen `pre-push`-Hook.
+- [ ] `main` schützen und die Branch-Konvention festlegen (S). Branch-Schutz und Rulesets sind für private Repositories im aktuellen GitHub-Plan nicht verfügbar (geprüft 2026-09-28). Bis zur Veröffentlichung oder einem Plan-Upgrade gilt die Regel per Konvention (Arbeit nur auf Branches, Merge per Pull Request), optional abgesichert durch einen lokalen `pre-push`-Hook. Nach dem Merge löscht GitHub den Branch automatisch (Einstellung aktiv seit 2026-09-28).
 - [x] ADR-Infrastruktur anlegen (S), erledigt 2026-09-27:
   - `docs/adr/README.md` (Index)
   - `docs/adr/TEMPLATE.md` (Kontext, Entscheidung, Alternativen, Konsequenzen, Status)
@@ -1134,3 +1134,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-28 | Präzisiert: Das Projekt bleibt privat, bis der Projektinhaber es selbst öffentlich schaltet; Gate O ist Voraussetzung, nicht Auslöser. ADR-0001, ADR-0008 und ADR-0009 mit Präzisierungsvermerk angepasst; Gate O und Querschnittsaufgaben ergänzt; die Frage nach dem Zeitpunkt ist damit beantwortet. |
 | 2026-09-28 | Privates Repository `ripmav/streamcrew` angelegt: `LICENSE` als erster Commit auf `main`, Dokumente per Pull Request. Branch-Schutz im aktuellen GitHub-Plan für private Repos nicht verfügbar; Roadmap-Aufgabe entsprechend ergänzt. |
 | 2026-09-28 | Claude-Code-Workflows umgestellt: Claude reagiert nur auf `@claude` in Pull Requests und führt dann ein Review aus; das automatische Review bei jedem PR und die Reaktion auf Issues entfallen. Plan §11.3 ergänzt. |
+| 2026-09-28 | `docs/spec/README.md` (Regeln, Ablauf, Index) und `docs/spec/TEMPLATE.md` angelegt. Automatisches Löschen gemergter Branches in ADR-0009, Plan §11.1 und Roadmap 0.4 dokumentiert. |
