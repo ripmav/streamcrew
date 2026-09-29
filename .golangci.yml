@@ -67,6 +67,12 @@ linters:
         linters:
           - forbidigo
         text: os\.(Getenv|LookupEnv|Environ)
+      # Tests may read environment variables, e.g. STREAMCREW_UPDATE_GOLDEN
+      # for golden files (Code-ADR-0006); approved by the project owner.
+      - path: _test\.go$
+        linters:
+          - forbidigo
+        text: os\.(Getenv|LookupEnv|Environ)
 
 formatters:
   enable:
