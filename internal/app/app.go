@@ -122,6 +122,9 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if a.store, err = store.Open(ctx, a.profile.Path, storeOpts...); err != nil {
 		return a, fmt.Errorf("open profile %q: %w", a.profile.ID, err)
 	}
+	if err := a.resetCounters(ctx); err != nil {
+		return a, err
+	}
 	if a.settings, err = settings.New(a.store); err != nil {
 		return a, err
 	}
@@ -236,6 +239,19 @@ func (a *App) close() error {
 		a.closeLog = nil
 	}
 	return errors.Join(errs...)
+}
+
+// resetCounters sets the counters that reset on start to 0 (spec
+// counters-and-quotes.md, B3).
+func (a *App) resetCounters(ctx context.Context) error {
+	n, err := a.store.ResetCountersOnStart(ctx)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		a.logger.InfoContext(ctx, "counters reset on start", "count", n)
+	}
+	return nil
 }
 
 // onStatus tracks readiness and publishes every state change of a runnable.

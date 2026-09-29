@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-09-29 |
 | **Bezug** | Roadmap Phase 2.2 (Counter und Quotes), 5.6, 8.3; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md); Plan §5.5, §6.13, Anhang A.3, A.6 |
-| **Umsetzung** | noch offen (geplant: `internal/domain/counter`, `internal/domain/quote`, Repositories in `internal/store`) |
+| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/counter`, `internal/domain/quote`, Repositories in `internal/store`; Rücksetzen beim Start in `internal/app`. Offen: formatierte Ausgabe (B4), Abgleich mit eingebauten Identifiern (B7), Abruf und Format per Identifier (B23, B24) mit Phase 3; vorgefertigte Quote-Commands (B22) mit Phase 5.6; Import (B25) |
 
 ## Zweck und Umfang
 
@@ -65,11 +65,11 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 
 ## Akzeptanzkriterien
 
-- [ ] B1, B40: Counter-Namen sind je Profil eindeutig.
-- [ ] B2: Erhöhen, Setzen und Zurücksetzen verändern den gespeicherten Wert.
-- [ ] B3: Counter mit Rücksetz-Option stehen nach dem Start auf 0, andere behalten ihren Wert.
-- [ ] B21, B41: Nummern werden fortlaufend vergeben und nach dem Löschen nicht neu verwendet.
-- [ ] B23: zufällige, neueste und Gesamtzahl lassen sich abfragen (Integrationstest gegen SQLite).
+- [x] B1, B40: Counter-Namen sind je Profil eindeutig.
+- [x] B2: Erhöhen, Setzen und Zurücksetzen verändern den gespeicherten Wert.
+- [x] B3: Counter mit Rücksetz-Option stehen nach dem Start auf 0, andere behalten ihren Wert.
+- [x] B21, B41: Nummern werden fortlaufend vergeben und nach dem Löschen nicht neu verwendet.
+- [x] B23: zufällige, neueste und Gesamtzahl lassen sich abfragen (Integrationstest gegen SQLite).
 
 ## Offene Fragen
 
@@ -92,3 +92,4 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 |---|---|
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
 | 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
+| 2026-09-29 | Datenmodell umgesetzt. Festlegungen dabei: Counter-Namen bestehen aus 1 bis 64 ASCII-Buchstaben und -Ziffern, weil die Template-Engine Identifier nur aus diesen Zeichen liest, und sind unabhängig von der Schreibweise eindeutig (B1, B7). Bei einem Überlauf bleibt der Wert am Grenzwert; ob er gespeichert wird, entscheidet der Aufrufer (B43). Die neueste Quote ist die mit der höchsten Nummer (B23). Quotes haben zusätzlich eine UUID wie jede Entität (Code-ADR-0009); Nutzer sprechen sie über die Nummer an. |
