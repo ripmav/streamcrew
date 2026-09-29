@@ -14,6 +14,6 @@ Es gelten dieselben Konventionen und dieselbe Vorlage ([`../TEMPLATE.md`](../TEM
 | [0004](0004-nebenlaeufigkeit-und-supervisor.md) | Nebenläufigkeit und Supervisor | Akzeptiert | 2026-09-29 |
 | [0005](0005-konfiguration.md) | Konfiguration | Akzeptiert | 2026-09-29 |
 | [0006](0006-teststrategie.md) | Teststrategie | Akzeptiert | 2026-09-29 |
-| [0007](0007-circuit-breaker.md) | Circuit Breaker für externe Dienste | Vorgeschlagen | 2026-09-29 |
+| [0007](0007-circuit-breaker.md) | Circuit Breaker für externe Dienste | Akzeptiert | 2026-09-29 |
 
 Die geplanten Code-ADRs stehen im ADR-Backlog von [`plan.md`](../../plan.md) (§12.2).

@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-29 |
-| **Entscheidung durch** | offen (Abnahme durch den Projektinhaber) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Plan §6.11, §6.18, §13 (R4); Roadmap Phase 4.1 und 4.2; [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0003](0003-fehler-und-logging.md), [Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md), [Code-ADR-0006](0006-teststrategie.md); geplantes Code-ADR zum HTTP-Client (ADR-Backlog in Plan §12.2) |
 
 ## Kontext
@@ -103,7 +103,7 @@
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen
+- [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
 - [ ] `internal/breaker` mit Standardwerten, Fehlerbewertung, Logging und Übersetzung in `ErrUnavailable` umsetzen (Roadmap Phase 4.2)
 - [ ] Im Code-ADR zum HTTP-Client die Reihenfolge Wiederholung → Breaker → Rate-Limiter → Anfrage festhalten und den Breaker einbauen (Roadmap Phase 4.2)
 - [ ] Breaker für `twitch.helix` und `twitch.auth` (Roadmap Phase 4.1 und 4.2), später für die übrigen Plattformen und Integrationen

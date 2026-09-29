@@ -896,7 +896,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | YAML | `go.yaml.in/yaml/v3` | gesetzt | Konfigurationsdatei und Commands als Code; offizieller Nachfolger von `gopkg.in/yaml.v3` (Code-ADR-0005) |
 | OAuth | `golang.org/x/oauth2` | Kandidat | Device Flow und PKCE eingebaut |
 | Rate-Limits, Nebenläufigkeit | `golang.org/x/time/rate`, `golang.org/x/sync/errgroup` | Kandidat | `x/`-Pakete |
-| Circuit Breaker | `github.com/sony/gobreaker/v2` | vorgeschlagen | Anfragen an externe Dienste, ein Breaker je API (Code-ADR-0007) |
+| Circuit Breaker | `github.com/sony/gobreaker/v2` | gesetzt | Anfragen an externe Dienste, ein Breaker je API (Code-ADR-0007) |
 | IDs | UUIDv7 (`github.com/google/uuid` oder eigene kleine Implementierung) | Kandidat | Code-ADR-0009 |
 | Logging | `log/slog`; eigene Rotation nach Größe (Code-ADR-0003) | gesetzt | stdlib |
 | Secrets | `crypto/aes` + `crypto/cipher`, `zalando/go-keyring` | Kandidat | stdlib-Krypto; Keyring plattformübergreifend |
@@ -1162,7 +1162,7 @@ Es existieren ADR-0001 bis ADR-0011. Alle höheren Nummern in Plan und Roadmap s
 | 0004 | `0004-nebenlaeufigkeit-und-supervisor.md` | Goroutine-Besitz, Backoff, Shutdown; **akzeptiert** | 1 |
 | 0005 | `0005-konfiguration.md` | kong, Env, YAML-Datei, Pfade; YAML-Bibliothek für das ganze Projekt; **akzeptiert** | 1 |
 | 0006 | `0006-teststrategie.md` | testify, Fixtures, Golden Files, Fakes, Fuzzing, native Tests; **akzeptiert** (vorläufig 0014) | 1 |
-| 0007 | `0007-circuit-breaker.md` | `sony/gobreaker/v2` für Anfragen an externe Dienste, ein Breaker je API; **vorgeschlagen** | 4 |
+| 0007 | `0007-circuit-breaker.md` | `sony/gobreaker/v2` für Anfragen an externe Dienste, ein Breaker je API; **akzeptiert** | 4 |
 | 0008 | `0008-datenbankzugriff.md` | modernc/sqlite, sqlc, goose | 2 |
 | 0009 | `0009-ids-und-zeit.md` | UUIDv7, Uhren, `synctest` | 2 |
 | 0010 | `0010-polymorphe-serialisierung.md` | Diskriminator, Versionen, json/v2 | 2 |
