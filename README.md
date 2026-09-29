@@ -147,8 +147,8 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 
 | Paket | Aufgabe |
 |---|---|
-| `cmd/streamcrew` | nur `main.go`: Signale, Umgebung, Exit |
-| `internal/cli` | kong-CLI mit allen Unterkommandos, Fehler und Exit-Codes |
+| `cmd/streamcrew` | nur `main.go`: Signale, Umgebung, kong-Initialisierung, Parsen, Exit-Code |
+| `internal/cli` | Definition der Kommandozeile (`cli.Root`) mit allen Unterkommandos, Fehler und Exit-Codes |
 | `internal/app` | Composition Root: verdrahtet alles, Bereitschaft ([Code-ADR-0002](docs/adr/code/0002-dependency-injection.md)) |
 | `internal/config` | Startkonfiguration, Konfigurationsdatei, Datenverzeichnis ([Code-ADR-0005](docs/adr/code/0005-konfiguration.md)) |
 | `internal/logging` | slog-Handler, Level je Komponente, Rotation, Maskierung ([Code-ADR-0003](docs/adr/code/0003-fehler-und-logging.md)) |
