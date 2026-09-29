@@ -232,7 +232,7 @@ Ein schlanker, headless Streaming-Bot- und Automatisierungs-Core in Go. Er läuf
 ### 4.3 Nicht-Ziele
 
 - Ein pixelgenauer Nachbau der WPF-Oberfläche.
-- Ausführen von C#-Skripten (Roslyn). Ersatz ist eingebettetes JavaScript (ADR-0016).
+- Ausführen von C#-Skripten (Roslyn). Ersatz ist eingebettetes JavaScript (ADR-0017).
 - Funktionen, die Blazing-Cacti-Server brauchen (Abschnitt 5.8).
 - Obsolete Plattformen und Funktionen: Mixer, Trovo, Glimesh, Facebook, Twitter, Übersetzung, OvrStream, InfiniteAlbum sowie Overlay v1/v2 (`Deprecated/`).
 - Inoffizielle oder AGB-kritische Schnittstellen, etwa inoffizielle TTS-Endpunkte oder den Pusher-WebSocket von Kick.
@@ -537,7 +537,7 @@ Die Sperrmodi entsprechen fachlich dem Original. Commands mit dem Flag „unlock
 ### 6.9 Actions, Requirements und Typkatalog
 
 - **Registry:** Jeder Action-Typ registriert einen Descriptor. Er enthält eine stabile Typ-ID, eine Schemaversion, eine Kategorie, i18n-Schlüssel, ein JSON-Schema der Konfiguration, UI-Hinweise (etwa Textfeld, Template, Nutzer, Dauer, Farbe, Datei, Command-Referenz) und die benötigten Capabilities.
-- **Speicherung:** Commands sind JSON-Dokumente mit `type`-Diskriminator und `schemaVersion`. Migrationen laufen pro Typversion. Die Kodierung nutzt `encoding/json/v2`, das in der installierten Toolchain go1.27.1 ohne GOEXPERIMENT verfügbar ist (geprüft).
+- **Speicherung:** Commands sind JSON-Dokumente mit `type`-Diskriminator und `schemaVersion`. Migrationen laufen pro Typversion (Code-ADR-0010). Die Kodierung nutzt vorerst `encoding/json`: `encoding/json/v2` ist in go1.27.1 noch nur mit `GOEXPERIMENT=jsonv2` verfügbar (berichtigt 2026-09-29).
 - **Typkatalog über die API:** `ListActionTypes` und Co. liefern Descriptors samt Schema. Frontends rendern daraus generische Editoren. Spezialeditoren gibt es nur, wo es sich lohnt, etwa für Conditional und für Overlay-Positionen.
 - **Requirements** folgen demselben Muster (Validieren, Ausführen bzw. Kosten abbuchen, Fehlermeldung).
 
@@ -631,7 +631,7 @@ type ChannelPoints interface {
 |---|---|---|---|---|
 | Twitch | Device Code Flow; öffentlicher Client ohne Secret; Refresh-Token verfällt nach 30 Tagen Inaktivität | EventSub-WebSocket, 43 Subscription-Typen inkl. `channel.chat.*` (Anhang A.2) | Helix „Send Chat Message“ | Subscription-Limits pro Verbindung; Mock-EventSub der Twitch CLI für Tests |
 | YouTube | OAuth 2.0 für Desktop-Apps (Loopback + PKCE) | `liveChatMessages.streamList` (gRPC-Streaming), Polling nur als Fallback | `liveChatMessages.insert` | Quota (Standard 10.000 Einheiten/Tag); im Google-„Testing“-Modus verfallen Refresh-Tokens nach 7 Tagen |
-| Kick | OAuth 2.1 + PKCE (App mit Client-ID und Secret) | ausschließlich Webhooks an eine öffentliche HTTPS-URL; bei wiederholten Fehlern kündigt Kick das Abo | REST | Server-Modus, Relay oder Tunnel nötig (ADR-0014) |
+| Kick | OAuth 2.1 + PKCE (App mit Client-ID und Secret) | ausschließlich Webhooks an eine öffentliche HTTPS-URL; bei wiederholten Fehlern kündigt Kick das Abo | REST | Server-Modus, Relay oder Tunnel nötig (ADR-0015) |
 | Velora, VPZone | OAuth | WebSocket (Velora teils Socket.IO) | REST | kleine Plattformen, P3 |
 | Mock | – | synthetisch (CLI, TUI, API) | Log/Bus | Tests, Demos, Entwicklung |
 
@@ -723,12 +723,12 @@ Die Services von `v1alpha1`:
 
 - **Eigener Overlay-Server im Core:** HTTP + WebSocket, konfigurierbarer Port, mehrere Endpunkte (je Browserquelle eine URL), Wiederverbinden der Clients.
 - **Neu geschriebene Overlay-Runtime** in TypeScript, gebündelt mit der Go-API von esbuild (`github.com/evanw/esbuild/pkg/api`) per `go generate`, sodass kein Node.js nötig ist. Das Bündel wird eingecheckt und per `go:embed` ausgeliefert. Assets von Mix It Up werden nicht übernommen.
-- **Protokoll (ADR-0018):** JSON-Pakete `{type, data}`. Es gibt Items (einmalige Ausgaben: Text, Bild, Video, Ton, HTML, YouTube, Clip) und Widgets (persistente Elemente mit Zustand: Label, Ziel, Timer, Event-Liste, Chat, Rangliste, Glücksrad, Umfrage, Emote-Effekte usw.). Dazu kommen Positionierung, Ebenen, CSS-Animationen und Batching aufeinanderfolgender Overlay-Actions.
+- **Protokoll (ADR-0019):** JSON-Pakete `{type, data}`. Es gibt Items (einmalige Ausgaben: Text, Bild, Video, Ton, HTML, YouTube, Clip) und Widgets (persistente Elemente mit Zustand: Label, Ziel, Timer, Event-Liste, Chat, Rangliste, Glücksrad, Umfrage, Emote-Effekte usw.). Dazu kommen Positionierung, Ebenen, CSS-Animationen und Batching aufeinanderfolgender Overlay-Actions.
 - **Dateien:** nur aus freigegebenen Verzeichnissen (`os.Root`), mit Range-Requests (`http.ServeContent`) für Videos.
 
 ### 6.17 Medien: Audio und TTS
 
-- **Audio-Sinks (ADR-0019):**
+- **Audio-Sinks (ADR-0020):**
   - `overlay`: Die Browserquelle spielt ab. Das ist der Standard, denn es funktioniert headless und remote.
   - `local` (P1, weil der Streaming-PC der Hauptbetriebsort ist, ADR-0003): Ausgabe auf ein wählbares Gerät via `ebitengine/oto/v3` mit Decodern. Sie liegt hinter einem Build-Tag, weil unter Linux eventuell CGO nötig ist (zu verifizieren). Server-Builds lassen sie weg.
   - `agent`: Die Desktop-App spielt ab (P2).
@@ -747,7 +747,7 @@ Die Services von `v1alpha1`:
   - eingehende Webhooks (Ko-fi, Fourthwall, Throne, Patreon …)
   - REST-Polling (DonorDrive, JustGiving)
   - OAuth-APIs (Discord, Patreon, Streamlabs)
-- **Eingehende Webhooks brauchen eine öffentliche HTTPS-URL.** Ein Desktop-PC hinter NAT hat keine. Das Original löst das über den eigenen Webhook-Hub, der nicht nutzbar ist. Lösungen (ADR-0014):
+- **Eingehende Webhooks brauchen eine öffentliche HTTPS-URL.** Ein Desktop-PC hinter NAT hat keine. Das Original löst das über den eigenen Webhook-Hub, der nicht nutzbar ist. Lösungen (ADR-0015):
   1. Core im Server-Modus mit öffentlicher URL hinter einem Reverse Proxy
   2. ein eigener, selbst hostbarer **Relay**: ein kleines, zustandsloses Go-Binary, das Webhooks annimmt, Signaturen prüft und per WebSocket an registrierte Cores weiterleitet
   3. ein dokumentierter Tunnel (Cloudflare Tunnel, Tailscale Funnel, ngrok)
@@ -760,7 +760,7 @@ Läuft der Core auf einem Server, fehlen ihm Fähigkeiten des Streaming-PCs: Tas
 
 ### 6.20 Scripting und Ausdrücke
 
-- **Ersatz für C#-Skripte:** eingebettetes JavaScript mit `dop251/goja` (ADR-0016). Die Sandbox hat keinen Datei- oder Netzzugriff außer über freigegebene Funktionen; ein Zeitlimit greift per Interrupt, die API umfasst Parameter, Identifier und Chat. Alternativen: Lua (`gopher-lua`), Starlark, `yaegi` (Go-Interpreter).
+- **Ersatz für C#-Skripte:** eingebettetes JavaScript mit `dop251/goja` (ADR-0017). Die Sandbox hat keinen Datei- oder Netzzugriff außer über freigegebene Funktionen; ein Zeitlimit greift per Interrupt, die API umfasst Parameter, Identifier und Chat. Alternativen: Lua (`gopher-lua`), Starlark, `yaegi` (Go-Interpreter).
 - **Python und andere Sprachen** laufen über die ExternalProgram-Action und nur mit `host:process`.
 - **Import:** C#-Skripte werden markiert und deaktiviert.
 - **Ausdrücke:** `expr-lang/expr` wertet Conditional-Actions, Berechnungen und Mengenangaben aus.
@@ -858,7 +858,7 @@ streamcrew
 ### 7.5 Web (eigenes Repo)
 
 - **Rolle:** Bedienung eines Cores im Server-Modus oder im LAN. Denkbar ist auch ein Moderations-Panel mit eingeschränkten Token-Scopes (P2).
-- **Technik (ADR-0017):**
+- **Technik (ADR-0018):**
   - **Empfehlung:** eine TypeScript-SPA (z. B. Svelte 5 oder React) mit `@connectrpc/connect-web`, statisch ausgeliefert, entweder vom Core unter `/ui` oder separat hinter einem Reverse Proxy
   - Alternative Go + templ + htmx: Go-zentriert, aber schwächer bei Drag-and-drop-Editoren
   - Alternative Go-WASM: Erfahrung aus `n8n-go` vorhanden, aber Bündelgröße und DOM-Ergonomie sprechen dagegen
@@ -885,23 +885,23 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | CLI | `alecthomas/kong` | gesetzt | `starting.md` |
 | TUI | `charm.land/bubbletea/v2` + Bubbles/Lip Gloss v2 | gesetzt | `starting.md`; v2 hat neuen Importpfad |
 | Desktop | `fyne.io/fyne/v2` (v2.8), `fyne-cross` | gesetzt | `starting.md` |
-| Web | TypeScript-SPA + `@connectrpc/connect-web` | Kandidat | ADR-0017 |
+| Web | TypeScript-SPA + `@connectrpc/connect-web` | Kandidat | ADR-0018 |
 | API | ConnectRPC + Protobuf + `buf` | gesetzt | ein Vertrag, Go- und TS-Clients, Streaming (ADR-0010) |
 | HTTP-Server | `net/http` mit dem Routing der Standardbibliothek | Kandidat | stdlib first, kein Router nötig |
 | WebSocket | `github.com/coder/websocket` | Kandidat | kontextfähig, gepflegt, auch in `n8n-go` genutzt |
-| SQLite | `modernc.org/sqlite` | Kandidat | CGO-frei; Alternative `ncruces/go-sqlite3` |
-| SQL/Migrationen | `sqlc`, `pressly/goose/v3` | Kandidat | typisiert, eingebettet; bewährt in `n8n-go` |
+| SQLite | `modernc.org/sqlite` | gesetzt | CGO-frei; zwei Pools (Schreiben, Lesen); Code-ADR-0008 |
+| SQL/Migrationen | `sqlc` (per `go run` gepinnt), `pressly/goose/v3` | gesetzt | typisiert, eingebettet; bewährt in `n8n-go`; Code-ADR-0008 |
 | JSON | `encoding/json/v2` | Kandidat | stdlib; polymorphes Dekodieren über eigene Unmarshaler. In go1.27.1 noch hinter `GOEXPERIMENT=jsonv2` (geprüft 2026-09-29); bis dahin `encoding/json` |
 | JSON-Schema | `github.com/google/jsonschema-go` | Kandidat | auch vom MCP-Go-SDK genutzt |
 | YAML | `go.yaml.in/yaml/v3` | gesetzt | Konfigurationsdatei und Commands als Code; offizieller Nachfolger von `gopkg.in/yaml.v3` (Code-ADR-0005) |
 | OAuth | `golang.org/x/oauth2` | Kandidat | Device Flow und PKCE eingebaut |
 | Rate-Limits, Nebenläufigkeit | `golang.org/x/time/rate`, `golang.org/x/sync/errgroup` | Kandidat | `x/`-Pakete |
 | Circuit Breaker | `github.com/sony/gobreaker/v2` | gesetzt | Anfragen an externe Dienste, ein Breaker je API (Code-ADR-0007) |
-| IDs | UUIDv7 (`github.com/google/uuid` oder eigene kleine Implementierung) | Kandidat | Code-ADR-0009 |
+| IDs | UUIDv7 aus dem Standardpaket `uuid` (Go 1.27) | gesetzt | keine Abhängigkeit; Code-ADR-0009 |
 | Logging | `log/slog`; eigene Rotation nach Größe (Code-ADR-0003) | gesetzt | stdlib |
-| Secrets | `crypto/aes` + `crypto/cipher`, `zalando/go-keyring` | Kandidat | stdlib-Krypto; Keyring plattformübergreifend |
+| Secrets | `crypto/aes` + `crypto/cipher`, `zalando/go-keyring` | gesetzt | stdlib-Krypto; Keyring plattformübergreifend, Fallback Umgebungsvariable oder Datei (ADR-0012) |
 | Ausdrücke | `expr-lang/expr` | Kandidat | sicher, schnell, ersetzt Jace |
-| Scripting | `dop251/goja` | Kandidat | reines Go, sandboxfähig (ADR-0016) |
+| Scripting | `dop251/goja` | Kandidat | reines Go, sandboxfähig (ADR-0017) |
 | YouTube | `google.golang.org/api/youtube/v3`, `google.golang.org/grpc` für `streamList` | Kandidat | offizielle Clients bzw. Proto |
 | OBS | `andreykaipov/goobs` | Kandidat | obs-websocket v5 |
 | Socket.IO | `zishang520/socket.io` (v4-Client) | Kandidat | Spike nötig |
@@ -936,7 +936,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | `streamcrew` | Core, CLI/TUI, API-Vertrag (`api/proto`), generierter Go-Client, Overlay-Runtime |
 | `streamcrew-desktop` | Fyne-App; importiert den Go-Client und `streamcrew/core`; startet den Core als eigenen Prozess ([ADR-0005](adr/0005-core-in-desktop-builds.md), [ADR-0006](adr/0006-core-als-bibliothek-fuer-selbststart.md)) |
 | `streamcrew-web` | Web-UI; erzeugt den TS-Client aus den Protos (per Git-Tag referenziert) |
-| `streamcrew-relay` | optional: Webhook-Relay (ADR-0014) |
+| `streamcrew-relay` | optional: Webhook-Relay (ADR-0015) |
 
 Alle Repositories liegen auf GitHub und bleiben privat, bis der Projektinhaber sie selbst öffentlich schaltet ([ADR-0009](adr/0009-repositories-und-hosting.md)). Jedes enthält ab dem ersten Commit die Apache-2.0-`LICENSE` (ADR-0002).
 
@@ -1118,7 +1118,7 @@ Aus den globalen Regeln, verbindlich für alle Repos:
 
 ## 12. ADR-Backlog
 
-Es existieren ADR-0001 bis ADR-0011. Alle höheren Nummern in Plan und Roadmap sind **vorläufige Backlog-Nummern** noch nicht geschriebener ADRs.
+Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap sind **vorläufige Backlog-Nummern** noch nicht geschriebener ADRs.
 
 - Nummern werden in Entstehungsreihenfolge vergeben. Ein neues ADR bekommt deshalb die nächste freie Nummer, und die Verweise in Plan und Roadmap werden angepasst.
 - Die ADR-Dateien selbst nennen geplante ADRs nur beim Thema, nie mit Nummer (Konvention in [`adr/README.md`](adr/README.md)).
@@ -1139,15 +1139,15 @@ Es existieren ADR-0001 bis ADR-0011. Alle höheren Nummern in Plan und Roadmap s
 | 0009 | `0009-repositories-und-hosting.md` | Repositories, Hosting, CI | 0 | **akzeptiert**: 3 Repos auf GitHub (privat), Actions, Releases |
 | 0010 | `0010-api-protokoll.md` | Vertrag Core ↔ Frontends; lokaler Transport | 0 | **akzeptiert**: ConnectRPC + Protobuf |
 | 0011 | `0011-keine-telemetrie.md` | Telemetrie, Datenhaltung | 0 | **akzeptiert**: keine Telemetrie, Diagnose-Paket |
-| 0012 | `0012-persistenz.md` | Speicherung, Profile, Backups | 2 | SQLite je Profil |
-| 0013 | `0013-oauth-und-app-credentials.md` | Flows, BYO-Credentials, Token-Speicher | 4 | DCF (Twitch), PKCE + Loopback, BYO |
-| 0014 | `0014-eingehende-webhooks-und-relay.md` | Kick und Dienste mit Webhooks | 9 | Server-Modus + Tunnel; Relay optional |
-| 0015 | `0015-youtube-chat-streaming.md` | `streamList` vs. Polling | 9 | `streamList` mit Polling-Fallback |
-| 0016 | `0016-scripting.md` | Ersatz für C#-Skripte | 10 | goja (JavaScript) |
-| 0017 | `0017-web-frontend-technologie.md` | Web-Stack | W0 | TS-SPA + connect-web |
-| 0018 | `0018-overlay-architektur.md` | Server, Runtime, Protokoll | 7 | eigene Runtime, JSON über WebSocket |
-| 0019 | `0019-audio-ausgabe.md` | Audio-Sinks | 7 | Overlay als Standard, lokale Ausgabe P1 |
-| 0020 | `0020-sicherheitsmodell.md` | Capabilities, API-Auth, Modi | 2 (Entwurf), 12 (final) | Default-Deny im Server-Modus |
+| 0012 | `0012-persistenz.md` | Speicherung, Profile, Sperre, Backups, Secrets im Ruhezustand | 2 | **akzeptiert**: SQLite je Profil, `VACUUM INTO`-Backups, AES-256-GCM mit Schlüssel aus Umgebung, Schlüsselbund oder Datei |
+| 0013 | `0013-sicherheitsmodell.md` | Capabilities, API-Auth, Modi | 2 (Entwurf), 12 (final) | **akzeptiert** (Entwurf): Default-Deny im Server-Modus, Rechte nur lokal erweiterbar |
+| 0014 | `0014-oauth-und-app-credentials.md` | Flows, BYO-Credentials, Token-Speicher | 4 | DCF (Twitch), PKCE + Loopback, BYO |
+| 0015 | `0015-eingehende-webhooks-und-relay.md` | Kick und Dienste mit Webhooks | 9 | Server-Modus + Tunnel; Relay optional |
+| 0016 | `0016-youtube-chat-streaming.md` | `streamList` vs. Polling | 9 | `streamList` mit Polling-Fallback |
+| 0017 | `0017-scripting.md` | Ersatz für C#-Skripte | 10 | goja (JavaScript) |
+| 0018 | `0018-web-frontend-technologie.md` | Web-Stack | W0 | TS-SPA + connect-web |
+| 0019 | `0019-overlay-architektur.md` | Server, Runtime, Protokoll | 7 | eigene Runtime, JSON über WebSocket |
+| 0020 | `0020-audio-ausgabe.md` | Audio-Sinks | 7 | Overlay als Standard, lokale Ausgabe P1 |
 | 0021 | `0021-import-von-mixitup-daten.md` | Interop-Import, `$`-Namen | 0 (Recht), 11 (Umsetzung) | nach rechtlicher Prüfung |
 | 0022 | `0022-internationalisierung.md` | i18n-Bibliothek, Sprachen | 3 | EN + DE |
 | 0023 | `0023-release-und-distribution.md` | goreleaser, Docker, Updates | 6 | GitHub-Releases, kein eigener Update-Server; Artefakte nach ADR-0007; Desktop-Pakete nach ADR-0005/0006 |
@@ -1164,15 +1164,15 @@ Es existieren ADR-0001 bis ADR-0011. Alle höheren Nummern in Plan und Roadmap s
 | 0005 | `0005-konfiguration.md` | kong, Env, YAML-Datei, Pfade; YAML-Bibliothek für das ganze Projekt; **akzeptiert** | 1 |
 | 0006 | `0006-teststrategie.md` | testify, Fixtures, Golden Files, Fakes, Fuzzing, native Tests; **akzeptiert** (vorläufig 0014) | 1 |
 | 0007 | `0007-circuit-breaker.md` | `sony/gobreaker/v2` für Anfragen an externe Dienste, ein Breaker je API; **akzeptiert** | 4 |
-| 0008 | `0008-datenbankzugriff.md` | modernc/sqlite, sqlc, goose | 2 |
-| 0009 | `0009-ids-und-zeit.md` | UUIDv7, Uhren, `synctest` | 2 |
-| 0010 | `0010-polymorphe-serialisierung.md` | Diskriminator, Versionen, json/v2 | 2 |
-| 0011 | `0011-event-bus.md` | Typisierung, Puffer, Lag | 2 |
+| 0008 | `0008-datenbankzugriff.md` | modernc/sqlite, sqlc, goose; **akzeptiert** | 2 |
+| 0009 | `0009-ids-und-zeit.md` | UUIDv7, Uhren, `synctest`; **akzeptiert** | 2 |
+| 0010 | `0010-polymorphe-serialisierung.md` | Diskriminator, Versionen, JSON-Bibliothek; **akzeptiert** | 2 |
+| 0011 | `0011-event-bus.md` | Typisierung, Puffer, Lag; **akzeptiert** | 2 |
 | 0012 | `0012-template-engine.md` | Tokenizer, Präfixregel, Kodierung | 3 |
 | 0013 | `0013-typ-registry.md` | Descriptors, Schemas, Capabilities | 3 |
 | 0014 | `0014-http-client.md` | Retry, Rate-Limits, Fehlerklassen; Einbau des Circuit Breakers (Code-ADR-0007) | 4 |
 | 0015 | `0015-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |
-| 0016 | `0016-codegenerierung.md` | buf, sqlc, esbuild in `go generate` | 2/6 |
+| 0016 | `0016-codegenerierung.md` | buf, esbuild in `go generate`; die sqlc-Konventionen stehen in Code-ADR-0008 | 6 |
 
 ---
 
@@ -1261,7 +1261,7 @@ Die Aufwände sind **grobe Schätzungen in Personenwochen (PW) für eine Person 
 2. **Import:** Wie wichtig ist die Übernahme bestehender Mix-It-Up-Daten? Gibt es einen eigenen Datenbestand? Zu klären vor ADR-0021 (Umsetzung), Roadmap 11.2.
 3. **Zielsysteme der Desktop-App:** Windows, macOS, Linux? Sind Code-Signierung und Notarisierung nötig? Zu klären in Desktop D0.
 4. **Kapazität:** Wie viel Zeit steht pro Woche zur Verfügung? Ohne diese Angabe lassen sich die Aufwände nicht in Termine übersetzen. Spätestens zur Kalibrierung nach M1.
-5. **Web-Frontend:** Gibt es eine Präferenz für einen Stack (TS-SPA, templ/htmx, Go-WASM)? Zu klären in Web W0 (ADR-0017).
+5. **Web-Frontend:** Gibt es eine Präferenz für einen Stack (TS-SPA, templ/htmx, Go-WASM)? Zu klären in Web W0 (ADR-0018).
 
 ---
 
