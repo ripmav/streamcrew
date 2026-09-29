@@ -889,17 +889,17 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | API | ConnectRPC + Protobuf + `buf` | gesetzt | ein Vertrag, Go- und TS-Clients, Streaming (ADR-0010) |
 | HTTP-Server | `net/http` mit dem Routing der Standardbibliothek | Kandidat | stdlib first, kein Router nötig |
 | WebSocket | `github.com/coder/websocket` | Kandidat | kontextfähig, gepflegt, auch in `n8n-go` genutzt |
-| SQLite | `modernc.org/sqlite` | vorgeschlagen | CGO-frei; zwei Pools (Schreiben, Lesen); Code-ADR-0008 |
-| SQL/Migrationen | `sqlc` (per `go run` gepinnt), `pressly/goose/v3` | vorgeschlagen | typisiert, eingebettet; bewährt in `n8n-go`; Code-ADR-0008 |
+| SQLite | `modernc.org/sqlite` | gesetzt | CGO-frei; zwei Pools (Schreiben, Lesen); Code-ADR-0008 |
+| SQL/Migrationen | `sqlc` (per `go run` gepinnt), `pressly/goose/v3` | gesetzt | typisiert, eingebettet; bewährt in `n8n-go`; Code-ADR-0008 |
 | JSON | `encoding/json/v2` | Kandidat | stdlib; polymorphes Dekodieren über eigene Unmarshaler. In go1.27.1 noch hinter `GOEXPERIMENT=jsonv2` (geprüft 2026-09-29); bis dahin `encoding/json` |
 | JSON-Schema | `github.com/google/jsonschema-go` | Kandidat | auch vom MCP-Go-SDK genutzt |
 | YAML | `go.yaml.in/yaml/v3` | gesetzt | Konfigurationsdatei und Commands als Code; offizieller Nachfolger von `gopkg.in/yaml.v3` (Code-ADR-0005) |
 | OAuth | `golang.org/x/oauth2` | Kandidat | Device Flow und PKCE eingebaut |
 | Rate-Limits, Nebenläufigkeit | `golang.org/x/time/rate`, `golang.org/x/sync/errgroup` | Kandidat | `x/`-Pakete |
 | Circuit Breaker | `github.com/sony/gobreaker/v2` | gesetzt | Anfragen an externe Dienste, ein Breaker je API (Code-ADR-0007) |
-| IDs | UUIDv7 aus dem Standardpaket `uuid` (Go 1.27) | vorgeschlagen | keine Abhängigkeit; Code-ADR-0009 |
+| IDs | UUIDv7 aus dem Standardpaket `uuid` (Go 1.27) | gesetzt | keine Abhängigkeit; Code-ADR-0009 |
 | Logging | `log/slog`; eigene Rotation nach Größe (Code-ADR-0003) | gesetzt | stdlib |
-| Secrets | `crypto/aes` + `crypto/cipher`, `zalando/go-keyring` | vorgeschlagen | stdlib-Krypto; Keyring plattformübergreifend, Fallback Umgebungsvariable oder Datei (ADR-0012) |
+| Secrets | `crypto/aes` + `crypto/cipher`, `zalando/go-keyring` | gesetzt | stdlib-Krypto; Keyring plattformübergreifend, Fallback Umgebungsvariable oder Datei (ADR-0012) |
 | Ausdrücke | `expr-lang/expr` | Kandidat | sicher, schnell, ersetzt Jace |
 | Scripting | `dop251/goja` | Kandidat | reines Go, sandboxfähig (ADR-0017) |
 | YouTube | `google.golang.org/api/youtube/v3`, `google.golang.org/grpc` für `streamList` | Kandidat | offizielle Clients bzw. Proto |
@@ -1138,8 +1138,8 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0009 | `0009-repositories-und-hosting.md` | Repositories, Hosting, CI | 0 | **akzeptiert**: 3 Repos auf GitHub (privat), Actions, Releases |
 | 0010 | `0010-api-protokoll.md` | Vertrag Core ↔ Frontends; lokaler Transport | 0 | **akzeptiert**: ConnectRPC + Protobuf |
 | 0011 | `0011-keine-telemetrie.md` | Telemetrie, Datenhaltung | 0 | **akzeptiert**: keine Telemetrie, Diagnose-Paket |
-| 0012 | `0012-persistenz.md` | Speicherung, Profile, Sperre, Backups, Secrets im Ruhezustand | 2 | **vorgeschlagen**: SQLite je Profil, `VACUUM INTO`-Backups, AES-256-GCM mit Schlüssel aus Umgebung, Schlüsselbund oder Datei |
-| 0013 | `0013-sicherheitsmodell.md` | Capabilities, API-Auth, Modi | 2 (Entwurf), 12 (final) | **vorgeschlagen** (Entwurf): Default-Deny im Server-Modus, Rechte nur lokal erweiterbar |
+| 0012 | `0012-persistenz.md` | Speicherung, Profile, Sperre, Backups, Secrets im Ruhezustand | 2 | **akzeptiert**: SQLite je Profil, `VACUUM INTO`-Backups, AES-256-GCM mit Schlüssel aus Umgebung, Schlüsselbund oder Datei |
+| 0013 | `0013-sicherheitsmodell.md` | Capabilities, API-Auth, Modi | 2 (Entwurf), 12 (final) | **akzeptiert** (Entwurf): Default-Deny im Server-Modus, Rechte nur lokal erweiterbar |
 | 0014 | `0014-oauth-und-app-credentials.md` | Flows, BYO-Credentials, Token-Speicher | 4 | DCF (Twitch), PKCE + Loopback, BYO |
 | 0015 | `0015-eingehende-webhooks-und-relay.md` | Kick und Dienste mit Webhooks | 9 | Server-Modus + Tunnel; Relay optional |
 | 0016 | `0016-youtube-chat-streaming.md` | `streamList` vs. Polling | 9 | `streamList` mit Polling-Fallback |
@@ -1163,10 +1163,10 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0005 | `0005-konfiguration.md` | kong, Env, YAML-Datei, Pfade; YAML-Bibliothek für das ganze Projekt; **akzeptiert** | 1 |
 | 0006 | `0006-teststrategie.md` | testify, Fixtures, Golden Files, Fakes, Fuzzing, native Tests; **akzeptiert** (vorläufig 0014) | 1 |
 | 0007 | `0007-circuit-breaker.md` | `sony/gobreaker/v2` für Anfragen an externe Dienste, ein Breaker je API; **akzeptiert** | 4 |
-| 0008 | `0008-datenbankzugriff.md` | modernc/sqlite, sqlc, goose; **vorgeschlagen** | 2 |
-| 0009 | `0009-ids-und-zeit.md` | UUIDv7, Uhren, `synctest`; **vorgeschlagen** | 2 |
-| 0010 | `0010-polymorphe-serialisierung.md` | Diskriminator, Versionen, JSON-Bibliothek; **vorgeschlagen** | 2 |
-| 0011 | `0011-event-bus.md` | Typisierung, Puffer, Lag; **vorgeschlagen** | 2 |
+| 0008 | `0008-datenbankzugriff.md` | modernc/sqlite, sqlc, goose; **akzeptiert** | 2 |
+| 0009 | `0009-ids-und-zeit.md` | UUIDv7, Uhren, `synctest`; **akzeptiert** | 2 |
+| 0010 | `0010-polymorphe-serialisierung.md` | Diskriminator, Versionen, JSON-Bibliothek; **akzeptiert** | 2 |
+| 0011 | `0011-event-bus.md` | Typisierung, Puffer, Lag; **akzeptiert** | 2 |
 | 0012 | `0012-template-engine.md` | Tokenizer, Präfixregel, Kodierung | 3 |
 | 0013 | `0013-typ-registry.md` | Descriptors, Schemas, Capabilities | 3 |
 | 0014 | `0014-http-client.md` | Retry, Rate-Limits, Fehlerklassen; Einbau des Circuit Breakers (Code-ADR-0007) | 4 |

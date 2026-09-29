@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-29 |
-| **Entscheidung durch** | offen (Abnahme durch den Projektinhaber) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | [ADR-0012](../0012-persistenz.md); Plan §6.13, §8, §9.2; Roadmap Phase 2.1; [Code-ADR-0001](0001-go-toolchain-und-linting.md), [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0003](0003-fehler-und-logging.md), [Code-ADR-0006](0006-teststrategie.md), [Code-ADR-0009](0009-ids-und-zeit.md), [Code-ADR-0010](0010-polymorphe-serialisierung.md) |
 
 ## Kontext
@@ -84,7 +84,7 @@
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen
+- [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
 - [ ] `internal/store` mit Pools, Migrationen, Transaktions-Helfer und Fehlerübersetzung umsetzen; `sqlc.yaml` anlegen (Roadmap Phase 2.1)
 - [ ] CI: `sqlc diff` im Checks-Job; Renovate-Regex-Manager um `go:generate`-Zeilen in Go-Dateien erweitern
 - [ ] Das Code-ADR zur Codegenerierung (Phase 6: `buf`, esbuild) nimmt die Konventionen dieses ADRs für sqlc auf
