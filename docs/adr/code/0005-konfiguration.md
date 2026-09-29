@@ -14,7 +14,7 @@
 - [ADR-0003](../0003-betriebsmodi.md): Die Standardwerte sind für den Streaming-PC ausgelegt; den Server-Modus wählt man ausdrücklich. Im Container kommt die Konfiguration üblicherweise aus Umgebungsvariablen.
 - kong wertet von Haus aus Konfigurationsdateien **vor** Umgebungsvariablen aus: Eine Datei würde eine Umgebungsvariable überschreiben. Unbekannte Schlüssel in einer Datei ignoriert kong stillschweigend.
 - Commands als Code (Phase 3) werden als YAML geschrieben. Eine YAML-Bibliothek braucht das Projekt deshalb ohnehin; bisher war ihre Wahl für Phase 3 geplant (ADR-Backlog in Plan §12.2).
-- `gopkg.in/yaml.v3` ist archiviert. Die YAML-Organisation pflegt den Nachfolger unter `go.yaml.in/yaml/v3` (Apache-2.0).
+- `gopkg.in/yaml.v3` ist archiviert. Die YAML-Organisation pflegt den Nachfolger unter `go.yaml.in/yaml/v3` (MIT für die aus libyaml portierten Dateien, sonst Apache-2.0).\*
 
 ## Entscheidung
 
@@ -55,6 +55,8 @@
 9. **Unterkommandos:** `config show` gibt die wirksame Konfiguration als YAML aus, mit `--output json` als JSON für Skripte. `config path` nennt die Konfigurationsdatei, das Datenverzeichnis und das Log-Verzeichnis. `config validate` aus Plan §7.2 folgt in Phase 6.
 10. **Laufzeiteinstellungen** gehören nicht in die Startkonfiguration. Sie liegen ab Phase 2 in der Profildatenbank und werden über die API geändert.
 
+*\* Redaktionell berichtigt am 2026-09-29: Die Lizenz von `go.yaml.in/yaml/v3` war zunächst nur als Apache-2.0 angegeben. Die Entscheidung ändert sich dadurch nicht.*
+
 ## Betrachtete Alternativen
 
 | Alternative | Warum nicht |
@@ -77,7 +79,7 @@
 
 **Negativ und Risiken:**
 
-- Eine Abhängigkeit mehr: `go.yaml.in/yaml/v3` (Apache-2.0).
+- Eine Abhängigkeit mehr: `go.yaml.in/yaml/v3` (MIT und Apache-2.0, beide in der Allowlist). Ihre `NOTICE`-Datei gehört zu den Drittkomponenten, die vor Gate O in die eigene `NOTICE` kommen.\*
 - YAML hat Fallstricke bei der Typerkennung, etwa `no` oder `on`, die je nach YAML-Version als Bool oder als Text gelten. Die Werte gehen deshalb durch die Typprüfung von kong; ein falscher Typ scheitert mit einer Meldung, die den Schlüssel nennt.
 - Der eigene Resolver hängt an kongs Resolver-Schnittstelle und muss bei kong-Updates mitgeprüft werden; Tests sichern den Vorrang ab.
 - Unter Linux liegen Daten und Logs im Konfigurationsverzeichnis (`~/.config`), nicht unter `~/.local/share`.

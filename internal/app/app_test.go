@@ -1,0 +1,119 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package app_test
+
+import (
+	"bytes"
+	"context"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ripmav/streamcrew/internal/app"
+	"github.com/ripmav/streamcrew/internal/config"
+)
+
+func testConfig(t *testing.T) config.Config {
+	t.Helper()
+	cfg := config.Config{
+		DataDir:         filepath.Join(t.TempDir(), "data"),
+		Mode:            config.ModeDaemon,
+		Listen:          "127.0.0.1:0",
+		ShutdownTimeout: 5 * time.Second,
+		Log:             config.LogConfig{Level: "debug", Format: "json", File: true, MaxSize: 1, MaxFiles: 1},
+	}
+	require.NoError(t, cfg.Resolve())
+	return cfg
+}
+
+func status(t *testing.T, url string) int {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	return resp.StatusCode
+}
+
+func TestRunStartsReportsReadyAndStops(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	var console bytes.Buffer
+	a, err := app.New(cfg, app.WithConsole(&console))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	errc := make(chan error, 1)
+	go func() { errc <- a.Run(ctx) }()
+
+	select {
+	case <-a.HTTPServer().Listening():
+	case err := <-errc:
+		t.Fatalf("Run returned early: %v", err)
+	}
+	base := "http://" + a.HTTPServer().Addr().String()
+	assert.Equal(t, http.StatusOK, status(t, base+"/healthz"))
+	require.Eventually(t, a.Ready, 5*time.Second, 10*time.Millisecond)
+	assert.Equal(t, http.StatusOK, status(t, base+"/readyz"))
+
+	cancel()
+	require.NoError(t, <-errc)
+	assert.False(t, a.Ready(), "not ready after shutdown")
+
+	assert.Contains(t, console.String(), `"msg":"streamcrew starting"`)
+	assert.Contains(t, console.String(), `"msg":"streamcrew stopped"`)
+	logFile, err := os.ReadFile(filepath.Join(cfg.LogDir(), "streamcrew.log"))
+	require.NoError(t, err)
+	assert.Contains(t, string(logFile), `"msg":"streamcrew stopped"`)
+	assert.Contains(t, string(logFile), `"component":"http"`)
+
+	info, err := os.Stat(cfg.DataDir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+}
+
+func TestRunFailsWhenPortIsInUse(t *testing.T) {
+	t.Parallel()
+	var lc net.ListenConfig
+	busy, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer busy.Close()
+
+	cfg := testConfig(t)
+	cfg.Listen = busy.Addr().String()
+	var console bytes.Buffer
+	a, err := app.New(cfg, app.WithConsole(&console))
+	require.NoError(t, err)
+
+	err = a.Run(t.Context())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "listen on")
+	assert.Contains(t, console.String(), "streamcrew stopped with an error")
+}
+
+func TestNewWithoutLogFile(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	cfg.Log.File = false
+	_, err := app.New(cfg, app.WithConsole(&bytes.Buffer{}))
+	require.NoError(t, err)
+	assert.NoDirExists(t, cfg.LogDir())
+}
+
+func TestNewFailsWithoutDataDirectory(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	blocker := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(blocker, nil, 0o600))
+	cfg.DataDir = filepath.Join(blocker, "data")
+
+	_, err := app.New(cfg, app.WithConsole(&bytes.Buffer{}))
+	assert.ErrorContains(t, err, "create data directory")
+}
