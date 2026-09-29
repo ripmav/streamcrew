@@ -95,21 +95,42 @@ func (b *Bus) Subscribe(ctx context.Context, opts ...SubscribeOption) *Subscript
 	s.watchMu.Lock()
 	s.stopWatching = context.AfterFunc(ctx, s.Close)
 	s.watchMu.Unlock()
+	// If the bus was closed in the meantime, Bus.Close found no watch to
+	// stop; stop it here.
+	if !b.active(s) {
+		s.stopWatch()
+	}
 	return s
 }
 
 // Close ends all subscriptions. Later subscriptions end at once.
 func (b *Bus) Close() {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	if b.closed {
+		b.mu.Unlock()
 		return
 	}
 	b.closed = true
+	subs := make([]*Subscription, 0, len(b.subs))
 	for s := range b.subs {
 		delete(b.subs, s)
 		close(s.ch)
+		subs = append(subs, s)
 	}
+	b.mu.Unlock()
+	// Like Subscription.Close, stop watching the contexts, so that a
+	// long-lived context does not keep the subscriptions alive.
+	for _, s := range subs {
+		s.stopWatch()
+	}
+}
+
+// active reports whether s is still subscribed.
+func (b *Bus) active(s *Subscription) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	_, ok := b.subs[s]
+	return ok
 }
 
 // remove ends one subscription; it reports whether it was still active.
@@ -184,6 +205,11 @@ func (s *Subscription) Close() {
 	if !s.bus.remove(s) {
 		return
 	}
+	s.stopWatch()
+}
+
+// stopWatch stops watching the subscription's context.
+func (s *Subscription) stopWatch() {
 	s.watchMu.Lock()
 	stop := s.stopWatching
 	s.watchMu.Unlock()
