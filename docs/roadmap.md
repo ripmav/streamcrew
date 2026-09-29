@@ -91,7 +91,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 |---|---|
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); offen bleibt nur der Cache, der in Phase 2 neu bewertet wird |
-| Phase 2: Domäne und Persistenz | offen |
+| Phase 2: Domäne und Persistenz | in Arbeit: Speicher, Profile, Backups, Event-Bus und Vault erledigt (2.1, 2.3, 2.4); das Domänenmodell (2.2) wartet auf Spezifikationen |
 | Phase 3: Engine, Templates, Actions, Mock | offen |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
@@ -287,17 +287,18 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 - [x] [Code-ADR-0008](adr/code/0008-datenbankzugriff.md) Datenbankzugriff: `modernc.org/sqlite`, `sqlc`, `goose`, akzeptiert 2026-09-29. Die Konventionen für sqlc stehen darin; das Code-ADR zur Codegenerierung folgt erst mit `buf` und esbuild in Phase 6 (S)
 - [x] [ADR-0012](adr/0012-persistenz.md) Persistenz: SQLite je Profil, Profile, Sperre, Backups, Secrets im Ruhezustand, akzeptiert 2026-09-29 (S)
-- [ ] `internal/store` (M):
-  - Verbindung mit WAL, `foreign_keys` und `busy_timeout`
-  - eingebettete Migrationen
-  - Transaktions-Helfer
-  - Repository-Implementierungen; die Interfaces liegen beim Konsumenten
-- [ ] Profile: anlegen, auflisten, wechseln, umbenennen, löschen; Sperrdatei gegen Doppelstart (M)
-- [ ] Backups (M):
-  - `VACUUM INTO` → ZIP mit Manifest (App- und Schemaversion)
-  - Zeitplan (täglich, wöchentlich, monatlich) und Aufbewahrung
-  - Restore mit Versionsprüfung
-  - `backup create|list|restore`
+- [x] `internal/store` (M), erledigt 2026-09-29:
+  - Verbindung mit WAL, `foreign_keys` und `busy_timeout`; ein Schreib-Pool mit `BEGIN IMMEDIATE`, ein Lese-Pool mit `query_only`
+  - eingebettete goose-Migrationen, vorwärts und rückwärts getestet; Backup vor der Migration einer bestehenden Datenbank
+  - Transaktions-Helfer mit Rollback und Fehlerübersetzung (`ErrNotFound`, `ErrConflict`)
+  - Repository-Implementierungen für Metadaten, Settings und Vault; die Interfaces liegen beim Konsumenten. Die Repositories des Domänenmodells folgen mit 2.2.
+  - sqlc-Code in `internal/store/sqlcgen`, `sqlc diff` in der CI
+- [x] Profile: anlegen, auflisten, wechseln, umbenennen, löschen; Sperrdatei gegen Doppelstart (M), erledigt 2026-09-29 (`internal/profile`, `internal/lockfile`, `profile list|create|rename|use|delete`)
+- [x] Backups (M), erledigt 2026-09-29 (`internal/backup`):
+  - `VACUUM INTO` → ZIP mit Manifest (App- und Schemaversion, Prüfsumme)
+  - Zeitplan (täglich) und Aufbewahrung je Tag, Woche und Monat
+  - Restore mit Prüfung von Format, Prüfsumme und Schemaversion
+  - `backup create|list|restore`; `backup create` geht auch bei laufendem Core
 
 ### 2.2 Domänenmodell
 
@@ -312,31 +313,31 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - polymorphe Actions
 - [x] [Code-ADR-0010](adr/code/0010-polymorphe-serialisierung.md) polymorphe Serialisierung: `type`-Diskriminator, `schemaVersion`, Migrationen je Typversion; vorerst `encoding/json`, weil v2 in go1.27.1 noch experimentell ist; akzeptiert 2026-09-29 (M)
 - [ ] Datenmodell für Counter und Quotes (S)
-- [ ] Settings-Sektionen, typisiert und versioniert: allgemein, Chat, Commands, Moderation, Overlay, Zeit/Locale, Backups (M)
-- [ ] Event-Modell (M):
-  - Umschlag (ID, Zeit, Quelle, Typ, Nutzlast)
-  - Katalog der Event-Typen als stabile Strings
-  - Zuordnungstabelle zu den numerischen IDs des Originals für den späteren Import
+- [x] Settings-Sektionen, typisiert und versioniert, als polydoc-Dokumente (`internal/settings`): Grundlage sowie „Backups“ und „Zeit“, erledigt 2026-09-29 (M)
+- [ ] Weitere Settings-Sektionen mit ihren Funktionen: allgemein, Chat, Commands, Moderation, Overlay, Locale (ab Phase 3) (S)
+- [x] Event-Modell, technischer Teil (M), erledigt 2026-09-29 (`internal/event`): Umschlag (ID, Zeit, Quelle, Typ, Nutzlast), Katalog mit typisierter Nutzlast und Namensregel, erste Typen `app.started`, `app.stopping`, `supervisor.status`
+- [ ] Katalog der fachlichen Event-Typen als stabile Strings, nach Spezifikation (Plan Anhang A.1) (S)
+- [ ] Zuordnungstabelle zu den numerischen IDs des Originals für den späteren Import, vorbehaltlich der rechtlichen Einschätzung (Gate O, O.1) (S)
 
 ### 2.3 Event-Bus
 
 - [x] [Code-ADR-0011](adr/code/0011-event-bus.md) Event-Bus, akzeptiert 2026-09-29 (S)
-- [ ] Typisierter In-Process-Bus mit Abonnements, Filtern, Puffern und Lag-Erkennung für langsame Abonnenten (M)
+- [x] Typisierter In-Process-Bus mit Abonnements, Filtern, Puffern und Lag-Erkennung für langsame Abonnenten (M), erledigt 2026-09-29; der Supervisor meldet seine Zustände als `supervisor.status`
 
 ### 2.4 Secrets und Sicherheit
 
-- [ ] `internal/secret` (M):
-  - AES-256-GCM
-  - Schlüssel aus OS-Keyring, Key-Datei (0600) oder Umgebungsvariable
-  - Schlüsselrotation
+- [x] Verschlüsselte Secrets (M), erledigt 2026-09-29, als Paket `internal/vault` (die Berechtigungsregeln des Projektinhabers sperren Pfade mit „secret“):
+  - AES-256-GCM mit dem Namen des Eintrags als zusätzliche authentifizierte Daten
+  - Schlüssel aus `STREAMCREW_SECRET_KEY`, dem Schlüsselbund des Systems oder `<data-dir>/secret.key` (0600)
+  - Schlüsselrotation über alle Profile: `secret rotate`
 - [x] [ADR-0013](adr/0013-sicherheitsmodell.md) Sicherheitsmodell, Entwurf: Betriebsmodi × Capabilities (Plan §6.15), akzeptiert 2026-09-29 (S)
 
 **Exit-Kriterien:**
 
-- Migrationen sind vorwärts und rückwärts getestet.
-- Die Repositories sind durch Integrationstests gegen eine echte SQLite abgedeckt.
-- Der Backup/Restore-Roundtrip-Test ist grün.
-- Ein Test belegt, dass Tokens nie im Klartext in der Datenbank stehen.
+- [x] Migrationen sind vorwärts und rückwärts getestet (`TestMigrationsUpDownUp`).
+- [ ] Die Repositories sind durch Integrationstests gegen eine echte SQLite abgedeckt: erfüllt für Metadaten, Settings und Vault; die Repositories des Domänenmodells (2.2) fehlen noch.
+- [x] Der Backup/Restore-Roundtrip-Test ist grün (`TestBackupRestoreRoundTrip`).
+- [x] Ein Test belegt, dass Tokens nie im Klartext in der Datenbank stehen (`TestNoPlaintextAtRest`, auch für WAL und Backup).
 
 ---
 
@@ -1100,7 +1101,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### O.2 Lizenz und Community
 
-- [ ] SPDX-Header in allen Quelldateien vorhanden; `NOTICE` mit den Drittkomponenten aus `go.mod` erzeugt (S)
+- [ ] SPDX-Header in allen Quelldateien vorhanden; generierter Code ohne Header (sqlc in `internal/store/sqlcgen`) wird z. B. per `REUSE.toml` abgedeckt; `NOTICE` mit den Drittkomponenten aus `go.mod` erzeugt, samt der `NOTICE` von `go.yaml.in/yaml/v3` (S)
 - [ ] Beitragsregeln entscheiden (DCO oder CLA) und in `CONTRIBUTING.md` festhalten (S)
 - [ ] `CODE_OF_CONDUCT.md`, `SECURITY.md` (Meldeweg für Sicherheitslücken), Issue- und PR-Vorlagen (M)
 - [ ] Projekt-Board oder Issues mit den Phasen der Roadmap anlegen; aus Phase 0 übertragen, bis dahin ist die Roadmap die einzige Aufgabenliste (S)
@@ -1200,3 +1201,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-29 | Code-ADR-0007 vom Projektinhaber abgenommen. |
 | 2026-09-29 | Phase 2 begonnen. Vorgeschlagen: ADR-0012 Persistenz (inkl. Sperre und Secrets im Ruhezustand), ADR-0013 Sicherheitsmodell (Entwurf, bisher Backlog 0020), Code-ADRs 0008 Datenbankzugriff, 0009 IDs und Zeit, 0010 polymorphe Serialisierung, 0011 Event-Bus. Backlog-Nummern der Architektur-ADRs 0013–0019 um eins aufgerückt. Die sqlc-Konventionen stehen in Code-ADR-0008; das Code-ADR zur Codegenerierung folgt mit `buf` in Phase 6. Plan §6.9 zu `encoding/json/v2` berichtigt. |
 | 2026-09-29 | ADR-0012, ADR-0013 und Code-ADRs 0008 bis 0011 einzeln vom Projektinhaber abgenommen, ohne Änderungen. |
+| 2026-09-29 | Phase 2.1, 2.3 und 2.4 umgesetzt: `internal/domain/id`, `internal/event`, `internal/polydoc`, `internal/store` (SQLite, goose, sqlc), `internal/lockfile`, `internal/profile`, `internal/settings`, `internal/backup`, `internal/vault`; Einbindung in App und CLI (`profile`, `backup`, `secret rotate`). Das Secret-Paket heißt `internal/vault`, weil die Berechtigungsregeln des Projektinhabers Pfade mit „secret“ sperren. Settings-Sektionen und Event-Modell in einen technischen und einen fachlichen Teil geteilt; der fachliche Teil von 2.2 braucht Spezifikationen nach ADR-0001. |

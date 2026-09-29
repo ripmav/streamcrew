@@ -956,7 +956,9 @@ streamcrew/
 │   ├── logging/                   # slog-Handler, Rotation, Maskierung
 │   ├── httpserver/                # HTTP-Server, /healthz, /readyz, pprof
 │   ├── doctor/  buildinfo/        # Selbstprüfung, Versionsinformation
-│   ├── domain/                    # Entitäten und Wertobjekte
+│   ├── domain/                    # Entitäten und Wertobjekte; domain/id: UUIDv7 (Code-ADR-0009)
+│   ├── polydoc/                   # polymorphe Dokumente mit Typ und Version (Code-ADR-0010)
+│   ├── settings/                  # typisierte Settings-Sektionen je Profil
 │   ├── engine/                    # Queue, Instanzen, Sperrmodi, Runner
 │   ├── action/                    # Registry + Implementierungen (action/chat, action/wait, …)
 │   ├── requirement/
@@ -974,10 +976,13 @@ streamcrew/
 │   ├── media/                     # Audio-Sinks, TTS-Pipeline
 │   ├── script/                    # goja-Sandbox
 │   ├── auth/                      # OAuth-Flows, Token-Refresh
-│   ├── secret/                    # Verschlüsselung, Keyring
+│   ├── vault/                     # Verschlüsselung der Secrets, Schlüssel (ADR-0012; Name siehe Roadmap 2.4)
 │   ├── store/                     # SQLite, Repositories
 │   │   ├── migrations/            # goose-SQL (go:embed)
-│   │   └── queries/               # sqlc-Queries
+│   │   ├── queries/               # sqlc-Queries
+│   │   └── sqlcgen/               # von sqlc generiert, eingecheckt
+│   ├── profile/  lockfile/        # Profile, Sperre des Datenverzeichnisses (ADR-0012)
+│   ├── backup/                    # Backups, Aufbewahrung, Zeitplan, Restore
 │   ├── api/                       # ConnectRPC-Handler, devapi/, mcp/, Auth-Middleware
 │   ├── importer/mixitup/          # optional (ADR-0021)
 │   ├── i18n/
