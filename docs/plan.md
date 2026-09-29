@@ -1174,7 +1174,7 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0009 | `0009-ids-und-zeit.md` | UUIDv7, Uhren, `synctest`; **akzeptiert** | 2 |
 | 0010 | `0010-polymorphe-serialisierung.md` | Diskriminator, Versionen, JSON-Bibliothek; **akzeptiert** | 2 |
 | 0011 | `0011-event-bus.md` | Typisierung, Puffer, Lag; **akzeptiert** | 2 |
-| 0012 | `0012-template-engine.md` | Tokenizer, Präfixregel, Kodierung | 3 |
+| 0012 | `0012-template-engine.md` | Tokenizer, Präfixregel, Kodierung, Ausdrücke mit `expr-lang/expr`; **vorgeschlagen** | 3 |
 | 0013 | `0013-typ-registry.md` | Descriptors, Schemas, Capabilities | 3 |
 | 0014 | `0014-http-client.md` | Retry, Rate-Limits, Fehlerklassen; Einbau des Circuit Breakers (Code-ADR-0007) | 4 |
 | 0015 | `0015-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |

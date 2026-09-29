@@ -5,7 +5,7 @@
 | **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12) |
 | **Stand** | 2026-09-29 |
 | **Grundlage** | [`plan.md`](plan.md) (Architektur, Prioritäten, Risiken), [`starting.md`](starting.md), [`adr/`](adr/README.md) |
-| **Aktuelle Phase** | Phase 3: Engine, Templates, Actions, Mock (nächste) |
+| **Aktuelle Phase** | Phase 3: Engine, Templates, Actions, Mock (in Arbeit) |
 
 > **Name:** Das Projekt heißt vorerst `streamcrew` (Codename, [ADR-0008](adr/0008-codename-streamcrew.md)); Binary `streamcrew`. Der endgültige Name wird vor Gate O geprüft.
 
@@ -92,7 +92,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (11.2) |
-| Phase 3: Engine, Templates, Actions, Mock | offen |
+| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: Spezifikation und Code-ADR der Template-Engine (3.1) warten auf die Prüfung |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
@@ -358,12 +358,12 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 3.1 Template-Engine
 
-- [ ] Spezifikation `docs/spec/template.md` (S):
+- [ ] Spezifikation [`docs/spec/template.md`](spec/template.md) (S), Entwurf vom 2026-09-29, wartet auf die Prüfung durch den Projektinhaber; Identifier-Namen unter Interop-Vorbehalt (Entscheidung des Projektinhabers):
   - Syntax und Auflösungsreihenfolge
   - Regel „längster Präfix“
   - Kodierung
   - bewusste Abweichungen vom Original
-- [ ] Code-ADR-0012 Template-Engine (S)
+- [ ] [Code-ADR-0012](adr/code/0012-template-engine.md) Template-Engine (S), vorgeschlagen 2026-09-29: Tokenizer mit Präfixbaum, Präfix-Familien, Kodierung je Ausgabeort, Ausdrücke mit `expr-lang/expr`
 - [ ] Tokenizer und Resolver-Registry (statisch, Muster, dynamische Namen); bedarfsgesteuerte Auflösung mit `context`; Cache pro Rendervorgang (M)
 - [ ] Kodierungsmodi: Text, URL, HTML, JSON (S)
 - [ ] Identifier-Familien für das MVP (M):
@@ -1214,3 +1214,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-29 | Spezifikationen des Domänenmodells vom Projektinhaber geprüft und akzeptiert; offene Fragen werden am Original geprüft, bis dahin gilt das beschriebene Verhalten. |
 | 2026-09-29 | Phase 2.2 umgesetzt: `internal/domain/{platform,role,user,command,counter,quote,eventtype}`, Migrationen 0002 bis 0004, Repositories mit Integrationstests, Golden Files der Anforderungsarten, Rücksetzen der Counter beim Start. Phase 2 abgeschlossen; weitere Settings-Sektionen nach 3.2 und die Zuordnung der numerischen Ereignis-IDs nach 11.2 übertragen. Code-ADR-0009 präzisiert: Dauern in Dokumenten als Go-Dauer. |
 | 2026-09-29 | CI-Cache neu bewertet (aus Phase 1.1): ein `actions/cache`-Eintrag je Linux-Job statt eines gemeinsamen setup-go-Caches. Abgerechnete Minuten je Push von 11 auf 5, Cross-Build von 334 s auf 111 s. |
+| 2026-09-29 | Phase 3 begonnen, mit Interop-Vorbehalt für die `$`-Identifier-Namen statt auf die rechtliche Einschätzung zu warten (Entscheidung des Projektinhabers). Entwurf der Spezifikation `template.md` aus der offiziellen Doku und dem Plan, ohne Code des Originals; Code-ADR-0012 Template-Engine vorgeschlagen. |
