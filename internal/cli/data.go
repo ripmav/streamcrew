@@ -22,18 +22,18 @@ import (
 
 // profiles returns the profile manager; profiles it opens get a backup
 // before migrations, like in the core.
-func (e *runEnv) profiles(cfg *config.Config) *profile.Manager {
+func (e *Env) profiles(cfg *config.Config) *profile.Manager {
 	return profile.NewManager(cfg.DataDir,
 		store.WithBeforeMigrate(app.PreMigrationBackup(app.BackupDir(cfg.DataDir), buildinfo.Read().Version, discardLogger())))
 }
 
 // lock takes the data directory lock for commands that change profiles.
-func (e *runEnv) lock(cfg *config.Config) (*lockfile.Lock, error) {
+func (e *Env) lock(cfg *config.Config) (*lockfile.Lock, error) {
 	return app.LockDataDir(cfg.DataDir)
 }
 
 // profileID returns --profile or the active profile.
-func (e *runEnv) profileID(cfg *config.Config) (string, error) {
+func (e *Env) profileID(cfg *config.Config) (string, error) {
 	if cfg.Profile != "" {
 		return cfg.Profile, nil
 	}
@@ -72,7 +72,7 @@ type profileListCmd struct {
 }
 
 // Run lists the profiles.
-func (c profileListCmd) Run(ctx context.Context, e *runEnv) error {
+func (c profileListCmd) Run(ctx context.Context, e *Env) error {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
@@ -82,9 +82,9 @@ func (c profileListCmd) Run(ctx context.Context, e *runEnv) error {
 		return err
 	}
 	if c.Output == "json" {
-		return writeJSON(e.stdout, list)
+		return writeJSON(e.Stdout, list)
 	}
-	tw := tabwriter.NewWriter(e.stdout, 0, 0, 2, ' ', 0)
+	tw := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "ACTIVE\tID\tNAME\tCREATED")
 	for _, p := range list {
 		active := ""
@@ -102,7 +102,7 @@ type profileCreateCmd struct {
 }
 
 // Run creates a profile.
-func (c profileCreateCmd) Run(ctx context.Context, e *runEnv) (err error) {
+func (c profileCreateCmd) Run(ctx context.Context, e *Env) (err error) {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func (c profileCreateCmd) Run(ctx context.Context, e *runEnv) (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(e.stdout, "created profile %s (%s)\n", p.ID, p.Name)
+	_, err = fmt.Fprintf(e.Stdout, "created profile %s (%s)\n", p.ID, p.Name)
 	return err
 }
 
@@ -126,7 +126,7 @@ type profileRenameCmd struct {
 }
 
 // Run renames a profile.
-func (c profileRenameCmd) Run(ctx context.Context, e *runEnv) (err error) {
+func (c profileRenameCmd) Run(ctx context.Context, e *Env) (err error) {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
@@ -139,7 +139,7 @@ func (c profileRenameCmd) Run(ctx context.Context, e *runEnv) (err error) {
 	if err := e.profiles(cfg).Rename(ctx, c.ID, c.Name); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(e.stdout, "renamed profile %s to %s\n", c.ID, c.Name)
+	_, err = fmt.Fprintf(e.Stdout, "renamed profile %s to %s\n", c.ID, c.Name)
 	return err
 }
 
@@ -148,7 +148,7 @@ type profileUseCmd struct {
 }
 
 // Run makes a profile the active one.
-func (c profileUseCmd) Run(e *runEnv) (err error) {
+func (c profileUseCmd) Run(e *Env) (err error) {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
@@ -161,7 +161,7 @@ func (c profileUseCmd) Run(e *runEnv) (err error) {
 	if err := e.profiles(cfg).SetActive(c.ID); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(e.stdout, "profile %s is now active\n", c.ID)
+	_, err = fmt.Fprintf(e.Stdout, "profile %s is now active\n", c.ID)
 	return err
 }
 
@@ -171,7 +171,7 @@ type profileDeleteCmd struct {
 }
 
 // Run deletes a profile after backing it up.
-func (c profileDeleteCmd) Run(ctx context.Context, e *runEnv) (err error) {
+func (c profileDeleteCmd) Run(ctx context.Context, e *Env) (err error) {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
@@ -195,7 +195,7 @@ func (c profileDeleteCmd) Run(ctx context.Context, e *runEnv) (err error) {
 	if err := profiles.Delete(c.ID); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(e.stdout, "deleted profile %s; backup: %s\n", c.ID, info.Path)
+	_, err = fmt.Fprintf(e.Stdout, "deleted profile %s; backup: %s\n", c.ID, info.Path)
 	return err
 }
 
@@ -208,7 +208,7 @@ type backupCmd struct {
 type backupCreateCmd struct{}
 
 // Run backs a profile up.
-func (backupCreateCmd) Run(ctx context.Context, e *runEnv) error {
+func (backupCreateCmd) Run(ctx context.Context, e *Env) error {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
@@ -224,7 +224,7 @@ func (backupCreateCmd) Run(ctx context.Context, e *runEnv) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(e.stdout, "%s\n", info.Path)
+	_, err = fmt.Fprintf(e.Stdout, "%s\n", info.Path)
 	return err
 }
 
@@ -233,7 +233,7 @@ type backupListCmd struct {
 }
 
 // Run lists the backups of a profile.
-func (c backupListCmd) Run(e *runEnv) error {
+func (c backupListCmd) Run(e *Env) error {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
@@ -250,9 +250,9 @@ func (c backupListCmd) Run(e *runEnv) error {
 		if list == nil {
 			list = []backup.Info{}
 		}
-		return writeJSON(e.stdout, list)
+		return writeJSON(e.Stdout, list)
 	}
-	tw := tabwriter.NewWriter(e.stdout, 0, 0, 2, ' ', 0)
+	tw := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "CREATED\tKIND\tSCHEMA\tSIZE\tFILE")
 	for _, b := range list {
 		fmt.Fprintf(tw, "%s\t%s\t%d\t%d\t%s\n",
@@ -267,7 +267,7 @@ type backupRestoreCmd struct {
 }
 
 // Run restores a backup.
-func (c backupRestoreCmd) Run(ctx context.Context, e *runEnv) (err error) {
+func (c backupRestoreCmd) Run(ctx context.Context, e *Env) (err error) {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
@@ -297,12 +297,12 @@ func (c backupRestoreCmd) Run(ctx context.Context, e *runEnv) (err error) {
 		if err != nil {
 			return fmt.Errorf("backup before restoring: %w", err)
 		}
-		fmt.Fprintf(e.stdout, "backed up the current state: %s\n", pre.Path)
+		fmt.Fprintf(e.Stdout, "backed up the current state: %s\n", pre.Path)
 	}
 	if _, err := backup.Restore(ctx, c.File, profiles.Path(id), store.LatestVersion()); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(e.stdout, "restored profile %s from %s\n", id, c.File)
+	_, err = fmt.Fprintf(e.Stdout, "restored profile %s from %s\n", id, c.File)
 	return err
 }
 
@@ -313,7 +313,7 @@ type vaultCmd struct {
 type vaultRotateCmd struct{}
 
 // Run rotates the key of the data directory.
-func (vaultRotateCmd) Run(ctx context.Context, e *runEnv) (err error) {
+func (vaultRotateCmd) Run(ctx context.Context, e *Env) (err error) {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
@@ -324,7 +324,7 @@ func (vaultRotateCmd) Run(ctx context.Context, e *runEnv) (err error) {
 	}
 	defer release(l, &err)
 
-	keys := vault.NewKeys(cfg.DataDir, e.envKey, vault.SystemKeyring{}, discardLogger())
+	keys := vault.NewKeys(cfg.DataDir, e.SecretKey, vault.SystemKeyring{}, discardLogger())
 	ks, err := keys.Load(ctx)
 	if err != nil {
 		return err
@@ -348,7 +348,7 @@ func (vaultRotateCmd) Run(ctx context.Context, e *runEnv) (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(e.stdout, "new key %s in the %s; %d profiles re-encrypted\n", next.Current, next.Source(), len(repos))
+	_, err = fmt.Fprintf(e.Stdout, "new key %s in the %s; %d profiles re-encrypted\n", next.Current, next.Source(), len(repos))
 	return err
 }
 
