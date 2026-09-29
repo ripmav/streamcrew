@@ -892,7 +892,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | SQL/Migrationen | `sqlc`, `pressly/goose/v3` | Kandidat | typisiert, eingebettet; bewährt in `n8n-go` |
 | JSON | `encoding/json/v2` | Kandidat | stdlib; polymorphes Dekodieren über eigene Unmarshaler |
 | JSON-Schema | `github.com/google/jsonschema-go` | Kandidat | auch vom MCP-Go-SDK genutzt |
-| YAML | `go.yaml.in/yaml/v3` oder `goccy/go-yaml` | Kandidat | Commands als Code (Code-ADR-0016) |
+| YAML | `go.yaml.in/yaml/v3` | gesetzt | Konfigurationsdatei und Commands als Code; offizieller Nachfolger von `gopkg.in/yaml.v3` (Code-ADR-0005) |
 | OAuth | `golang.org/x/oauth2` | Kandidat | Device Flow und PKCE eingebaut |
 | Rate-Limits, Nebenläufigkeit | `golang.org/x/time/rate`, `golang.org/x/sync/errgroup` | Kandidat | `x/`-Pakete |
 | IDs | UUIDv7 (`github.com/google/uuid` oder eigene kleine Implementierung) | Kandidat | Code-ADR-0008 |
@@ -909,7 +909,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | Tabellenimport | `encoding/csv`, `xuri/excelize/v2` | Kandidat | Nutzerimport (P2) |
 | i18n | `nicksnyder/go-i18n/v2` oder `golang.org/x/text` | Kandidat | ADR-0022 |
 | Overlay-Bundling | `github.com/evanw/esbuild/pkg/api` | Kandidat | kein Node.js im Build |
-| Tests | `testing`, `testing/synctest`, `testing/fstest`, `net/http/httptest`, Fuzzing, Twitch CLI, Playwright (Web) | Kandidat | |
+| Tests | `testing` mit `github.com/stretchr/testify` (`assert`, `require`), `testing/synctest`, `testing/fstest`, `net/http/httptest`, Fuzzing, Twitch CLI, Playwright (Web) | gesetzt (Go), Kandidat (Web) | Code-ADR-0006 |
 | Release | `goreleaser`, Docker, `fyne-cross` | Kandidat | ADR-0023 |
 
 **Moderne Go-Features, die genutzt werden sollen** (in go1.27.1 geprüft):
@@ -1047,7 +1047,7 @@ Aus den globalen Regeln, verbindlich für alle Repos:
 
 | Ebene | Werkzeuge | Ziel |
 |---|---|---|
-| Unit | stdlib `testing`, tabellengetrieben | Engine, Template, Requirements, Domäne; ≥ 80 % Abdeckung in `engine`, `template`, `requirement` |
+| Unit | `testing` mit testify, tabellengetrieben | Engine, Template, Requirements, Domäne; ≥ 80 % Abdeckung in `engine`, `template`, `requirement` |
 | Golden Files | `testdata/*.golden` | Template-Ausgaben, Overlay-Pakete, Import-Mapping |
 | Fuzzing | native Go-Fuzz-Tests | Template-Tokenizer, Trigger-Parser, Importer; kurze Läufe in CI |
 | Zeitverhalten | `testing/synctest` | Cooldowns, Timer, Backoff, Queues |
@@ -1150,11 +1150,11 @@ Es existieren ADR-0001 bis ADR-0011. Alle höheren Nummern in Plan und Roadmap s
 | Nr. | Datei | Thema | Phase |
 |---|---|---|---|
 | 0001 | `0001-go-toolchain-und-linting.md` | Go-Version-Policy, golangci-lint-v2-Konfiguration, CI, Renovate; **akzeptiert** | 1 |
-| 0002 | `0002-dependency-injection.md` | Composition Root, kein `init()`, keine Globals; **vorgeschlagen** | 1 |
-| 0003 | `0003-fehler-und-logging.md` | Fehlertypen, Wrapping, slog-Konventionen, Rotation; **vorgeschlagen** | 1 |
-| 0004 | `0004-nebenlaeufigkeit-und-supervisor.md` | Goroutine-Besitz, Backoff, Shutdown; **vorgeschlagen** | 1 |
-| 0005 | `0005-konfiguration.md` | kong, Env, Datei, Pfade; **vorgeschlagen** | 1 |
-| 0006 | `0006-teststrategie.md` | Fixtures, Golden Files, Fakes, Fuzzing, native Tests; **vorgeschlagen** (vorläufig 0014) | 1 |
+| 0002 | `0002-dependency-injection.md` | Composition Root, kein `init()`, keine Globals; **akzeptiert** | 1 |
+| 0003 | `0003-fehler-und-logging.md` | Fehlertypen, Wrapping, slog-Konventionen, Rotation; **akzeptiert** | 1 |
+| 0004 | `0004-nebenlaeufigkeit-und-supervisor.md` | Goroutine-Besitz, Backoff, Shutdown; **akzeptiert** | 1 |
+| 0005 | `0005-konfiguration.md` | kong, Env, YAML-Datei, Pfade; YAML-Bibliothek für das ganze Projekt; **akzeptiert** | 1 |
+| 0006 | `0006-teststrategie.md` | testify, Fixtures, Golden Files, Fakes, Fuzzing, native Tests; **akzeptiert** (vorläufig 0014) | 1 |
 | 0007 | `0007-datenbankzugriff.md` | modernc/sqlite, sqlc, goose | 2 |
 | 0008 | `0008-ids-und-zeit.md` | UUIDv7, Uhren, `synctest` | 2 |
 | 0009 | `0009-polymorphe-serialisierung.md` | Diskriminator, Versionen, json/v2 | 2 |
@@ -1164,7 +1164,6 @@ Es existieren ADR-0001 bis ADR-0011. Alle höheren Nummern in Plan und Roadmap s
 | 0013 | `0013-http-client.md` | Retry, Rate-Limits, Fehlerklassen | 4 |
 | 0014 | `0014-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |
 | 0015 | `0015-codegenerierung.md` | buf, sqlc, esbuild in `go generate` | 2/6 |
-| 0016 | `0016-yaml-bibliothek.md` | Commands als Code | 3 |
 
 ---
 

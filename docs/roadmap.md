@@ -153,7 +153,6 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
   - `docs/adr/README.md` (Index)
   - `docs/adr/TEMPLATE.md` (Kontext, Entscheidung, Alternativen, Konsequenzen, Status)
   - `docs/adr/code/README.md`
-- [ ] Projekt-Board oder Issues mit den Phasen dieser Roadmap anlegen (S)
 
 ### 0.5 Übertragene Aufgaben
 
@@ -169,6 +168,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | Plan §15: Zielsysteme der Desktop-App, Signierung und Notarisierung | Desktop-Track D0 | vor dem Paketierungs-Spike |
 | Plan §15: Web-Stack | Web-Track W0 (ADR-0017) | vor W0 |
 | Plan §15: verfügbare Kapazität pro Woche | Querschnittsaufgaben | spätestens zur Kalibrierung nach M1 |
+| Projekt-Board oder Issues mit den Phasen der Roadmap (Entscheidung des Projektinhabers: später) | Gate O, O.2 | vor Gate O |
 
 **Exit-Kriterien** (erfüllt, Gate bestanden am 2026-09-29):
 
@@ -230,13 +230,13 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [x] [ADR-0009](adr/0009-repositories-und-hosting.md) Repositories und Hosting: drei Repositories auf GitHub (privat), CI mit Actions, Releases in GitHub Releases; vorgezogen, erledigt 2026-09-28
 - [x] [ADR-0010](adr/0010-api-protokoll.md) API-Protokoll: ConnectRPC mit Protobuf, inklusive lokalem Transport zum Core-Prozess; vorgezogen, erledigt 2026-09-28
 - [x] [ADR-0011](adr/0011-keine-telemetrie.md) Keine Telemetrie; Fehlersuche über lokale Logs und Diagnose-Paket; vorgezogen, erledigt 2026-09-28
-- [ ] Code-ADRs schreiben (M):
+- [x] Code-ADRs schreiben (M), erledigt 2026-09-29, jedes einzeln vom Projektinhaber abgenommen:
   - 0001 Toolchain und Linting: [Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md), akzeptiert 2026-09-28
-  - 0002 Dependency Injection: [Code-ADR-0002](adr/code/0002-dependency-injection.md), vorgeschlagen 2026-09-29
-  - 0003 Fehler und Logging: [Code-ADR-0003](adr/code/0003-fehler-und-logging.md), vorgeschlagen 2026-09-29
-  - 0004 Nebenläufigkeit und Supervisor: [Code-ADR-0004](adr/code/0004-nebenlaeufigkeit-und-supervisor.md), vorgeschlagen 2026-09-29
-  - 0005 Konfiguration: [Code-ADR-0005](adr/code/0005-konfiguration.md), vorgeschlagen 2026-09-29
-  - 0006 Teststrategie: [Code-ADR-0006](adr/code/0006-teststrategie.md), vorgeschlagen 2026-09-29 (vorläufige Backlog-Nummer 0014; die Backlog-Nummern 0006–0013 sind um eins aufgerückt)
+  - 0002 Dependency Injection: [Code-ADR-0002](adr/code/0002-dependency-injection.md), akzeptiert 2026-09-29
+  - 0003 Fehler und Logging: [Code-ADR-0003](adr/code/0003-fehler-und-logging.md), akzeptiert 2026-09-29
+  - 0004 Nebenläufigkeit und Supervisor: [Code-ADR-0004](adr/code/0004-nebenlaeufigkeit-und-supervisor.md), akzeptiert 2026-09-29
+  - 0005 Konfiguration: [Code-ADR-0005](adr/code/0005-konfiguration.md), akzeptiert 2026-09-29
+  - 0006 Teststrategie: [Code-ADR-0006](adr/code/0006-teststrategie.md), akzeptiert 2026-09-29 (vorläufige Backlog-Nummer 0014; die Backlog-Nummern 0006–0013 sind um eins aufgerückt)
 
 ### 1.3 Skelett
 
@@ -344,7 +344,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | plattformneutrale Ausführung von Commands, testbar ohne Live-Plattform |
 | **Voraussetzungen** | Phase 2; möglichst die rechtliche Einschätzung zu den `$`-Identifier-Namen (Gate O, O.1) |
 | **Aufwand** | 5–7 PW |
-| **ADRs** | 0022; Code-ADRs 0011, 0012, 0016 |
+| **ADRs** | 0022; Code-ADRs 0011, 0012 |
 
 ### 3.1 Template-Engine
 
@@ -401,7 +401,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 3.5 Commands als Code und Typkatalog
 
-- [ ] Code-ADR-0016 YAML-Bibliothek (S)
+- [ ] Prüfen, ob die YAML-Bibliothek aus [Code-ADR-0005](adr/code/0005-konfiguration.md) (`go.yaml.in/yaml/v3`) für Commands als Code genügt, etwa bei Fehlermeldungen mit Zeile und Spalte; sonst ein neues Code-ADR (S)
 - [ ] Typkatalog als JSON-Schema exportieren (`schema export` → `schemas/`) (S)
 - [ ] YAML/JSON-Format (`apiVersion`, `kind`, `metadata`, `spec`) mit Import, Export und Validierung: `command validate|import|export` (M)
 
@@ -1097,6 +1097,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [ ] SPDX-Header in allen Quelldateien vorhanden; `NOTICE` mit den Drittkomponenten aus `go.mod` erzeugt (S)
 - [ ] Beitragsregeln entscheiden (DCO oder CLA) und in `CONTRIBUTING.md` festhalten (S)
 - [ ] `CODE_OF_CONDUCT.md`, `SECURITY.md` (Meldeweg für Sicherheitslücken), Issue- und PR-Vorlagen (M)
+- [ ] Projekt-Board oder Issues mit den Phasen der Roadmap anlegen; aus Phase 0 übertragen, bis dahin ist die Roadmap die einzige Aufgabenliste (S)
 - [ ] README für die Öffentlichkeit: Ziel, Status, Abgrenzung zu Mix It Up (keine Verbindung, keine Marken) (S)
 
 ### O.3 Veröffentlichung
@@ -1186,3 +1187,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-28 | Review-Prompt und Ausgabe-Schema nach `.github/claude/` ausgelagert; der Workflow liest sie aus dem Commit des Workflows, nicht aus dem PR-Checkout. Korrektur: Nur `issue_comment` nutzt die Workflow-Fassung aus `main`, Reviews und Inline-Kommentare nutzen die aus dem Merge-Commit des PRs. PR #9 lässt sich daher per Review mit `@claude` vor dem Merge testen. |
 | 2026-09-29 | Phase 0 abgeschlossen, Gate bestanden: Exit-Kriterien erfüllt. Offene Punkte ohne Einfluss auf Phase 1 übertragen (neuer Abschnitt 0.5): rechtliche Einschätzung, rechtlicher Teil von ADR-0021, Erlaubnis von Blazing Cacti und Namensprüfung nach Gate O (O.1); Fragen aus Plan §15 nach 11.2, D0, W0 und in die Querschnittsaufgaben. Branch-Konvention in `CONTRIBUTING.md` mit optionalem `pre-push`-Hook. Phase 1.1 nachgezogen: Renovate-App installiert, `claude-code-action` gepinnt (#11), Claude-Review auf Festlegung des Projektinhabers ohne Nachweis als erledigt. |
 | 2026-09-29 | Code-ADRs 0002 bis 0006 vorgeschlagen: Dependency Injection, Fehler und Logging, Nebenläufigkeit und Supervisor, Konfiguration, Teststrategie. Die Teststrategie bekommt nach der ADR-Konvention die nächste freie Nummer 0006 statt der vorläufigen 0014; die Backlog-Nummern 0006–0013 rücken um eins auf (Plan §12.2, Phasen 2 bis 4 angepasst). |
+| 2026-09-29 | Code-ADRs 0002 bis 0006 einzeln vom Projektinhaber abgenommen. Überarbeitet vor der Abnahme: Konfigurationsdatei als YAML mit `go.yaml.in/yaml/v3` statt JSON (0005), testify (`assert`, `require`) als Assertion-Bibliothek (0006). Die YAML-Bibliothek gilt damit projektweit; der Backlog-Eintrag „YAML-Bibliothek“ (0016) entfällt, Phase 3 prüft nur ihre Eignung. Projekt-Board aus Phase 0 nach Gate O (O.2) verschoben. |

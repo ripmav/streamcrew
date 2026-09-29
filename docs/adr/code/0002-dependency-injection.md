@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-29 |
-| **Entscheidung durch** | offen (Abnahme durch den Projektinhaber) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | [ADR-0006](../0006-core-als-bibliothek-fuer-selbststart.md); Plan §6.1, §6.3, §6.6, §11.1; Roadmap Phase 1.2 und 1.3; [Code-ADR-0003](0003-fehler-und-logging.md), [Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md), [Code-ADR-0005](0005-konfiguration.md) |
 
 ## Kontext
@@ -58,5 +58,5 @@
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen
+- [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
 - [ ] `internal/app` als Composition Root anlegen (Roadmap Phase 1.3)

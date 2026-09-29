@@ -9,10 +9,10 @@ Es gelten dieselben Konventionen und dieselbe Vorlage ([`../TEMPLATE.md`](../TEM
 | Nr. | Titel | Status | Datum |
 |---|---|---|---|
 | [0001](0001-go-toolchain-und-linting.md) | Go-Toolchain und Linting | Akzeptiert | 2026-09-28 |
-| [0002](0002-dependency-injection.md) | Dependency Injection und Composition Root | Vorgeschlagen | 2026-09-29 |
-| [0003](0003-fehler-und-logging.md) | Fehler und Logging | Vorgeschlagen | 2026-09-29 |
-| [0004](0004-nebenlaeufigkeit-und-supervisor.md) | Nebenläufigkeit und Supervisor | Vorgeschlagen | 2026-09-29 |
-| [0005](0005-konfiguration.md) | Konfiguration | Vorgeschlagen | 2026-09-29 |
-| [0006](0006-teststrategie.md) | Teststrategie | Vorgeschlagen | 2026-09-29 |
+| [0002](0002-dependency-injection.md) | Dependency Injection und Composition Root | Akzeptiert | 2026-09-29 |
+| [0003](0003-fehler-und-logging.md) | Fehler und Logging | Akzeptiert | 2026-09-29 |
+| [0004](0004-nebenlaeufigkeit-und-supervisor.md) | Nebenläufigkeit und Supervisor | Akzeptiert | 2026-09-29 |
+| [0005](0005-konfiguration.md) | Konfiguration | Akzeptiert | 2026-09-29 |
+| [0006](0006-teststrategie.md) | Teststrategie | Akzeptiert | 2026-09-29 |
 
 Die geplanten Code-ADRs stehen im ADR-Backlog von [`plan.md`](../../plan.md) (§12.2).

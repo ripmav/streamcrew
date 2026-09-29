@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-29 |
-| **Entscheidung durch** | offen (Abnahme durch den Projektinhaber) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | [ADR-0003](../0003-betriebsmodi.md), [ADR-0010](../0010-api-protokoll.md); Plan §6.5, §6.21, §7.2, §8; Roadmap Phase 1.2 und 1.3; [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0003](0003-fehler-und-logging.md) |
 
 ## Kontext
@@ -13,7 +13,8 @@
 - Datenverzeichnis: `os.UserConfigDir()`, alternativ `--data-dir` oder ein portabler Modus.
 - [ADR-0003](../0003-betriebsmodi.md): Die Standardwerte sind für den Streaming-PC ausgelegt; den Server-Modus wählt man ausdrücklich. Im Container kommt die Konfiguration üblicherweise aus Umgebungsvariablen.
 - kong wertet von Haus aus Konfigurationsdateien **vor** Umgebungsvariablen aus: Eine Datei würde eine Umgebungsvariable überschreiben. Unbekannte Schlüssel in einer Datei ignoriert kong stillschweigend.
-- Für YAML ist noch keine Bibliothek gewählt; das entscheidet das Code-ADR zur YAML-Bibliothek in Phase 3 (ADR-Backlog in Plan §12.2).
+- Commands als Code (Phase 3) werden als YAML geschrieben. Eine YAML-Bibliothek braucht das Projekt deshalb ohnehin; bisher war ihre Wahl für Phase 3 geplant (ADR-Backlog in Plan §12.2).
+- `gopkg.in/yaml.v3` ist archiviert. Die YAML-Organisation pflegt den Nachfolger unter `go.yaml.in/yaml/v3` (Apache-2.0).
 
 ## Entscheidung
 
@@ -24,11 +25,12 @@
 2. **Vorrang:** Flag vor Umgebungsvariable vor Konfigurationsdatei vor Standardwert.
    - Umgebungsvariablen heißen wie das Flag mit Präfix: `--data-dir` → `STREAMCREW_DATA_DIR` (`kong.DefaultEnvars`).
    - Die Reihenfolge von kong (Datei vor Umgebung) dreht ein eigener Resolver um: Ist die Umgebungsvariable eines Flags gesetzt, liefert die Datei keinen Wert.
-3. **Konfigurationsdatei:** optional, im JSON-Format.
-   - Schlüssel sind die Flag-Namen in `snake_case`, z. B. `log_level`. `streamcrew config show --output json` gibt genau dieses Format aus.
+3. **Konfigurationsdatei:** optional, im YAML-Format, gelesen mit `go.yaml.in/yaml/v3`.
+   - Schlüssel sind die Flag-Namen in `snake_case`, z. B. `log_level`; Maps wie `log_component_level` sind verschachtelte YAML-Objekte. `streamcrew config show` gibt die wirksame Konfiguration genau in diesem Format aus.
    - Unbekannte Schlüssel sind ein Fehler, damit Tippfehler auffallen.
-   - Pfad: `--config` bzw. `STREAMCREW_CONFIG`. Ist er gesetzt, muss die Datei existieren, und nur sie wird gelesen. Sonst wird `<Standard-Datenverzeichnis>/config.json` gelesen, falls vorhanden.
-   - JSON, weil es ohne Abhängigkeit auskommt und die Startkonfiguration klein ist. YAML kann später über die Dateiendung dazukommen, ohne JSON-Dateien ungültig zu machen.
+   - Pfad: `--config` bzw. `STREAMCREW_CONFIG`. Ist er gesetzt, muss die Datei existieren, und nur sie wird gelesen. Sonst wird `<Standard-Datenverzeichnis>/config.yaml` gelesen, falls vorhanden.
+   - YAML erlaubt Kommentare und ist dasselbe Format wie später die Commands als Code.
+   - **Die YAML-Bibliothek gilt damit für das ganze Projekt**, auch für Commands als Code. Der geplante Backlog-Eintrag „YAML-Bibliothek“ entfällt. Phase 3 prüft nur, ob die Bibliothek dort genügt, etwa bei Fehlermeldungen mit Zeile und Spalte; wenn nicht, löst ein neues Code-ADR diesen Punkt ab.
 4. **Pfade:**
    - Datenverzeichnis: `--data-dir` bzw. `STREAMCREW_DATA_DIR`. Standard ist `os.UserConfigDir()/streamcrew`, also z. B. `~/.config/streamcrew`, `%AppData%\streamcrew` oder `~/Library/Application Support/streamcrew`.
    - **Portabler Modus:** Liegt neben dem Binary eine Datei `streamcrew.portable`, ist das Standard-Datenverzeichnis `<Verzeichnis des Binarys>/streamcrew-data`. Eine ausdrückliche Angabe mit `--data-dir` gilt weiterhin.
@@ -50,15 +52,17 @@
 
 7. **Secrets** werden nie als Flag übergeben, weil Flags in der Prozessliste und im Shell-Verlauf stehen. Sie kommen aus Umgebungsvariablen oder Dateien (`--…-file`) und werden in `config show` maskiert. In Phase 1 gibt es noch keine.
 8. **Prüfung:** Alle Fehler werden gesammelt (`errors.Join`) und nennen Flag bzw. Umgebungsvariable. Ungültige Konfiguration beendet `streamcrew` mit Exit-Code `2`.
-9. **Unterkommandos:** `config show` gibt die wirksame Konfiguration als Text oder JSON aus, `config path` die Konfigurationsdatei, das Datenverzeichnis und das Log-Verzeichnis. `config validate` aus Plan §7.2 folgt in Phase 6.
+9. **Unterkommandos:** `config show` gibt die wirksame Konfiguration als YAML aus, mit `--output json` als JSON für Skripte. `config path` nennt die Konfigurationsdatei, das Datenverzeichnis und das Log-Verzeichnis. `config validate` aus Plan §7.2 folgt in Phase 6.
 10. **Laufzeiteinstellungen** gehören nicht in die Startkonfiguration. Sie liegen ab Phase 2 in der Profildatenbank und werden über die API geändert.
 
 ## Betrachtete Alternativen
 
 | Alternative | Warum nicht |
 |---|---|
-| YAML-Datei jetzt (z. B. über `kong-yaml`) | braucht eine YAML-Bibliothek, deren Wahl in Phase 3 ansteht; `kong-yaml` hängt am archivierten `gopkg.in/yaml.v3` |
-| TOML-Datei | gut lesbar, aber eine zusätzliche Abhängigkeit nur für die kleine Startkonfiguration |
+| JSON-Datei über `kong.JSON` | ohne Abhängigkeit, aber ohne Kommentare und unbequem von Hand zu pflegen; unbekannte Schlüssel würden ignoriert |
+| TOML-Datei (`BurntSushi/toml`, `pelletier/go-toml/v2`) | gut lesbar, aber ein zweites Format neben dem YAML der Commands als Code |
+| `github.com/goccy/go-yaml` | MIT-lizenziert, gute Fehlermeldungen mit Position; seltener gepflegt als der offizielle Nachfolger (letztes Release Januar 2026) |
+| `github.com/alecthomas/kong-yaml` | hängt am archivierten `gopkg.in/yaml.v3`; der eigene Resolver ist ohnehin nötig, um den Vorrang und die Prüfung unbekannter Schlüssel umzusetzen |
 | Vorrang wie in kong (Datei vor Umgebung) | widerspricht der Erwartung im Container, dass Umgebungsvariablen eine mitgelieferte Datei übersteuern |
 | `spf13/viper` bzw. `koanf` | eigene Konfigurationsschicht neben kong mit doppelter Definition der Flags; viper bringt viele Abhängigkeiten mit |
 | Daten nach XDG getrennt (`XDG_DATA_HOME`, `XDG_STATE_HOME`) | unter Linux sauberer, aber mehrere Verzeichnisse erschweren Backups und den portablen Modus; Plan §6.21 sieht ein Verzeichnis vor |
@@ -69,16 +73,18 @@
 
 - Eine Definition je Einstellung für Flag, Umgebungsvariable, Datei und Hilfetext.
 - Vorhersehbarer Vorrang, auch im Container; Tippfehler in der Datei fallen sofort auf.
-- Keine zusätzliche Abhängigkeit außer kong.
+- Kommentierbare Konfigurationsdatei im selben Format wie die Commands als Code; die YAML-Frage für Phase 3 ist damit geklärt.
 
 **Negativ und Risiken:**
 
-- JSON erlaubt keine Kommentare in der Konfigurationsdatei.
+- Eine Abhängigkeit mehr: `go.yaml.in/yaml/v3` (Apache-2.0).
+- YAML hat Fallstricke bei der Typerkennung, etwa `no` oder `on`, die je nach YAML-Version als Bool oder als Text gelten. Die Werte gehen deshalb durch die Typprüfung von kong; ein falscher Typ scheitert mit einer Meldung, die den Schlüssel nennt.
 - Der eigene Resolver hängt an kongs Resolver-Schnittstelle und muss bei kong-Updates mitgeprüft werden; Tests sichern den Vorrang ab.
 - Unter Linux liegen Daten und Logs im Konfigurationsverzeichnis (`~/.config`), nicht unter `~/.local/share`.
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen
+- [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
 - [ ] `internal/config` und die Unterkommandos `config show|path` umsetzen; `forbidigo` für Umgebungsvariablen konfigurieren (Roadmap Phase 1.3)
+- [x] Backlog-Eintrag „YAML-Bibliothek“ in Plan §12.2 und Roadmap Phase 3 streichen bzw. durch die Prüfung der Bibliothek für Commands als Code ersetzen, erledigt 2026-09-29
 - [ ] Unix-Socket als lokalen Transport und `config validate` ergänzen (Roadmap Phase 6)

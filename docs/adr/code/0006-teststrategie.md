@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-29 |
-| **Entscheidung durch** | offen (Abnahme durch den Projektinhaber) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | [ADR-0001](../0001-neuimplementierung-und-nutzung-des-originals.md); Plan §11.2, §11.4; Roadmap Phase 1.2; [`docs/spec/README.md`](../../spec/README.md); [Code-ADR-0001](0001-go-toolchain-und-linting.md), [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md) |
 
 *Im ADR-Backlog (Plan §12.2) stand dieses ADR vorläufig unter der Nummer 0014. Es bekommt nach der ADR-Konvention die nächste freie Nummer; die bisherigen Backlog-Nummern 0006 bis 0013 rücken um eins auf.*
@@ -19,9 +19,12 @@
 
 ## Entscheidung
 
-1. **Nur das Paket `testing` der Standardbibliothek.** Keine Assertion- oder Mock-Frameworks (testify, gomock, mockery) und kein `go-cmp`.
-   - Vergleiche mit `==`, `slices.Equal`, `maps.Equal`, `errors.Is` und `errors.AsType`, `reflect.DeepEqual` nur als letztes Mittel.
-   - Fehlermeldungen im Stil `Func(eingabe) = got, want want`.
+1. **`testing` mit testify als Assertion-Bibliothek** (`github.com/stretchr/testify`, MIT):
+   - `require` für Bedingungen, ohne die der Test nicht sinnvoll weiterlaufen kann (Fehler beim Aufbau, erwartete Fehler), `assert` für die übrigen Prüfungen
+   - Fehler mit `require.ErrorIs` bzw. `assert.ErrorIs` und `ErrorAs`, nie über den Text der Meldung
+   - Nur `assert` und `require`: Die Pakete `mock` und `suite` werden nicht verwendet; Fakes bleiben handgeschrieben (Punkt 3), Tests bleiben gewöhnliche Funktionen mit `t.Run`.
+   - Kein zusätzliches `go-cmp`: testify zeigt bei Abweichungen selbst einen Diff.
+   - `require` nur in der Goroutine des Tests, weil es `t.FailNow` aufruft; in anderen Goroutinen gilt `assert`.
 2. **Aufbau:**
    - tabellengetrieben mit `t.Run`; `t.Parallel()`, wo Tests keinen Zustand teilen (nicht zusammen mit `t.Setenv`)
    - Hilfsfunktionen rufen `t.Helper()`; `t.TempDir()`, `t.Setenv()`, `t.Cleanup()` und `t.Context()` statt eigener Auf- und Abbauten
@@ -43,8 +46,10 @@
 
 | Alternative | Warum nicht |
 |---|---|
-| `testify` (assert, require, mock) | verbreitet, aber eine Abhängigkeit für Vergleiche, die die Standardbibliothek abdeckt; Mocks aus Frameworks prüfen eher Aufrufe als Verhalten |
-| `go-cmp` für strukturelle Vergleiche | nützlich bei großen Strukturen; wird erst eingeführt, wenn Tests es tatsächlich brauchen, und dann in einem ergänzenden Code-ADR begründet |
+| Nur die Standardbibliothek | keine Abhängigkeit, aber längere Vergleiche von Hand und keine Diffs bei Abweichungen; Entscheidung des Projektinhabers für testify |
+| `go-cmp` statt testify | liefert Diffs, aber keine Assertions; Prüfungen blieben von Hand geschrieben |
+| testify `mock` bzw. `gomock`, `mockery` | prüfen eher Aufrufe als Verhalten und koppeln Tests an Implementierungsdetails; handgeschriebene Fakes sind robuster |
+| testify `suite` | Zustand über Methoden einer Suite erschwert parallele Tests; `t.Run` und Hilfsfunktionen genügen |
 | `-update`-Flag für Golden Files | verstößt als Paketvariable gegen `gochecknoglobals` |
 | Native Tests bei jedem Pull Request | je Lauf grob zehn bis fünfzehn abgerechnete Minuten mehr; plattformabhängige Fehler sind selten und fallen wöchentlich rechtzeitig auf |
 | Keine nativen Tests | Pfade, Signale und Dateirechte verhalten sich unter Windows anders; Fehler fielen erst beim Nutzer auf |
@@ -54,17 +59,18 @@
 
 **Positiv:**
 
-- Tests sind schnell und deterministisch und brauchen keine Abhängigkeiten.
+- Tests sind schnell und deterministisch; Assertions sind kurz und zeigen bei Abweichungen einen Diff.
 - Plattformabhängige Fehler fallen spätestens nach einer Woche auf, ohne jeden Pull Request zu verteuern.
 - Jede Verhaltensregel einer Spezifikation lässt sich bis zum Test verfolgen.
 
 **Negativ und Risiken:**
 
-- Vergleiche ohne Assertion-Bibliothek sind etwas länger zu schreiben.
+- testify ist eine Testabhängigkeit mehr (mit `github.com/stretchr/objx`, MIT, und `go.yaml.in/yaml/v3`, das der Core ohnehin nutzt). Sie landet nicht im Binary.
 - Ein Fehler unter Windows oder macOS kann bis zum nächsten wöchentlichen Lauf unbemerkt auf `main` liegen. Wer plattformabhängigen Code ändert, startet den Job deshalb im Pull Request von Hand.
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen
+- [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
+- [ ] testify einführen und Tests entsprechend schreiben (Roadmap Phase 1.3)
 - [ ] CI-Job für native Tests unter Windows und macOS ergänzen (Roadmap Phase 1.3); damit ist die entsprechende Folgearbeit aus [Code-ADR-0001](0001-go-toolchain-und-linting.md) erledigt
 - [ ] Ablageort für End-to-End-Tests festlegen (Roadmap Phase 3)

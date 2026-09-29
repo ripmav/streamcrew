@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-29 |
-| **Entscheidung durch** | offen (Abnahme durch den Projektinhaber) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Plan §6.1, §6.6, §11.1; Roadmap Phase 1.2 und 1.3; [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0003](0003-fehler-und-logging.md), [Code-ADR-0006](0006-teststrategie.md) |
 
 ## Kontext
@@ -68,6 +68,6 @@
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen
+- [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
 - [ ] `internal/supervisor` umsetzen und in `internal/app` nutzen (Roadmap Phase 1.3)
 - [ ] Statusmeldungen auf den Event-Bus legen (Roadmap Phase 2.3)

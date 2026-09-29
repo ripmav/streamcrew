@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-29 |
-| **Entscheidung durch** | offen (Abnahme durch den Projektinhaber) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | [ADR-0011](../0011-keine-telemetrie.md); Plan §6.21, §8, §11.1; Roadmap Phase 1.2 und 1.3; [Code-ADR-0001](0001-go-toolchain-und-linting.md), [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md), [Code-ADR-0005](0005-konfiguration.md) |
 
 ## Kontext
@@ -90,7 +90,7 @@
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen
+- [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
 - [ ] `internal/logging` mit Handlern, Level je Komponente, Rotation und Maskierung umsetzen; `sloglint` konfigurieren (Roadmap Phase 1.3)
 - [ ] Log-Stream der API als weiteren Handler anbinden (Roadmap Phase 6)
 - [ ] Diagnose-Paket liest die Datei-Logs ein (Roadmap Phase 6, ADR-0011)
