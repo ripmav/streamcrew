@@ -150,3 +150,26 @@ func TestSettingsDocuments(t *testing.T) {
 	assert.True(t, found)
 	assert.JSONEq(t, `{"type":"backups","schemaVersion":1,"enabled":false}`, string(doc))
 }
+
+func TestReadOnlyBackupWhileOpen(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+	require.NoError(t, s.SetMeta(ctx, "profile.name", "Main"))
+
+	ro, err := store.OpenReadOnly(ctx, s.Path())
+	require.NoError(t, err)
+	defer ro.Close()
+	assert.Equal(t, store.LatestVersion(), ro.SchemaVersion())
+	assert.Equal(t, "Main", ro.Meta("profile.name"))
+
+	dest := filepath.Join(t.TempDir(), "copy.db")
+	require.NoError(t, ro.VacuumInto(ctx, dest), "works while the writer is open")
+	require.Error(t, ro.VacuumInto(ctx, dest))
+	info, err := store.Inspect(ctx, dest)
+	require.NoError(t, err)
+	assert.Equal(t, "Main", info.Meta["profile.name"])
+
+	_, err = store.OpenReadOnly(ctx, filepath.Join(t.TempDir(), "missing.db"))
+	require.Error(t, err)
+}
