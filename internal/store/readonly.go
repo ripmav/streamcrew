@@ -56,8 +56,11 @@ func (r *ReadOnly) Meta(key string) string {
 // VacuumInto writes a consistent, compact copy of the database to dest,
 // which must not exist.
 func (r *ReadOnly) VacuumInto(ctx context.Context, dest string) error {
-	if _, err := os.Stat(dest); !errors.Is(err, os.ErrNotExist) {
+	switch _, err := os.Stat(dest); {
+	case err == nil:
 		return fmt.Errorf("vacuum into %s: target exists", dest)
+	case !errors.Is(err, os.ErrNotExist):
+		return fmt.Errorf("vacuum into %s: %w", dest, err)
 	}
 	if _, err := r.db.ExecContext(ctx, "VACUUM INTO ?", dest); err != nil {
 		return fmt.Errorf("vacuum into %s: %w", dest, err)
