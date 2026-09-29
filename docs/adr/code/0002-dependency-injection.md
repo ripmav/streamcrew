@@ -19,14 +19,14 @@
 1. **Konstruktor-Injektion von Hand.** Abhängigkeiten sind Parameter von `NewX(…)` und werden in Feldern gespeichert. Es gibt kein DI-Framework, keinen Container, keinen Service Locator und keine Registry mit globalem Zustand.
 2. **Eine Composition Root:** `internal/app` baut den gesamten Objektgraphen.
    - `app.New(cfg config.Config, opts ...app.Option) (*app.App, error)` erzeugt alle Komponenten, `(*App).Run(ctx)` betreibt sie bis zum Abbruch des Kontexts.
-   - `cmd/streamcrew` parst nur die Kommandozeile und die Konfiguration ([Code-ADR-0005](0005-konfiguration.md)) und ruft dann `app`. Die spätere Start-API `core.Run` (Phase 6) ist eine dünne Hülle um denselben Aufruf.
+   - `cmd/streamcrew` parst nur die Kommandozeile und die Konfiguration ([Code-ADR-0005](0005-konfiguration.md)) und ruft dann `app`. Die spätere Start-API `core.Run` (Phase 6) ist eine dünne Hülle um denselben Aufruf. *Präzisiert am 2026-09-29, Entscheidung des Projektinhabers: Die Kommandozeile (kong-Definition, Unterkommandos, Exit-Codes) liegt in `internal/cli`; `cmd/streamcrew` enthält nur `main.go` und richtet den Prozess ein (Signale, Umgebung, Exit).*
    - Wird die Verdrahtung groß, wird sie in `internal/app` auf mehrere Dateien je Bereich aufgeteilt, nicht auf weitere Pakete.
 3. **Konstruktoren:**
    - Pflichtabhängigkeiten sind Parameter. Bei mehr als drei Abhängigkeiten oder bei optionalen Einstellungen kommen funktionale Optionen dazu, benannt mit `With…` (`WithLogger`, `WithStatusFunc`).
    - Ein Konstruktor gibt einen konkreten Typ zurück, bei Validierung oder I/O zusammen mit einem Fehler.
    - Fehlt eine optionale Abhängigkeit, gilt ein brauchbarer Standard, z. B. ein Logger, der nichts ausgibt. Der Nullwert eines Typs ist nach Möglichkeit nutzbar.
 4. **Interfaces beim Konsumenten:** Ein Paket definiert die kleinen Interfaces, die es selbst braucht (ein bis drei Methoden). Interfaces entstehen nur an Grenzen, an denen ein Fake oder eine zweite Implementierung nötig ist, nicht vorsorglich für jeden Typ.
-5. **Komponenten kennen `internal/config` nicht.** Jedes Paket hat seine eigene kleine `Config`-Struktur bzw. Optionen. Die Composition Root übersetzt die globale Konfiguration in diese Strukturen. So bleiben Pakete unabhängig testbar, und nur `cmd/streamcrew` und `internal/app` hängen von der Konfiguration ab.
+5. **Komponenten kennen `internal/config` nicht.** Jedes Paket hat seine eigene kleine `Config`-Struktur bzw. Optionen. Die Composition Root übersetzt die globale Konfiguration in diese Strukturen. So bleiben Pakete unabhängig testbar, und nur `cmd/streamcrew` (seit 2026-09-29: `internal/cli`) und `internal/app` hängen von der Konfiguration ab.
 6. **Erlaubt auf Paketebene** sind nur Konstanten, Sentinel-Fehler, kompilierte reguläre Ausdrücke und `//go:embed`-Daten. Braucht ein anderer Fall eine Ausnahme von `gochecknoglobals`, entscheidet der Projektinhaber, und `nolintlint` verlangt eine Begründung.
 7. **Lebenszyklus:**
    - Hintergrundarbeit ist ein Runnable, das die Composition Root beim Supervisor registriert ([Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md)).

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package main
+package cli
 
 import (
 	"context"
@@ -22,9 +22,9 @@ import (
 	"github.com/ripmav/streamcrew/internal/profile"
 )
 
-// cli is the command line: the global flags of config.Config and the
+// root is the command line: the global flags of config.Config and the
 // subcommands.
-type cli struct {
+type root struct {
 	config.Config
 
 	Serve      serveCmd   `cmd:"" help:"Run the core until SIGINT or SIGTERM."`
