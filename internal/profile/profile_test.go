@@ -5,13 +5,16 @@ package profile_test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ripmav/streamcrew/internal/profile"
+	"github.com/ripmav/streamcrew/internal/store"
 )
 
 func TestSlugAndValidID(t *testing.T) {
@@ -44,11 +47,19 @@ func TestCreateListRenameDelete(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, list)
 
+	before := time.Now().Truncate(time.Millisecond)
 	main, err := m.Create(ctx, "Main Channel", "")
 	require.NoError(t, err)
 	assert.Equal(t, "main-channel", main.ID)
 	assert.Equal(t, "Main Channel", main.Name)
-	assert.False(t, main.CreatedAt.IsZero())
+	assert.WithinRange(t, main.CreatedAt, before, time.Now())
+	assert.Equal(t, time.UTC, main.CreatedAt.Location())
+
+	// Stored as Unix milliseconds like every time in the database
+	// (Code-ADR-0009), not as RFC 3339 text.
+	info, err := store.Inspect(ctx, main.Path)
+	require.NoError(t, err)
+	assert.Equal(t, strconv.FormatInt(main.CreatedAt.UnixMilli(), 10), info.Meta[profile.MetaCreatedAt])
 
 	second, err := m.Create(ctx, "Main Channel", "")
 	require.NoError(t, err)

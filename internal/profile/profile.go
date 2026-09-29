@@ -29,7 +29,10 @@ const DefaultID = "default"
 
 // Metadata keys in the profile database.
 const (
-	MetaName      = "profile.name"
+	// MetaName holds the display name.
+	MetaName = "profile.name"
+	// MetaCreatedAt holds the creation time in Unix milliseconds, UTC
+	// (Code-ADR-0009).
 	MetaCreatedAt = "profile.created_at"
 )
 
@@ -182,8 +185,8 @@ func (m *Manager) describe(ctx context.Context, id string) (Profile, error) {
 	if p.Name == "" {
 		p.Name = id
 	}
-	if ts, err := time.Parse(time.RFC3339, info.Meta[MetaCreatedAt]); err == nil {
-		p.CreatedAt = ts
+	if ms, err := strconv.ParseInt(info.Meta[MetaCreatedAt], 10, 64); err == nil {
+		p.CreatedAt = time.UnixMilli(ms).UTC()
 	}
 	return p, nil
 }
@@ -208,10 +211,11 @@ func (m *Manager) Create(ctx context.Context, name, id string) (Profile, error) 
 	if err != nil {
 		return Profile{}, fmt.Errorf("create profile %q: %w", id, err)
 	}
-	created := time.Now().UTC().Truncate(time.Second)
+	// Unix milliseconds like every time in the database (Code-ADR-0009).
+	created := strconv.FormatInt(time.Now().UnixMilli(), 10)
 	err = errors.Join(
 		s.SetMeta(ctx, MetaName, name),
-		s.SetMeta(ctx, MetaCreatedAt, created.Format(time.RFC3339)),
+		s.SetMeta(ctx, MetaCreatedAt, created),
 	)
 	if err = errors.Join(err, s.Close()); err != nil {
 		return Profile{}, fmt.Errorf("create profile %q: %w", id, err)
