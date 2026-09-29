@@ -75,7 +75,8 @@ type Registry[T Document] struct {
 
 // NewRegistry returns an empty registry. unknown wraps documents the
 // registry cannot decode into a placeholder of the family; the placeholder
-// should implement Raw, so that Encode writes the original back.
+// should implement Raw, so that Encode writes the original back. Without
+// unknown (nil), Decode returns an error for such documents instead.
 func NewRegistry[T Document](family string, unknown func(Unknown) T) *Registry[T] {
 	return &Registry[T]{family: family, entries: make(map[string]Entry[T]), unknown: unknown}
 }
@@ -91,6 +92,8 @@ func (r *Registry[T]) Register(e Entry[T]) error {
 		return fmt.Errorf("%s %q: version %d needs %d migrations, got %d", r.family, e.Type, e.Version, e.Version-1, len(e.Migrations))
 	case e.Decode == nil:
 		return fmt.Errorf("%s %q: no decode function", r.family, e.Type)
+	case slices.ContainsFunc(e.Migrations, func(m Migration) bool { return m == nil }):
+		return fmt.Errorf("%s %q: empty migration", r.family, e.Type)
 	}
 	if _, dup := r.entries[e.Type]; dup {
 		return fmt.Errorf("%s %q: already registered", r.family, e.Type)
@@ -137,13 +140,13 @@ func (r *Registry[T]) Decode(data []byte) (T, error) {
 
 	e, ok := r.entries[typ]
 	if !ok {
-		return r.placeholder(typ, version, data, "unknown type"), nil
+		return r.placeholder(typ, version, data, "unknown type")
 	}
 	if version == 0 {
 		version = e.Version
 	}
 	if version > e.Version {
-		return r.placeholder(typ, version, data, fmt.Sprintf("version %d is newer than the supported version %d", version, e.Version)), nil
+		return r.placeholder(typ, version, data, fmt.Sprintf("version %d is newer than the supported version %d", version, e.Version))
 	}
 
 	delete(doc, KeyType)
@@ -211,13 +214,17 @@ func (r *Registry[T]) Encode(v T) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-func (r *Registry[T]) placeholder(typ string, version int, data []byte, reason string) T {
+func (r *Registry[T]) placeholder(typ string, version int, data []byte, reason string) (T, error) {
+	if r.unknown == nil {
+		var zero T
+		return zero, fmt.Errorf("%s %q: %s", r.family, typ, reason)
+	}
 	var compact bytes.Buffer
 	raw := json.RawMessage(slices.Clone(data))
 	if err := json.Compact(&compact, data); err == nil {
 		raw = compact.Bytes()
 	}
-	return r.unknown(Unknown{Type: typ, Version: version, Raw: raw, Reason: reason})
+	return r.unknown(Unknown{Type: typ, Version: version, Raw: raw, Reason: reason}), nil
 }
 
 // errVersion is returned for an invalid schemaVersion.

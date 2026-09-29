@@ -202,6 +202,7 @@ func TestRegisterValidation(t *testing.T) {
 		"empty type":         {Version: 1, Decode: decode},
 		"version zero":       {Type: "a.b", Decode: decode},
 		"missing migrations": {Type: "a.b", Version: 3, Decode: decode, Migrations: []polydoc.Migration{nil}},
+		"empty migration":    {Type: "a.b", Version: 2, Decode: decode, Migrations: []polydoc.Migration{nil}},
 		"no decode":          {Type: "a.b", Version: 1},
 	} {
 		assert.Error(t, r.Register(e), name)
@@ -211,6 +212,20 @@ func TestRegisterValidation(t *testing.T) {
 	assert.Equal(t, []string{"a.b"}, r.Types())
 	assert.Equal(t, 1, r.Version("a.b"))
 	assert.Zero(t, r.Version("x.y"))
+}
+
+// TestWithoutPlaceholder checks that a registry without a placeholder for
+// unknown documents fails with an error instead of a panic.
+func TestWithoutPlaceholder(t *testing.T) {
+	t.Parallel()
+	r := polydoc.NewRegistry[step]("step", nil)
+	decode := func([]byte) (step, error) { return wait{}, nil }
+	require.NoError(t, r.Register(polydoc.Entry[step]{Type: "flow.wait", Version: 1, Decode: decode}))
+
+	_, err := r.Decode([]byte(`{"type":"obs.scene","schemaVersion":1}`))
+	require.ErrorContains(t, err, "unknown type")
+	_, err = r.Decode([]byte(`{"type":"flow.wait","schemaVersion":2,"millis":1}`))
+	require.ErrorContains(t, err, "newer than the supported version")
 }
 
 func TestMigrationError(t *testing.T) {
