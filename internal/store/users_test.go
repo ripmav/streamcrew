@@ -71,7 +71,7 @@ func TestAccountBelongsToOneUser(t *testing.T) {
 
 	ada, _, err := s.UpsertIdentity(ctx, twitchIdentity("1001", "ada"))
 	require.NoError(t, err)
-	grace, _, err := s.UpsertIdentity(ctx, user.Identity{Platform: platform.YouTube, PlatformUserID: "UC7", Login: "ada"})
+	grace, _, err := s.UpsertIdentity(ctx, user.Identity{Platform: platform.YouTube, PlatformUserID: "UC7", Login: "ada", DisplayName: "Ada"})
 	require.NoError(t, err)
 	assert.NotEqual(t, ada.ID, grace.ID, "B40: same name, other platform, other user")
 
@@ -87,7 +87,7 @@ func TestRolesAcrossIdentities(t *testing.T) {
 
 	u, _, err := s.UpsertIdentity(ctx, twitchIdentity("1001", "ada"))
 	require.NoError(t, err)
-	require.NoError(t, s.AddIdentity(ctx, u.ID, user.Identity{Platform: platform.YouTube, PlatformUserID: "UC7", Login: "ada"}))
+	require.NoError(t, s.AddIdentity(ctx, u.ID, user.Identity{Platform: platform.YouTube, PlatformUserID: "UC7", Login: "ada", DisplayName: "Ada"}))
 	require.NoError(t, s.SetRoles(ctx, platform.Twitch, "1001", role.NewSet(role.VIP, role.Subscriber)))
 	require.NoError(t, s.SetRoles(ctx, platform.YouTube, "UC7", role.NewSet(role.Moderator)))
 	u, err = s.UpdateUser(ctx, u.ID, func(u *user.User) error {

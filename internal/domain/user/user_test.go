@@ -47,6 +47,7 @@ func TestIdentityValidate(t *testing.T) {
 		"invalid platform":    func(i *user.Identity) { i.Platform = "Twitch" },
 		"empty platform ID":   func(i *user.Identity) { i.PlatformUserID = "" },
 		"empty login":         func(i *user.Identity) { i.Login = "" },
+		"B2: no display name": func(i *user.Identity) { i.DisplayName = "" },
 		"control character":   func(i *user.Identity) { i.DisplayName = "Ada\n" },
 		"regular on platform": func(i *user.Identity) { i.Roles = role.NewSet(role.Regular) },
 		"negative tier":       func(i *user.Identity) { i.Data.SubTier = -1 },

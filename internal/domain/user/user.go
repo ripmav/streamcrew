@@ -53,8 +53,9 @@ type Identity struct {
 	// account never belongs to two users (B3).
 	Platform       platform.Name
 	PlatformUserID string
-	// Login and DisplayName follow the platform; they are updated on the
-	// next contact after a change (B4).
+	// Login and DisplayName follow the platform and are both required
+	// (B2); they are updated on the next contact after a change (B4). An
+	// adapter whose platform has no display name uses the login.
 	Login       string
 	DisplayName string
 	// Color is the chat color, e.g. "#1E90FF"; empty if unknown.
@@ -137,7 +138,7 @@ func (i Identity) Validate() error {
 	if err := text("login", i.Login, true); err != nil {
 		return err
 	}
-	if err := text("display name", i.DisplayName, false); err != nil {
+	if err := text("display name", i.DisplayName, true); err != nil {
 		return err
 	}
 	if i.Roles.Has(role.Regular) {

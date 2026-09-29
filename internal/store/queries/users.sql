@@ -1,5 +1,3 @@
--- SPDX-License-Identifier: Apache-2.0
-
 -- name: GetUser :one
 SELECT * FROM users WHERE id = ?;
 
@@ -74,3 +72,5 @@ UPDATE user_identities SET
     data_updated_at = ?,
     updated_at = ?
 WHERE platform = ? AND platform_user_id = ?;
+
+-- SPDX-License-Identifier: Apache-2.0

@@ -55,11 +55,9 @@ func (q *Queries) GetIdentity(ctx context.Context, arg GetIdentityParams) (UserI
 }
 
 const getUser = `-- name: GetUser :one
-
 SELECT id, title, notes, excluded, regular, entrance_command_id, created_at, updated_at FROM users WHERE id = ?
 `
 
-// SPDX-License-Identifier: Apache-2.0
 func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 	row := q.db.QueryRowContext(ctx, getUser, id)
 	var i User
