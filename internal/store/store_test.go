@@ -133,3 +133,20 @@ func TestInspectEmptyDatabase(t *testing.T) {
 	assert.Zero(t, info.SchemaVersion)
 	assert.Empty(t, info.Meta)
 }
+
+func TestSettingsDocuments(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+
+	_, found, err := s.Settings(ctx, "backups")
+	require.NoError(t, err)
+	assert.False(t, found)
+
+	require.NoError(t, s.PutSettings(ctx, "backups", []byte(`{"type":"backups","schemaVersion":1}`)))
+	require.NoError(t, s.PutSettings(ctx, "backups", []byte(`{"type":"backups","schemaVersion":1,"enabled":false}`)))
+	doc, found, err := s.Settings(ctx, "backups")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.JSONEq(t, `{"type":"backups","schemaVersion":1,"enabled":false}`, string(doc))
+}
