@@ -22,11 +22,9 @@ func (q *Queries) DeleteCounter(ctx context.Context, name string) (int64, error)
 }
 
 const getCounter = `-- name: GetCounter :one
-
 SELECT id, name, value, reset_on_start, created_at, updated_at FROM counters WHERE name = ?
 `
 
-// SPDX-License-Identifier: Apache-2.0
 func (q *Queries) GetCounter(ctx context.Context, name string) (Counter, error) {
 	row := q.db.QueryRowContext(ctx, getCounter, name)
 	var i Counter

@@ -34,11 +34,9 @@ func (q *Queries) DeleteQuote(ctx context.Context, number int64) (int64, error) 
 }
 
 const getQuote = `-- name: GetQuote :one
-
 SELECT number, id, text, game, quoted_at, added_by, created_at, updated_at FROM quotes WHERE number = ?
 `
 
-// SPDX-License-Identifier: Apache-2.0
 func (q *Queries) GetQuote(ctx context.Context, number int64) (Quote, error) {
 	row := q.db.QueryRowContext(ctx, getQuote, number)
 	var i Quote

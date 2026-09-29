@@ -1,5 +1,3 @@
--- SPDX-License-Identifier: Apache-2.0
-
 -- name: GetCounter :one
 SELECT * FROM counters WHERE name = ?;
 
@@ -18,3 +16,5 @@ DELETE FROM counters WHERE name = ?;
 
 -- name: ResetCountersOnStart :execrows
 UPDATE counters SET value = 0, updated_at = ? WHERE reset_on_start = 1;
+
+-- SPDX-License-Identifier: Apache-2.0

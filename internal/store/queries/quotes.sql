@@ -1,5 +1,3 @@
--- SPDX-License-Identifier: Apache-2.0
-
 -- name: GetQuote :one
 SELECT * FROM quotes WHERE number = ?;
 
@@ -28,3 +26,5 @@ UPDATE quotes SET text = ?, game = ?, quoted_at = ?, added_by = ?, updated_at = 
 
 -- name: DeleteQuote :execrows
 DELETE FROM quotes WHERE number = ?;
+
+-- SPDX-License-Identifier: Apache-2.0

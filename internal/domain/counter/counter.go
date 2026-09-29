@@ -94,8 +94,10 @@ type Repository interface {
 	// is replaced with a new one.
 	CreateCounter(ctx context.Context, c Counter) (Counter, error)
 	// UpdateCounter changes a counter in one transaction: fn gets the stored
-	// counter and changes it, e.g. with Add; an error from fn discards the
-	// change.
+	// counter and changes it with Add, Set or Reset; an error from fn
+	// discards the change. To store the value an overflow stopped at (B43),
+	// fn must not return the ErrOverflow of Add but report it by other means,
+	// as TestCounterOverflowStopsAtLimit in internal/store shows.
 	UpdateCounter(ctx context.Context, name string, fn func(*Counter) error) (Counter, error)
 	DeleteCounter(ctx context.Context, name string) error
 	// ResetCountersOnStart sets the counters with ResetOnStart to 0 (B3) and
