@@ -1,0 +1,135 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package store_test
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ripmav/streamcrew/internal/store"
+	"github.com/ripmav/streamcrew/internal/store/sqlcgen"
+)
+
+func openStore(t *testing.T) *store.Store {
+	t.Helper()
+	s, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "profiles", "default.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, s.Close()) })
+	return s
+}
+
+func TestOpenCreatesPrivateFile(t *testing.T) {
+	t.Parallel()
+	s := openStore(t)
+	assert.Equal(t, store.LatestVersion(), s.SchemaVersion())
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix file modes do not apply on Windows")
+	}
+	info, err := os.Stat(s.Path())
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	dir, err := os.Stat(filepath.Dir(s.Path()))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), dir.Mode().Perm())
+}
+
+func TestMeta(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+
+	_, err := s.Meta(ctx, "profile.name")
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	require.NoError(t, s.SetMeta(ctx, "profile.name", "Main"))
+	require.NoError(t, s.SetMeta(ctx, "profile.name", "Main channel"))
+	v, err := s.Meta(ctx, "profile.name")
+	require.NoError(t, err)
+	assert.Equal(t, "Main channel", v)
+}
+
+func TestWriteRollsBackOnError(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+
+	err := s.Write(ctx, func(q *sqlcgen.Queries) error {
+		require.NoError(t, q.SetMeta(ctx, sqlcgen.SetMetaParams{Key: "k", Value: "v"}))
+		return assert.AnError
+	})
+	require.ErrorIs(t, err, assert.AnError)
+	_, err = s.Meta(ctx, "k")
+	require.ErrorIs(t, err, store.ErrNotFound, "rolled back")
+}
+
+func TestReadersSeeCommittedDataDuringWrite(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+	require.NoError(t, s.SetMeta(ctx, "k", "committed"))
+
+	inTx := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- s.Write(ctx, func(q *sqlcgen.Queries) error {
+			if err := q.SetMeta(ctx, sqlcgen.SetMetaParams{Key: "k", Value: "uncommitted"}); err != nil {
+				return err
+			}
+			close(inTx)
+			<-release
+			return nil
+		})
+	}()
+	<-inTx
+
+	// WAL: the reader pool is not blocked by the open write transaction and
+	// does not see its changes.
+	readCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	v, err := s.Meta(readCtx, "k")
+	require.NoError(t, err)
+	assert.Equal(t, "committed", v)
+
+	close(release)
+	require.NoError(t, <-done)
+	v, err = s.Meta(ctx, "k")
+	require.NoError(t, err)
+	assert.Equal(t, "uncommitted", v)
+}
+
+func TestVacuumIntoAndInspect(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+	require.NoError(t, s.SetMeta(ctx, "profile.name", "Main"))
+
+	copyPath := filepath.Join(t.TempDir(), "copy.db")
+	require.NoError(t, s.VacuumInto(ctx, copyPath))
+	require.Error(t, s.VacuumInto(ctx, copyPath), "the target must not exist")
+
+	info, err := store.Inspect(ctx, copyPath)
+	require.NoError(t, err)
+	assert.Equal(t, store.LatestVersion(), info.SchemaVersion)
+	assert.Equal(t, map[string]string{"profile.name": "Main"}, info.Meta)
+
+	_, err = store.Inspect(ctx, filepath.Join(t.TempDir(), "missing.db"))
+	require.Error(t, err)
+}
+
+func TestInspectEmptyDatabase(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "empty.db")
+	require.NoError(t, os.WriteFile(path, nil, 0o600))
+	info, err := store.Inspect(t.Context(), path)
+	require.NoError(t, err)
+	assert.Zero(t, info.SchemaVersion)
+	assert.Empty(t, info.Meta)
+}
