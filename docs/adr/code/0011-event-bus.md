@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-29 |
-| **Entscheidung durch** | offen (Abnahme durch den Projektinhaber) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Plan §6.1, §6.7, §6.14; Roadmap Phase 2.2, 2.3; [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md), [Code-ADR-0006](0006-teststrategie.md), [Code-ADR-0009](0009-ids-und-zeit.md), [Code-ADR-0010](0010-polymorphe-serialisierung.md) |
 
 ## Kontext
@@ -75,7 +75,7 @@
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen
+- [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
 - [ ] `internal/event` mit Umschlag, Katalog, Bus, Filtern und Lag-Hinweis umsetzen (Roadmap Phase 2.2 und 2.3)
 - [ ] Statusmeldungen des Supervisors als Ereignis `supervisor.status` veröffentlichen (Folgearbeit aus [Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md))
 - [ ] Zuordnung der numerischen Ereignis-IDs des Originals für den Import (Roadmap Phase 2.2), vorbehaltlich der rechtlichen Einschätzung und des geplanten ADRs zum Import von Mix-It-Up-Daten (ADR-Backlog in Plan §12.1)

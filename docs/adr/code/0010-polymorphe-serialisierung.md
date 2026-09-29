@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-29 |
-| **Entscheidung durch** | offen (Abnahme durch den Projektinhaber) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Plan §6.8, §6.9, §8, §10; Roadmap Phase 2.2, 3.3 bis 3.5; [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0005](0005-konfiguration.md), [Code-ADR-0006](0006-teststrategie.md), [Code-ADR-0008](0008-datenbankzugriff.md) |
 
 ## Kontext
@@ -67,6 +67,6 @@
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) anpassen und Plan §6.9 zu `encoding/json/v2` berichtigen
+- [x] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) anpassen und Plan §6.9 zu `encoding/json/v2` berichtigen, erledigt 2026-09-29
 - [ ] `internal/polydoc` mit Registry, Migrationskette, `Unknown`, Golden Files und Fuzz-Test umsetzen (Roadmap Phase 2.2)
 - [ ] Die Typ-Registry in Phase 3 auf `internal/polydoc` aufbauen

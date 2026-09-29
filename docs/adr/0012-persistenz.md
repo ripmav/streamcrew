@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-29 |
-| **Entscheidung durch** | offen (Abnahme durch den Projektinhaber) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | [ADR-0003](0003-betriebsmodi.md), [ADR-0011](0011-keine-telemetrie.md); Plan §6.12, §6.13; Roadmap Phase 2.1 und 2.4; [Code-ADR-0005](code/0005-konfiguration.md), [Code-ADR-0008](code/0008-datenbankzugriff.md), [Code-ADR-0009](code/0009-ids-und-zeit.md) |
 
 ## Kontext
@@ -81,7 +81,7 @@
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) anpassen und die Backlog-Nummern in Plan und Roadmap nachziehen
+- [x] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) anpassen und die Backlog-Nummern in Plan und Roadmap nachziehen, erledigt 2026-09-29
 - [ ] `internal/store`, Profile, Sperre und Backups umsetzen (Roadmap Phase 2.1)
 - [ ] `internal/secret` mit Schlüsselquellen und Rotation umsetzen (Roadmap Phase 2.4)
 - [ ] `secret export-key|import-key` und Profilwechsel über die API (Roadmap Phase 6)

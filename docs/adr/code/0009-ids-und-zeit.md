@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-29 |
-| **Entscheidung durch** | offen (Abnahme durch den Projektinhaber) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Plan §6.7, §6.13, §6.22, §8; Roadmap Phase 2.2; [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0006](0006-teststrategie.md), [Code-ADR-0008](0008-datenbankzugriff.md) |
 
 ## Kontext
@@ -65,6 +65,6 @@
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen
-- [ ] `internal/domain/id` umsetzen; Plan §8 (IDs) auf die Standardbibliothek ändern (Roadmap Phase 2.2)
+- [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
+- [ ] `internal/domain/id` umsetzen (Roadmap Phase 2.2); Plan §8 (IDs) steht seit 2026-09-29 auf der Standardbibliothek
 - [ ] Zeitzone als Profileinstellung (Roadmap Phase 2.2, Settings-Sektion „Zeit/Locale“)
