@@ -63,6 +63,7 @@ Das Skript führt die Pre-Commit-Checkliste aus Plan §11.1 in der festgelegten 
 - **Lizenz-Header:** Jede Quelldatei beginnt mit `// SPDX-License-Identifier: MIT` bzw. dem Kommentarformat ihrer Sprache ([ADR-0002](docs/adr/0002-lizenz-des-projekts.md)). Für Go-Dateien prüft das `goheader`.
 - **Konventionen** für Go stehen in Plan §11.1 und in den Code-ADRs ([`docs/adr/code/`](docs/adr/code/README.md)): Verdrahtung, Fehler und Logging, Nebenläufigkeit, Konfiguration, Tests.
 - **Abhängigkeiten:** Standardbibliothek zuerst, dann `golang.org/x/…`. Jede neue Drittabhängigkeit braucht eine Begründung im Pull Request und eine MIT-kompatible Lizenz; die CI prüft das mit einer Allowlist.
+- **Datenbank:** Schemaänderungen kommen nur als neue Migration in `internal/store/migrations`, mit Up- und Down-Teil. Danach `go generate ./internal/store/...`; der generierte sqlc-Code wird eingecheckt ([Code-ADR-0008](docs/adr/code/0008-datenbankzugriff.md)).
 - **Tests:** Neue Funktionen kommen nur mit Tests: `testing` mit testify (`assert`, `require`), Zeitverhalten in `testing/synctest`, handgeschriebene Fakes ([Code-ADR-0006](docs/adr/code/0006-teststrategie.md)).
 
 ## Entscheidungen (ADRs)

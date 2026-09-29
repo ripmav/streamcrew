@@ -68,5 +68,5 @@
 **Folgearbeiten:**
 
 - [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
-- [ ] `internal/domain/id` umsetzen (Roadmap Phase 2.2); Plan §8 (IDs) steht seit 2026-09-29 auf der Standardbibliothek
-- [ ] Zeitzone als Profileinstellung (Roadmap Phase 2.2, Settings-Sektion „Zeit/Locale“)
+- [x] `internal/domain/id` umsetzen (Roadmap Phase 2.2), erledigt 2026-09-29; Plan §8 (IDs) steht auf der Standardbibliothek
+- [x] Zeitzone als Profileinstellung (Roadmap Phase 2.2, Settings-Sektion „Zeit“), erledigt 2026-09-29
