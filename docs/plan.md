@@ -625,6 +625,7 @@ type ChannelPoints interface {
 - **Konten:** pro Plattform ein Streamer-Konto und optional ein Bot-Konto. Nachrichten gehen über den Bot, wenn er verbunden ist.
 - **Normalisiertes Chat-Modell:** Fragmente (Text, Emote, Erwähnung, Cheermote), Badges, Rollen, Antwortbezug und Shared-Chat-Quelle. Nutzer werden plattformübergreifenden Identitäten zugeordnet.
 - **Grenzen:** Rate-Limits je Plattform (`golang.org/x/time/rate`) und Aufteilung zu langer Nachrichten nach der plattformspezifischen Maximallänge.
+- **Störungen:** Anfragen an die APIs der Plattformen laufen durch einen Circuit Breaker je API (Code-ADR-0007). Ist ein Dienst gestört, scheitern Aufrufe sofort mit `ErrUnavailable`, statt die Command-Engine aufzuhalten.
 
 | Plattform | Authentifizierung | Empfang | Senden | Besonderheiten |
 |---|---|---|---|---|
@@ -766,7 +767,7 @@ Läuft der Core auf einem Server, fehlen ihm Fähigkeiten des Streaming-PCs: Tas
 
 ### 6.21 Konfiguration, Logging, Beobachtbarkeit
 
-- **Startkonfiguration:** per `kong` (Flags, Umgebungsvariablen `STREAMCREW_*`, optionale Konfigurationsdatei). Laufzeiteinstellungen liegen in der Profildatenbank und sind über die API änderbar.
+- **Startkonfiguration:** per `kong` (Flags, Umgebungsvariablen `STREAMCREW_*`, optionale YAML-Konfigurationsdatei; Code-ADR-0005). Laufzeiteinstellungen liegen in der Profildatenbank und sind über die API änderbar.
 - **Datenverzeichnis:** `os.UserConfigDir()` bzw. XDG, alternativ `--data-dir` oder ein portabler Modus.
 - **Logging mit `log/slog`:** Text oder JSON, Attribute wie `component`, `platform` und `command_id`. `slog.NewMultiHandler` (in der installierten Toolchain vorhanden) verteilt auf Konsole, Datei mit Rotation und den Log-Stream der API.
 - **Betrieb:** `/healthz` und `/readyz`. Prometheus- oder OpenTelemetry-Export ist optional und standardmäßig aus; nichts wird nach Hause gemeldet ([ADR-0011](adr/0011-keine-telemetrie.md)).
@@ -890,13 +891,14 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | WebSocket | `github.com/coder/websocket` | Kandidat | kontextfähig, gepflegt, auch in `n8n-go` genutzt |
 | SQLite | `modernc.org/sqlite` | Kandidat | CGO-frei; Alternative `ncruces/go-sqlite3` |
 | SQL/Migrationen | `sqlc`, `pressly/goose/v3` | Kandidat | typisiert, eingebettet; bewährt in `n8n-go` |
-| JSON | `encoding/json/v2` | Kandidat | stdlib; polymorphes Dekodieren über eigene Unmarshaler |
+| JSON | `encoding/json/v2` | Kandidat | stdlib; polymorphes Dekodieren über eigene Unmarshaler. In go1.27.1 noch hinter `GOEXPERIMENT=jsonv2` (geprüft 2026-09-29); bis dahin `encoding/json` |
 | JSON-Schema | `github.com/google/jsonschema-go` | Kandidat | auch vom MCP-Go-SDK genutzt |
-| YAML | `go.yaml.in/yaml/v3` oder `goccy/go-yaml` | Kandidat | Commands als Code (Code-ADR-0016) |
+| YAML | `go.yaml.in/yaml/v3` | gesetzt | Konfigurationsdatei und Commands als Code; offizieller Nachfolger von `gopkg.in/yaml.v3` (Code-ADR-0005) |
 | OAuth | `golang.org/x/oauth2` | Kandidat | Device Flow und PKCE eingebaut |
 | Rate-Limits, Nebenläufigkeit | `golang.org/x/time/rate`, `golang.org/x/sync/errgroup` | Kandidat | `x/`-Pakete |
-| IDs | UUIDv7 (`github.com/google/uuid` oder eigene kleine Implementierung) | Kandidat | Code-ADR-0007 |
-| Logging | `log/slog`; Rotation per Code-ADR | gesetzt | stdlib |
+| Circuit Breaker | `github.com/sony/gobreaker/v2` | gesetzt | Anfragen an externe Dienste, ein Breaker je API (Code-ADR-0007) |
+| IDs | UUIDv7 (`github.com/google/uuid` oder eigene kleine Implementierung) | Kandidat | Code-ADR-0009 |
+| Logging | `log/slog`; eigene Rotation nach Größe (Code-ADR-0003) | gesetzt | stdlib |
 | Secrets | `crypto/aes` + `crypto/cipher`, `zalando/go-keyring` | Kandidat | stdlib-Krypto; Keyring plattformübergreifend |
 | Ausdrücke | `expr-lang/expr` | Kandidat | sicher, schnell, ersetzt Jace |
 | Scripting | `dop251/goja` | Kandidat | reines Go, sandboxfähig (ADR-0016) |
@@ -909,7 +911,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | Tabellenimport | `encoding/csv`, `xuri/excelize/v2` | Kandidat | Nutzerimport (P2) |
 | i18n | `nicksnyder/go-i18n/v2` oder `golang.org/x/text` | Kandidat | ADR-0022 |
 | Overlay-Bundling | `github.com/evanw/esbuild/pkg/api` | Kandidat | kein Node.js im Build |
-| Tests | `testing`, `testing/synctest`, `testing/fstest`, `net/http/httptest`, Fuzzing, Twitch CLI, Playwright (Web) | Kandidat | |
+| Tests | `testing` mit `github.com/stretchr/testify` (`assert`, `require`), `testing/synctest`, `testing/fstest`, `net/http/httptest`, Fuzzing, Twitch CLI, Playwright (Web) | gesetzt (Go), Kandidat (Web) | Code-ADR-0006 |
 | Release | `goreleaser`, Docker, `fyne-cross` | Kandidat | ADR-0023 |
 
 **Moderne Go-Features, die genutzt werden sollen** (in go1.27.1 geprüft):
@@ -919,7 +921,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 - `errors.AsType`
 - `sync.WaitGroup.Go`
 - `http.CrossOriginProtection`
-- `encoding/json/v2`
+- `encoding/json/v2`, sobald es ohne `GOEXPERIMENT` verfügbar ist (in go1.27.1 noch nicht)
 - `slog.NewMultiHandler`
 - Iteratoren (`range over func`) für Repository-Abfragen
 
@@ -948,8 +950,12 @@ streamcrew/
 │   └── gen/                       # generierter Go-Code (Handler-Interfaces + Clients)
 ├── core/                          # öffentliche Start-API für den Selbststart (ADR-0006)
 ├── internal/
-│   ├── app/                       # Composition Root, Lebenszyklus, Supervisor
-│   ├── config/                    # kong-Konfiguration, Pfade, Betriebsmodi
+│   ├── app/                       # Composition Root, Lebenszyklus, Bereitschaft
+│   ├── config/                    # kong-Konfiguration, YAML-Datei, Pfade, Betriebsmodi
+│   ├── supervisor/                # Runnables, Restart-Policy, Backoff, Shutdown
+│   ├── logging/                   # slog-Handler, Rotation, Maskierung
+│   ├── httpserver/                # HTTP-Server, /healthz, /readyz, pprof
+│   ├── doctor/  buildinfo/        # Selbstprüfung, Versionsinformation
 │   ├── domain/                    # Entitäten und Wertobjekte
 │   ├── engine/                    # Queue, Instanzen, Sperrmodi, Runner
 │   ├── action/                    # Registry + Implementierungen (action/chat, action/wait, …)
@@ -1047,7 +1053,7 @@ Aus den globalen Regeln, verbindlich für alle Repos:
 
 | Ebene | Werkzeuge | Ziel |
 |---|---|---|
-| Unit | stdlib `testing`, tabellengetrieben | Engine, Template, Requirements, Domäne; ≥ 80 % Abdeckung in `engine`, `template`, `requirement` |
+| Unit | `testing` mit testify, tabellengetrieben | Engine, Template, Requirements, Domäne; ≥ 80 % Abdeckung in `engine`, `template`, `requirement` |
 | Golden Files | `testdata/*.golden` | Template-Ausgaben, Overlay-Pakete, Import-Mapping |
 | Fuzzing | native Go-Fuzz-Tests | Template-Tokenizer, Trigger-Parser, Importer; kurze Läufe in CI |
 | Zeitverhalten | `testing/synctest` | Cooldowns, Timer, Backoff, Queues |
@@ -1084,11 +1090,12 @@ Aus den globalen Regeln, verbindlich für alle Repos:
 - **Prüfungen** (`.github/workflows/ci.yml`, Code-ADR-0001):
   - `go fix -diff`, `go vet`, Lint inkl. SPDX-Header
   - Tests mit `-race`, kurze Fuzz-Läufe (`scripts/fuzz.sh`)
+  - wöchentlich und auf Anforderung: Tests nativ unter Windows und macOS (Code-ADR-0006)
   - `govulncheck`, zusätzlich wöchentlich per Zeitplan
   - Lizenzprüfung der Abhängigkeiten (`go-licenses`, Allowlist)
   - später `buf lint`/`buf breaking` und `sqlc diff`
 - **Dokumentation:** `.github/workflows/docs.yml` prüft mit `lychee` offline alle internen Links und Überschriften-Anker in Markdown-Dateien.
-- **Builds:** Cross-Build über linux/windows/darwin und amd64/arm64 in einem Job auf ubuntu, um Actions-Minuten zu sparen; Docker-Build mit Smoke-Test.
+- **Builds:** Cross-Build über linux/windows/darwin und amd64/arm64 in einem Job auf ubuntu, um Actions-Minuten zu sparen; im selben Job Docker-Build mit Smoke-Test (`scripts/docker-smoke.sh`).
 - **Absicherung und Updates:** Fremd-Actions sind auf Commit-SHAs gepinnt. Renovate (GitHub-App, kein Dependabot, `renovate.json` nach Vorbild von `recipe-reader`) öffnet montags vor 6 Uhr je Ökosystem einen Pull Request:
   - Go-Module samt `go`-Direktive
   - Actions samt Werkzeugversionen in Workflows (golangci-lint, `go-licenses`)
@@ -1150,21 +1157,21 @@ Es existieren ADR-0001 bis ADR-0011. Alle höheren Nummern in Plan und Roadmap s
 | Nr. | Datei | Thema | Phase |
 |---|---|---|---|
 | 0001 | `0001-go-toolchain-und-linting.md` | Go-Version-Policy, golangci-lint-v2-Konfiguration, CI, Renovate; **akzeptiert** | 1 |
-| 0002 | `0002-dependency-injection.md` | Composition Root, kein `init()`, keine Globals | 1 |
-| 0003 | `0003-fehler-und-logging.md` | Fehlertypen, Wrapping, slog-Konventionen, Rotation | 1 |
-| 0004 | `0004-nebenlaeufigkeit-und-supervisor.md` | Goroutine-Besitz, Backoff, Shutdown | 1 |
-| 0005 | `0005-konfiguration.md` | kong, Env, Datei, Pfade | 1 |
-| 0006 | `0006-datenbankzugriff.md` | modernc/sqlite, sqlc, goose | 2 |
-| 0007 | `0007-ids-und-zeit.md` | UUIDv7, Uhren, `synctest` | 2 |
-| 0008 | `0008-polymorphe-serialisierung.md` | Diskriminator, Versionen, json/v2 | 2 |
-| 0009 | `0009-event-bus.md` | Typisierung, Puffer, Lag | 2 |
-| 0010 | `0010-template-engine.md` | Tokenizer, Präfixregel, Kodierung | 3 |
-| 0011 | `0011-typ-registry.md` | Descriptors, Schemas, Capabilities | 3 |
-| 0012 | `0012-http-client.md` | Retry, Rate-Limits, Fehlerklassen | 4 |
-| 0013 | `0013-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |
-| 0014 | `0014-teststrategie.md` | Fixtures, Golden Files, Fakes, Fuzzing | 1 |
-| 0015 | `0015-codegenerierung.md` | buf, sqlc, esbuild in `go generate` | 2/6 |
-| 0016 | `0016-yaml-bibliothek.md` | Commands als Code | 3 |
+| 0002 | `0002-dependency-injection.md` | Composition Root, kein `init()`, keine Globals; **akzeptiert** | 1 |
+| 0003 | `0003-fehler-und-logging.md` | Fehlertypen, Wrapping, slog-Konventionen, Rotation; **akzeptiert** | 1 |
+| 0004 | `0004-nebenlaeufigkeit-und-supervisor.md` | Goroutine-Besitz, Backoff, Shutdown; **akzeptiert** | 1 |
+| 0005 | `0005-konfiguration.md` | kong, Env, YAML-Datei, Pfade; YAML-Bibliothek für das ganze Projekt; **akzeptiert** | 1 |
+| 0006 | `0006-teststrategie.md` | testify, Fixtures, Golden Files, Fakes, Fuzzing, native Tests; **akzeptiert** (vorläufig 0014) | 1 |
+| 0007 | `0007-circuit-breaker.md` | `sony/gobreaker/v2` für Anfragen an externe Dienste, ein Breaker je API; **akzeptiert** | 4 |
+| 0008 | `0008-datenbankzugriff.md` | modernc/sqlite, sqlc, goose | 2 |
+| 0009 | `0009-ids-und-zeit.md` | UUIDv7, Uhren, `synctest` | 2 |
+| 0010 | `0010-polymorphe-serialisierung.md` | Diskriminator, Versionen, json/v2 | 2 |
+| 0011 | `0011-event-bus.md` | Typisierung, Puffer, Lag | 2 |
+| 0012 | `0012-template-engine.md` | Tokenizer, Präfixregel, Kodierung | 3 |
+| 0013 | `0013-typ-registry.md` | Descriptors, Schemas, Capabilities | 3 |
+| 0014 | `0014-http-client.md` | Retry, Rate-Limits, Fehlerklassen; Einbau des Circuit Breakers (Code-ADR-0007) | 4 |
+| 0015 | `0015-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |
+| 0016 | `0016-codegenerierung.md` | buf, sqlc, esbuild in `go generate` | 2/6 |
 
 ---
 
@@ -1177,7 +1184,7 @@ W = Wahrscheinlichkeit, A = Auswirkung (niedrig/mittel/hoch).
 | R1 | Die Nutzung des Originalcodes als Hilfestellung wird als Verstoß gegen die BSL (§3.3) oder als abgeleitetes Werk gewertet und verhindert die Veröffentlichung | mittel | hoch | Regeln aus ADR-0001, Herkunftsnachweis, privat bis zur Freigabe durch den Projektinhaber (Gate O als Voraussetzung), rechtliche Prüfung, optional Erlaubnis von Blazing Cacti |
 | R2 | Markenkonflikt („Mix It Up“, „Mixie“) | mittel | mittel | neuer Name mit Markenrecherche, kein Branding übernehmen |
 | R3 | Umfang (~100k Zeilen Logik, 46 Actions, ~48 Integrationen) sprengt die Kapazität | hoch | hoch | strikte Priorisierung, MVP zuerst, Tiers, generische UI |
-| R4 | Plattform-APIs ändern sich oder werden abgekündigt | hoch | mittel | isolierte Adapter, Contract-Tests, Changelogs beobachten |
+| R4 | Plattform-APIs ändern sich, fallen aus oder werden abgekündigt | hoch | mittel | isolierte Adapter, Contract-Tests, Changelogs beobachten; Circuit Breaker je API (Code-ADR-0007) |
 | R5 | Kick braucht eine öffentliche Webhook-URL und kündigt Abos bei Fehlern automatisch | hoch | mittel | Server-Modus, Tunnel, optionaler Relay, automatisches Neuabonnieren |
 | R6 | YouTube: Quota, Google-Verifizierung, 7-Tage-Tokens im „Testing“-Modus | hoch | mittel | `streamList`, BYO-Credentials, Verifizierung nur bei Bedarf |
 | R7 | Dreifacher UI-Aufwand (TUI, Desktop, Web) | hoch | hoch | Typkatalog und generische Editoren; GUI-Tracks bewusst takten |
@@ -1247,13 +1254,13 @@ Die Aufwände sind **grobe Schätzungen in Personenwochen (PW) für eine Person 
 | Telemetrie | keine; lokale Logs und Diagnose-Paket | ADR-0011 |
 | MVP-Umfang | wie geplant (Plan §5, Meilenstein M2) | – |
 
-**Noch offen**, in Phase 0 bzw. vor der jeweiligen Phase zu klären:
+**Noch offen**, vor der jeweiligen Phase zu klären. Beim Abschluss von Phase 0 (2026-09-29) wurden die Fragen den Stellen in der Roadmap zugeordnet, an denen sie fällig werden:
 
-1. **Weitere Plattformen:** Welche außer Twitch werden für Core 1.0 wirklich gebraucht? Entscheidung nach M2 (ADR-0004).
-2. **Import:** Wie wichtig ist die Übernahme bestehender Mix-It-Up-Daten? Gibt es einen eigenen Datenbestand?
-3. **Zielsysteme der Desktop-App:** Windows, macOS, Linux? Sind Code-Signierung und Notarisierung nötig?
-4. **Kapazität:** Wie viel Zeit steht pro Woche zur Verfügung? Ohne diese Angabe lassen sich die Aufwände nicht in Termine übersetzen.
-5. **Web-Frontend:** Gibt es eine Präferenz für einen Stack (TS-SPA, templ/htmx, Go-WASM)?
+1. **Weitere Plattformen:** Welche außer Twitch werden für Core 1.0 wirklich gebraucht? Entscheidung nach M2 (ADR-0004, Roadmap 9.0).
+2. **Import:** Wie wichtig ist die Übernahme bestehender Mix-It-Up-Daten? Gibt es einen eigenen Datenbestand? Zu klären vor ADR-0021 (Umsetzung), Roadmap 11.2.
+3. **Zielsysteme der Desktop-App:** Windows, macOS, Linux? Sind Code-Signierung und Notarisierung nötig? Zu klären in Desktop D0.
+4. **Kapazität:** Wie viel Zeit steht pro Woche zur Verfügung? Ohne diese Angabe lassen sich die Aufwände nicht in Termine übersetzen. Spätestens zur Kalibrierung nach M1.
+5. **Web-Frontend:** Gibt es eine Präferenz für einen Stack (TS-SPA, templ/htmx, Go-WASM)? Zu klären in Web W0 (ADR-0017).
 
 ---
 

@@ -33,6 +33,14 @@ linters:
   settings:
     exhaustive:
       default-signifies-exhaustive: true
+    forbidigo:
+      forbid:
+        # The default of forbidigo: output goes through log/slog or an
+        # explicit writer (Code-ADR-0001).
+        - pattern: ^(fmt\.Print(|f|ln)|print|println)$
+        # Configuration is read in one place (Code-ADR-0005).
+        - pattern: ^os\.(Getenv|LookupEnv|Environ)$
+          msg: read configuration through internal/config (Code-ADR-0005)
     goheader:
       template: "SPDX-License-Identifier: Apache-2.0"
     misspell:
@@ -40,11 +48,25 @@ linters:
     nolintlint:
       require-explanation: true
       require-specific: true
+    # Logging conventions of Code-ADR-0003.
+    sloglint:
+      no-global: all
+      context: scope
+      static-msg: true
+      msg-style: lowercased
+      key-naming-case: snake
   exclusions:
     generated: lax
     presets:
       - common-false-positives
       - std-error-handling
+    rules:
+      # Only the command and internal/config read environment variables
+      # (Code-ADR-0005).
+      - path: ^(cmd/streamcrew|internal/config)/
+        linters:
+          - forbidigo
+        text: os\.(Getenv|LookupEnv|Environ)
 
 formatters:
   enable:
