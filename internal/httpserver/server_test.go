@@ -99,3 +99,26 @@ func TestRunListenErrorIsPermanent(t *testing.T) {
 	assert.ErrorContains(t, err, "listen on")
 	assert.Nil(t, srv.Addr())
 }
+
+// TestRunClosesIdleNewConnections is a regression test: a connection on
+// which the client never sends a request (like a browser preconnect or a
+// connection the HTTP client dialled in reserve) kept net/http's graceful
+// shutdown waiting for 5 s, longer than the shutdown timeout of the core.
+func TestRunClosesIdleNewConnections(t *testing.T) {
+	t.Parallel()
+	srv := httpserver.New(httpserver.Config{Addr: "127.0.0.1:0", ShutdownTimeout: 200 * time.Millisecond}, nil, nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	errc := make(chan error, 1)
+	go func() { errc <- srv.Run(ctx) }()
+	<-srv.Listening()
+
+	var d net.Dialer
+	conn, err := d.DialContext(t.Context(), "tcp", srv.Addr().String())
+	require.NoError(t, err)
+	defer conn.Close()
+
+	begin := time.Now()
+	cancel()
+	require.NoError(t, <-errc)
+	assert.Less(t, time.Since(begin), 2*time.Second, "stops after the shutdown timeout, not after net/http's 5 s")
+}
