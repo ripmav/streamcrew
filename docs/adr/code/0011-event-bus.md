@@ -76,6 +76,6 @@
 **Folgearbeiten:**
 
 - [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
-- [ ] `internal/event` mit Umschlag, Katalog, Bus, Filtern und Lag-Hinweis umsetzen (Roadmap Phase 2.2 und 2.3)
-- [ ] Statusmeldungen des Supervisors als Ereignis `supervisor.status` veröffentlichen (Folgearbeit aus [Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md))
+- [x] `internal/event` mit Umschlag, Katalog, Bus, Filtern und Lag-Hinweis umsetzen (Roadmap Phase 2.2 und 2.3), erledigt 2026-09-29
+- [x] Statusmeldungen des Supervisors als Ereignis `supervisor.status` veröffentlichen (Folgearbeit aus [Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md)), erledigt 2026-09-29
 - [ ] Zuordnung der numerischen Ereignis-IDs des Originals für den Import (Roadmap Phase 2.2), vorbehaltlich der rechtlichen Einschätzung und des geplanten ADRs zum Import von Mix-It-Up-Daten (ADR-Backlog in Plan §12.1)

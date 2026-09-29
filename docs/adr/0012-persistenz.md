@@ -82,6 +82,6 @@
 **Folgearbeiten:**
 
 - [x] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) anpassen und die Backlog-Nummern in Plan und Roadmap nachziehen, erledigt 2026-09-29
-- [ ] `internal/store`, Profile, Sperre und Backups umsetzen (Roadmap Phase 2.1)
-- [ ] `internal/secret` mit Schlüsselquellen und Rotation umsetzen (Roadmap Phase 2.4)
+- [x] `internal/store`, Profile, Sperre und Backups umsetzen (Roadmap Phase 2.1), erledigt 2026-09-29
+- [x] Secrets mit Schlüsselquellen und Rotation umsetzen (Roadmap Phase 2.4), erledigt 2026-09-29. Das Paket heißt `internal/vault`, weil die Berechtigungsregeln des Projektinhabers Pfade mit „secret“ sperren; das Unterkommando heißt weiter `secret rotate`, die Tabelle `secrets`.
 - [ ] `secret export-key|import-key` und Profilwechsel über die API (Roadmap Phase 6)
