@@ -1247,13 +1247,13 @@ Die Aufwände sind **grobe Schätzungen in Personenwochen (PW) für eine Person 
 | Telemetrie | keine; lokale Logs und Diagnose-Paket | ADR-0011 |
 | MVP-Umfang | wie geplant (Plan §5, Meilenstein M2) | – |
 
-**Noch offen**, in Phase 0 bzw. vor der jeweiligen Phase zu klären:
+**Noch offen**, vor der jeweiligen Phase zu klären. Beim Abschluss von Phase 0 (2026-09-29) wurden die Fragen den Stellen in der Roadmap zugeordnet, an denen sie fällig werden:
 
-1. **Weitere Plattformen:** Welche außer Twitch werden für Core 1.0 wirklich gebraucht? Entscheidung nach M2 (ADR-0004).
-2. **Import:** Wie wichtig ist die Übernahme bestehender Mix-It-Up-Daten? Gibt es einen eigenen Datenbestand?
-3. **Zielsysteme der Desktop-App:** Windows, macOS, Linux? Sind Code-Signierung und Notarisierung nötig?
-4. **Kapazität:** Wie viel Zeit steht pro Woche zur Verfügung? Ohne diese Angabe lassen sich die Aufwände nicht in Termine übersetzen.
-5. **Web-Frontend:** Gibt es eine Präferenz für einen Stack (TS-SPA, templ/htmx, Go-WASM)?
+1. **Weitere Plattformen:** Welche außer Twitch werden für Core 1.0 wirklich gebraucht? Entscheidung nach M2 (ADR-0004, Roadmap 9.0).
+2. **Import:** Wie wichtig ist die Übernahme bestehender Mix-It-Up-Daten? Gibt es einen eigenen Datenbestand? Zu klären vor ADR-0021 (Umsetzung), Roadmap 11.2.
+3. **Zielsysteme der Desktop-App:** Windows, macOS, Linux? Sind Code-Signierung und Notarisierung nötig? Zu klären in Desktop D0.
+4. **Kapazität:** Wie viel Zeit steht pro Woche zur Verfügung? Ohne diese Angabe lassen sich die Aufwände nicht in Termine übersetzen. Spätestens zur Kalibrierung nach M1.
+5. **Web-Frontend:** Gibt es eine Präferenz für einen Stack (TS-SPA, templ/htmx, Go-WASM)? Zu klären in Web W0 (ADR-0017).
 
 ---
 

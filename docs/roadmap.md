@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | Phase 0 läuft; Kernentscheidungen getroffen (ADR-0001 bis ADR-0011), Umsetzung noch nicht begonnen |
-| **Stand** | 2026-09-27 |
+| **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 in Arbeit |
+| **Stand** | 2026-09-29 |
 | **Grundlage** | [`plan.md`](plan.md) (Architektur, Prioritäten, Risiken), [`starting.md`](starting.md), [`adr/`](adr/README.md) |
-| **Aktuelle Phase** | Phase 0: Klärung und Projektstart (Gate) |
+| **Aktuelle Phase** | Phase 1: Fundament (Toolchain, Skelett, CI) |
 
 > **Name:** Das Projekt heißt vorerst `streamcrew` (Codename, [ADR-0008](adr/0008-codename-streamcrew.md)); Binary `streamcrew`. Der endgültige Name wird vor Gate O geprüft.
 
@@ -89,8 +89,8 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 | Track / Phase | Status |
 |---|---|
-| Phase 0: Klärung und Projektstart | in Arbeit (ADR-0001 bis ADR-0011 akzeptiert, `LICENSE` angelegt) |
-| Phase 1: Fundament | offen |
+| Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
+| Phase 1: Fundament | in Arbeit (1.1 erledigt bis auf den Cache, der in Phase 2 neu bewertet wird) |
 | Phase 2: Domäne und Persistenz | offen |
 | Phase 3: Engine, Templates, Actions, Mock | offen |
 | Phase 4: Twitch | offen |
@@ -116,31 +116,19 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | **Ziel** | Vorgehen, Lizenz und Organisation klären, bevor Code entsteht |
 | **Voraussetzungen** | keine |
 | **Aufwand** | ~1 PW |
-| **ADRs** | 0001–0011 (akzeptiert), 0021 (rechtlicher Teil) |
+| **ADRs** | 0001–0011 (akzeptiert); 0021 (rechtlicher Teil) übertragen nach Gate O |
 
 ### 0.1 Vorgehen und Recht
 
 - [x] ADR-0001 „Neuimplementierung und Nutzung des Originals“ schreiben und entscheiden (S), erledigt 2026-09-27
 - [x] Festlegen, ob `../mixitup` weiter gelesen werden darf: ja, als Hilfestellung nach den Regeln aus ADR-0001, erledigt 2026-09-27
 - [x] Regeln aus ADR-0001 in [`docs/spec/README.md`](spec/README.md) übernommen, mit Vorlage [`docs/spec/TEMPLATE.md`](spec/TEMPLATE.md) für Spezifikationen mit Quellenangabe (S), erledigt 2026-09-28
-- [ ] Rechtliche Einschätzung einholen (extern), spätestens vor Gate O, besser vor Phase 3. Themen:
-  - BSL §2 und §3.1–3.5
-  - EULA §1 (kein Reverse Engineering)
-  - Nutzung des Codes als Hilfestellung (ADR-0001)
-  - die MIT-Datei `MixItUp.Base/LICENSE.txt`
-  - die Import-Funktion (Interoperabilität)
-  - die Übernahme der `$`-Identifier-Namen
-- [ ] Optional (Option D): Blazing Cacti um eine schriftliche Erlaubnis bitten und die Antwort dokumentieren (S)
-- [ ] Rechtlichen Teil von ADR-0021 (Import, Identifier-Namen) entscheiden; danach in ADR-0001 unter „Interop-Ausnahmen“ den Link auf das neue ADR nachtragen (S)
 
 ### 0.2 Lizenz, Name, Marke
 
 - [x] ADR-0002 Lizenz des Projekts: Apache-2.0 (S), erledigt 2026-09-27
 - [x] `LICENSE` mit dem offiziellen Apache-2.0-Text im Projektwurzelverzeichnis anlegen (S), erledigt 2026-09-27
 - [x] [ADR-0008](adr/0008-codename-streamcrew.md) Codename `streamcrew` (englisch, beschreibend, ohne Anlehnung an Mix It Up), erledigt 2026-09-28
-- [ ] Namensprüfung für den endgültigen Namen, spätestens vor Gate O, möglichst früher (S):
-  - Markenrecherche (DPMA, EUIPO, USPTO)
-  - Domain-, GitHub- und Paketnamen-Verfügbarkeit
 - [x] Platzhalter für Projekt- und Binärnamen in `plan.md`, `roadmap.md` und den ADRs durch `streamcrew` ersetzt (S), erledigt 2026-09-28
 
 ### 0.3 Umfang
@@ -151,24 +139,42 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 - [x] [ADR-0005](adr/0005-core-in-desktop-builds.md) Core in Desktop-Builds: Die App liefert den Core mit und startet ihn als eigenen Prozess, erledigt 2026-09-27
 - [x] [ADR-0006](adr/0006-core-als-bibliothek-fuer-selbststart.md) Core als Bibliothek: schmale Start-API nur für den Selbststart, kein Betrieb im selben Prozess; ob mitgeliefert oder eingebunden, legt der Build-Prozess fest, erledigt 2026-09-27
 - [x] [ADR-0007](adr/0007-release-artefakte-des-cores.md) Release-Artefakte: Jedes Core-Release enthält Binary und Bibliothek (Go-Modul als Quellarchiv), erledigt 2026-09-27
-- [ ] Restliche offene Fragen aus Plan §15 beantworten: Import, Zielsysteme der Desktop-App, Kapazität, Web-Stack (S)
 - [x] MVP-Umfang (P0, M2) wie geplant bestätigt; P1–P3 werden vor den jeweiligen Phasen überprüft (S), erledigt 2026-09-28
 
 ### 0.4 Organisation
 
 - [x] Privates GitHub-Repository `ripmav/streamcrew` angelegt ([ADR-0009](adr/0009-repositories-und-hosting.md)); `LICENSE` im ersten Commit auf `main`, `docs/` per Pull Request (S), erledigt 2026-09-28
-- [ ] `main` schützen und die Branch-Konvention festlegen (S). Branch-Schutz und Rulesets sind für private Repositories im aktuellen GitHub-Plan nicht verfügbar (geprüft 2026-09-28). Bis zur Veröffentlichung oder einem Plan-Upgrade gilt die Regel per Konvention (Arbeit nur auf Branches, Merge per Pull Request), optional abgesichert durch einen lokalen `pre-push`-Hook. Nach dem Merge löscht GitHub den Branch automatisch (Einstellung aktiv seit 2026-09-28).
+- [x] Branch-Konvention festlegen und `main` schützen (S), erledigt 2026-09-29:
+  - Branch-Schutz und Rulesets sind für private Repositories im aktuellen GitHub-Plan nicht verfügbar (geprüft 2026-09-28). Bis zur Veröffentlichung oder einem Plan-Upgrade gilt die Regel per Konvention: Arbeit nur auf Branches, Merge per Pull Request.
+  - Die Konvention steht in [`CONTRIBUTING.md`](../CONTRIBUTING.md); der optionale lokale Hook `scripts/hooks/pre-push` verhindert Pushes auf `main`.
+  - Nach dem Merge löscht GitHub den Branch automatisch (Einstellung aktiv seit 2026-09-28).
+  - Den technischen Schutz aktiviert der Projektinhaber nach dem Umschalten auf öffentlich (Gate O, O.3).
 - [x] ADR-Infrastruktur anlegen (S), erledigt 2026-09-27:
   - `docs/adr/README.md` (Index)
   - `docs/adr/TEMPLATE.md` (Kontext, Entscheidung, Alternativen, Konsequenzen, Status)
   - `docs/adr/code/README.md`
 - [ ] Projekt-Board oder Issues mit den Phasen dieser Roadmap anlegen (S)
 
-**Exit-Kriterien:**
+### 0.5 Übertragene Aufgaben
 
-- ADR-0001 bis ADR-0008 haben den Status „akzeptiert“.
-- Das private Repository existiert, mit `LICENSE` ab dem ersten Commit.
-- Produktivcode entsteht erst, wenn der Name bzw. Codename für den Modulpfad feststeht.
+Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2026-09-29) dorthin verschoben, wo sie fällig werden:
+
+| Aufgabe | jetzt in | fällig |
+|---|---|---|
+| Rechtliche Einschätzung (extern): BSL, EULA, Code als Hilfestellung, MIT-Datei, Import, `$`-Identifier-Namen | Gate O, O.1 | Soll vor Phase 3 (Template-Engine mit den Identifier-Namen), Muss vor Gate O |
+| Rechtlicher Teil von ADR-0021 (Import, Identifier-Namen) | Gate O, O.1 | Soll vor Phase 3 |
+| Optional: schriftliche Erlaubnis von Blazing Cacti | Gate O, O.1 | vor Gate O |
+| Namensprüfung für den endgültigen Namen | Gate O, O.1 | vor Gate O, möglichst früher |
+| Plan §15: Bedeutung des Imports, eigener Datenbestand | Phase 11.2 | vor ADR-0021 (Umsetzung) |
+| Plan §15: Zielsysteme der Desktop-App, Signierung und Notarisierung | Desktop-Track D0 | vor dem Paketierungs-Spike |
+| Plan §15: Web-Stack | Web-Track W0 (ADR-0017) | vor W0 |
+| Plan §15: verfügbare Kapazität pro Woche | Querschnittsaufgaben | spätestens zur Kalibrierung nach M1 |
+
+**Exit-Kriterien** (erfüllt, Gate bestanden am 2026-09-29):
+
+- [x] ADR-0001 bis ADR-0008 haben den Status „akzeptiert“ (dazu ADR-0009 bis ADR-0011).
+- [x] Das private Repository existiert, mit `LICENSE` ab dem ersten Commit (`fdbbcbc`).
+- [x] Produktivcode entsteht erst, wenn der Name bzw. Codename für den Modulpfad feststeht: `github.com/ripmav/streamcrew` ([ADR-0008](adr/0008-codename-streamcrew.md)).
 
 ---
 
@@ -195,14 +201,14 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
   - Cross-Build linux/windows/darwin × amd64/arm64 in einem Job auf ubuntu
   - Actions auf Commit-SHAs gepinnt; wöchentlicher `govulncheck`-Lauf per Zeitplan
 - [x] Dependency-Updates mit Renovate automatisieren, kein Dependabot (`renovate.json` nach Vorbild von `recipe-reader`: je Ökosystem ein Pull Request, Go-Module samt `go`-Direktive, Actions samt Werkzeugversionen, später Docker-Images; montags, Sicherheitsupdates sofort) (S), erledigt 2026-09-28
-- [ ] Renovate-GitHub-App für `ripmav/streamcrew` installieren; danach das Dependency Dashboard und die ersten Renovate-PRs prüfen (Projektinhaber) (S)
+- [x] Renovate-GitHub-App für `ripmav/streamcrew` installieren; danach das Dependency Dashboard und die ersten Renovate-PRs prüfen (Projektinhaber) (S), erledigt 2026-09-28: Dependency Dashboard (#10), erster Renovate-PR (#11) gemergt
 - [x] Die CI-Läufe des ersten Pull Requests prüfen: Laufzeit, Minutenverbrauch, Cache (S), erledigt 2026-09-28
   - Laufzeit (PR #8): Checks 70 s, Tests 36 s, Cross-Build 55 s, Linkprüfung 7 s; Gesamtdauer der CI 74 s
   - Minuten: pro Push mit Go- und Markdown-Änderungen etwa 5 abgerechnete Minuten, weil jeder Job auf volle Minuten aufgerundet wird
   - Cache: Die drei CI-Jobs teilen sich einen setup-go-Schlüssel. Gespeichert wird nur der Stand des zuerst fertigen Jobs, die anderen melden „Unable to reserve cache“. Ohne Abhängigkeiten ist das unerheblich.
 - [ ] setup-go-Cache mit den ersten Abhängigkeiten neu bewerten, z. B. Cache nur in einem Job speichern (Phase 2) (S)
 - [x] Claude-Code-Review nur auf `@claude`-Erwähnung in Pull Requests, mit Fortschritts- und Ergebniskommentar (`.github/workflows/claude.yml`; kein automatisches Review, keine Issues) (S), erledigt 2026-09-28
-- [ ] Claude-Review so korrigieren, dass das Review tatsächlich läuft (S):
+- [x] Claude-Review so korrigieren, dass das Review tatsächlich läuft (S), erledigt 2026-09-29:
   - Erste Ursache: Das Werkzeug `Skill`, über das Claude Code den Plugin-Befehl ausführt, wurde verweigert. Seit PR #7 ist es gezielt für `code-review:code-review` freigegeben. Im Lauf zu PR #8 wirkt die Freigabe: keine Verweigerung.
   - Zweite Ursache, noch offen: Der Befehl brach in PR #8 nach 12 s in seiner Vorprüfung ab (2 Haiku-Agents, kein eigener Kommentar). Bei einem vollständigen Lauf ohne Befunde hätte er einen Kommentar „No issues found“ gepostet.
   - Wahrscheinlicher Grund: Die Vorprüfung stoppt, wenn Claude den PR schon kommentiert hat. Dafür hält sie vermutlich den vorab geposteten Fortschrittskommentar. Wiederholte `@claude`-Anfragen würden aus demselben Grund übersprungen.
@@ -212,10 +218,11 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
     - Claude nur mit Lese-Werkzeugen und Inline-Kommentaren
     - Ergebnis als strukturierte Ausgabe, die den Fortschrittskommentar ersetzt
   - Prompt und Schema liegen in `.github/claude/`. Der Workflow liest sie aus dem Commit, aus dem er selbst stammt, nie aus dem PR-Checkout.
-  - Offen: der Nachweis in einem echten Lauf. Die Workflow-Fassung hängt vom Ereignis ab:
+  - Die Workflow-Fassung hängt vom Ereignis ab:
     - `@claude` als PR-Kommentar (`issue_comment`) nutzt die Fassung aus `main`.
-    - `@claude` in einem Review oder Inline-Kommentar nutzt die Fassung aus dem Merge-Commit des PRs. Damit lässt sich PR #9 schon vor dem Merge testen.
-- [ ] `anthropics/claude-code-action` in `claude.yml` auf einen Commit-SHA pinnen: Renovate schlägt das selbst vor; erst nach dem Review-Nachweis mergen. `actions/checkout` ist dort seit PR #9 gepinnt ([Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md)) (S)
+    - `@claude` in einem Review oder Inline-Kommentar nutzt die Fassung aus dem Merge-Commit des PRs.
+  - Nachweis: Der einzige `@claude`-Lauf zu PR #9 kam als PR-Kommentar kurz vor dem Merge und lief deshalb noch mit der alten Fassung aus `main`. Der Projektinhaber hat die Aufgabe am 2026-09-29 ohne Nachweis in einem echten Lauf als erledigt festgelegt.
+- [x] `anthropics/claude-code-action` in `claude.yml` auf einen Commit-SHA pinnen ([Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md)) (S), erledigt 2026-09-28 mit dem Renovate-PR #11; `actions/checkout` ist dort seit PR #9 gepinnt. Digest-Updates schlägt Renovate vor.
 - [ ] `GOPRIVATE=github.com/ripmav/*` und CI-Token für den Zugriff auf private Repositories und Release-Artefakte einrichten ([ADR-0009](adr/0009-repositories-und-hosting.md)) (S)
 
 ### 1.2 Architekturentscheidungen
@@ -335,7 +342,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | | |
 |---|---|
 | **Ziel** | plattformneutrale Ausführung von Commands, testbar ohne Live-Plattform |
-| **Voraussetzungen** | Phase 2 |
+| **Voraussetzungen** | Phase 2; möglichst die rechtliche Einschätzung zu den `$`-Identifier-Namen (Gate O, O.1) |
 | **Aufwand** | 5–7 PW |
 | **ADRs** | 0022; Code-ADRs 0010, 0011, 0016 |
 
@@ -869,7 +876,8 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 ### 11.2 Import (P2)
 
 - [ ] Nutzerimport aus CSV und XLSX (S)
-- [ ] ADR-0021 Import von Mix-It-Up-Daten, Umsetzung auf Basis der Rechtsgrundlage aus Phase 0 (S)
+- [ ] Klären, wie wichtig die Übernahme bestehender Mix-It-Up-Daten ist und ob es einen eigenen Datenbestand gibt (Plan §15, aus Phase 0 übertragen) (S)
+- [ ] ADR-0021 Import von Mix-It-Up-Daten, Umsetzung auf Basis der Rechtsgrundlage aus Gate O, O.1 (S)
 - [ ] Importer für `.miubackup`, `.miu3` und `.db3` (XL, vor Beginn aufteilen):
   - Typ-Mapping (`$type` → Typ-ID, numerische Event-IDs → Event-Strings)
   - Commands, Actions, Requirements, Nutzer, Währungen, Quotes, Counter
@@ -924,6 +932,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### D0: Setup und Machbarkeit (1–2 PW)
 
+- [ ] Zielsysteme der Desktop-App festlegen (Windows, macOS, Linux) und klären, ob Code-Signierung und Notarisierung nötig sind (Plan §15, aus Phase 0 übertragen) (S)
 - [ ] Repository, `go.mod` (Go 1.27), Fyne v2.8, CI, `fyne-cross`-Builds für Windows, macOS und Linux (M)
 - [ ] Spike: generisches Formular aus dem JSON-Schema des Typkatalogs und verschachtelter Action-Editor (Baum, Umordnen). Das Ergebnis wird als ADR im Desktop-Repo festgehalten. (M)
 - [ ] Spike: Emote-Darstellung im Chat (statisch und animiert) (S)
@@ -990,7 +999,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### W0: Entscheidung und Setup (1–2 PW)
 
-- [ ] ADR-0017 Web-Technologie; Kandidaten: TypeScript-SPA (Svelte 5 oder React), Go + templ + htmx, Go-WASM (S)
+- [ ] ADR-0017 Web-Technologie; Kandidaten: TypeScript-SPA (Svelte 5 oder React), Go + templ + htmx, Go-WASM; beantwortet die offene Frage zum Web-Stack aus Plan §15 (S)
 - [ ] Repository, Build, TS-Client aus den Protos (`@connectrpc/connect-web`), CI (M)
 - [ ] Auslieferung festlegen: statisch vom Core unter `/ui` (optional eingebettet) oder separat hinter einem Reverse Proxy (S)
 
@@ -1065,12 +1074,22 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### O.1 Recht und Herkunft
 
-- [ ] Rechtliche Prüfung abgeschlossen: BSL §3.1–3.5, Urheberrecht (abgeleitetes Werk), Marken, Import-Funktion (extern)
+- [ ] Rechtliche Einschätzung einholen (extern); aus Phase 0 übertragen, möglichst vor Phase 3, spätestens vor Gate O. Themen:
+  - BSL §2 und §3.1–3.5, Urheberrecht (abgeleitetes Werk), Marken
+  - EULA §1 (kein Reverse Engineering)
+  - Nutzung des Codes als Hilfestellung (ADR-0001)
+  - die MIT-Datei `MixItUp.Base/LICENSE.txt`
+  - die Import-Funktion (Interoperabilität)
+  - die Übernahme der `$`-Identifier-Namen
+- [ ] Rechtlichen Teil von ADR-0021 (Import, Identifier-Namen) entscheiden, möglichst vor Phase 3; danach in ADR-0001 unter „Interop-Ausnahmen“ den Link auf das neue ADR nachtragen (S)
+- [ ] Optional (Option D): Blazing Cacti um eine schriftliche Erlaubnis bitten und die Antwort dokumentieren (S)
 - [ ] Herkunfts-Review (M):
   - Alle Spezifikationen haben einen Quellennachweis.
   - Stichproben des Go-Codes werden mit dem Original verglichen: keine übernommene Struktur, keine Bezeichner ohne Interop-Grund, keine Kommentare oder Texte.
   - Alle Assets und Texte sind eigenständig.
-- [ ] Namensprüfung abgeschlossen und endgültigen Namen als ADR festgehalten (Backlog ADR-0024): `streamcrew` bestätigen oder umbenennen; Logo prüfen (S)
+- [ ] Namensprüfung abgeschlossen und endgültigen Namen als ADR festgehalten (Backlog ADR-0024): `streamcrew` bestätigen oder umbenennen; Logo prüfen. Aus Phase 0 übertragen, möglichst früher erledigen (S):
+  - Markenrecherche (DPMA, EUIPO, USPTO)
+  - Domain-, GitHub- und Paketnamen-Verfügbarkeit
 - [ ] Git-Historie geprüft: keine Secrets, keine kopierten Fremdinhalte; bei Bedarf bereinigt (S)
 
 ### O.2 Lizenz und Community
@@ -1102,7 +1121,7 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 - Lizenz (ADR-0002): Neue Dateien tragen den SPDX-Header, neue Abhängigkeiten sind Apache-2.0-kompatibel.
 - ADRs werden geschrieben, **bevor** eine Entscheidung umgesetzt wird. Der Index in `docs/adr/README.md` wird gepflegt.
 - Dokumentation (README, `docs/`, Code-Kommentare) wird mit jeder Änderung aktualisiert.
-- Roadmap: Checkboxen abhaken, Statusübersicht und Änderungshistorie pflegen, Aufwände nach jedem Meilenstein kalibrieren.
+- Roadmap: Checkboxen abhaken, Statusübersicht und Änderungshistorie pflegen, Aufwände nach jedem Meilenstein kalibrieren. Für die Kalibrierung nach M1 legt der Projektinhaber die verfügbare Kapazität pro Woche fest (Plan §15, aus Phase 0 übertragen).
 - Sicherheit: `govulncheck`, Dependency-Updates, keine Secrets in Repo und Logs. Findings ohne Fix-Version werden gemeldet, nicht ignoriert.
 - i18n: Neue Texte entstehen immer auf Englisch und Deutsch.
 - Tests: Neue Features kommen nur mit Tests; der Race-Detector läuft in der CI.
@@ -1165,3 +1184,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-28 | Renovate-Konfiguration nach Vorbild von `recipe-reader` neu gefasst: `renovate.json` im Repository-Root statt `.github/renovate.json5`, ein Pull Request je Ökosystem mit Scope und Label, keine PR-Limits, Commit-Typen nach `config:recommended`, Sicherheitsupdates mit Label `security`. Ergänzt um `go`-Direktive, Werkzeugversionen in Workflows und die Docker-Regel. Code-ADR-0001, Plan und README angepasst. |
 | 2026-09-28 | Claude-Review auf einen eigenen Prompt umgestellt (PR #9): kein Plugin-Befehl und damit keine Vorprüfung mehr; Claude nur lesend ohne Shell, der Kontext wird vorab gesammelt; Befunde als Inline-Kommentare; Zusammenfassung und Befundliste als strukturierte Ausgabe, die den Fortschrittskommentar ersetzt. Plan §11.3 angepasst. Nachweis nach dem Merge offen. |
 | 2026-09-28 | Review-Prompt und Ausgabe-Schema nach `.github/claude/` ausgelagert; der Workflow liest sie aus dem Commit des Workflows, nicht aus dem PR-Checkout. Korrektur: Nur `issue_comment` nutzt die Workflow-Fassung aus `main`, Reviews und Inline-Kommentare nutzen die aus dem Merge-Commit des PRs. PR #9 lässt sich daher per Review mit `@claude` vor dem Merge testen. |
+| 2026-09-29 | Phase 0 abgeschlossen, Gate bestanden: Exit-Kriterien erfüllt. Offene Punkte ohne Einfluss auf Phase 1 übertragen (neuer Abschnitt 0.5): rechtliche Einschätzung, rechtlicher Teil von ADR-0021, Erlaubnis von Blazing Cacti und Namensprüfung nach Gate O (O.1); Fragen aus Plan §15 nach 11.2, D0, W0 und in die Querschnittsaufgaben. Branch-Konvention in `CONTRIBUTING.md` mit optionalem `pre-push`-Hook. Phase 1.1 nachgezogen: Renovate-App installiert, `claude-code-action` gepinnt (#11), Claude-Review auf Festlegung des Projektinhabers ohne Nachweis als erledigt. |

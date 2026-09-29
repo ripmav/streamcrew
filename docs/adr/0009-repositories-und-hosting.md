@@ -65,7 +65,7 @@
 **Folgearbeiten:**
 
 - [x] `streamcrew` privat angelegt: `LICENSE` im ersten Commit auf `main`, `docs/` per Pull Request (2026-09-28). `streamcrew-desktop` und `streamcrew-web` folgen mit ihren Tracks.
-- [ ] Branch-Schutz für `main` einrichten (Roadmap 0.4). Für private Repositories ist er im aktuellen GitHub-Plan nicht verfügbar (geprüft 2026-09-28); bis dahin gilt die Regel per Konvention.
+- [ ] Branch-Schutz für `main` einrichten (Roadmap 0.4). Für private Repositories ist er im aktuellen GitHub-Plan nicht verfügbar (geprüft 2026-09-28); bis dahin gilt die Regel per Konvention, festgehalten in [`CONTRIBUTING.md`](../../CONTRIBUTING.md) (2026-09-29). Der technische Schutz folgt nach dem Umschalten auf öffentlich (Gate O, O.3).
 - [ ] `GOPRIVATE` und CI-Token für den Zugriff zwischen den Repositories (Roadmap Phase 1)
 
 ---

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+#
+# pre-push rejects pushes to main: work happens on branches and is merged by
+# pull request (CONTRIBUTING.md). Branch protection is not available for the
+# private repository, so this hook enforces the convention locally.
+#
+# Enable it once per clone:
+#
+#	git config core.hooksPath scripts/hooks
+set -euo pipefail
+
+# Git passes one line per pushed ref: <local ref> <local sha> <remote ref> <remote sha>.
+while read -r _ _ remote_ref _; do
+	if [[ $remote_ref == refs/heads/main ]]; then
+		echo "pre-push: pushing to main is not allowed; open a pull request instead (see CONTRIBUTING.md)" >&2
+		exit 1
+	fi
+done
