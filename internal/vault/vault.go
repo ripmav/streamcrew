@@ -37,9 +37,10 @@ type Repository interface {
 	GetSecret(ctx context.Context, name string) (rec Record, found bool, err error)
 	PutSecret(ctx context.Context, rec Record) error
 	DeleteSecret(ctx context.Context, name string) (deleted bool, err error)
-	ListSecrets(ctx context.Context) ([]Record, error)
-	// ReplaceSecrets writes all records in one transaction.
-	ReplaceSecrets(ctx context.Context, recs []Record) error
+	// RewriteSecrets reads all records and stores the records fn returns,
+	// in one write transaction, so that no other write comes in between.
+	// An error from fn discards the transaction.
+	RewriteSecrets(ctx context.Context, fn func([]Record) ([]Record, error)) error
 }
 
 // Vault encrypts and decrypts the secrets of a profile.
@@ -90,6 +91,11 @@ func (v *Vault) Delete(ctx context.Context, name string) error {
 // that an interruption leaves every entry readable: the new key is saved
 // before any entry uses it, and old keys are removed only after all entries
 // have been re-encrypted. It returns the new key set.
+//
+// Each repository is read and re-encrypted in one write transaction
+// (ADR-0012). The caller must still hold the data directory lock: a vault
+// that keeps using the old key could otherwise store an entry after the
+// re-encryption, and removing the old key would make it unreadable.
 func Rotate(ctx context.Context, keys *Keys, current *KeySet, repos ...Repository) (*KeySet, error) {
 	if current.Source() == SourceEnv {
 		return nil, errors.New("the key from STREAMCREW_SECRET_KEY cannot be rotated by streamcrew; set a new value and sign in again")
@@ -103,25 +109,24 @@ func Rotate(ctx context.Context, keys *Keys, current *KeySet, repos ...Repositor
 
 	oldVault := &Vault{keys: current}
 	newVault := &Vault{keys: next}
-	for _, repo := range repos {
-		recs, err := repo.ListSecrets(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("rotate: %w", err)
-		}
-		reenc := make([]Record, 0, len(recs))
+	reencrypt := func(recs []Record) ([]Record, error) {
+		out := make([]Record, 0, len(recs))
 		for _, rec := range recs {
 			plain, err := oldVault.open(rec)
 			if err != nil {
-				return nil, fmt.Errorf("rotate: %w", err)
+				return nil, err
 			}
 			r, err := newVault.seal(rec.Name, plain)
 			clear(plain)
 			if err != nil {
-				return nil, fmt.Errorf("rotate: %w", err)
+				return nil, err
 			}
-			reenc = append(reenc, r)
+			out = append(out, r)
 		}
-		if err := repo.ReplaceSecrets(ctx, reenc); err != nil {
+		return out, nil
+	}
+	for _, repo := range repos {
+		if err := repo.RewriteSecrets(ctx, reencrypt); err != nil {
 			return nil, fmt.Errorf("rotate: %w", err)
 		}
 	}

@@ -265,10 +265,10 @@ func TestRotate(t *testing.T) {
 	}
 }
 
-// failingReplace makes the re-encryption fail, as a crash would.
-type failingReplace struct{ vault.Repository }
+// failingRewrite makes the re-encryption fail, as a crash would.
+type failingRewrite struct{ vault.Repository }
 
-func (failingReplace) ReplaceSecrets(context.Context, []vault.Record) error {
+func (failingRewrite) RewriteSecrets(context.Context, func([]vault.Record) ([]vault.Record, error)) error {
 	return assert.AnError
 }
 
@@ -280,7 +280,7 @@ func TestInterruptedRotationKeepsSecretsReadable(t *testing.T) {
 	ks, err := keys.Load(ctx)
 	require.NoError(t, err)
 
-	_, err = vault.Rotate(ctx, keys, ks, failingReplace{s})
+	_, err = vault.Rotate(ctx, keys, ks, failingRewrite{s})
 	require.ErrorIs(t, err, assert.AnError)
 
 	after, err := keys.Load(ctx)

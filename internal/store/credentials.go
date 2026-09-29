@@ -56,11 +56,24 @@ func (s *Store) ListSecrets(ctx context.Context) ([]vault.Record, error) {
 	return out, nil
 }
 
-// ReplaceSecrets implements vault.Repository: all records in one
-// transaction.
-func (s *Store) ReplaceSecrets(ctx context.Context, recs []vault.Record) error {
+// RewriteSecrets implements vault.Repository. Reading and writing happen in
+// one transaction on the writer pool, which holds the write lock from its
+// start, so other writes wait until it ends.
+func (s *Store) RewriteSecrets(ctx context.Context, fn func([]vault.Record) ([]vault.Record, error)) error {
 	return s.Write(ctx, func(q *sqlcgen.Queries) error {
-		for _, rec := range recs {
+		rows, err := q.ListSecrets(ctx)
+		if err != nil {
+			return err
+		}
+		recs := make([]vault.Record, 0, len(rows))
+		for _, r := range rows {
+			recs = append(recs, toRecord(r))
+		}
+		out, err := fn(recs)
+		if err != nil {
+			return err
+		}
+		for _, rec := range out {
 			if err := q.PutSecret(ctx, fromRecord(rec)); err != nil {
 				return err
 			}
