@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: MIT
+#
+# Build output, as in .gitignore. Everything else stays in the context,
+# including .git: the build embeds the VCS revision, and a context without
+# the tracked files would mark the binary as modified.
+streamcrew
+streamcrew.exe
+dist/
+**/*.test
+**/*.out
+**/*.prof
