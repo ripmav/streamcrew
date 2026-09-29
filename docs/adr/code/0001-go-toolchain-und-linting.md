@@ -131,5 +131,6 @@
 - [x] Nach der Annahme den Status setzen und in ADR-0002 und ADR-0009 den Vermerk „Ergänzt durch“ eintragen, erledigt 2026-09-28
 - [x] Renovate-GitHub-App für `ripmav/streamcrew` installieren (Projektinhaber, Roadmap Phase 1.1), erledigt 2026-09-28
 - [x] `claude.yml` auf Commit-SHAs pinnen (Roadmap Phase 1.1), erledigt 2026-09-28 mit dem Renovate-PR #11; den Review-Nachweis hat der Projektinhaber am 2026-09-29 für entbehrlich erklärt
-- [ ] Native Test-Läufe unter Windows und macOS gezielt ergänzen, sobald plattformabhängiger Code entsteht (Roadmap Phase 1.3)
-- [ ] CI erweitern: Docker-Build mit Smoke-Test (Roadmap Phase 1.4), `sqlc diff` (Phase 2), `buf lint` und `buf breaking` (Phase 6)
+- [x] Native Test-Läufe unter Windows und macOS gezielt ergänzen, sobald plattformabhängiger Code entsteht (Roadmap Phase 1.3), erledigt 2026-09-29: Job `test-native`, wöchentlich und auf Anforderung ([Code-ADR-0006](0006-teststrategie.md))
+- [x] CI erweitern: Docker-Build mit Smoke-Test (Roadmap Phase 1.4), erledigt 2026-09-29 im Build-Job
+- [ ] CI erweitern: `sqlc diff` (Phase 2), `buf lint` und `buf breaking` (Phase 6)

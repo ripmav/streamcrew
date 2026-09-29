@@ -71,6 +71,6 @@
 **Folgearbeiten:**
 
 - [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
-- [ ] testify einführen und Tests entsprechend schreiben (Roadmap Phase 1.3)
-- [ ] CI-Job für native Tests unter Windows und macOS ergänzen (Roadmap Phase 1.3); damit ist die entsprechende Folgearbeit aus [Code-ADR-0001](0001-go-toolchain-und-linting.md) erledigt
+- [x] testify einführen und Tests entsprechend schreiben (Roadmap Phase 1.3), erledigt 2026-09-29
+- [x] CI-Job für native Tests unter Windows und macOS ergänzen (Roadmap Phase 1.3); damit ist die entsprechende Folgearbeit aus [Code-ADR-0001](0001-go-toolchain-und-linting.md) erledigt, erledigt 2026-09-29
 - [ ] Ablageort für End-to-End-Tests festlegen (Roadmap Phase 3)

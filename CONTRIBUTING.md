@@ -63,7 +63,7 @@ Das Skript führt die Pre-Commit-Checkliste aus Plan §11.1 in der festgelegten 
 - **Lizenz-Header:** Jede Quelldatei beginnt mit `// SPDX-License-Identifier: Apache-2.0` bzw. dem Kommentarformat ihrer Sprache ([ADR-0002](docs/adr/0002-lizenz-des-projekts.md)). Für Go-Dateien prüft das `goheader`.
 - **Konventionen** für Go stehen in Plan §11.1 und in den Code-ADRs ([`docs/adr/code/`](docs/adr/code/README.md)): Verdrahtung, Fehler und Logging, Nebenläufigkeit, Konfiguration, Tests.
 - **Abhängigkeiten:** Standardbibliothek zuerst, dann `golang.org/x/…`. Jede neue Drittabhängigkeit braucht eine Begründung im Pull Request und eine Apache-2.0-kompatible Lizenz; die CI prüft das mit einer Allowlist.
-- **Tests:** Neue Funktionen kommen nur mit Tests.
+- **Tests:** Neue Funktionen kommen nur mit Tests: `testing` mit testify (`assert`, `require`), Zeitverhalten in `testing/synctest`, handgeschriebene Fakes ([Code-ADR-0006](docs/adr/code/0006-teststrategie.md)).
 
 ## Entscheidungen (ADRs)
 

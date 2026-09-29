@@ -766,7 +766,7 @@ Läuft der Core auf einem Server, fehlen ihm Fähigkeiten des Streaming-PCs: Tas
 
 ### 6.21 Konfiguration, Logging, Beobachtbarkeit
 
-- **Startkonfiguration:** per `kong` (Flags, Umgebungsvariablen `STREAMCREW_*`, optionale Konfigurationsdatei). Laufzeiteinstellungen liegen in der Profildatenbank und sind über die API änderbar.
+- **Startkonfiguration:** per `kong` (Flags, Umgebungsvariablen `STREAMCREW_*`, optionale YAML-Konfigurationsdatei; Code-ADR-0005). Laufzeiteinstellungen liegen in der Profildatenbank und sind über die API änderbar.
 - **Datenverzeichnis:** `os.UserConfigDir()` bzw. XDG, alternativ `--data-dir` oder ein portabler Modus.
 - **Logging mit `log/slog`:** Text oder JSON, Attribute wie `component`, `platform` und `command_id`. `slog.NewMultiHandler` (in der installierten Toolchain vorhanden) verteilt auf Konsole, Datei mit Rotation und den Log-Stream der API.
 - **Betrieb:** `/healthz` und `/readyz`. Prometheus- oder OpenTelemetry-Export ist optional und standardmäßig aus; nichts wird nach Hause gemeldet ([ADR-0011](adr/0011-keine-telemetrie.md)).
@@ -890,7 +890,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | WebSocket | `github.com/coder/websocket` | Kandidat | kontextfähig, gepflegt, auch in `n8n-go` genutzt |
 | SQLite | `modernc.org/sqlite` | Kandidat | CGO-frei; Alternative `ncruces/go-sqlite3` |
 | SQL/Migrationen | `sqlc`, `pressly/goose/v3` | Kandidat | typisiert, eingebettet; bewährt in `n8n-go` |
-| JSON | `encoding/json/v2` | Kandidat | stdlib; polymorphes Dekodieren über eigene Unmarshaler |
+| JSON | `encoding/json/v2` | Kandidat | stdlib; polymorphes Dekodieren über eigene Unmarshaler. In go1.27.1 noch hinter `GOEXPERIMENT=jsonv2` (geprüft 2026-09-29); bis dahin `encoding/json` |
 | JSON-Schema | `github.com/google/jsonschema-go` | Kandidat | auch vom MCP-Go-SDK genutzt |
 | YAML | `go.yaml.in/yaml/v3` | gesetzt | Konfigurationsdatei und Commands als Code; offizieller Nachfolger von `gopkg.in/yaml.v3` (Code-ADR-0005) |
 | OAuth | `golang.org/x/oauth2` | Kandidat | Device Flow und PKCE eingebaut |
@@ -919,7 +919,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 - `errors.AsType`
 - `sync.WaitGroup.Go`
 - `http.CrossOriginProtection`
-- `encoding/json/v2`
+- `encoding/json/v2`, sobald es ohne `GOEXPERIMENT` verfügbar ist (in go1.27.1 noch nicht)
 - `slog.NewMultiHandler`
 - Iteratoren (`range over func`) für Repository-Abfragen
 
@@ -948,8 +948,12 @@ streamcrew/
 │   └── gen/                       # generierter Go-Code (Handler-Interfaces + Clients)
 ├── core/                          # öffentliche Start-API für den Selbststart (ADR-0006)
 ├── internal/
-│   ├── app/                       # Composition Root, Lebenszyklus, Supervisor
-│   ├── config/                    # kong-Konfiguration, Pfade, Betriebsmodi
+│   ├── app/                       # Composition Root, Lebenszyklus, Bereitschaft
+│   ├── config/                    # kong-Konfiguration, YAML-Datei, Pfade, Betriebsmodi
+│   ├── supervisor/                # Runnables, Restart-Policy, Backoff, Shutdown
+│   ├── logging/                   # slog-Handler, Rotation, Maskierung
+│   ├── httpserver/                # HTTP-Server, /healthz, /readyz, pprof
+│   ├── doctor/  buildinfo/        # Selbstprüfung, Versionsinformation
 │   ├── domain/                    # Entitäten und Wertobjekte
 │   ├── engine/                    # Queue, Instanzen, Sperrmodi, Runner
 │   ├── action/                    # Registry + Implementierungen (action/chat, action/wait, …)
@@ -1084,11 +1088,12 @@ Aus den globalen Regeln, verbindlich für alle Repos:
 - **Prüfungen** (`.github/workflows/ci.yml`, Code-ADR-0001):
   - `go fix -diff`, `go vet`, Lint inkl. SPDX-Header
   - Tests mit `-race`, kurze Fuzz-Läufe (`scripts/fuzz.sh`)
+  - wöchentlich und auf Anforderung: Tests nativ unter Windows und macOS (Code-ADR-0006)
   - `govulncheck`, zusätzlich wöchentlich per Zeitplan
   - Lizenzprüfung der Abhängigkeiten (`go-licenses`, Allowlist)
   - später `buf lint`/`buf breaking` und `sqlc diff`
 - **Dokumentation:** `.github/workflows/docs.yml` prüft mit `lychee` offline alle internen Links und Überschriften-Anker in Markdown-Dateien.
-- **Builds:** Cross-Build über linux/windows/darwin und amd64/arm64 in einem Job auf ubuntu, um Actions-Minuten zu sparen; Docker-Build mit Smoke-Test.
+- **Builds:** Cross-Build über linux/windows/darwin und amd64/arm64 in einem Job auf ubuntu, um Actions-Minuten zu sparen; im selben Job Docker-Build mit Smoke-Test (`scripts/docker-smoke.sh`).
 - **Absicherung und Updates:** Fremd-Actions sind auf Commit-SHAs gepinnt. Renovate (GitHub-App, kein Dependabot, `renovate.json` nach Vorbild von `recipe-reader`) öffnet montags vor 6 Uhr je Ökosystem einen Pull Request:
   - Go-Module samt `go`-Direktive
   - Actions samt Werkzeugversionen in Workflows (golangci-lint, `go-licenses`)

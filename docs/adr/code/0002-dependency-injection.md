@@ -59,4 +59,4 @@
 **Folgearbeiten:**
 
 - [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
-- [ ] `internal/app` als Composition Root anlegen (Roadmap Phase 1.3)
+- [x] `internal/app` als Composition Root anlegen (Roadmap Phase 1.3), erledigt 2026-09-29

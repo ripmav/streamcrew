@@ -87,6 +87,6 @@
 **Folgearbeiten:**
 
 - [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
-- [ ] `internal/config` und die Unterkommandos `config show|path` umsetzen; `forbidigo` für Umgebungsvariablen konfigurieren (Roadmap Phase 1.3)
+- [x] `internal/config` und die Unterkommandos `config show|path` umsetzen; `forbidigo` für Umgebungsvariablen konfigurieren (Roadmap Phase 1.3), erledigt 2026-09-29
 - [x] Backlog-Eintrag „YAML-Bibliothek“ in Plan §12.2 und Roadmap Phase 3 streichen bzw. durch die Prüfung der Bibliothek für Commands als Code ersetzen, erledigt 2026-09-29
 - [ ] Unix-Socket als lokalen Transport und `config validate` ergänzen (Roadmap Phase 6)

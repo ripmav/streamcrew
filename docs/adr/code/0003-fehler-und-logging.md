@@ -91,6 +91,6 @@
 **Folgearbeiten:**
 
 - [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
-- [ ] `internal/logging` mit Handlern, Level je Komponente, Rotation und Maskierung umsetzen; `sloglint` konfigurieren (Roadmap Phase 1.3)
+- [x] `internal/logging` mit Handlern, Level je Komponente, Rotation und Maskierung umsetzen; `sloglint` konfigurieren (Roadmap Phase 1.3), erledigt 2026-09-29
 - [ ] Log-Stream der API als weiteren Handler anbinden (Roadmap Phase 6)
 - [ ] Diagnose-Paket liest die Datei-Logs ein (Roadmap Phase 6, ADR-0011)

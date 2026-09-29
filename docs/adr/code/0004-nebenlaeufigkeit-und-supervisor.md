@@ -69,5 +69,5 @@
 **Folgearbeiten:**
 
 - [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
-- [ ] `internal/supervisor` umsetzen und in `internal/app` nutzen (Roadmap Phase 1.3)
+- [x] `internal/supervisor` umsetzen und in `internal/app` nutzen (Roadmap Phase 1.3), erledigt 2026-09-29
 - [ ] Statusmeldungen auf den Event-Bus legen (Roadmap Phase 2.3)
