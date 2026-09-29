@@ -31,9 +31,31 @@ func notFound(rows int64, what string) error {
 	return nil
 }
 
+// now returns the current time as stored: UTC with millisecond precision
+// (Code-ADR-0009).
+func now() time.Time {
+	return time.Now().UTC().Truncate(time.Millisecond)
+}
+
 // fromMillis converts a stored time.
 func fromMillis(ms int64) time.Time {
 	return time.UnixMilli(ms).UTC()
+}
+
+// nullMillis stores a zero time as NULL.
+func nullMillis(t time.Time) sql.NullInt64 {
+	if t.IsZero() {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: t.UnixMilli(), Valid: true}
+}
+
+// fromNullMillis converts NULL to the zero time.
+func fromNullMillis(v sql.NullInt64) time.Time {
+	if !v.Valid {
+		return time.Time{}
+	}
+	return fromMillis(v.Int64)
 }
 
 // flag stores a bool as 0 or 1.
