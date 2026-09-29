@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/doctor"
+	"github.com/ripmav/streamcrew/internal/profile"
 )
 
 // isolate points the user config directory to a temporary directory and
@@ -35,6 +37,9 @@ func isolate(t *testing.T) (userConfigDir string) {
 			require.NoError(t, os.Unsetenv(key))
 		}
 	}
+	// A key from the environment keeps the tests away from the system
+	// keyring of the developer (ADR-0012).
+	t.Setenv("STREAMCREW_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{42}, 32)))
 	home := t.TempDir()
 	t.Setenv("HOME", home)                                   // macOS
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".cfg")) // Linux, BSD
@@ -227,4 +232,114 @@ func TestServePortInUse(t *testing.T) {
 	assert.Equal(t, exitFailure, res.code)
 	assert.Contains(t, res.stderr, "streamcrew stopped with an error")
 	assert.NotContains(t, res.stderr, "streamcrew: ", "the error is logged once, not printed again")
+}
+
+func TestProfileCommands(t *testing.T) {
+	isolate(t)
+	dataDir := t.TempDir()
+	cli := func(args ...string) result {
+		return runCLI(t.Context(), t, append([]string{"--data-dir", dataDir}, args...)...)
+	}
+
+	res := cli("profile", "create", "Main Channel")
+	require.Equal(t, exitOK, res.code, res.stderr)
+	assert.Contains(t, res.stdout, "created profile main-channel")
+	require.Equal(t, exitOK, cli("profile", "create", "Second", "--id", "second").code)
+
+	res = cli("profile", "use", "second")
+	require.Equal(t, exitOK, res.code, res.stderr)
+	res = cli("profile", "rename", "main-channel", "Hauptkanal")
+	require.Equal(t, exitOK, res.code, res.stderr)
+
+	res = cli("profile", "list", "-o", "json")
+	require.Equal(t, exitOK, res.code, res.stderr)
+	var list []profile.Profile
+	require.NoError(t, json.Unmarshal([]byte(res.stdout), &list))
+	require.Len(t, list, 2)
+	assert.Equal(t, "Hauptkanal", list[0].Name)
+	assert.True(t, list[1].Active)
+
+	res = cli("profile", "list")
+	require.Equal(t, exitOK, res.code, res.stderr)
+	assert.Contains(t, res.stdout, "*       second")
+
+	res = cli("profile", "delete", "main-channel")
+	assert.Equal(t, exitUsage, res.code, "deleting needs --yes")
+	res = cli("profile", "delete", "main-channel", "--yes")
+	require.Equal(t, exitOK, res.code, res.stderr)
+	assert.Contains(t, res.stdout, "backup:")
+	res = cli("--profile", "main-channel", "backup", "list", "-o", "json")
+	require.Equal(t, exitOK, res.code, res.stderr)
+	assert.Contains(t, res.stdout, `"kind": "pre-delete"`, "the deleted profile was backed up")
+
+	res = cli("--profile", "Bad ID", "profile", "list")
+	assert.Equal(t, exitUsage, res.code)
+}
+
+func TestBackupCommands(t *testing.T) {
+	isolate(t)
+	dataDir := t.TempDir()
+	cli := func(args ...string) result {
+		return runCLI(t.Context(), t, append([]string{"--data-dir", dataDir}, args...)...)
+	}
+	require.Equal(t, exitOK, cli("profile", "create", "Default", "--id", "default").code)
+
+	res := cli("backup", "create")
+	require.Equal(t, exitOK, res.code, res.stderr)
+	file := strings.TrimSpace(res.stdout)
+	assert.FileExists(t, file)
+
+	res = cli("backup", "list")
+	require.Equal(t, exitOK, res.code, res.stderr)
+	assert.Contains(t, res.stdout, "manual")
+
+	res = cli("backup", "restore", file)
+	assert.Equal(t, exitUsage, res.code, "restoring needs --yes")
+	res = cli("backup", "restore", file, "--yes")
+	require.Equal(t, exitOK, res.code, res.stderr)
+	assert.Contains(t, res.stdout, "backed up the current state")
+	assert.Contains(t, res.stdout, "restored profile default")
+
+	// Restore into a new profile.
+	res = cli("--profile", "copy", "backup", "restore", file, "--yes")
+	require.Equal(t, exitOK, res.code, res.stderr)
+	res = cli("profile", "list", "-o", "json")
+	require.Equal(t, exitOK, res.code, res.stderr)
+	assert.Contains(t, res.stdout, `"id": "copy"`)
+
+	res = cli("--profile", "missing", "backup", "create")
+	assert.Equal(t, exitFailure, res.code)
+}
+
+func TestCommandsRefuseWhileCoreRuns(t *testing.T) {
+	isolate(t)
+	dataDir := t.TempDir()
+	addr := freeAddr(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan result, 1)
+	go func() {
+		done <- runCLI(ctx, t, "--data-dir", dataDir, "--listen", addr, "--no-log-file", "serve")
+	}()
+	require.Eventually(t, func() bool {
+		return httpStatus(t.Context(), "http://"+addr+"/readyz") == http.StatusOK
+	}, 10*time.Second, 20*time.Millisecond)
+
+	res := runCLI(t.Context(), t, "--data-dir", dataDir, "profile", "create", "Other")
+	assert.Equal(t, exitFailure, res.code)
+	assert.Contains(t, res.stderr, "in use by another streamcrew process")
+
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "backup", "create")
+	require.Equal(t, exitOK, res.code, "backups work while the core runs: %s", res.stderr)
+
+	cancel()
+	require.Equal(t, exitOK, (<-done).code)
+}
+
+func TestVaultRotateWithEnvironmentKey(t *testing.T) {
+	isolate(t)
+	dataDir := t.TempDir()
+	require.Equal(t, exitOK, runCLI(t.Context(), t, "--data-dir", dataDir, "profile", "create", "Main").code)
+	res := runCLI(t.Context(), t, "--data-dir", dataDir, "secret", "rotate")
+	assert.Equal(t, exitFailure, res.code)
+	assert.Contains(t, res.stderr, "STREAMCREW_SECRET_KEY")
 }

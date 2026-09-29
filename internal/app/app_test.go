@@ -5,6 +5,8 @@ package app_test
 import (
 	"bytes"
 	"context"
+	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -16,7 +18,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ripmav/streamcrew/internal/app"
+	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/config"
+	"github.com/ripmav/streamcrew/internal/event"
+	"github.com/ripmav/streamcrew/internal/lockfile"
+	"github.com/ripmav/streamcrew/internal/profile"
+	"github.com/ripmav/streamcrew/internal/store"
+	"github.com/ripmav/streamcrew/internal/supervisor"
 )
 
 func testConfig(t *testing.T) config.Config {
@@ -46,7 +54,7 @@ func TestRunStartsReportsReadyAndStops(t *testing.T) {
 	t.Parallel()
 	cfg := testConfig(t)
 	var console bytes.Buffer
-	a, err := app.New(cfg, app.WithConsole(&console))
+	a, err := app.New(t.Context(), cfg, app.WithConsole(&console), app.WithKeyring(nil))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -89,7 +97,7 @@ func TestRunFailsWhenPortIsInUse(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.Listen = busy.Addr().String()
 	var console bytes.Buffer
-	a, err := app.New(cfg, app.WithConsole(&console))
+	a, err := app.New(t.Context(), cfg, app.WithConsole(&console), app.WithKeyring(nil))
 	require.NoError(t, err)
 
 	err = a.Run(t.Context())
@@ -102,8 +110,10 @@ func TestNewWithoutLogFile(t *testing.T) {
 	t.Parallel()
 	cfg := testConfig(t)
 	cfg.Log.File = false
-	_, err := app.New(cfg, app.WithConsole(&bytes.Buffer{}))
+	a, err := app.New(t.Context(), cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
 	require.NoError(t, err)
+	require.NoError(t, a.Close())
+	require.NoError(t, a.Close(), "closing twice is harmless")
 	assert.NoDirExists(t, cfg.LogDir())
 }
 
@@ -114,6 +124,86 @@ func TestNewFailsWithoutDataDirectory(t *testing.T) {
 	require.NoError(t, os.WriteFile(blocker, nil, 0o600))
 	cfg.DataDir = filepath.Join(blocker, "data")
 
-	_, err := app.New(cfg, app.WithConsole(&bytes.Buffer{}))
+	_, err := app.New(t.Context(), cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
 	assert.ErrorContains(t, err, "create data directory")
+}
+
+func TestDataDirectoryIsLocked(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	first, err := app.New(t.Context(), cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
+	require.NoError(t, err)
+	assert.Equal(t, profile.DefaultID, first.Profile().ID, "the default profile is created on first start")
+
+	_, err = app.New(t.Context(), cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
+	require.ErrorContains(t, err, "in use by another streamcrew process")
+	_, locked := errors.AsType[*lockfile.LockedError](err)
+	assert.True(t, locked)
+
+	require.NoError(t, first.Close())
+	again, err := app.New(t.Context(), cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
+	require.NoError(t, err, "free after Close")
+	require.NoError(t, again.Close())
+}
+
+func TestUnknownProfileFails(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	cfg.Profile = "missing"
+	_, err := app.New(t.Context(), cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
+	require.ErrorIs(t, err, profile.ErrNotFound)
+
+	cfg.Profile = ""
+	a, err := app.New(t.Context(), cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
+	require.NoError(t, err, "the lock was released after the failed start")
+	require.NoError(t, a.Close())
+}
+
+func TestEventsDuringLifecycle(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	a, err := app.New(t.Context(), cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
+	require.NoError(t, err)
+	sub := a.Bus().Subscribe(t.Context(), event.WithPrefixes("app.", "supervisor."), event.WithBuffer(64))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	errc := make(chan error, 1)
+	go func() { errc <- a.Run(ctx) }()
+	require.Eventually(t, a.Ready, 5*time.Second, 10*time.Millisecond)
+	cancel()
+	require.NoError(t, <-errc)
+
+	var seen []string
+	for e := range sub.C() {
+		if st, ok := event.Payload[supervisor.Status](e); ok {
+			seen = append(seen, string(e.Type)+":"+st.Name+":"+string(st.State))
+			continue
+		}
+		seen = append(seen, string(e.Type))
+	}
+	assert.Equal(t, "app.started", seen[0])
+	assert.Contains(t, seen, "supervisor.status:http:running")
+	assert.Contains(t, seen, "supervisor.status:backup:running")
+	assert.Contains(t, seen, "app.stopping")
+	assert.Contains(t, seen, "supervisor.status:http:stopped")
+}
+
+func TestPreMigrationBackup(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	dir := t.TempDir()
+	s, err := store.Open(ctx, filepath.Join(dir, "profiles", "main.db"))
+	require.NoError(t, err)
+	defer s.Close()
+	require.NoError(t, s.SetMeta(ctx, profile.MetaName, "Main"))
+
+	hook := app.PreMigrationBackup(app.BackupDir(dir), "v1.2.3", slog.New(slog.DiscardHandler))
+	require.NoError(t, hook(ctx, s, 1, 2))
+
+	list, err := backup.List(app.BackupDir(dir), "main")
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, backup.KindPreMigration, list[0].Manifest.Kind)
+	assert.Equal(t, "Main", list[0].Manifest.ProfileName)
+	assert.Equal(t, "v1.2.3", list[0].Manifest.AppVersion)
 }

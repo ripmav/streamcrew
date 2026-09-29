@@ -41,6 +41,7 @@ const DefaultPort = 8740
 type Config struct {
 	ConfigFile      string        `name:"config" type:"path" placeholder:"FILE" help:"Configuration file (YAML). Without this flag, config.yaml in the default data directory is read if it exists."`
 	DataDir         string        `name:"data-dir" type:"path" default:"${default_data_dir}" placeholder:"DIR" help:"Data directory for profiles, logs and runtime files. Default: ${default}."`
+	Profile         string        `placeholder:"ID" help:"Profile to use. Default: the active profile (streamcrew profile use)."`
 	Mode            Mode          `enum:"desktop,daemon,server" default:"daemon" help:"Operating mode: ${enum}."`
 	Listen          string        `placeholder:"HOST:PORT" help:"Address of the HTTP server. Default: 127.0.0.1:8740, in server mode :8740."`
 	Dev             bool          `help:"Developer mode: serves pprof under /debug/pprof/. Requires a loopback listen address."`
