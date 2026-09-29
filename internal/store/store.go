@@ -225,7 +225,7 @@ func dsn(path string, readOnly bool) string {
 func fileURI(path string, q url.Values) string {
 	p := filepath.ToSlash(path)
 	if filepath.VolumeName(path) != "" {
-		p = "/" + p // file:///C:/… on Windows
+		p = "/" + p // file:/C:/… on Windows: an absolute path, as SQLite expects
 	}
 	u := url.URL{Scheme: "file", Path: p, OmitHost: true, RawQuery: q.Encode()}
 	return u.String()
