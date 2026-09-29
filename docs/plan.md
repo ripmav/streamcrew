@@ -900,7 +900,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | IDs | UUIDv7 aus dem Standardpaket `uuid` (Go 1.27) | gesetzt | keine Abhängigkeit; Code-ADR-0009 |
 | Logging | `log/slog`; eigene Rotation nach Größe (Code-ADR-0003) | gesetzt | stdlib |
 | Secrets | `crypto/aes` + `crypto/cipher`, `zalando/go-keyring` | gesetzt | stdlib-Krypto; Keyring plattformübergreifend, Fallback Umgebungsvariable oder Datei (ADR-0012) |
-| Ausdrücke | `expr-lang/expr` | Kandidat | sicher, schnell, ersetzt Jace |
+| Ausdrücke | `expr-lang/expr` | gesetzt | sicher, schnell, ersetzt Jace; Werte als Variablen, Größe und Speicher begrenzt (Code-ADR-0012) |
 | Scripting | `dop251/goja` | Kandidat | reines Go, sandboxfähig (ADR-0017) |
 | YouTube | `google.golang.org/api/youtube/v3`, `google.golang.org/grpc` für `streamList` | Kandidat | offizielle Clients bzw. Proto |
 | OBS | `andreykaipov/goobs` | Kandidat | obs-websocket v5 |
@@ -1174,7 +1174,7 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0009 | `0009-ids-und-zeit.md` | UUIDv7, Uhren, `synctest`; **akzeptiert** | 2 |
 | 0010 | `0010-polymorphe-serialisierung.md` | Diskriminator, Versionen, JSON-Bibliothek; **akzeptiert** | 2 |
 | 0011 | `0011-event-bus.md` | Typisierung, Puffer, Lag; **akzeptiert** | 2 |
-| 0012 | `0012-template-engine.md` | Tokenizer, Präfixregel, Kodierung, Ausdrücke mit `expr-lang/expr`; **vorgeschlagen** | 3 |
+| 0012 | `0012-template-engine.md` | Tokenizer, Präfixregel, Kodierung, Ausdrücke mit `expr-lang/expr`; **akzeptiert** | 3 |
 | 0013 | `0013-typ-registry.md` | Descriptors, Schemas, Capabilities | 3 |
 | 0014 | `0014-http-client.md` | Retry, Rate-Limits, Fehlerklassen; Einbau des Circuit Breakers (Code-ADR-0007) | 4 |
 | 0015 | `0015-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |

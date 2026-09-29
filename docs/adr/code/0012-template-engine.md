@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-29 |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Plan §6.10, §8, §11.2; Roadmap Phase 3.1; [Spezifikation `template.md`](../../spec/template.md); [ADR-0001](../0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0003](0003-fehler-und-logging.md), [Code-ADR-0006](0006-teststrategie.md), [Code-ADR-0009](0009-ids-und-zeit.md) |
@@ -81,7 +81,7 @@
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) und das ADR-Backlog in Plan §12.2 anpassen
+- [x] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) und das ADR-Backlog in Plan §12.2 anpassen, erledigt 2026-09-29
 - [ ] `internal/template` und `internal/expr` umsetzen (Roadmap 3.1); `expr-lang/expr` in `go.mod` aufnehmen und die Lizenzprüfung der CI laufen lassen
 - [ ] Die Special-Identifier-Action (Roadmap 3.3) setzt lokale und globale Werte über die Quellen aus Punkt 2
 - [ ] Namen und Eigenschaften nach der rechtlichen Einschätzung (Gate O, O.1) bestätigen oder austauschen
