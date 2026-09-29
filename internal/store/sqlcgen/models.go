@@ -4,9 +4,65 @@
 
 package sqlcgen
 
+import (
+	"database/sql"
+)
+
+type Command struct {
+	ID           string
+	Name         string
+	Kind         string
+	Enabled      int64
+	Unlocked     int64
+	GroupID      sql.NullString
+	Wildcard     int64
+	EventType    sql.NullString
+	Requirements string
+	Actions      string
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+type CommandGroup struct {
+	ID            string
+	Name          string
+	NameKey       string
+	TimerInterval int64
+	CreatedAt     int64
+	UpdatedAt     int64
+}
+
+type CommandTrigger struct {
+	CommandID   string
+	Position    int64
+	TriggerText string
+	TriggerKey  string
+	Active      int64
+}
+
+type Counter struct {
+	ID           string
+	Name         string
+	Value        int64
+	ResetOnStart int64
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
 type Meta struct {
 	Key   string
 	Value string
+}
+
+type Quote struct {
+	Number    int64
+	ID        string
+	Text      string
+	Game      string
+	QuotedAt  int64
+	AddedBy   sql.NullString
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 type Secret struct {
@@ -21,4 +77,46 @@ type Setting struct {
 	Section   string
 	Document  string
 	UpdatedAt int64
+}
+
+type User struct {
+	ID                string
+	Title             string
+	Notes             string
+	Excluded          int64
+	Regular           int64
+	EntranceCommandID sql.NullString
+	CreatedAt         int64
+	UpdatedAt         int64
+}
+
+type UserIdentity struct {
+	Platform         string
+	PlatformUserID   string
+	UserID           string
+	Login            string
+	DisplayName      string
+	Color            string
+	AvatarUrl        string
+	Roles            string
+	FollowedAt       sql.NullInt64
+	SubscribedAt     sql.NullInt64
+	SubTier          int64
+	AccountCreatedAt sql.NullInt64
+	DataUpdatedAt    sql.NullInt64
+	CreatedAt        int64
+	UpdatedAt        int64
+}
+
+type UserStat struct {
+	UserID         string
+	WatchMinutes   int64
+	Messages       int64
+	CommandsRun    int64
+	Mentions       int64
+	StreamsWatched int64
+	FirstSeen      sql.NullInt64
+	LastSeen       sql.NullInt64
+	DonatedCents   int64
+	Strikes        int64
 }

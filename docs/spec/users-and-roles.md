@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
+| **Status** | Geprüft |
 | **Stand** | 2026-09-29 |
 | **Bezug** | Roadmap Phase 2.2 (Nutzer, Rollenmodell), 5.2; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0009](../adr/code/0009-ids-und-zeit.md); Plan §5.5, §6.13, Anhang A.6, A.7 |
-| **Umsetzung** | noch offen (geplant: `internal/domain/user`, Repository in `internal/store`) |
+| **Umsetzung** | Datenmodell und Rollen umgesetzt (PR #13): `internal/domain/role`, `internal/domain/user`, `internal/domain/platform`, Repository in `internal/store`. Offen: Standardtitel (B5) und Vergabe der Regular-Rolle (B26) mit Phase 5.2, nutzerspezifische Chat-Commands (B8, P1), Import (B11, P2) |
 
 ## Zweck und Umfang
 
@@ -79,12 +79,12 @@ Nicht Teil dieser Spezifikation:
 
 ## Akzeptanzkriterien
 
-- [ ] B3: Ein zweiter Nutzer mit derselben Kombination aus Plattform und Plattform-ID wird abgelehnt (Constraint in der Datenbank).
-- [ ] B4: Eine Namensänderung aktualisiert die Identität, ohne einen neuen Nutzer anzulegen.
-- [ ] B20, B23: Tabellengetriebener Test über alle Paare aus Nutzerrolle und Mindestrolle.
-- [ ] B22: Hauptrolle eines Nutzers mit mehreren Rollen ist die höchste.
-- [ ] B27: Ein gebannter Nutzer erfüllt keine Mindestrolle.
-- [ ] B9: Statistiken werden gespeichert und gelesen (Integrationstest gegen SQLite).
+- [x] B3: Ein zweiter Nutzer mit derselben Kombination aus Plattform und Plattform-ID wird abgelehnt (Constraint in der Datenbank).
+- [x] B4: Eine Namensänderung aktualisiert die Identität, ohne einen neuen Nutzer anzulegen.
+- [x] B20, B23: Tabellengetriebener Test über alle Paare aus Nutzerrolle und Mindestrolle.
+- [x] B22: Hauptrolle eines Nutzers mit mehreren Rollen ist die höchste.
+- [x] B27: Ein gebannter Nutzer erfüllt keine Mindestrolle.
+- [x] B9: Statistiken werden gespeichert und gelesen (Integrationstest gegen SQLite).
 
 ## Offene Fragen
 
@@ -110,3 +110,5 @@ Nicht Teil dieser Spezifikation:
 | Datum | Änderung |
 |---|---|
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
+| 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
+| 2026-09-29 | Umgesetzt (PR #13). Festlegungen dabei: Die Hauptrolle eines gebannten Nutzers ist `banned`, auch wenn er weitere Rollen hat (B22 mit B27). `regular` gehört zum Nutzer, nicht zu einer Plattform-Identität (B26). Beim erneuten Kontakt übernimmt streamcrew Login, Anzeigename, Chatfarbe und Profilbild (B4); Rollen und Plattformdaten kommen über einen eigenen Abgleich (B10, B42). Spenden werden in Hundertsteln der Hauptwährungseinheit summiert (B9). |

@@ -20,6 +20,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/app"
 	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/config"
+	"github.com/ripmav/streamcrew/internal/domain/counter"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/lockfile"
 	"github.com/ripmav/streamcrew/internal/profile"
@@ -186,6 +187,43 @@ func TestEventsDuringLifecycle(t *testing.T) {
 	assert.Contains(t, seen, "supervisor.status:backup:running")
 	assert.Contains(t, seen, "app.stopping")
 	assert.Contains(t, seen, "supervisor.status:http:stopped")
+}
+
+// TestNewResetsCounters covers B3 of spec counters-and-quotes.md: counters
+// with the reset option are 0 after the core started, the others keep their
+// value.
+func TestNewResetsCounters(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	cfg := testConfig(t)
+	var console bytes.Buffer
+	first, err := app.New(ctx, cfg, app.WithConsole(&console), app.WithKeyring(nil))
+	require.NoError(t, err)
+	path := first.Profile().Path
+	require.NoError(t, first.Close())
+
+	s, err := store.Open(ctx, path)
+	require.NoError(t, err)
+	_, err = s.CreateCounter(ctx, counter.Counter{Name: "session", Value: 5, ResetOnStart: true})
+	require.NoError(t, err)
+	_, err = s.CreateCounter(ctx, counter.Counter{Name: "total", Value: 5})
+	require.NoError(t, err)
+	require.NoError(t, s.Close())
+
+	second, err := app.New(ctx, cfg, app.WithConsole(&console), app.WithKeyring(nil))
+	require.NoError(t, err)
+	require.NoError(t, second.Close())
+	assert.Contains(t, console.String(), `"msg":"counters reset on start"`)
+
+	s, err = store.Open(ctx, path)
+	require.NoError(t, err)
+	defer s.Close()
+	session, err := s.Counter(ctx, "session")
+	require.NoError(t, err)
+	assert.Zero(t, session.Value)
+	total, err := s.Counter(ctx, "total")
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), total.Value)
 }
 
 func TestPreMigrationBackup(t *testing.T) {

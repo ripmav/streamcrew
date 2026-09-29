@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
+| **Status** | Geprüft |
 | **Stand** | 2026-09-29 |
 | **Bezug** | Roadmap Phase 2.2 (Event-Modell), 3.6, 4.4, 5.1; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0011](../adr/code/0011-event-bus.md); Plan §6.7, Anhang A.1, A.2; [`commands.md`](commands.md) |
-| **Umsetzung** | teilweise: Umschlag und Katalog-Mechanismus in `internal/event`; die Typen dieses Katalogs folgen mit ihren Quellen (Chat, Twitch …) |
+| **Umsetzung** | teilweise (PR #13): Katalog mit Namen, plattformneutraler Entsprechung und Häufigkeit je Typ in `internal/domain/eventtype`; Umschlag und Bus in `internal/event`. Die Auslöseregeln (B2 bis B6, B20 bis B22) folgen mit den Quellen: Engine (Phase 3.6), Twitch (Phase 4), Chat (Phase 5) |
 
 ## Zweck und Umfang
 
@@ -122,7 +122,7 @@ Nicht Teil dieser Spezifikation: die Zuordnung zu den numerischen Ereignis-IDs d
 
 ## Akzeptanzkriterien
 
-- [ ] B1: Alle Typen dieses Katalogs erfüllen die Namensregel und stehen im Katalog von `internal/event`, sobald ihre Quelle existiert.
+- [x] B1: Alle Typen dieses Katalogs erfüllen die Namensregel und stehen im Katalog von `internal/event`, sobald ihre Quelle existiert.
 - [ ] B2: Ein Twitch-Follow veröffentlicht `twitch.channel.follow` und `channel.follow`.
 - [ ] B3, B20: Ein zweiter Follow desselben Nutzers in derselben Sitzung löst kein Ereignis aus; nach einem neuen Stream-Start wieder.
 - [ ] B5: Unter und über der Schwelle entstehen die richtigen Geschenk-Ereignisse.
@@ -149,3 +149,5 @@ Nicht Teil dieser Spezifikation: die Zuordnung zu den numerischen Ereignis-IDs d
 | Datum | Änderung |
 |---|---|
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
+| 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
+| 2026-09-29 | Katalog umgesetzt (PR #13). Festlegungen dabei: `chat.user.join` und `chat.user.entrance` gelten wie B3 einmal je Nutzer und Stream-Sitzung, `chat.user.new` und `chat.user.first_message` einmal je Nutzer überhaupt; plattformspezifische Typen haben die Häufigkeit ihrer neutralen Entsprechung. |

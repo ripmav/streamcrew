@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
+| **Status** | Geprüft |
 | **Stand** | 2026-09-29 |
 | **Bezug** | Roadmap Phase 2.2 (Commands), 3.2–3.5, 5.4; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md); Plan §5.2, §5.4, §6.8, §6.9; [`users-and-roles.md`](users-and-roles.md), [`events.md`](events.md) |
-| **Umsetzung** | noch offen (geplant: `internal/domain/command`, Repository in `internal/store`) |
+| **Umsetzung** | Datenmodell umgesetzt (PR #13): `internal/domain/command`, Repository in `internal/store`. Ausführung, Sperren, Prüfung der Anforderungen und fehlerhafte Verweise (B3, B5, B15, B21, B63) folgen mit `command-engine.md` (Phase 3), B6 mit den vorgefertigten Commands (Phase 5.6) |
 
 ## Zweck und Umfang
 
@@ -103,13 +103,13 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 
 ## Akzeptanzkriterien
 
-- [ ] B1, B4: Ein Command mit Actions unbekannten Typs wird gespeichert, geladen und unverändert zurückgeschrieben.
-- [ ] B11, B12: Trigger werden ohne `!` und als Liste gespeichert; Eingaben mit Leerzeichen und Semikolon werden richtig zerlegt.
-- [ ] B13: Tabellengetriebener Test der Wortgrenzen für Platzhalter-Trigger.
-- [ ] B14: Ein zweiter aktiver Chat-Command mit gleichem Trigger wird abgelehnt.
-- [ ] B20: Ein zweiter Ereignis-Command für denselben Typ wird abgelehnt.
-- [ ] B30, B62: Gruppennamen sind eindeutig; Löschen einer Gruppe lässt ihre Commands bestehen.
-- [ ] B40–B47: Jede Anforderungsart lässt sich speichern und laden (Golden Files, Code-ADR-0010).
+- [x] B1, B4: Ein Command mit Actions unbekannten Typs wird gespeichert, geladen und unverändert zurückgeschrieben.
+- [x] B11, B12: Trigger werden ohne `!` und als Liste gespeichert; Eingaben mit Leerzeichen und Semikolon werden richtig zerlegt.
+- [x] B13: Tabellengetriebener Test der Wortgrenzen für Platzhalter-Trigger.
+- [x] B14: Ein zweiter aktiver Chat-Command mit gleichem Trigger wird abgelehnt.
+- [x] B20: Ein zweiter Ereignis-Command für denselben Typ wird abgelehnt.
+- [x] B30, B62: Gruppennamen sind eindeutig; Löschen einer Gruppe lässt ihre Commands bestehen.
+- [x] B40–B47: Jede Anforderungsart lässt sich speichern und laden (Golden Files, Code-ADR-0010).
 
 ## Offene Fragen
 
@@ -135,3 +135,5 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | Datum | Änderung |
 |---|---|
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
+| 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
+| 2026-09-29 | Datenmodell umgesetzt (PR #13). Festlegungen dabei: Der Platzhalter gilt je Command für alle seine Trigger (B13); eine Wortgrenze liegt überall, wo nicht Buchstabe oder Ziffer auf Buchstabe oder Ziffer folgt. Ohne Platzhalter folgt auf `!` und Trigger das Ende der Nachricht oder ein Leerraum (B11). Trigger mit und ohne Platzhalter teilen sich die Eindeutigkeit (B14). Argumenttypen vorerst `text`, `number` und `user` (B45, offene Frage). Dauern in Anforderungen stehen als Go-Dauer, etwa `30s` (B41, B46; Code-ADR-0009). Gruppennamen sind unabhängig von Groß- und Kleinschreibung eindeutig (B30). |

@@ -5,7 +5,7 @@
 | **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12) |
 | **Stand** | 2026-09-29 |
 | **Grundlage** | [`plan.md`](plan.md) (Architektur, Prioritäten, Risiken), [`starting.md`](starting.md), [`adr/`](adr/README.md) |
-| **Aktuelle Phase** | Phase 2: Domäne und Persistenz (nächste) |
+| **Aktuelle Phase** | Phase 3: Engine, Templates, Actions, Mock (nächste) |
 
 > **Name:** Das Projekt heißt vorerst `streamcrew` (Codename, [ADR-0008](adr/0008-codename-streamcrew.md)); Binary `streamcrew`. Der endgültige Name wird vor Gate O geprüft.
 
@@ -91,7 +91,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 |---|---|
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); offen bleibt nur der Cache, der in Phase 2 neu bewertet wird |
-| Phase 2: Domäne und Persistenz | in Arbeit: Speicher, Profile, Backups, Event-Bus und Vault erledigt (2.1, 2.3, 2.4); das Domänenmodell (2.2) wartet auf Spezifikationen |
+| Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29 (PR #13), alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (Phase 3), Zuordnung zu den numerischen Ereignis-IDs (Gate O) |
 | Phase 3: Engine, Templates, Actions, Mock | offen |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
@@ -303,22 +303,22 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 ### 2.2 Domänenmodell
 
 - [x] [Code-ADR-0009](adr/code/0009-ids-und-zeit.md) IDs und Zeit: UUIDv7 aus der Standardbibliothek, keine injizierbare Uhr (`testing/synctest`), akzeptiert 2026-09-29 (S)
-- [ ] Spezifikationen für das Domänenmodell, Entwürfe vom 2026-09-29, warten auf die Prüfung durch den Projektinhaber: [`users-and-roles.md`](spec/users-and-roles.md), [`commands.md`](spec/commands.md), [`counters-and-quotes.md`](spec/counters-and-quotes.md), [`events.md`](spec/events.md) (M)
-- [ ] Nutzer: Nutzer, Plattform-Identitäten, Statistiken, Titel, Notizen, Ausschlüsse (M)
-- [ ] Rollenmodell: plattformneutrale Rollen mit Rangordnung plus plattformspezifische Rollen; Semantik „erfüllt Mindestrolle“ (Plan Anhang A.7) (M)
-- [ ] Commands (M):
+- [x] Spezifikationen für das Domänenmodell: [`users-and-roles.md`](spec/users-and-roles.md), [`commands.md`](spec/commands.md), [`counters-and-quotes.md`](spec/counters-and-quotes.md), [`events.md`](spec/events.md) (M), vom Projektinhaber geprüft und akzeptiert 2026-09-29; die offenen Fragen darin werden am Original geprüft
+- [x] Nutzer: Nutzer, Plattform-Identitäten, Statistiken, Titel, Notizen, Ausschlüsse (M), erledigt 2026-09-29 (`internal/domain/user`, `internal/domain/platform`)
+- [x] Rollenmodell: plattformneutrale Rollen mit Rangordnung plus plattformspezifische Rollen; Semantik „erfüllt Mindestrolle“ (Plan Anhang A.7) (M), erledigt 2026-09-29 (`internal/domain/role`; plattformspezifische Rollen zählen auf der Stufe, auf der sie stehen)
+- [x] Commands (M), erledigt 2026-09-29 (`internal/domain/command`; Golden Files für alle Anforderungsarten):
   - Arten, Trigger
   - Gruppen inkl. Gruppen-Timer-Intervall
   - aktiv/unlocked
   - Requirements-Set
   - polymorphe Actions
 - [x] [Code-ADR-0010](adr/code/0010-polymorphe-serialisierung.md) polymorphe Serialisierung: `type`-Diskriminator, `schemaVersion`, Migrationen je Typversion; vorerst `encoding/json`, weil v2 in go1.27.1 noch experimentell ist; akzeptiert 2026-09-29 (M)
-- [ ] Datenmodell für Counter und Quotes (S)
+- [x] Datenmodell für Counter und Quotes (S), erledigt 2026-09-29 (`internal/domain/counter`, `internal/domain/quote`; Rücksetzen beim Start)
 - [x] Settings-Sektionen, typisiert und versioniert, als polydoc-Dokumente (`internal/settings`): Grundlage sowie „Backups“ und „Zeit“, erledigt 2026-09-29 (M)
-- [ ] Weitere Settings-Sektionen mit ihren Funktionen: allgemein, Chat, Commands, Moderation, Overlay, Locale (ab Phase 3) (S)
+- [ ] Weitere Settings-Sektionen mit ihren Funktionen: allgemein, Chat, Commands, Moderation, Overlay, Locale (ab Phase 3) (S); übertragen nach 3.2, weil jede Sektion mit ihrer Funktion entsteht
 - [x] Event-Modell, technischer Teil (M), erledigt 2026-09-29 (`internal/event`): Umschlag (ID, Zeit, Quelle, Typ, Nutzlast), Katalog mit typisierter Nutzlast und Namensregel, erste Typen `app.started`, `app.stopping`, `supervisor.status`
-- [ ] Katalog der fachlichen Event-Typen als stabile Strings, nach Spezifikation (Plan Anhang A.1) (S)
-- [ ] Zuordnungstabelle zu den numerischen IDs des Originals für den späteren Import, vorbehaltlich der rechtlichen Einschätzung (Gate O, O.1) (S)
+- [x] Katalog der fachlichen Event-Typen als stabile Strings, nach Spezifikation (Plan Anhang A.1) (S), erledigt 2026-09-29 (`internal/domain/eventtype`, mit plattformneutraler Entsprechung und Häufigkeit je Typ)
+- [ ] Zuordnungstabelle zu den numerischen IDs des Originals für den späteren Import, vorbehaltlich der rechtlichen Einschätzung (Gate O, O.1) (S); übertragen nach 11.2 (Typ-Mapping des Importers)
 
 ### 2.3 Event-Bus
 
@@ -336,7 +336,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 **Exit-Kriterien:**
 
 - [x] Migrationen sind vorwärts und rückwärts getestet (`TestMigrationsUpDownUp`).
-- [ ] Die Repositories sind durch Integrationstests gegen eine echte SQLite abgedeckt: erfüllt für Metadaten, Settings und Vault; die Repositories des Domänenmodells (2.2) fehlen noch.
+- [x] Die Repositories sind durch Integrationstests gegen eine echte SQLite abgedeckt: Metadaten, Settings, Vault, Nutzer, Commands, Counter und Quotes (`internal/store/*_test.go`).
 - [x] Der Backup/Restore-Roundtrip-Test ist grün (`TestBackupRestoreRoundTrip`).
 - [x] Ein Test belegt, dass Tokens nie im Klartext in der Datenbank stehen (`TestNoPlaintextAtRest`, auch für WAL und Backup).
 
@@ -378,6 +378,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [ ] Abbrechen über `context`, Replay, Verlauf als Ringpuffer, Ereignisse `command.instance.*` (M)
 - [ ] Runner-Parameter pro Nutzer, Auflösung des Ziel-Nutzers, Rekursions- und Zyklenschutz, Zeitlimits je Action (M)
 - [ ] Nebenläufigkeitstests mit `testing/synctest` und `-race` (M)
+- [ ] Settings-Sektionen mit ihren Funktionen, aus 2.2 übertragen: „commands“ (Sperrmodus, Fehler-Cooldowns) und „locale“ hier, „general“, „chat“ und „moderation“ mit Phase 5, „overlay“ mit Phase 7 (S)
 
 ### 3.3 Action-Framework und P0-Actions
 
@@ -885,7 +886,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [ ] Klären, wie wichtig die Übernahme bestehender Mix-It-Up-Daten ist und ob es einen eigenen Datenbestand gibt (Plan §15, aus Phase 0 übertragen) (S)
 - [ ] ADR-0021 Import von Mix-It-Up-Daten, Umsetzung auf Basis der Rechtsgrundlage aus Gate O, O.1 (S)
 - [ ] Importer für `.miubackup`, `.miu3` und `.db3` (XL, vor Beginn aufteilen):
-  - Typ-Mapping (`$type` → Typ-ID, numerische Event-IDs → Event-Strings)
+  - Typ-Mapping (`$type` → Typ-ID, numerische Event-IDs → Event-Strings aus `internal/domain/eventtype`; aus 2.2 übertragen)
   - Commands, Actions, Requirements, Nutzer, Währungen, Quotes, Counter
   - Overlays, soweit abbildbar
   - Importbericht mit allem, was nicht übernommen wird (C#-Skripte, Tokens)
@@ -1205,3 +1206,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-29 | Phase 2.1, 2.3 und 2.4 umgesetzt: `internal/domain/id`, `internal/event`, `internal/polydoc`, `internal/store` (SQLite, goose, sqlc), `internal/lockfile`, `internal/profile`, `internal/settings`, `internal/backup`, `internal/vault`; Einbindung in App und CLI (`profile`, `backup`, `secret rotate`). Das Secret-Paket heißt `internal/vault`, weil die Berechtigungsregeln des Projektinhabers Pfade mit „secret“ sperren. Settings-Sektionen und Event-Modell in einen technischen und einen fachlichen Teil geteilt; der fachliche Teil von 2.2 braucht Spezifikationen nach ADR-0001. |
 | 2026-09-29 | Entwürfe der Spezifikationen für das Domänenmodell (Nutzer und Rollen, Commands, Counter und Quotes, Ereigniskatalog) aus der offiziellen Doku und dem Plan, ohne Code des Originals; die Umsetzung wartet auf die Prüfung. Zeitzone: Systemzone zur Laufzeit, Rückfall UTC; `forbidigo` erlaubt Umgebungsvariablen in Tests (Entscheidungen des Projektinhabers). |
 | 2026-09-29 | Kommandozeile aufgeteilt (Entscheidung des Projektinhabers): `cmd/streamcrew` enthält nur noch `main.go` mit Signalen, Umgebung, kong-Initialisierung und Parsen; Definition und Unterkommandos liegen in `internal/cli`. Code-ADR-0002, 0003 und 0005 mit Präzisierungsvermerk, Plan §6.3 und §9.2 angepasst. |
+| 2026-09-29 | Spezifikationen des Domänenmodells vom Projektinhaber geprüft und akzeptiert; offene Fragen werden am Original geprüft. Phase 2.2 umgesetzt: `internal/domain/{platform,role,user,command,counter,quote,eventtype}`, Migration `0002_domain.sql`, Repositories mit Integrationstests, Golden Files der Anforderungsarten, Rücksetzen der Counter beim Start. Phase 2 abgeschlossen; weitere Settings-Sektionen nach 3.2 und die Zuordnung der numerischen Ereignis-IDs nach 11.2 übertragen. Code-ADR-0009 präzisiert: Dauern in Dokumenten als Go-Dauer. |

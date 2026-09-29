@@ -1,0 +1,7 @@
+{
+  "type": "threshold",
+  "schemaVersion": 1,
+  "users": 3,
+  "within": "1m0s",
+  "runForEachUser": true
+}
