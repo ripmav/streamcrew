@@ -102,7 +102,7 @@ func TestRunListenErrorIsPermanent(t *testing.T) {
 
 // TestRunClosesIdleNewConnections is a regression test: a connection on
 // which the client never sends a request (like a browser preconnect or a
-// connection the HTTP client dialled in reserve) kept net/http's graceful
+// connection the HTTP client dialed in reserve) kept net/http's graceful
 // shutdown waiting for 5 s, longer than the shutdown timeout of the core.
 func TestRunClosesIdleNewConnections(t *testing.T) {
 	t.Parallel()
