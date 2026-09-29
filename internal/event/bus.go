@@ -5,6 +5,7 @@ package event
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -193,18 +194,9 @@ func (s *Subscription) Close() {
 
 func (s *Subscription) matches(e Envelope) bool {
 	if len(s.types) > 0 || len(s.prefixes) > 0 {
-		ok := false
-		for _, t := range s.types {
-			if t == e.Type {
-				ok = true
-				break
-			}
-		}
-		for _, p := range s.prefixes {
-			if !ok && strings.HasPrefix(string(e.Type), p) {
-				ok = true
-			}
-		}
+		ok := slices.Contains(s.types, e.Type) || slices.ContainsFunc(s.prefixes, func(p string) bool {
+			return strings.HasPrefix(string(e.Type), p)
+		})
 		if !ok {
 			return false
 		}
