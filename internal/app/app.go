@@ -4,6 +4,10 @@
 // all components from the startup configuration, registers the long-running
 // ones with the supervisor and runs them until the context ends.
 //
+// Start-up order (plan §6.6): lock the data directory, resolve and open the
+// profile (with a backup before migrations), load the settings and the
+// vault key, then run the supervised components.
+//
 // "streamcrew serve" uses it directly; the public start API core.Run
 // (ADR-0006, roadmap phase 6) will be a thin wrapper around the same calls.
 package app
@@ -18,11 +22,18 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/buildinfo"
 	"github.com/ripmav/streamcrew/internal/config"
+	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/httpserver"
+	"github.com/ripmav/streamcrew/internal/lockfile"
 	"github.com/ripmav/streamcrew/internal/logging"
+	"github.com/ripmav/streamcrew/internal/profile"
+	"github.com/ripmav/streamcrew/internal/settings"
+	"github.com/ripmav/streamcrew/internal/store"
 	"github.com/ripmav/streamcrew/internal/supervisor"
+	"github.com/ripmav/streamcrew/internal/vault"
 )
 
 // logFileName is the name of the log file in the log directory.
@@ -33,6 +44,8 @@ type Option func(*options)
 
 type options struct {
 	console io.Writer
+	keyring vault.Keyring
+	envKey  string
 }
 
 // WithConsole sets the destination of the console log; the default is
@@ -41,20 +54,39 @@ func WithConsole(w io.Writer) Option {
 	return func(o *options) { o.console = w }
 }
 
+// WithKeyring sets the system keyring for the vault key; nil skips the
+// keyring. The default is vault.SystemKeyring.
+func WithKeyring(k vault.Keyring) Option {
+	return func(o *options) { o.keyring = k }
+}
+
+// WithSecretKey passes the value of STREAMCREW_SECRET_KEY (ADR-0012).
+func WithSecretKey(base64Key string) Option {
+	return func(o *options) { o.envKey = base64Key }
+}
+
 // App is the wired core.
 type App struct {
 	cfg      config.Config
+	version  string
 	logger   *slog.Logger
 	closeLog io.Closer
+	lock     *lockfile.Lock
+	profile  profile.Profile
+	store    *store.Store
+	settings *settings.Service
+	vault    *vault.Vault
+	bus      *event.Bus
 	sup      *supervisor.Supervisor
 	http     *httpserver.Server
 	ready    *readiness
 }
 
 // New builds the core from a resolved configuration (config.Config.Resolve).
-// It creates the data directory and opens the log file.
-func New(cfg config.Config, opts ...Option) (*App, error) {
-	o := options{console: os.Stderr}
+// It takes the data directory lock and opens the profile; Run releases
+// them. If New fails, everything it opened is closed again.
+func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err error) {
+	o := options{console: os.Stderr, keyring: vault.SystemKeyring{}}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -66,10 +98,45 @@ func New(cfg config.Config, opts ...Option) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	a = &App{cfg: cfg, version: buildinfo.Read().Version, logger: logger, closeLog: closeLog, ready: newReadiness()}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, a.close())
+		}
+	}()
 
-	a := &App{cfg: cfg, logger: logger, closeLog: closeLog, ready: newReadiness()}
+	if a.lock, err = LockDataDir(cfg.DataDir); err != nil {
+		return a, err
+	}
+	backups := BackupDir(cfg.DataDir)
+	storeOpts := []store.Option{
+		store.WithLogger(component(logger, "store")),
+		store.WithBeforeMigrate(PreMigrationBackup(backups, a.version, component(logger, "backup"))),
+	}
+	profiles := profile.NewManager(cfg.DataDir, storeOpts...)
+	if a.profile, err = profiles.Resolve(ctx, cfg.Profile); err != nil {
+		return a, err
+	}
+	if a.store, err = store.Open(ctx, a.profile.Path, storeOpts...); err != nil {
+		return a, fmt.Errorf("open profile %q: %w", a.profile.ID, err)
+	}
+	if a.settings, err = settings.New(a.store); err != nil {
+		return a, err
+	}
+	keys := vault.NewKeys(cfg.DataDir, o.envKey, o.keyring, component(logger, "vault"))
+	ks, err := keys.Load(ctx)
+	if err != nil {
+		return a, fmt.Errorf("vault key: %w", err)
+	}
+	a.vault = vault.New(a.store, ks)
+
+	catalog, err := newCatalog()
+	if err != nil {
+		return a, err
+	}
+	a.bus = event.NewBus(component(logger, "event"), event.WithCatalog(catalog))
 	a.sup = supervisor.New(component(logger, "supervisor"),
-		supervisor.WithStatusFunc(a.ready.update),
+		supervisor.WithStatusFunc(a.onStatus),
 		supervisor.WithShutdownTimeout(cfg.ShutdownTimeout),
 	)
 	a.http = httpserver.New(httpserver.Config{
@@ -77,11 +144,15 @@ func New(cfg config.Config, opts ...Option) (*App, error) {
 		Dev:             cfg.Dev,
 		ShutdownTimeout: cfg.ShutdownTimeout,
 	}, component(logger, "http"), a.ready.Ready)
+	scheduler := backup.NewScheduler(a.store, backups,
+		backup.Request{ProfileID: a.profile.ID, ProfileName: a.profile.Name, AppVersion: a.version},
+		a.backupSchedule, component(logger, "backup"))
 
-	if err := a.sup.Add("http", a.http, supervisor.WithCritical()); err != nil {
-		return nil, errors.Join(err, closeLog.Close())
-	}
-	return a, nil
+	err = errors.Join(
+		a.sup.Add("backup", scheduler),
+		a.sup.Add("http", a.http, supervisor.WithCritical()),
+	)
+	return a, err
 }
 
 // Logger returns the root logger of the core.
@@ -94,6 +165,16 @@ func (a *App) HTTPServer() *httpserver.Server {
 	return a.http
 }
 
+// Bus returns the event bus.
+func (a *App) Bus() *event.Bus {
+	return a.bus
+}
+
+// Profile returns the running profile.
+func (a *App) Profile() profile.Profile {
+	return a.profile
+}
+
 // Ready reports whether the core is ready: all runnables run and the core is
 // not shutting down.
 func (a *App) Ready() bool {
@@ -101,27 +182,98 @@ func (a *App) Ready() bool {
 }
 
 // Run runs the core until ctx ends or a critical component fails, then shuts
-// it down and closes the log file. The returned error has been logged.
-func (a *App) Run(ctx context.Context) error {
-	defer a.closeLog.Close()
+// it down, closes the profile, releases the lock and closes the log file.
+// The returned error has been logged.
+func (a *App) Run(ctx context.Context) (err error) {
+	defer func() { err = errors.Join(err, a.close()) }()
 
-	stopWatching := context.AfterFunc(ctx, a.ready.stopping)
+	stopWatching := context.AfterFunc(ctx, func() {
+		a.ready.stopping()
+		a.publish(context.WithoutCancel(ctx), TypeAppStopping, Stopping{})
+	})
 	defer stopWatching()
 
-	info := buildinfo.Read()
 	a.logger.InfoContext(ctx, "streamcrew starting",
-		"version", info.Version, "mode", a.cfg.Mode, "data_dir", a.cfg.DataDir, "pid", os.Getpid())
+		"version", a.version, "mode", a.cfg.Mode, "profile", a.profile.ID,
+		"data_dir", a.cfg.DataDir, "pid", os.Getpid())
 	if a.cfg.Dev {
 		a.logger.WarnContext(ctx, "developer mode is on: pprof is served under /debug/pprof/")
 	}
+	a.publish(ctx, TypeAppStarted, Started{Version: a.version, Mode: string(a.cfg.Mode), Profile: a.profile.ID})
 
-	err := a.sup.Run(ctx)
-	if err != nil {
+	if err := a.sup.Run(ctx); err != nil {
 		a.logger.ErrorContext(ctx, "streamcrew stopped with an error", "error", err)
 		return err
 	}
 	a.logger.InfoContext(ctx, "streamcrew stopped")
 	return nil
+}
+
+// Close releases what New opened without running the core. Run does this
+// itself; calling Close after Run is harmless.
+func (a *App) Close() error {
+	return a.close()
+}
+
+// close releases what New opened, in reverse order; the log file last.
+func (a *App) close() error {
+	var errs []error
+	if a.bus != nil {
+		a.bus.Close()
+	}
+	if a.store != nil {
+		errs = append(errs, a.store.Close())
+		a.store = nil
+	}
+	if a.lock != nil {
+		errs = append(errs, a.lock.Release())
+		a.lock = nil
+	}
+	if a.closeLog != nil {
+		errs = append(errs, a.closeLog.Close())
+		a.closeLog = nil
+	}
+	return errors.Join(errs...)
+}
+
+// onStatus tracks readiness and publishes every state change of a runnable.
+func (a *App) onStatus(st supervisor.Status) {
+	a.ready.update(st)
+	a.publish(context.Background(), TypeSupervisorStatus, st)
+}
+
+func (a *App) publish(ctx context.Context, typ event.Type, payload any) {
+	e := event.New(event.Source{Kind: event.SourceSystem, Name: "app"}, typ, payload)
+	if err := a.bus.Publish(ctx, e); err != nil {
+		a.logger.ErrorContext(ctx, "publishing an event failed", "type", typ, "error", err)
+	}
+}
+
+// backupSchedule reads the backup settings of the profile.
+func (a *App) backupSchedule(ctx context.Context) (backup.Schedule, error) {
+	b, err := settings.Load(ctx, a.settings, settings.DefaultBackups())
+	if err != nil {
+		return backup.Schedule{}, err
+	}
+	t, err := settings.Load(ctx, a.settings, settings.DefaultTime())
+	if err != nil {
+		return backup.Schedule{}, err
+	}
+	loc, err := t.Location()
+	if err != nil {
+		return backup.Schedule{}, err
+	}
+	hour, minute, err := b.Clock()
+	if err != nil {
+		return backup.Schedule{}, err
+	}
+	return backup.Schedule{
+		Enabled:  b.Enabled,
+		Hour:     hour,
+		Minute:   minute,
+		Policy:   backup.Policy{Daily: b.KeepDaily, Weekly: b.KeepWeekly, Monthly: b.KeepMonthly},
+		Location: loc,
+	}, nil
 }
 
 func newLogger(cfg config.Config, console io.Writer) (*slog.Logger, io.Closer, error) {

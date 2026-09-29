@@ -215,7 +215,7 @@ func TestViewRoundTrip(t *testing.T) {
 	clearEnv(t)
 	dataDir := t.TempDir()
 	want, file := parse(t, config.Defaults{DataDir: dataDir},
-		"--mode=server", "--listen=:9001", "--shutdown-timeout=7s", "--log-level=debug",
+		"--profile=second", "--mode=server", "--listen=:9001", "--shutdown-timeout=7s", "--log-level=debug",
 		"--log-component-level=supervisor=warn", "--log-format=json", "--no-log-file",
 		"--log-max-size=3", "--log-max-files=1")
 	require.NoError(t, file.Err())

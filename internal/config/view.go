@@ -7,6 +7,7 @@ package config
 // configuration file.
 type FileView struct {
 	DataDir           string            `yaml:"data_dir" json:"data_dir"`
+	Profile           string            `yaml:"profile,omitempty" json:"profile,omitempty"`
 	Mode              Mode              `yaml:"mode" json:"mode"`
 	Listen            string            `yaml:"listen" json:"listen"`
 	Dev               bool              `yaml:"dev" json:"dev"`
@@ -23,6 +24,7 @@ type FileView struct {
 func (c *Config) View() FileView {
 	return FileView{
 		DataDir:           c.DataDir,
+		Profile:           c.Profile,
 		Mode:              c.Mode,
 		Listen:            c.Listen,
 		Dev:               c.Dev,
