@@ -35,9 +35,11 @@
    | Dauern | in Go `time.Duration`; in der Datenbank `INTEGER` in Millisekunden; in YAML und Konfiguration als Go-Dauer (`30s`, `5m`) |
 
    Millisekunden reichen für Chat und Ereignisse und bleiben in JavaScript-Frontends verlustfrei.
-5. **Zeitzonen:** Jedes Profil speichert eine IANA-Zeitzone (Standard: die des Systems beim Anlegen, sonst UTC). Zeitpläne wie tägliche Backups oder Timer laufen in dieser Zone; auch Sommerzeitwechsel richten sich nach ihr.
+5. **Zeitzonen:** Jedes Profil speichert eine IANA-Zeitzone (Standard: die des Systems beim Anlegen, sonst UTC).\*\* Zeitpläne wie tägliche Backups oder Timer laufen in dieser Zone; auch Sommerzeitwechsel richten sich nach ihr.
 
 *\* Redaktionell ergänzt am 2026-09-29: Der UUIDv7-Generator der Standardbibliothek ist prozessweit. Entsteht zwischen zwei IDs in einer Bubble eine ID mit echter Zeit, etwa in einem parallelen Test, wirkt das für den Generator wie ein Rücksprung der Uhr, und die IDs der Bubble sind nicht mehr aufsteigend (gemessen: 351 von 2000 Paaren). Tests, die die Reihenfolge von IDs prüfen, laufen deshalb nicht parallel zu anderen Tests, die IDs erzeugen. Im Betrieb gibt es keine Bubbles; die Entscheidung ändert sich nicht.*
+
+*\*\* Präzisiert am 2026-09-29, Entscheidung des Projektinhabers: Ohne gespeicherte Zone gilt die Zeitzone des Systems zur Laufzeit, nicht die beim Anlegen. Unter Windows lässt sich der IANA-Name der Systemzone nicht zuverlässig ermitteln. Kann weder die gespeicherte noch die Systemzone genutzt werden, gilt UTC; eine gespeicherte, aber nicht ladbare Zone wird im Log gemeldet.*
 
 ## Betrachtete Alternativen
 
