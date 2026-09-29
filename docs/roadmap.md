@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 umgesetzt, M0 mit grüner CI des Pull Requests |
+| **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12) |
 | **Stand** | 2026-09-29 |
 | **Grundlage** | [`plan.md`](plan.md) (Architektur, Prioritäten, Risiken), [`starting.md`](starting.md), [`adr/`](adr/README.md) |
-| **Aktuelle Phase** | Phase 1: Fundament (Toolchain, Skelett, CI) |
+| **Aktuelle Phase** | Phase 2: Domäne und Persistenz (nächste) |
 
 > **Name:** Das Projekt heißt vorerst `streamcrew` (Codename, [ADR-0008](adr/0008-codename-streamcrew.md)); Binary `streamcrew`. Der endgültige Name wird vor Gate O geprüft.
 
@@ -90,7 +90,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | Track / Phase | Status |
 |---|---|
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
-| Phase 1: Fundament | umgesetzt 2026-09-29; M0 erreicht, sobald die CI des Pull Requests grün ist (offen bleibt nur der Cache, der in Phase 2 neu bewertet wird) |
+| Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); offen bleibt nur der Cache, der in Phase 2 neu bewertet wird |
 | Phase 2: Domäne und Persistenz | offen |
 | Phase 3: Engine, Templates, Actions, Mock | offen |
 | Phase 4: Twitch | offen |
@@ -269,7 +269,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 **Exit-Kriterien (M0):**
 
 - [x] `streamcrew serve` startet, meldet sich gesund und beendet sich auf SIGINT/SIGTERM sauber: `TestServe` in `cmd/streamcrew` und der Docker-Smoke-Test (2026-09-29).
-- [ ] Die CI ist grün: offen bis zum Lauf im Pull Request dieser Änderungen.
+- [x] Die CI ist grün: PR #12 (2026-09-29), alle Jobs einschließlich Docker-Smoke-Test; per `workflow_dispatch` zusätzlich die nativen Tests unter Windows und macOS.
 - [x] Das Docker-Image ist gebaut und getestet: lokal mit `scripts/docker-smoke.sh` (2026-09-29), in der CI im Build-Job.
 
 ---
@@ -281,11 +281,11 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | Datenmodell, Speicher, Profile, Backups, Event-Bus und Secrets |
 | **Voraussetzungen** | Phase 1 |
 | **Aufwand** | 3–4 PW |
-| **ADRs** | 0012, 0020 (Entwurf); Code-ADRs 0007, 0008, 0009, 0010, 0015 |
+| **ADRs** | 0012, 0020 (Entwurf); Code-ADRs 0008, 0009, 0010, 0011, 0016 |
 
 ### 2.1 Speicher
 
-- [ ] Code-ADR-0007 Datenbankzugriff: `modernc.org/sqlite`, `sqlc`, `goose`; Code-ADR-0015 Codegenerierung (S)
+- [ ] Code-ADR-0008 Datenbankzugriff: `modernc.org/sqlite`, `sqlc`, `goose`; Code-ADR-0016 Codegenerierung (S)
 - [ ] ADR-0012 Persistenz: SQLite je Profil, Backups (S)
 - [ ] `internal/store` (M):
   - Verbindung mit WAL, `foreign_keys` und `busy_timeout`
@@ -301,7 +301,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 2.2 Domänenmodell
 
-- [ ] Code-ADR-0008 IDs und Zeit: UUIDv7, injizierbare Uhr, `testing/synctest` (S)
+- [ ] Code-ADR-0009 IDs und Zeit: UUIDv7, injizierbare Uhr, `testing/synctest` (S)
 - [ ] Nutzer: Nutzer, Plattform-Identitäten, Statistiken, Titel, Notizen, Ausschlüsse (M)
 - [ ] Rollenmodell: plattformneutrale Rollen mit Rangordnung plus plattformspezifische Rollen; Semantik „erfüllt Mindestrolle“ (Plan Anhang A.7) (M)
 - [ ] Commands (M):
@@ -310,7 +310,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - aktiv/unlocked
   - Requirements-Set
   - polymorphe Actions
-- [ ] Code-ADR-0009 polymorphe Serialisierung: `type`-Diskriminator, `schemaVersion`, `encoding/json/v2`, Migrationen je Typversion (M)
+- [ ] Code-ADR-0010 polymorphe Serialisierung: `type`-Diskriminator, `schemaVersion`, `encoding/json/v2`, Migrationen je Typversion (M)
 - [ ] Datenmodell für Counter und Quotes (S)
 - [ ] Settings-Sektionen, typisiert und versioniert: allgemein, Chat, Commands, Moderation, Overlay, Zeit/Locale, Backups (M)
 - [ ] Event-Modell (M):
@@ -320,7 +320,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 2.3 Event-Bus
 
-- [ ] Code-ADR-0010 Event-Bus (S)
+- [ ] Code-ADR-0011 Event-Bus (S)
 - [ ] Typisierter In-Process-Bus mit Abonnements, Filtern, Puffern und Lag-Erkennung für langsame Abonnenten (M)
 
 ### 2.4 Secrets und Sicherheit
@@ -347,7 +347,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | plattformneutrale Ausführung von Commands, testbar ohne Live-Plattform |
 | **Voraussetzungen** | Phase 2; möglichst die rechtliche Einschätzung zu den `$`-Identifier-Namen (Gate O, O.1) |
 | **Aufwand** | 5–7 PW |
-| **ADRs** | 0022; Code-ADRs 0011, 0012 |
+| **ADRs** | 0022; Code-ADRs 0012, 0013 |
 
 ### 3.1 Template-Engine
 
@@ -356,7 +356,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - Regel „längster Präfix“
   - Kodierung
   - bewusste Abweichungen vom Original
-- [ ] Code-ADR-0011 Template-Engine (S)
+- [ ] Code-ADR-0012 Template-Engine (S)
 - [ ] Tokenizer und Resolver-Registry (statisch, Muster, dynamische Namen); bedarfsgesteuerte Auflösung mit `context`; Cache pro Rendervorgang (M)
 - [ ] Kodierungsmodi: Text, URL, HTML, JSON (S)
 - [ ] Identifier-Familien für das MVP (M):
@@ -379,7 +379,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 3.3 Action-Framework und P0-Actions
 
-- [ ] Code-ADR-0012 Typ-Registry (M): Descriptor mit
+- [ ] Code-ADR-0013 Typ-Registry (M): Descriptor mit
   - Typ-ID, Version, Kategorie, i18n-Schlüsseln
   - JSON-Schema und UI-Hinweisen
   - benötigten Capabilities
@@ -435,7 +435,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | vollständige Twitch-Anbindung für Streamer- und Bot-Konto |
 | **Voraussetzungen** | Phase 3 (parallel zu Phase 5 möglich) |
 | **Aufwand** | 5–6 PW |
-| **ADRs** | 0013; Code-ADRs 0013, 0014 |
+| **ADRs** | 0013; Code-ADRs [0007](adr/code/0007-circuit-breaker.md), 0014, 0015 |
 
 ### 4.1 Authentifizierung
 
@@ -452,7 +452,8 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 4.2 Helix-Client
 
-- [ ] Code-ADR-0013 HTTP-Client: Retry mit Backoff, Rate-Limit-Header, Paginierung, typisierte Fehler (S)
+- [ ] Code-ADR-0014 HTTP-Client: Retry mit Backoff, Rate-Limit-Header, Paginierung, typisierte Fehler; Reihenfolge Wiederholung → Circuit Breaker → Rate-Limiter → Anfrage (S)
+- [ ] `internal/breaker` nach [Code-ADR-0007](adr/code/0007-circuit-breaker.md): `sony/gobreaker/v2` mit Standardwerten, Fehlerbewertung, Logging und `ErrUnavailable`; Breaker `twitch.helix` und `twitch.auth` (S)
 - [ ] Endpunkte (L):
   - Users, Channels (lesen/aktualisieren), Streams
   - Chat: Nachricht senden, löschen, Einstellungen, Ankündigung, Shoutout
@@ -462,7 +463,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 4.3 EventSub
 
-- [ ] Code-ADR-0014 WebSocket-Bibliothek (S)
+- [ ] Code-ADR-0015 WebSocket-Bibliothek (S)
 - [ ] WebSocket-Client (L):
   - Welcome-Nachricht, Keepalive-Überwachung
   - `session_reconnect` ohne Eventverlust
@@ -560,11 +561,11 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | vollständige Bedienung ohne GUI über API, CLI und TUI; erste Releases |
 | **Voraussetzungen** | Phasen 4 und 5 |
 | **Aufwand** | 4–6 PW |
-| **ADRs** | 0023, [ADR-0010](adr/0010-api-protokoll.md) (API), [ADR-0011](adr/0011-keine-telemetrie.md) (Diagnose-Paket), [ADR-0006](adr/0006-core-als-bibliothek-fuer-selbststart.md) (Start-API), [ADR-0007](adr/0007-release-artefakte-des-cores.md) (Release-Artefakte); Code-ADR 0015 (buf ergänzen) |
+| **ADRs** | 0023, [ADR-0010](adr/0010-api-protokoll.md) (API), [ADR-0011](adr/0011-keine-telemetrie.md) (Diagnose-Paket), [ADR-0006](adr/0006-core-als-bibliothek-fuer-selbststart.md) (Start-API), [ADR-0007](adr/0007-release-artefakte-des-cores.md) (Release-Artefakte); Code-ADR 0016 (buf ergänzen) |
 
 ### 6.1 API-Vertrag
 
-- [ ] `buf` einrichten (lint, breaking, generate); Code-ADR-0015 um `buf` ergänzen (S)
+- [ ] `buf` einrichten (lint, breaking, generate); Code-ADR-0016 um `buf` ergänzen (S)
 - [ ] Protos `v1alpha1` gemäß Plan §6.14 (L):
   - `SystemService`, `AuthService`, `StreamService`, `ChatService`
   - `CommandService` inkl. Typkatalog
@@ -1194,3 +1195,5 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-29 | Code-ADRs 0002 bis 0006 vorgeschlagen: Dependency Injection, Fehler und Logging, Nebenläufigkeit und Supervisor, Konfiguration, Teststrategie. Die Teststrategie bekommt nach der ADR-Konvention die nächste freie Nummer 0006 statt der vorläufigen 0014; die Backlog-Nummern 0006–0013 rücken um eins auf (Plan §12.2, Phasen 2 bis 4 angepasst). |
 | 2026-09-29 | Code-ADRs 0002 bis 0006 einzeln vom Projektinhaber abgenommen. Überarbeitet vor der Abnahme: Konfigurationsdatei als YAML mit `go.yaml.in/yaml/v3` statt JSON (0005), testify (`assert`, `require`) als Assertion-Bibliothek (0006). Die YAML-Bibliothek gilt damit projektweit; der Backlog-Eintrag „YAML-Bibliothek“ (0016) entfällt, Phase 3 prüft nur ihre Eignung. Projekt-Board aus Phase 0 nach Gate O (O.2) verschoben. |
 | 2026-09-29 | Phase 1.3 und 1.4 umgesetzt: Skelett mit `serve`, `version`, `config show|path` und `doctor`; Pakete `config`, `logging`, `supervisor`, `httpserver`, `app`, `doctor`, `buildinfo` mit Tests. Dockerfile (`scratch`, non-root, Server-Modus) und `scripts/docker-smoke.sh`, in der CI im Build-Job. CI: `GOPRIVATE`, native Tests unter Windows und macOS wöchentlich. `sloglint` und `forbidigo` nach Code-ADR-0003 und -0005 verschärft. CI-Token für abhängige Repositories nach D0 und W0 verschoben. M0 fehlt nur noch die grüne CI im Pull Request. |
+| 2026-09-29 | M0 erreicht: Die CI von PR #12 ist grün, die nativen Tests unter Windows und macOS ebenfalls (`workflow_dispatch`). Phase 1 abgeschlossen. |
+| 2026-09-29 | Code-ADR-0007 „Circuit Breaker für externe Dienste“ vorgeschlagen (`sony/gobreaker/v2`, ein Breaker je API), auf Wunsch des Projektinhabers. Es bekommt die nächste freie Nummer; die Backlog-Nummern 0007–0015 rücken um eins auf (Plan §12.2, Phasen 2 bis 4 und 6). Phase 4.2 um `internal/breaker` ergänzt. |

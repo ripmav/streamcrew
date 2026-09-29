@@ -625,6 +625,7 @@ type ChannelPoints interface {
 - **Konten:** pro Plattform ein Streamer-Konto und optional ein Bot-Konto. Nachrichten gehen über den Bot, wenn er verbunden ist.
 - **Normalisiertes Chat-Modell:** Fragmente (Text, Emote, Erwähnung, Cheermote), Badges, Rollen, Antwortbezug und Shared-Chat-Quelle. Nutzer werden plattformübergreifenden Identitäten zugeordnet.
 - **Grenzen:** Rate-Limits je Plattform (`golang.org/x/time/rate`) und Aufteilung zu langer Nachrichten nach der plattformspezifischen Maximallänge.
+- **Störungen:** Anfragen an die APIs der Plattformen laufen durch einen Circuit Breaker je API (Code-ADR-0007). Ist ein Dienst gestört, scheitern Aufrufe sofort mit `ErrUnavailable`, statt die Command-Engine aufzuhalten.
 
 | Plattform | Authentifizierung | Empfang | Senden | Besonderheiten |
 |---|---|---|---|---|
@@ -895,7 +896,8 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | YAML | `go.yaml.in/yaml/v3` | gesetzt | Konfigurationsdatei und Commands als Code; offizieller Nachfolger von `gopkg.in/yaml.v3` (Code-ADR-0005) |
 | OAuth | `golang.org/x/oauth2` | Kandidat | Device Flow und PKCE eingebaut |
 | Rate-Limits, Nebenläufigkeit | `golang.org/x/time/rate`, `golang.org/x/sync/errgroup` | Kandidat | `x/`-Pakete |
-| IDs | UUIDv7 (`github.com/google/uuid` oder eigene kleine Implementierung) | Kandidat | Code-ADR-0008 |
+| Circuit Breaker | `github.com/sony/gobreaker/v2` | vorgeschlagen | Anfragen an externe Dienste, ein Breaker je API (Code-ADR-0007) |
+| IDs | UUIDv7 (`github.com/google/uuid` oder eigene kleine Implementierung) | Kandidat | Code-ADR-0009 |
 | Logging | `log/slog`; eigene Rotation nach Größe (Code-ADR-0003) | gesetzt | stdlib |
 | Secrets | `crypto/aes` + `crypto/cipher`, `zalando/go-keyring` | Kandidat | stdlib-Krypto; Keyring plattformübergreifend |
 | Ausdrücke | `expr-lang/expr` | Kandidat | sicher, schnell, ersetzt Jace |
@@ -1160,15 +1162,16 @@ Es existieren ADR-0001 bis ADR-0011. Alle höheren Nummern in Plan und Roadmap s
 | 0004 | `0004-nebenlaeufigkeit-und-supervisor.md` | Goroutine-Besitz, Backoff, Shutdown; **akzeptiert** | 1 |
 | 0005 | `0005-konfiguration.md` | kong, Env, YAML-Datei, Pfade; YAML-Bibliothek für das ganze Projekt; **akzeptiert** | 1 |
 | 0006 | `0006-teststrategie.md` | testify, Fixtures, Golden Files, Fakes, Fuzzing, native Tests; **akzeptiert** (vorläufig 0014) | 1 |
-| 0007 | `0007-datenbankzugriff.md` | modernc/sqlite, sqlc, goose | 2 |
-| 0008 | `0008-ids-und-zeit.md` | UUIDv7, Uhren, `synctest` | 2 |
-| 0009 | `0009-polymorphe-serialisierung.md` | Diskriminator, Versionen, json/v2 | 2 |
-| 0010 | `0010-event-bus.md` | Typisierung, Puffer, Lag | 2 |
-| 0011 | `0011-template-engine.md` | Tokenizer, Präfixregel, Kodierung | 3 |
-| 0012 | `0012-typ-registry.md` | Descriptors, Schemas, Capabilities | 3 |
-| 0013 | `0013-http-client.md` | Retry, Rate-Limits, Fehlerklassen | 4 |
-| 0014 | `0014-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |
-| 0015 | `0015-codegenerierung.md` | buf, sqlc, esbuild in `go generate` | 2/6 |
+| 0007 | `0007-circuit-breaker.md` | `sony/gobreaker/v2` für Anfragen an externe Dienste, ein Breaker je API; **vorgeschlagen** | 4 |
+| 0008 | `0008-datenbankzugriff.md` | modernc/sqlite, sqlc, goose | 2 |
+| 0009 | `0009-ids-und-zeit.md` | UUIDv7, Uhren, `synctest` | 2 |
+| 0010 | `0010-polymorphe-serialisierung.md` | Diskriminator, Versionen, json/v2 | 2 |
+| 0011 | `0011-event-bus.md` | Typisierung, Puffer, Lag | 2 |
+| 0012 | `0012-template-engine.md` | Tokenizer, Präfixregel, Kodierung | 3 |
+| 0013 | `0013-typ-registry.md` | Descriptors, Schemas, Capabilities | 3 |
+| 0014 | `0014-http-client.md` | Retry, Rate-Limits, Fehlerklassen; Einbau des Circuit Breakers (Code-ADR-0007) | 4 |
+| 0015 | `0015-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |
+| 0016 | `0016-codegenerierung.md` | buf, sqlc, esbuild in `go generate` | 2/6 |
 
 ---
 
@@ -1181,7 +1184,7 @@ W = Wahrscheinlichkeit, A = Auswirkung (niedrig/mittel/hoch).
 | R1 | Die Nutzung des Originalcodes als Hilfestellung wird als Verstoß gegen die BSL (§3.3) oder als abgeleitetes Werk gewertet und verhindert die Veröffentlichung | mittel | hoch | Regeln aus ADR-0001, Herkunftsnachweis, privat bis zur Freigabe durch den Projektinhaber (Gate O als Voraussetzung), rechtliche Prüfung, optional Erlaubnis von Blazing Cacti |
 | R2 | Markenkonflikt („Mix It Up“, „Mixie“) | mittel | mittel | neuer Name mit Markenrecherche, kein Branding übernehmen |
 | R3 | Umfang (~100k Zeilen Logik, 46 Actions, ~48 Integrationen) sprengt die Kapazität | hoch | hoch | strikte Priorisierung, MVP zuerst, Tiers, generische UI |
-| R4 | Plattform-APIs ändern sich oder werden abgekündigt | hoch | mittel | isolierte Adapter, Contract-Tests, Changelogs beobachten |
+| R4 | Plattform-APIs ändern sich, fallen aus oder werden abgekündigt | hoch | mittel | isolierte Adapter, Contract-Tests, Changelogs beobachten; Circuit Breaker je API (Code-ADR-0007) |
 | R5 | Kick braucht eine öffentliche Webhook-URL und kündigt Abos bei Fehlern automatisch | hoch | mittel | Server-Modus, Tunnel, optionaler Relay, automatisches Neuabonnieren |
 | R6 | YouTube: Quota, Google-Verifizierung, 7-Tage-Tokens im „Testing“-Modus | hoch | mittel | `streamList`, BYO-Credentials, Verifizierung nur bei Bedarf |
 | R7 | Dreifacher UI-Aufwand (TUI, Desktop, Web) | hoch | hoch | Typkatalog und generische Editoren; GUI-Tracks bewusst takten |
