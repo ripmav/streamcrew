@@ -573,7 +573,7 @@ spec:
   triggers: [hug, umarmen]
   requirements:
     role: follower
-    cooldown: { scope: user, seconds: 30 }
+    cooldown: { scope: per_user, duration: 30s }
     arguments: { min: 1 }
   actions:
     - type: chat.send

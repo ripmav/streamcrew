@@ -1,0 +1,17 @@
+{
+  "type": "arguments",
+  "schemaVersion": 1,
+  "arguments": [
+    {
+      "name": "target",
+      "type": "user",
+      "required": true,
+      "identifier": "target"
+    },
+    {
+      "name": "amount",
+      "type": "number",
+      "required": false
+    }
+  ]
+}

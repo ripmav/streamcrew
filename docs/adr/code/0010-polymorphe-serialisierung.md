@@ -69,5 +69,5 @@
 
 - [x] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) anpassen und Plan §6.9 zu `encoding/json/v2` berichtigen, erledigt 2026-09-29
 - [x] `internal/polydoc` mit Registry, Migrationskette, `Unknown` und Fuzz-Test umsetzen (Roadmap Phase 2.2), erledigt 2026-09-29
-- [ ] Golden Files für die Versionen der ersten echten Typen (Roadmap Phase 3); der Mechanismus selbst ist mit Erwartungen im Test abgedeckt
+- [x] Golden Files für die Versionen der ersten echten Typen, erledigt 2026-09-29 für die Anforderungsarten der Commands (`internal/domain/command/testdata`, neu geschrieben mit `STREAMCREW_UPDATE_GOLDEN=1`); die Action-Typen folgen in Phase 3 nach demselben Muster
 - [ ] Die Typ-Registry in Phase 3 auf `internal/polydoc` aufbauen
