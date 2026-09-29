@@ -4,6 +4,42 @@
 
 package sqlcgen
 
+import (
+	"database/sql"
+)
+
+type Command struct {
+	ID           string
+	Name         string
+	Kind         string
+	Enabled      int64
+	Unlocked     int64
+	GroupID      sql.NullString
+	Wildcard     int64
+	EventType    sql.NullString
+	Requirements string
+	Actions      string
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+type CommandGroup struct {
+	ID            string
+	Name          string
+	NameKey       string
+	TimerInterval int64
+	CreatedAt     int64
+	UpdatedAt     int64
+}
+
+type CommandTrigger struct {
+	CommandID   string
+	Position    int64
+	TriggerText string
+	TriggerKey  string
+	Active      int64
+}
+
 type Meta struct {
 	Key   string
 	Value string
