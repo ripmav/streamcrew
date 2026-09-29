@@ -20,7 +20,7 @@
 
 1. **kong ist die einzige Quelle der Startkonfiguration.**
    - Die Struktur `config.Config` in `internal/config` trägt die kong-Tags und gilt als globale Flags für alle Unterkommandos.
-   - Nur `cmd/streamcrew` parst. Danach ergänzt `Config.Resolve` die vom Modus abhängigen Standardwerte und prüft alles. Das Ergebnis geht als Wert an die Composition Root ([Code-ADR-0002](0002-dependency-injection.md)).
+   - Nur `cmd/streamcrew` parst. Danach ergänzt `Config.Resolve` die vom Modus abhängigen Standardwerte und prüft alles. Das Ergebnis geht als Wert an die Composition Root ([Code-ADR-0002](0002-dependency-injection.md)). *Präzisiert am 2026-09-29, Entscheidung des Projektinhabers: `cmd/streamcrew` enthält nur `main.go` mit Signalen, Umgebung, kong-Initialisierung, Parsen und Exit-Code; die Definition der Kommandozeile (kong-Struktur `cli.Root`, Unterkommandos, Abbildung auf Exit-Codes) liegt in `internal/cli`.*
    - Außerhalb von `internal/config` und `cmd/streamcrew` liest kein Code Umgebungsvariablen. `forbidigo` meldet `os.Getenv`, `os.LookupEnv` und `os.Environ`. *Ergänzt am 2026-09-29, Entscheidung des Projektinhabers: Ausgenommen sind Testdateien (`_test.go`), damit Golden Files per Umgebungsvariable neu geschrieben werden können ([Code-ADR-0006](0006-teststrategie.md)).*
 2. **Vorrang:** Flag vor Umgebungsvariable vor Konfigurationsdatei vor Standardwert.
    - Umgebungsvariablen heißen wie das Flag mit Präfix: `--data-dir` → `STREAMCREW_DATA_DIR` (`kong.DefaultEnvars`).
