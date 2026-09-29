@@ -336,10 +336,11 @@ func (vaultRotateCmd) Run(ctx context.Context, e *runEnv) (err error) {
 	}
 	repos := make([]vault.Repository, 0, len(list))
 	for _, p := range list {
-		s, err := store.Open(ctx, p.Path, store.WithBeforeMigrate(
+		// openErr, not err: the deferred Close must add to the named result.
+		s, openErr := store.Open(ctx, p.Path, store.WithBeforeMigrate(
 			app.PreMigrationBackup(app.BackupDir(cfg.DataDir), buildinfo.Read().Version, discardLogger())))
-		if err != nil {
-			return err
+		if openErr != nil {
+			return openErr
 		}
 		defer func() { err = errors.Join(err, s.Close()) }()
 		repos = append(repos, s)
