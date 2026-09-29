@@ -67,7 +67,18 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.mod
+          cache: false
+
+      # One cache per job (roadmap 1.1): with the shared setup-go cache only
+      # the job that finished first saved its build outputs, and the others
+      # compiled their dependencies again on every run.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-
 
       - name: go fix (no pending rewrites)
         run: go fix -diff ./...
@@ -110,7 +121,18 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.mod
+          cache: false
+
+      # One cache per job (roadmap 1.1): with the shared setup-go cache only
+      # the job that finished first saved its build outputs, and the others
+      # compiled their dependencies again on every run.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-
 
       - name: go test -race
         run: go test -race -shuffle=on ./...
@@ -133,7 +155,18 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.mod
+          cache: false
+
+      # One cache per job (roadmap 1.1): with the shared setup-go cache only
+      # the job that finished first saved its build outputs, and the others
+      # compiled their dependencies again on every run.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-
 
       # One job with a loop instead of a job matrix: every job is billed at
       # least one minute, and the cross builds share the module cache.
@@ -169,6 +202,8 @@ jobs:
         with:
           persist-credentials: false
 
+      # One job per system: the setup-go cache is not shared between jobs
+      # here, so it keeps each job's build outputs.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
