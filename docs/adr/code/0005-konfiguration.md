@@ -1,0 +1,84 @@
+# Code-ADR-0005: Konfiguration
+
+| | |
+|---|---|
+| **Status** | Vorgeschlagen |
+| **Datum** | 2026-09-29 |
+| **Entscheidung durch** | offen (Abnahme durch den Projektinhaber) |
+| **Bezug** | [ADR-0003](../0003-betriebsmodi.md), [ADR-0010](../0010-api-protokoll.md); Plan §6.5, §6.21, §7.2, §8; Roadmap Phase 1.2 und 1.3; [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0003](0003-fehler-und-logging.md) |
+
+## Kontext
+
+- Plan §6.21: Die Startkonfiguration kommt über `kong` aus Flags, Umgebungsvariablen `STREAMCREW_*` und einer optionalen Konfigurationsdatei. Laufzeiteinstellungen liegen in der Profildatenbank und sind über die API änderbar.
+- Datenverzeichnis: `os.UserConfigDir()`, alternativ `--data-dir` oder ein portabler Modus.
+- [ADR-0003](../0003-betriebsmodi.md): Die Standardwerte sind für den Streaming-PC ausgelegt; den Server-Modus wählt man ausdrücklich. Im Container kommt die Konfiguration üblicherweise aus Umgebungsvariablen.
+- kong wertet von Haus aus Konfigurationsdateien **vor** Umgebungsvariablen aus: Eine Datei würde eine Umgebungsvariable überschreiben. Unbekannte Schlüssel in einer Datei ignoriert kong stillschweigend.
+- Für YAML ist noch keine Bibliothek gewählt; das entscheidet das Code-ADR zur YAML-Bibliothek in Phase 3 (ADR-Backlog in Plan §12.2).
+
+## Entscheidung
+
+1. **kong ist die einzige Quelle der Startkonfiguration.**
+   - Die Struktur `config.Config` in `internal/config` trägt die kong-Tags und gilt als globale Flags für alle Unterkommandos.
+   - Nur `cmd/streamcrew` parst. Danach ergänzt `Config.Resolve` die vom Modus abhängigen Standardwerte und prüft alles. Das Ergebnis geht als Wert an die Composition Root ([Code-ADR-0002](0002-dependency-injection.md)).
+   - Außerhalb von `internal/config` und `cmd/streamcrew` liest kein Code Umgebungsvariablen. `forbidigo` meldet `os.Getenv`, `os.LookupEnv` und `os.Environ`.
+2. **Vorrang:** Flag vor Umgebungsvariable vor Konfigurationsdatei vor Standardwert.
+   - Umgebungsvariablen heißen wie das Flag mit Präfix: `--data-dir` → `STREAMCREW_DATA_DIR` (`kong.DefaultEnvars`).
+   - Die Reihenfolge von kong (Datei vor Umgebung) dreht ein eigener Resolver um: Ist die Umgebungsvariable eines Flags gesetzt, liefert die Datei keinen Wert.
+3. **Konfigurationsdatei:** optional, im JSON-Format.
+   - Schlüssel sind die Flag-Namen in `snake_case`, z. B. `log_level`. `streamcrew config show --output json` gibt genau dieses Format aus.
+   - Unbekannte Schlüssel sind ein Fehler, damit Tippfehler auffallen.
+   - Pfad: `--config` bzw. `STREAMCREW_CONFIG`. Ist er gesetzt, muss die Datei existieren, und nur sie wird gelesen. Sonst wird `<Standard-Datenverzeichnis>/config.json` gelesen, falls vorhanden.
+   - JSON, weil es ohne Abhängigkeit auskommt und die Startkonfiguration klein ist. YAML kann später über die Dateiendung dazukommen, ohne JSON-Dateien ungültig zu machen.
+4. **Pfade:**
+   - Datenverzeichnis: `--data-dir` bzw. `STREAMCREW_DATA_DIR`. Standard ist `os.UserConfigDir()/streamcrew`, also z. B. `~/.config/streamcrew`, `%AppData%\streamcrew` oder `~/Library/Application Support/streamcrew`.
+   - **Portabler Modus:** Liegt neben dem Binary eine Datei `streamcrew.portable`, ist das Standard-Datenverzeichnis `<Verzeichnis des Binarys>/streamcrew-data`. Eine ausdrückliche Angabe mit `--data-dir` gilt weiterhin.
+   - Logs liegen unter `<data-dir>/logs`. `serve` legt fehlende Verzeichnisse mit den Rechten `0700` an.
+5. **Betriebsmodus** ([ADR-0003](../0003-betriebsmodi.md)): `--mode desktop|daemon|server`, Standard `daemon`. Vom Modus hängen Standardwerte ab, etwa die Adresse des HTTP-Servers: `127.0.0.1:8740` für `desktop` und `daemon`, `:8740` für `server`. Der Port ist frei gewählt; `--listen` ändert ihn. Den lokalen Transport per Unix-Socket ([ADR-0010](../0010-api-protokoll.md)) ergänzt Phase 6.
+6. **Einstellungen in Phase 1:**
+
+   | Flag | Standard | Zweck |
+   |---|---|---|
+   | `--config` | siehe oben | Konfigurationsdatei |
+   | `--data-dir` | siehe oben | Datenverzeichnis |
+   | `--mode` | `daemon` | Betriebsmodus |
+   | `--listen` | abhängig vom Modus | Adresse des HTTP-Servers (`/healthz`, `/readyz`, später die API) |
+   | `--dev` | aus | Entwicklermodus: `pprof` unter `/debug/pprof/`, nur mit einer Loopback-Adresse erlaubt |
+   | `--shutdown-timeout` | `15s` | Zeitlimit für den gesamten Shutdown |
+   | `--log-level`, `--log-component-level` | `info` | Level global und je Komponente ([Code-ADR-0003](0003-fehler-und-logging.md)) |
+   | `--log-format` | `text` | Format der Konsole: `text` oder `json` |
+   | `--[no-]log-file`, `--log-max-size`, `--log-max-files` | an, 10 MiB, 5 | Datei-Log und Rotation |
+
+7. **Secrets** werden nie als Flag übergeben, weil Flags in der Prozessliste und im Shell-Verlauf stehen. Sie kommen aus Umgebungsvariablen oder Dateien (`--…-file`) und werden in `config show` maskiert. In Phase 1 gibt es noch keine.
+8. **Prüfung:** Alle Fehler werden gesammelt (`errors.Join`) und nennen Flag bzw. Umgebungsvariable. Ungültige Konfiguration beendet `streamcrew` mit Exit-Code `2`.
+9. **Unterkommandos:** `config show` gibt die wirksame Konfiguration als Text oder JSON aus, `config path` die Konfigurationsdatei, das Datenverzeichnis und das Log-Verzeichnis. `config validate` aus Plan §7.2 folgt in Phase 6.
+10. **Laufzeiteinstellungen** gehören nicht in die Startkonfiguration. Sie liegen ab Phase 2 in der Profildatenbank und werden über die API geändert.
+
+## Betrachtete Alternativen
+
+| Alternative | Warum nicht |
+|---|---|
+| YAML-Datei jetzt (z. B. über `kong-yaml`) | braucht eine YAML-Bibliothek, deren Wahl in Phase 3 ansteht; `kong-yaml` hängt am archivierten `gopkg.in/yaml.v3` |
+| TOML-Datei | gut lesbar, aber eine zusätzliche Abhängigkeit nur für die kleine Startkonfiguration |
+| Vorrang wie in kong (Datei vor Umgebung) | widerspricht der Erwartung im Container, dass Umgebungsvariablen eine mitgelieferte Datei übersteuern |
+| `spf13/viper` bzw. `koanf` | eigene Konfigurationsschicht neben kong mit doppelter Definition der Flags; viper bringt viele Abhängigkeiten mit |
+| Daten nach XDG getrennt (`XDG_DATA_HOME`, `XDG_STATE_HOME`) | unter Linux sauberer, aber mehrere Verzeichnisse erschweren Backups und den portablen Modus; Plan §6.21 sieht ein Verzeichnis vor |
+
+## Konsequenzen
+
+**Positiv:**
+
+- Eine Definition je Einstellung für Flag, Umgebungsvariable, Datei und Hilfetext.
+- Vorhersehbarer Vorrang, auch im Container; Tippfehler in der Datei fallen sofort auf.
+- Keine zusätzliche Abhängigkeit außer kong.
+
+**Negativ und Risiken:**
+
+- JSON erlaubt keine Kommentare in der Konfigurationsdatei.
+- Der eigene Resolver hängt an kongs Resolver-Schnittstelle und muss bei kong-Updates mitgeprüft werden; Tests sichern den Vorrang ab.
+- Unter Linux liegen Daten und Logs im Konfigurationsverzeichnis (`~/.config`), nicht unter `~/.local/share`.
+
+**Folgearbeiten:**
+
+- [ ] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen
+- [ ] `internal/config` und die Unterkommandos `config show|path` umsetzen; `forbidigo` für Umgebungsvariablen konfigurieren (Roadmap Phase 1.3)
+- [ ] Unix-Socket als lokalen Transport und `config validate` ergänzen (Roadmap Phase 6)

@@ -185,7 +185,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | lauffähiges, sauber beendbares Skelett mit vollständiger Qualitäts-Pipeline |
 | **Voraussetzungen** | Phase 0 |
 | **Aufwand** | 1–2 PW |
-| **ADRs** | 0009, 0010, 0011 (bereits akzeptiert); Code-ADRs 0001–0005, 0014 |
+| **ADRs** | 0009, 0010, 0011 (bereits akzeptiert); Code-ADRs 0001–0006 |
 
 ### 1.1 Toolchain und Qualität
 
@@ -232,11 +232,11 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [x] [ADR-0011](adr/0011-keine-telemetrie.md) Keine Telemetrie; Fehlersuche über lokale Logs und Diagnose-Paket; vorgezogen, erledigt 2026-09-28
 - [ ] Code-ADRs schreiben (M):
   - 0001 Toolchain und Linting: [Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md), akzeptiert 2026-09-28
-  - 0002 Dependency Injection
-  - 0003 Fehler und Logging
-  - 0004 Nebenläufigkeit und Supervisor
-  - 0005 Konfiguration
-  - 0014 Teststrategie
+  - 0002 Dependency Injection: [Code-ADR-0002](adr/code/0002-dependency-injection.md), vorgeschlagen 2026-09-29
+  - 0003 Fehler und Logging: [Code-ADR-0003](adr/code/0003-fehler-und-logging.md), vorgeschlagen 2026-09-29
+  - 0004 Nebenläufigkeit und Supervisor: [Code-ADR-0004](adr/code/0004-nebenlaeufigkeit-und-supervisor.md), vorgeschlagen 2026-09-29
+  - 0005 Konfiguration: [Code-ADR-0005](adr/code/0005-konfiguration.md), vorgeschlagen 2026-09-29
+  - 0006 Teststrategie: [Code-ADR-0006](adr/code/0006-teststrategie.md), vorgeschlagen 2026-09-29 (vorläufige Backlog-Nummer 0014; die Backlog-Nummern 0006–0013 sind um eins aufgerückt)
 
 ### 1.3 Skelett
 
@@ -278,11 +278,11 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | Datenmodell, Speicher, Profile, Backups, Event-Bus und Secrets |
 | **Voraussetzungen** | Phase 1 |
 | **Aufwand** | 3–4 PW |
-| **ADRs** | 0012, 0020 (Entwurf); Code-ADRs 0006, 0007, 0008, 0009, 0015 |
+| **ADRs** | 0012, 0020 (Entwurf); Code-ADRs 0007, 0008, 0009, 0010, 0015 |
 
 ### 2.1 Speicher
 
-- [ ] Code-ADR-0006 Datenbankzugriff: `modernc.org/sqlite`, `sqlc`, `goose`; Code-ADR-0015 Codegenerierung (S)
+- [ ] Code-ADR-0007 Datenbankzugriff: `modernc.org/sqlite`, `sqlc`, `goose`; Code-ADR-0015 Codegenerierung (S)
 - [ ] ADR-0012 Persistenz: SQLite je Profil, Backups (S)
 - [ ] `internal/store` (M):
   - Verbindung mit WAL, `foreign_keys` und `busy_timeout`
@@ -298,7 +298,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 2.2 Domänenmodell
 
-- [ ] Code-ADR-0007 IDs und Zeit: UUIDv7, injizierbare Uhr, `testing/synctest` (S)
+- [ ] Code-ADR-0008 IDs und Zeit: UUIDv7, injizierbare Uhr, `testing/synctest` (S)
 - [ ] Nutzer: Nutzer, Plattform-Identitäten, Statistiken, Titel, Notizen, Ausschlüsse (M)
 - [ ] Rollenmodell: plattformneutrale Rollen mit Rangordnung plus plattformspezifische Rollen; Semantik „erfüllt Mindestrolle“ (Plan Anhang A.7) (M)
 - [ ] Commands (M):
@@ -307,7 +307,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - aktiv/unlocked
   - Requirements-Set
   - polymorphe Actions
-- [ ] Code-ADR-0008 polymorphe Serialisierung: `type`-Diskriminator, `schemaVersion`, `encoding/json/v2`, Migrationen je Typversion (M)
+- [ ] Code-ADR-0009 polymorphe Serialisierung: `type`-Diskriminator, `schemaVersion`, `encoding/json/v2`, Migrationen je Typversion (M)
 - [ ] Datenmodell für Counter und Quotes (S)
 - [ ] Settings-Sektionen, typisiert und versioniert: allgemein, Chat, Commands, Moderation, Overlay, Zeit/Locale, Backups (M)
 - [ ] Event-Modell (M):
@@ -317,7 +317,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 2.3 Event-Bus
 
-- [ ] Code-ADR-0009 Event-Bus (S)
+- [ ] Code-ADR-0010 Event-Bus (S)
 - [ ] Typisierter In-Process-Bus mit Abonnements, Filtern, Puffern und Lag-Erkennung für langsame Abonnenten (M)
 
 ### 2.4 Secrets und Sicherheit
@@ -344,7 +344,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | plattformneutrale Ausführung von Commands, testbar ohne Live-Plattform |
 | **Voraussetzungen** | Phase 2; möglichst die rechtliche Einschätzung zu den `$`-Identifier-Namen (Gate O, O.1) |
 | **Aufwand** | 5–7 PW |
-| **ADRs** | 0022; Code-ADRs 0010, 0011, 0016 |
+| **ADRs** | 0022; Code-ADRs 0011, 0012, 0016 |
 
 ### 3.1 Template-Engine
 
@@ -353,7 +353,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - Regel „längster Präfix“
   - Kodierung
   - bewusste Abweichungen vom Original
-- [ ] Code-ADR-0010 Template-Engine (S)
+- [ ] Code-ADR-0011 Template-Engine (S)
 - [ ] Tokenizer und Resolver-Registry (statisch, Muster, dynamische Namen); bedarfsgesteuerte Auflösung mit `context`; Cache pro Rendervorgang (M)
 - [ ] Kodierungsmodi: Text, URL, HTML, JSON (S)
 - [ ] Identifier-Familien für das MVP (M):
@@ -376,7 +376,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 3.3 Action-Framework und P0-Actions
 
-- [ ] Code-ADR-0011 Typ-Registry (M): Descriptor mit
+- [ ] Code-ADR-0012 Typ-Registry (M): Descriptor mit
   - Typ-ID, Version, Kategorie, i18n-Schlüsseln
   - JSON-Schema und UI-Hinweisen
   - benötigten Capabilities
@@ -432,7 +432,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | vollständige Twitch-Anbindung für Streamer- und Bot-Konto |
 | **Voraussetzungen** | Phase 3 (parallel zu Phase 5 möglich) |
 | **Aufwand** | 5–6 PW |
-| **ADRs** | 0013; Code-ADRs 0012, 0013 |
+| **ADRs** | 0013; Code-ADRs 0013, 0014 |
 
 ### 4.1 Authentifizierung
 
@@ -449,7 +449,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 4.2 Helix-Client
 
-- [ ] Code-ADR-0012 HTTP-Client: Retry mit Backoff, Rate-Limit-Header, Paginierung, typisierte Fehler (S)
+- [ ] Code-ADR-0013 HTTP-Client: Retry mit Backoff, Rate-Limit-Header, Paginierung, typisierte Fehler (S)
 - [ ] Endpunkte (L):
   - Users, Channels (lesen/aktualisieren), Streams
   - Chat: Nachricht senden, löschen, Einstellungen, Ankündigung, Shoutout
@@ -459,7 +459,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 4.3 EventSub
 
-- [ ] Code-ADR-0013 WebSocket-Bibliothek (S)
+- [ ] Code-ADR-0014 WebSocket-Bibliothek (S)
 - [ ] WebSocket-Client (L):
   - Welcome-Nachricht, Keepalive-Überwachung
   - `session_reconnect` ohne Eventverlust
@@ -1185,3 +1185,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-28 | Claude-Review auf einen eigenen Prompt umgestellt (PR #9): kein Plugin-Befehl und damit keine Vorprüfung mehr; Claude nur lesend ohne Shell, der Kontext wird vorab gesammelt; Befunde als Inline-Kommentare; Zusammenfassung und Befundliste als strukturierte Ausgabe, die den Fortschrittskommentar ersetzt. Plan §11.3 angepasst. Nachweis nach dem Merge offen. |
 | 2026-09-28 | Review-Prompt und Ausgabe-Schema nach `.github/claude/` ausgelagert; der Workflow liest sie aus dem Commit des Workflows, nicht aus dem PR-Checkout. Korrektur: Nur `issue_comment` nutzt die Workflow-Fassung aus `main`, Reviews und Inline-Kommentare nutzen die aus dem Merge-Commit des PRs. PR #9 lässt sich daher per Review mit `@claude` vor dem Merge testen. |
 | 2026-09-29 | Phase 0 abgeschlossen, Gate bestanden: Exit-Kriterien erfüllt. Offene Punkte ohne Einfluss auf Phase 1 übertragen (neuer Abschnitt 0.5): rechtliche Einschätzung, rechtlicher Teil von ADR-0021, Erlaubnis von Blazing Cacti und Namensprüfung nach Gate O (O.1); Fragen aus Plan §15 nach 11.2, D0, W0 und in die Querschnittsaufgaben. Branch-Konvention in `CONTRIBUTING.md` mit optionalem `pre-push`-Hook. Phase 1.1 nachgezogen: Renovate-App installiert, `claude-code-action` gepinnt (#11), Claude-Review auf Festlegung des Projektinhabers ohne Nachweis als erledigt. |
+| 2026-09-29 | Code-ADRs 0002 bis 0006 vorgeschlagen: Dependency Injection, Fehler und Logging, Nebenläufigkeit und Supervisor, Konfiguration, Teststrategie. Die Teststrategie bekommt nach der ADR-Konvention die nächste freie Nummer 0006 statt der vorläufigen 0014; die Backlog-Nummern 0006–0013 rücken um eins auf (Plan §12.2, Phasen 2 bis 4 angepasst). |

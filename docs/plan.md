@@ -895,8 +895,8 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | YAML | `go.yaml.in/yaml/v3` oder `goccy/go-yaml` | Kandidat | Commands als Code (Code-ADR-0016) |
 | OAuth | `golang.org/x/oauth2` | Kandidat | Device Flow und PKCE eingebaut |
 | Rate-Limits, Nebenläufigkeit | `golang.org/x/time/rate`, `golang.org/x/sync/errgroup` | Kandidat | `x/`-Pakete |
-| IDs | UUIDv7 (`github.com/google/uuid` oder eigene kleine Implementierung) | Kandidat | Code-ADR-0007 |
-| Logging | `log/slog`; Rotation per Code-ADR | gesetzt | stdlib |
+| IDs | UUIDv7 (`github.com/google/uuid` oder eigene kleine Implementierung) | Kandidat | Code-ADR-0008 |
+| Logging | `log/slog`; eigene Rotation nach Größe (Code-ADR-0003) | gesetzt | stdlib |
 | Secrets | `crypto/aes` + `crypto/cipher`, `zalando/go-keyring` | Kandidat | stdlib-Krypto; Keyring plattformübergreifend |
 | Ausdrücke | `expr-lang/expr` | Kandidat | sicher, schnell, ersetzt Jace |
 | Scripting | `dop251/goja` | Kandidat | reines Go, sandboxfähig (ADR-0016) |
@@ -1150,19 +1150,19 @@ Es existieren ADR-0001 bis ADR-0011. Alle höheren Nummern in Plan und Roadmap s
 | Nr. | Datei | Thema | Phase |
 |---|---|---|---|
 | 0001 | `0001-go-toolchain-und-linting.md` | Go-Version-Policy, golangci-lint-v2-Konfiguration, CI, Renovate; **akzeptiert** | 1 |
-| 0002 | `0002-dependency-injection.md` | Composition Root, kein `init()`, keine Globals | 1 |
-| 0003 | `0003-fehler-und-logging.md` | Fehlertypen, Wrapping, slog-Konventionen, Rotation | 1 |
-| 0004 | `0004-nebenlaeufigkeit-und-supervisor.md` | Goroutine-Besitz, Backoff, Shutdown | 1 |
-| 0005 | `0005-konfiguration.md` | kong, Env, Datei, Pfade | 1 |
-| 0006 | `0006-datenbankzugriff.md` | modernc/sqlite, sqlc, goose | 2 |
-| 0007 | `0007-ids-und-zeit.md` | UUIDv7, Uhren, `synctest` | 2 |
-| 0008 | `0008-polymorphe-serialisierung.md` | Diskriminator, Versionen, json/v2 | 2 |
-| 0009 | `0009-event-bus.md` | Typisierung, Puffer, Lag | 2 |
-| 0010 | `0010-template-engine.md` | Tokenizer, Präfixregel, Kodierung | 3 |
-| 0011 | `0011-typ-registry.md` | Descriptors, Schemas, Capabilities | 3 |
-| 0012 | `0012-http-client.md` | Retry, Rate-Limits, Fehlerklassen | 4 |
-| 0013 | `0013-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |
-| 0014 | `0014-teststrategie.md` | Fixtures, Golden Files, Fakes, Fuzzing | 1 |
+| 0002 | `0002-dependency-injection.md` | Composition Root, kein `init()`, keine Globals; **vorgeschlagen** | 1 |
+| 0003 | `0003-fehler-und-logging.md` | Fehlertypen, Wrapping, slog-Konventionen, Rotation; **vorgeschlagen** | 1 |
+| 0004 | `0004-nebenlaeufigkeit-und-supervisor.md` | Goroutine-Besitz, Backoff, Shutdown; **vorgeschlagen** | 1 |
+| 0005 | `0005-konfiguration.md` | kong, Env, Datei, Pfade; **vorgeschlagen** | 1 |
+| 0006 | `0006-teststrategie.md` | Fixtures, Golden Files, Fakes, Fuzzing, native Tests; **vorgeschlagen** (vorläufig 0014) | 1 |
+| 0007 | `0007-datenbankzugriff.md` | modernc/sqlite, sqlc, goose | 2 |
+| 0008 | `0008-ids-und-zeit.md` | UUIDv7, Uhren, `synctest` | 2 |
+| 0009 | `0009-polymorphe-serialisierung.md` | Diskriminator, Versionen, json/v2 | 2 |
+| 0010 | `0010-event-bus.md` | Typisierung, Puffer, Lag | 2 |
+| 0011 | `0011-template-engine.md` | Tokenizer, Präfixregel, Kodierung | 3 |
+| 0012 | `0012-typ-registry.md` | Descriptors, Schemas, Capabilities | 3 |
+| 0013 | `0013-http-client.md` | Retry, Rate-Limits, Fehlerklassen | 4 |
+| 0014 | `0014-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |
 | 0015 | `0015-codegenerierung.md` | buf, sqlc, esbuild in `go generate` | 2/6 |
 | 0016 | `0016-yaml-bibliothek.md` | Commands als Code | 3 |
 
