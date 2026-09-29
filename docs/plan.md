@@ -426,7 +426,7 @@ flowchart TB
 
 | Schicht | Pakete (Auszug) | Verantwortung | Darf abhängen von |
 |---|---|---|---|
-| Einstieg | `cmd/streamcrew` | CLI-Parsing (kong), Start | `internal/app`, `internal/tui` |
+| Einstieg | `cmd/streamcrew` (nur `main.go`), `internal/cli` | Prozess einrichten (Signale, Umgebung, Exit); CLI-Parsing (kong) und Unterkommandos in `internal/cli` | `internal/app`, `internal/tui` |
 | Composition Root | `internal/app`, `internal/config` | Verdrahtung, Lebenszyklus, Supervisor | allen internen Paketen |
 | API | `internal/api` | ConnectRPC-Handler, Developer-API, MCP, Authentifizierung | Application Services |
 | Application Services | `internal/chat`, `internal/user`, `internal/economy`, `internal/timer`, `internal/moderation`, … | Anwendungsfälle, Transaktionen, Ereignisse | Domäne, Engine, Ports |
@@ -944,13 +944,14 @@ Alle Repositories liegen auf GitHub und bleiben privat, bis der Projektinhaber s
 
 ```text
 streamcrew/
-├── cmd/streamcrew/main.go         # kong-Einstieg: serve, tui, auth, command, …
+├── cmd/streamcrew/main.go         # Einstieg: Signale, Umgebung, Exit; ruft internal/cli
 ├── api/
 │   ├── proto/streamcrew/v1alpha1/  # Protobuf-Verträge (einzige Quelle)
 │   └── gen/                       # generierter Go-Code (Handler-Interfaces + Clients)
 ├── core/                          # öffentliche Start-API für den Selbststart (ADR-0006)
 ├── internal/
 │   ├── app/                       # Composition Root, Lebenszyklus, Bereitschaft
+│   ├── cli/                       # kong-CLI: serve, profile, backup, config, … (Code-ADR-0005)
 │   ├── config/                    # kong-Konfiguration, YAML-Datei, Pfade, Betriebsmodi
 │   ├── supervisor/                # Runnables, Restart-Policy, Backoff, Shutdown
 │   ├── logging/                   # slog-Handler, Rotation, Maskierung
