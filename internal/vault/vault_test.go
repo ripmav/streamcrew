@@ -244,10 +244,12 @@ func TestRotate(t *testing.T) {
 	before, err := keys.Load(ctx)
 	require.NoError(t, err)
 
-	require.NoError(t, v.Rotate(ctx, keys))
+	rotated, err := vault.Rotate(ctx, keys, before, s)
+	require.NoError(t, err)
 
 	after, err := keys.Load(ctx)
 	require.NoError(t, err)
+	assert.Equal(t, rotated.Current, after.Current)
 	assert.NotEqual(t, before.Current, after.Current)
 	assert.Equal(t, []string{after.Current}, after.IDs(), "the old key is gone")
 	recs, err := s.ListSecrets(ctx)
@@ -278,7 +280,8 @@ func TestInterruptedRotationKeepsSecretsReadable(t *testing.T) {
 	ks, err := keys.Load(ctx)
 	require.NoError(t, err)
 
-	require.ErrorIs(t, vault.New(failingReplace{s}, ks).Rotate(ctx, keys), assert.AnError)
+	_, err = vault.Rotate(ctx, keys, ks, failingReplace{s})
+	require.ErrorIs(t, err, assert.AnError)
 
 	after, err := keys.Load(ctx)
 	require.NoError(t, err)
@@ -297,7 +300,8 @@ func TestRotateWithEnvironmentKey(t *testing.T) {
 	keys := vault.NewKeys(dir, key, nil, nil)
 	ks, err := keys.Load(t.Context())
 	require.NoError(t, err)
-	require.ErrorContains(t, vault.New(s, ks).Rotate(t.Context(), keys), "STREAMCREW_SECRET_KEY")
+	_, err = vault.Rotate(t.Context(), keys, ks, s)
+	require.ErrorContains(t, err, "STREAMCREW_SECRET_KEY")
 }
 
 func assertPrivate(t *testing.T, path string) {
@@ -311,4 +315,32 @@ func assertPrivate(t *testing.T, path string) {
 
 func slogText(w io.Writer) *slog.Logger {
 	return slog.New(slog.NewTextHandler(w, nil))
+}
+
+// TestRotateCoversAllProfiles: the key belongs to the data directory, so a
+// rotation must re-encrypt every profile before the old key goes.
+func TestRotateCoversAllProfiles(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	dir := t.TempDir()
+	keys := vault.NewKeys(dir, "", newFakeKeyring(), nil)
+	ks, err := keys.Load(ctx)
+	require.NoError(t, err)
+
+	var stores []*store.Store
+	for _, id := range []string{"main", "second"} {
+		s, err := store.Open(ctx, filepath.Join(dir, "profiles", id+".db"))
+		require.NoError(t, err)
+		defer s.Close()
+		require.NoError(t, vault.New(s, ks).Put(ctx, "token", logging.Secret("value-"+id)))
+		stores = append(stores, s)
+	}
+
+	rotated, err := vault.Rotate(ctx, keys, ks, stores[0], stores[1])
+	require.NoError(t, err)
+	for i, id := range []string{"main", "second"} {
+		got, err := vault.New(stores[i], rotated).Get(ctx, "token")
+		require.NoError(t, err)
+		assert.Equal(t, "value-"+id, got.Reveal())
+	}
 }

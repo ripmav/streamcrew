@@ -84,50 +84,53 @@ func (v *Vault) Delete(ctx context.Context, name string) error {
 	return err
 }
 
-// Rotate creates a new key, re-encrypts every secret with it and removes the
-// old keys. The steps are ordered so that an interruption leaves every
-// secret readable: the new key is saved before any secret uses it, and old
-// keys are removed only after all secrets have been re-encrypted.
-func (v *Vault) Rotate(ctx context.Context, keys *Keys) error {
-	if v.keys.Source() == SourceEnv {
-		return errors.New("the key from STREAMCREW_SECRET_KEY cannot be rotated by streamcrew; set a new value and sign in again")
+// Rotate creates a new key, re-encrypts the entries of every repository with
+// it and removes the old keys. The key belongs to the data directory, so
+// repos must be the databases of all its profiles. The steps are ordered so
+// that an interruption leaves every entry readable: the new key is saved
+// before any entry uses it, and old keys are removed only after all entries
+// have been re-encrypted. It returns the new key set.
+func Rotate(ctx context.Context, keys *Keys, current *KeySet, repos ...Repository) (*KeySet, error) {
+	if current.Source() == SourceEnv {
+		return nil, errors.New("the key from STREAMCREW_SECRET_KEY cannot be rotated by streamcrew; set a new value and sign in again")
 	}
 	id, key := newKey()
-	next := &KeySet{Current: id, keys: maps.Clone(v.keys.keys), source: v.keys.source}
+	next := &KeySet{Current: id, keys: maps.Clone(current.keys), source: current.source}
 	next.keys[id] = key
 	if err := keys.Save(ctx, next); err != nil {
-		return fmt.Errorf("rotate: save new key: %w", err)
+		return nil, fmt.Errorf("rotate: save new key: %w", err)
 	}
 
-	recs, err := v.repo.ListSecrets(ctx)
-	if err != nil {
-		return fmt.Errorf("rotate: %w", err)
-	}
-	oldVault := &Vault{keys: v.keys}
+	oldVault := &Vault{keys: current}
 	newVault := &Vault{keys: next}
-	reenc := make([]Record, 0, len(recs))
-	for _, rec := range recs {
-		plain, err := oldVault.open(rec)
+	for _, repo := range repos {
+		recs, err := repo.ListSecrets(ctx)
 		if err != nil {
-			return fmt.Errorf("rotate: %w", err)
+			return nil, fmt.Errorf("rotate: %w", err)
 		}
-		r, err := newVault.seal(rec.Name, plain)
-		clear(plain)
-		if err != nil {
-			return fmt.Errorf("rotate: %w", err)
+		reenc := make([]Record, 0, len(recs))
+		for _, rec := range recs {
+			plain, err := oldVault.open(rec)
+			if err != nil {
+				return nil, fmt.Errorf("rotate: %w", err)
+			}
+			r, err := newVault.seal(rec.Name, plain)
+			clear(plain)
+			if err != nil {
+				return nil, fmt.Errorf("rotate: %w", err)
+			}
+			reenc = append(reenc, r)
 		}
-		reenc = append(reenc, r)
-	}
-	if err := v.repo.ReplaceSecrets(ctx, reenc); err != nil {
-		return fmt.Errorf("rotate: %w", err)
+		if err := repo.ReplaceSecrets(ctx, reenc); err != nil {
+			return nil, fmt.Errorf("rotate: %w", err)
+		}
 	}
 
 	final := &KeySet{Current: id, keys: map[string][]byte{id: key}, source: next.source}
 	if err := keys.Save(ctx, final); err != nil {
-		return fmt.Errorf("rotate: remove old keys: %w", err)
+		return nil, fmt.Errorf("rotate: remove old keys: %w", err)
 	}
-	v.keys = final
-	return nil
+	return final, nil
 }
 
 func (v *Vault) seal(name string, plain []byte) (Record, error) {
