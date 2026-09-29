@@ -44,5 +44,7 @@ Ergänzend:
 | [0009](0009-repositories-und-hosting.md) | Repositories und Hosting | Akzeptiert | 2026-09-28 |
 | [0010](0010-api-protokoll.md) | API-Protokoll: ConnectRPC mit Protobuf | Akzeptiert | 2026-09-28 |
 | [0011](0011-keine-telemetrie.md) | Keine Telemetrie | Akzeptiert | 2026-09-28 |
+| [0012](0012-persistenz.md) | Persistenz: SQLite je Profil, Backups und Secrets | Vorgeschlagen | 2026-09-29 |
+| [0013](0013-sicherheitsmodell.md) | Sicherheitsmodell (Entwurf) | Vorgeschlagen | 2026-09-29 |
 
 Die geplanten ADRs stehen im ADR-Backlog von [`plan.md`](../plan.md) (§12).
