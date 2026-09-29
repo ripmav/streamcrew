@@ -1,5 +1,3 @@
--- SPDX-License-Identifier: Apache-2.0
-
 -- name: GetCommand :one
 SELECT * FROM commands WHERE id = ?;
 
@@ -56,3 +54,5 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- name: DeleteCommandGroup :execrows
 DELETE FROM command_groups WHERE id = ?;
+
+-- SPDX-License-Identifier: Apache-2.0

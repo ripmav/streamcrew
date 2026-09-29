@@ -44,11 +44,9 @@ func (q *Queries) DeleteTriggers(ctx context.Context, commandID string) error {
 }
 
 const getCommand = `-- name: GetCommand :one
-
 SELECT id, name, kind, enabled, unlocked, group_id, wildcard, event_type, requirements, actions, created_at, updated_at FROM commands WHERE id = ?
 `
 
-// SPDX-License-Identifier: Apache-2.0
 func (q *Queries) GetCommand(ctx context.Context, id string) (Command, error) {
 	row := q.db.QueryRowContext(ctx, getCommand, id)
 	var i Command
