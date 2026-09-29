@@ -90,7 +90,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | Track / Phase | Status |
 |---|---|
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
-| Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); offen bleibt nur der Cache, der in Phase 2 neu bewertet wird |
+| Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet (PR #13) |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29 (PR #13), alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (Phase 3), Zuordnung zu den numerischen Ereignis-IDs (Gate O) |
 | Phase 3: Engine, Templates, Actions, Mock | offen |
 | Phase 4: Twitch | offen |
@@ -206,7 +206,11 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - Laufzeit (PR #8): Checks 70 s, Tests 36 s, Cross-Build 55 s, Linkprüfung 7 s; Gesamtdauer der CI 74 s
   - Minuten: pro Push mit Go- und Markdown-Änderungen etwa 5 abgerechnete Minuten, weil jeder Job auf volle Minuten aufgerundet wird
   - Cache: Die drei CI-Jobs teilen sich einen setup-go-Schlüssel. Gespeichert wird nur der Stand des zuerst fertigen Jobs, die anderen melden „Unable to reserve cache“. Ohne Abhängigkeiten ist das unerheblich.
-- [ ] setup-go-Cache mit den ersten Abhängigkeiten neu bewerten, z. B. Cache nur in einem Job speichern (Phase 2) (S)
+- [x] setup-go-Cache mit den ersten Abhängigkeiten neu bewerten, z. B. Cache nur in einem Job speichern (Phase 2) (S), erledigt 2026-09-29 (PR #13):
+  - Befund: Mit modernc SQLite kompilierte jeder Job, der den gemeinsamen Cache nicht gespeichert hatte, seine Abhängigkeiten bei jedem Lauf neu: den Race-Build, den Fuzz-Build, sqlc und die sechs Cross-Builds. Gemessen mit gemeinsamem Cache: Checks 54 s, Tests 234 s, Cross-Build 334 s, zusammen 11 abgerechnete Minuten je Push.
+  - Nur einen Job speichern zu lassen hätte das nicht gelöst, weil die Jobs verschiedene Build-Ausgaben brauchen. Stattdessen hat jeder Linux-Job einen eigenen `actions/cache`-Eintrag, Schlüssel aus Job und Hash von `go.mod` und `go.sum`, mit Präfix-Rückfall nach Abhängigkeits-Updates. Die nativen Tests behalten den setup-go-Cache, der dort schon je System getrennt ist.
+  - Ergebnis mit warmem Cache: Checks 46 s, Tests 101 s, Cross-Build 111 s (davon `go build` 7 s statt 227 s), zusammen 5 abgerechnete Minuten. Der erste Lauf nach einem Abhängigkeits-Update braucht so lange wie vorher. Speicher: rund 850 MB je Cache-Bereich (Branch bzw. Pull Request); das Limit liegt bei 10 GB.
+  - Offen als mögliche Verbesserung: Der Docker-Smoke-Test kompiliert im Container ohne Cache (rund 75 s); ein BuildKit-Cache über GitHub Actions bräuchte weitere Actions und wird erst bei Bedarf bewertet.
 - [x] Claude-Code-Review nur auf `@claude`-Erwähnung in Pull Requests, mit Fortschritts- und Ergebniskommentar (`.github/workflows/claude.yml`; kein automatisches Review, keine Issues) (S), erledigt 2026-09-28
 - [x] Claude-Review so korrigieren, dass das Review tatsächlich läuft (S), erledigt 2026-09-29:
   - Erste Ursache: Das Werkzeug `Skill`, über das Claude Code den Plugin-Befehl ausführt, wurde verweigert. Seit PR #7 ist es gezielt für `code-review:code-review` freigegeben. Im Lauf zu PR #8 wirkt die Freigabe: keine Verweigerung.
@@ -1207,3 +1211,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-29 | Entwürfe der Spezifikationen für das Domänenmodell (Nutzer und Rollen, Commands, Counter und Quotes, Ereigniskatalog) aus der offiziellen Doku und dem Plan, ohne Code des Originals; die Umsetzung wartet auf die Prüfung. Zeitzone: Systemzone zur Laufzeit, Rückfall UTC; `forbidigo` erlaubt Umgebungsvariablen in Tests (Entscheidungen des Projektinhabers). |
 | 2026-09-29 | Kommandozeile aufgeteilt (Entscheidung des Projektinhabers): `cmd/streamcrew` enthält nur noch `main.go` mit Signalen, Umgebung, kong-Initialisierung und Parsen; Definition und Unterkommandos liegen in `internal/cli`. Code-ADR-0002, 0003 und 0005 mit Präzisierungsvermerk, Plan §6.3 und §9.2 angepasst. |
 | 2026-09-29 | Spezifikationen des Domänenmodells vom Projektinhaber geprüft und akzeptiert; offene Fragen werden am Original geprüft. Phase 2.2 umgesetzt: `internal/domain/{platform,role,user,command,counter,quote,eventtype}`, Migration `0002_domain.sql`, Repositories mit Integrationstests, Golden Files der Anforderungsarten, Rücksetzen der Counter beim Start. Phase 2 abgeschlossen; weitere Settings-Sektionen nach 3.2 und die Zuordnung der numerischen Ereignis-IDs nach 11.2 übertragen. Code-ADR-0009 präzisiert: Dauern in Dokumenten als Go-Dauer. |
+| 2026-09-29 | CI-Cache neu bewertet (aus Phase 1.1): ein `actions/cache`-Eintrag je Linux-Job statt eines gemeinsamen setup-go-Caches. Abgerechnete Minuten je Push von 11 auf 5, Cross-Build von 334 s auf 111 s. |
