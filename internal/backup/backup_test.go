@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -282,5 +284,34 @@ func TestSchedulerDisabled(t *testing.T) {
 		assert.Empty(t, list)
 		cancel()
 		require.NoError(t, <-done)
+	})
+}
+
+// TestConcurrentCreateKeepsEveryBackup is a regression test for the review
+// of PR #22: backups of a profile started in the same second, e.g. the
+// scheduled and a manual one, must not replace each other.
+func TestConcurrentCreateKeepsEveryBackup(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		// Time stands still in the bubble: all backups start in the same second.
+		dir := t.TempDir()
+		const n = 8
+		paths := make([]string, n)
+		errs := make([]error, n)
+		var wg sync.WaitGroup
+		for i := range n {
+			wg.Go(func() {
+				info, err := backup.Create(t.Context(), fakeSource{schema: 1}, dir, backup.Request{ProfileID: "main"})
+				paths[i], errs[i] = info.Path, err
+			})
+		}
+		wg.Wait()
+		for _, err := range errs {
+			require.NoError(t, err)
+		}
+		assert.Len(t, slices.Compact(slices.Sorted(slices.Values(paths))), n, "distinct names")
+		list, err := backup.List(dir, "main")
+		require.NoError(t, err)
+		assert.Len(t, list, n, "every backup is kept")
 	})
 }

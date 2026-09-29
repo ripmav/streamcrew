@@ -126,12 +126,13 @@ func Create(ctx context.Context, src Source, dir string, req Request) (Info, err
 	if err := writeZip(zipPath, m, dbPath); err != nil {
 		return Info{}, fmt.Errorf("create backup: %w", err)
 	}
-	final, err := freeName(dir, req.ProfileID, m.CreatedAt)
+	final, err := claimName(dir, req.ProfileID, m.CreatedAt)
 	if err != nil {
 		return Info{}, err
 	}
+	// Replaces the empty file claimName created, never another backup.
 	if err := os.Rename(zipPath, final); err != nil {
-		return Info{}, fmt.Errorf("create backup: %w", err)
+		return Info{}, errors.Join(fmt.Errorf("create backup: %w", err), os.Remove(final))
 	}
 	st, err := os.Stat(final)
 	if err != nil {
@@ -177,8 +178,11 @@ func writeZip(path string, m Manifest, dbPath string) (err error) {
 	return f.Sync()
 }
 
-// freeName returns an unused file name for a backup created at t.
-func freeName(dir, profileID string, t time.Time) (string, error) {
+// claimName reserves an unused file name for a backup created at t by
+// creating an empty file with O_EXCL. Two backups of a profile started in
+// the same second, e.g. the scheduled and a manual one, thus never get the
+// same name; List skips the empty file until Create replaces it.
+func claimName(dir, profileID string, t time.Time) (string, error) {
 	base := profileID + "-" + t.UTC().Format("20060102T150405Z")
 	for n := 1; n < 1000; n++ {
 		name := base + ".zip"
@@ -186,9 +190,14 @@ func freeName(dir, profileID string, t time.Time) (string, error) {
 			name = base + "-" + strconv.Itoa(n) + ".zip"
 		}
 		path := filepath.Join(dir, name)
-		if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
-			return path, nil
+		f, err := os.OpenFile(filepath.Clean(path), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, fs.ErrExist) {
+			continue
 		}
+		if err != nil {
+			return "", fmt.Errorf("create backup: %w", err)
+		}
+		return path, f.Close()
 	}
 	return "", fmt.Errorf("create backup: no free file name for %s", base)
 }
