@@ -30,7 +30,7 @@
   - Implementiert wird aus der Spezifikation, nicht aus dem C#-Code.
   - KI-Assistenten bekommen keinen C#-Code und keine Übersetzungsaufträge.
 - **Lizenz (ADR-0002):** Jede neue Quelldatei trägt `// SPDX-License-Identifier: Apache-2.0`.
-- **ADR-Nummern:** ADR-0001 bis ADR-0011 existieren (siehe [`adr/`](adr/README.md)). Höhere Nummern sind vorläufige Backlog-Nummern aus Plan §12.1. Wer ein geplantes ADR anlegt, vergibt die nächste freie Nummer und passt die Verweise hier und im Plan an.
+- **ADR-Nummern:** ADR-0001 bis ADR-0013 existieren (siehe [`adr/`](adr/README.md)). Höhere Nummern sind vorläufige Backlog-Nummern aus Plan §12.1. Wer ein geplantes ADR anlegt, vergibt die nächste freie Nummer und passt die Verweise hier und im Plan an.
 - **Pre-Commit-Checkliste:** gilt für jede Aufgabe mit Code (Plan §11.1); `scripts/check.sh` führt sie aus:
   1. `go fix ./...`
   2. `gofmt -w .`
@@ -166,7 +166,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | Namensprüfung für den endgültigen Namen | Gate O, O.1 | vor Gate O, möglichst früher |
 | Plan §15: Bedeutung des Imports, eigener Datenbestand | Phase 11.2 | vor ADR-0021 (Umsetzung) |
 | Plan §15: Zielsysteme der Desktop-App, Signierung und Notarisierung | Desktop-Track D0 | vor dem Paketierungs-Spike |
-| Plan §15: Web-Stack | Web-Track W0 (ADR-0017) | vor W0 |
+| Plan §15: Web-Stack | Web-Track W0 (ADR-0018) | vor W0 |
 | Plan §15: verfügbare Kapazität pro Woche | Querschnittsaufgaben | spätestens zur Kalibrierung nach M1 |
 | Projekt-Board oder Issues mit den Phasen der Roadmap (Entscheidung des Projektinhabers: später) | Gate O, O.2 | vor Gate O |
 
@@ -281,12 +281,12 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | Datenmodell, Speicher, Profile, Backups, Event-Bus und Secrets |
 | **Voraussetzungen** | Phase 1 |
 | **Aufwand** | 3–4 PW |
-| **ADRs** | 0012, 0020 (Entwurf); Code-ADRs 0008, 0009, 0010, 0011, 0016 |
+| **ADRs** | [0012](adr/0012-persistenz.md), [0013](adr/0013-sicherheitsmodell.md) (Entwurf); Code-ADRs [0008](adr/code/0008-datenbankzugriff.md), [0009](adr/code/0009-ids-und-zeit.md), [0010](adr/code/0010-polymorphe-serialisierung.md), [0011](adr/code/0011-event-bus.md) |
 
 ### 2.1 Speicher
 
-- [ ] Code-ADR-0008 Datenbankzugriff: `modernc.org/sqlite`, `sqlc`, `goose`; Code-ADR-0016 Codegenerierung (S)
-- [ ] ADR-0012 Persistenz: SQLite je Profil, Backups (S)
+- [ ] [Code-ADR-0008](adr/code/0008-datenbankzugriff.md) Datenbankzugriff: `modernc.org/sqlite`, `sqlc`, `goose`, vorgeschlagen 2026-09-29. Die Konventionen für sqlc stehen darin; das Code-ADR zur Codegenerierung folgt erst mit `buf` und esbuild in Phase 6 (S)
+- [ ] [ADR-0012](adr/0012-persistenz.md) Persistenz: SQLite je Profil, Profile, Sperre, Backups, Secrets im Ruhezustand, vorgeschlagen 2026-09-29 (S)
 - [ ] `internal/store` (M):
   - Verbindung mit WAL, `foreign_keys` und `busy_timeout`
   - eingebettete Migrationen
@@ -301,7 +301,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 2.2 Domänenmodell
 
-- [ ] Code-ADR-0009 IDs und Zeit: UUIDv7, injizierbare Uhr, `testing/synctest` (S)
+- [ ] [Code-ADR-0009](adr/code/0009-ids-und-zeit.md) IDs und Zeit: UUIDv7 aus der Standardbibliothek, keine injizierbare Uhr (`testing/synctest`), vorgeschlagen 2026-09-29 (S)
 - [ ] Nutzer: Nutzer, Plattform-Identitäten, Statistiken, Titel, Notizen, Ausschlüsse (M)
 - [ ] Rollenmodell: plattformneutrale Rollen mit Rangordnung plus plattformspezifische Rollen; Semantik „erfüllt Mindestrolle“ (Plan Anhang A.7) (M)
 - [ ] Commands (M):
@@ -310,7 +310,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - aktiv/unlocked
   - Requirements-Set
   - polymorphe Actions
-- [ ] Code-ADR-0010 polymorphe Serialisierung: `type`-Diskriminator, `schemaVersion`, `encoding/json/v2`, Migrationen je Typversion (M)
+- [ ] [Code-ADR-0010](adr/code/0010-polymorphe-serialisierung.md) polymorphe Serialisierung: `type`-Diskriminator, `schemaVersion`, Migrationen je Typversion; vorerst `encoding/json`, weil v2 in go1.27.1 noch experimentell ist; vorgeschlagen 2026-09-29 (M)
 - [ ] Datenmodell für Counter und Quotes (S)
 - [ ] Settings-Sektionen, typisiert und versioniert: allgemein, Chat, Commands, Moderation, Overlay, Zeit/Locale, Backups (M)
 - [ ] Event-Modell (M):
@@ -320,7 +320,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 2.3 Event-Bus
 
-- [ ] Code-ADR-0011 Event-Bus (S)
+- [ ] [Code-ADR-0011](adr/code/0011-event-bus.md) Event-Bus, vorgeschlagen 2026-09-29 (S)
 - [ ] Typisierter In-Process-Bus mit Abonnements, Filtern, Puffern und Lag-Erkennung für langsame Abonnenten (M)
 
 ### 2.4 Secrets und Sicherheit
@@ -329,7 +329,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - AES-256-GCM
   - Schlüssel aus OS-Keyring, Key-Datei (0600) oder Umgebungsvariable
   - Schlüsselrotation
-- [ ] ADR-0020 Sicherheitsmodell, Entwurf: Betriebsmodi × Capabilities (Plan §6.15) (S)
+- [ ] [ADR-0013](adr/0013-sicherheitsmodell.md) Sicherheitsmodell, Entwurf: Betriebsmodi × Capabilities (Plan §6.15), vorgeschlagen 2026-09-29 (S)
 
 **Exit-Kriterien:**
 
@@ -435,12 +435,12 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | vollständige Twitch-Anbindung für Streamer- und Bot-Konto |
 | **Voraussetzungen** | Phase 3 (parallel zu Phase 5 möglich) |
 | **Aufwand** | 5–6 PW |
-| **ADRs** | 0013; Code-ADRs [0007](adr/code/0007-circuit-breaker.md), 0014, 0015 |
+| **ADRs** | 0014; Code-ADRs [0007](adr/code/0007-circuit-breaker.md), 0014, 0015 |
 
 ### 4.1 Authentifizierung
 
 - [ ] Twitch-App registrieren (öffentlicher Client, Device Code Flow) (S)
-- [ ] ADR-0013 OAuth und App-Credentials, inkl. BYO-Option für alle Plattformen (S)
+- [ ] ADR-0014 OAuth und App-Credentials, inkl. BYO-Option für alle Plattformen (S)
 - [ ] `internal/auth` (M):
   - Device Code Flow mit `golang.org/x/oauth2`
   - verschlüsselter Token-Speicher
@@ -565,7 +565,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 6.1 API-Vertrag
 
-- [ ] `buf` einrichten (lint, breaking, generate); Code-ADR-0016 um `buf` ergänzen (S)
+- [ ] `buf` einrichten (lint, breaking, generate); Code-ADR-0016 zur Codegenerierung schreiben (`buf`, esbuild; übernimmt die sqlc-Konventionen aus [Code-ADR-0008](adr/code/0008-datenbankzugriff.md)) (S)
 - [ ] Protos `v1alpha1` gemäß Plan §6.14 (L):
   - `SystemService`, `AuthService`, `StreamService`, `ChatService`
   - `CommandService` inkl. Typkatalog
@@ -639,11 +639,11 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | OBS-Browserquellen mit Items und Widgets, Ton, TTS und OBS-Steuerung |
 | **Voraussetzungen** | Phase 6 |
 | **Aufwand** | 5–7 PW (P1); 3–5 PW zusätzlich für P2-Widgets |
-| **ADRs** | 0018, 0019 |
+| **ADRs** | 0019, 0020 |
 
 ### 7.1 Overlay-Server und Runtime
 
-- [ ] Spezifikation `docs/spec/overlays.md` und ADR-0018: Architektur und Protokoll (S)
+- [ ] Spezifikation `docs/spec/overlays.md` und ADR-0019: Architektur und Protokoll (S)
 - [ ] HTTP- und WebSocket-Server, mehrere Endpunkte (eine URL je Browserquelle), optionales Token, Wiederverbinden der Clients (M)
 - [ ] Neu geschriebene Overlay-Runtime in TypeScript, gebündelt mit der Go-API von esbuild per `go generate` und per `go:embed` ausgeliefert (L):
   - Pakete, Positionen, Ebenen
@@ -659,7 +659,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 7.3 Medien
 
-- [ ] ADR-0019 Audio-Ausgabe (S)
+- [ ] ADR-0020 Audio-Ausgabe (S)
 - [ ] Audio-Sinks: Overlay als Standard; lokale Ausgabe mit Geräteauswahl per Build-Tag, P1 wegen des Streaming-PCs als Hauptbetriebsort (ADR-0003); Agent-Schnittstelle vorbereitet (M)
 - [ ] Sound-Action mit Lautstärke und Ausgabe (S)
 - [ ] Desktop-Variante des Core-Binaries (Build-Tag für lokale Audioausgabe) als Release-Artefakt für die Desktop-Pakete ([ADR-0005](adr/0005-core-in-desktop-builds.md)) (S)
@@ -750,7 +750,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | YouTube und Kick als vollwertige Plattformen; Multiplattform-Betrieb |
 | **Voraussetzungen** | Phase 6; Go/No-Go je Plattform nach M2 (ADR-0004) |
 | **Aufwand** | 8–11 PW (P1); 4–6 PW zusätzlich für Velora und VPZone (P3) |
-| **ADRs** | 0014, 0015 |
+| **ADRs** | 0015, 0016 |
 
 ### 9.0 Entscheidung
 
@@ -763,7 +763,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 9.2 YouTube
 
-- [ ] ADR-0015 Chat-Streaming; Anleitung für eigene Google-Cloud-Credentials (S)
+- [ ] ADR-0016 Chat-Streaming; Anleitung für eigene Google-Cloud-Credentials (S)
 - [ ] OAuth: Loopback + PKCE, Server-Callback, Einfügen des Codes als Fallback (M)
 - [ ] Chat-Empfang (L):
   - Livestream-Erkennung
@@ -774,7 +774,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 9.3 Kick
 
-- [ ] ADR-0014 Eingehende Webhooks und Relay (S):
+- [ ] ADR-0015 Eingehende Webhooks und Relay (S):
   - Server-Modus mit Reverse Proxy
   - Tunnel-Anleitung
   - Relay optional
@@ -804,7 +804,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | wichtigste Dienste anbinden, Skripte ermöglichen, Host-Fähigkeiten für Remote-Betrieb |
 | **Voraussetzungen** | Phase 7; für Webhook-Dienste den Webhook-Eingang aus 9.1, sonst hier bauen |
 | **Aufwand** | 4–6 PW (P1); 8–12 PW für P2 (Tier 2, Agent); 4–6 PW für P3 (Tier 3) |
-| **ADRs** | 0016 |
+| **ADRs** | 0017 |
 
 ### 10.1 Grundlagen
 
@@ -821,7 +821,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 10.3 Scripting (P1)
 
-- [ ] ADR-0016 Scripting (S)
+- [ ] ADR-0017 Scripting (S)
 - [ ] `goja`-Sandbox (M):
   - Zeitlimit
   - kein Datei- oder Netzzugriff außer über freigegebene Funktionen
@@ -904,12 +904,12 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | Stabilität, Sicherheit, Performance, vollständige Dokumentation; API `v1` |
 | **Voraussetzungen** | alle P1-Aufgaben der Phasen 8–11 |
 | **Aufwand** | 3–4 PW |
-| **ADRs** | 0020 (final) |
+| **ADRs** | [0013](adr/0013-sicherheitsmodell.md) (final) |
 
 - [ ] Security-Review (M):
   - Prüfumfang: Capabilities, API-Authentifizierung, SSRF, Pfadzugriffe, Secrets, Abhängigkeiten
   - Threat Model in `docs/security.md`
-  - ADR-0020 finalisieren
+  - ADR-0013 finalisieren
 - [ ] Lasttests mit der Mock-Plattform (z. B. 100 Chatnachrichten/s, 100.000 Nutzer), Profiling mit `pprof`, Speicherbudget festlegen (M)
 - [ ] Chaos-Tests: Netzabbrüche, Datenbanksperren, Absturz während eines Schreibvorgangs; Wiederanlauf und Backup-Verifikation (M)
 - [ ] Upgrade-Test: Datenbanken aus M2 lassen sich auf 1.0 migrieren (S)
@@ -1000,11 +1000,11 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | Weboberfläche für Server- und LAN-Betrieb, später auch für Moderatoren |
 | **Voraussetzungen** | M2 (API `v1alpha1`) |
 | **Aufwand** | 16–20 PW |
-| **ADRs** | 0017 im Core-Repo; weitere im Web-Repo |
+| **ADRs** | 0018 im Core-Repo; weitere im Web-Repo |
 
 ### W0: Entscheidung und Setup (1–2 PW)
 
-- [ ] ADR-0017 Web-Technologie; Kandidaten: TypeScript-SPA (Svelte 5 oder React), Go + templ + htmx, Go-WASM; beantwortet die offene Frage zum Web-Stack aus Plan §15 (S)
+- [ ] ADR-0018 Web-Technologie; Kandidaten: TypeScript-SPA (Svelte 5 oder React), Go + templ + htmx, Go-WASM; beantwortet die offene Frage zum Web-Stack aus Plan §15 (S)
 - [ ] Repository, Build, TS-Client aus den Protos (`@connectrpc/connect-web`), CI (M)
 - [ ] CI-Token mit Leserechten auf das Core-Repository, um die Protos per Git-Tag zu beziehen ([ADR-0009](adr/0009-repositories-und-hosting.md), aus Phase 1 verschoben) (S)
 - [ ] Auslieferung festlegen: statisch vom Core unter `/ui` (optional eingebettet) oder separat hinter einem Reverse Proxy (S)
@@ -1051,12 +1051,12 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | | |
 |---|---|
 | **Ziel** | Webhooks für Desktop-Nutzer ohne öffentliche URL (Kick, Spendendienste) |
-| **Voraussetzungen** | ADR-0014 (Phase 9) |
+| **Voraussetzungen** | ADR-0015 (Phase 9) |
 | **Aufwand** | 2–3 PW |
 
 ### R0: Entscheidung
 
-- [ ] In ADR-0014 festlegen, ob der Relay gebaut wird und wer ihn betreibt (selbst gehostet oder vom Projekt) (S)
+- [ ] In ADR-0015 festlegen, ob der Relay gebaut wird und wer ihn betreibt (selbst gehostet oder vom Projekt) (S)
 
 ### R1: MVP
 
@@ -1198,3 +1198,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-29 | M0 erreicht: Die CI von PR #12 ist grün, die nativen Tests unter Windows und macOS ebenfalls (`workflow_dispatch`). Phase 1 abgeschlossen. |
 | 2026-09-29 | Code-ADR-0007 „Circuit Breaker für externe Dienste“ vorgeschlagen (`sony/gobreaker/v2`, ein Breaker je API), auf Wunsch des Projektinhabers. Es bekommt die nächste freie Nummer; die Backlog-Nummern 0007–0015 rücken um eins auf (Plan §12.2, Phasen 2 bis 4 und 6). Phase 4.2 um `internal/breaker` ergänzt. |
 | 2026-09-29 | Code-ADR-0007 vom Projektinhaber abgenommen. |
+| 2026-09-29 | Phase 2 begonnen. Vorgeschlagen: ADR-0012 Persistenz (inkl. Sperre und Secrets im Ruhezustand), ADR-0013 Sicherheitsmodell (Entwurf, bisher Backlog 0020), Code-ADRs 0008 Datenbankzugriff, 0009 IDs und Zeit, 0010 polymorphe Serialisierung, 0011 Event-Bus. Backlog-Nummern der Architektur-ADRs 0013–0019 um eins aufgerückt. Die sqlc-Konventionen stehen in Code-ADR-0008; das Code-ADR zur Codegenerierung folgt mit `buf` in Phase 6. Plan §6.9 zu `encoding/json/v2` berichtigt. |
