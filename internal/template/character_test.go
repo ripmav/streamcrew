@@ -40,7 +40,7 @@ func TestCharacterFamily_B32_B33(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.text, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, render(t, e, tc.text, nil))
+			assert.Equal(t, tc.want, render(t, e, tc.text, new(scope())))
 		})
 	}
 }
