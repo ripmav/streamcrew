@@ -42,7 +42,7 @@
    - `HTML`: `html.EscapeString`.
    - `JSON`: Inhalt eines JSON-Strings ohne Anführungszeichen, mit `encoding/json` ohne HTML-Maskierung.
 
-   *Präzisiert am 2026-09-30: `JSON` nutzt `jsontext.AppendQuote` aus `encoding/json/jsontext` (Go 1.27). Es maskiert kein HTML und ersetzt ungültiges UTF-8 durch U+FFFD, statt abzubrechen.*
+   *Präzisiert am 2026-09-30: `JSON` nutzt `jsontext.AppendQuote` aus `encoding/json/jsontext` (Go 1.27, ohne `GOEXPERIMENT` verfügbar; siehe die Berichtigung in [Code-ADR-0010](0010-polymorphe-serialisierung.md)). Es maskiert kein HTML und ersetzt ungültiges UTF-8 durch U+FFFD, statt abzubrechen.*
 7. **Werte:** `Value` trägt den Text und optional eine Zahl. Datum, Uhrzeit und Zeitspannen formatiert die Engine mit Zeitzone und Locale des Profils (B40–B42); bis zur Locale-Einstellung mit den Formaten des Originals. Die Formate liegen in `internal/template`, nicht verstreut in den Resolvern.
 8. **Ausdrücke mit `expr-lang/expr`** im Paket `internal/expr`:
    - Beim Parsen eines Ausdrucks wird jedes Token durch eine Variable ersetzt (`v0`, `v1` …); `expr` kompiliert den so entstandenen Text einmal. Beim Auswerten gehen die aufgelösten Werte als Variablen hinein: Zahlen als `float64`, sonst als Text (B51). Werte werden nie Teil des Ausdruckstexts.
