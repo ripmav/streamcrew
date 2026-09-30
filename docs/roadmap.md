@@ -92,7 +92,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
-| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); 3.2 begonnen, die Spezifikation der Command-Engine wartet auf die Prüfung |
+| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); 3.2 begonnen, Spezifikation `command-engine.md` akzeptiert; als Nächstes die Umsetzung der Command-Engine |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
@@ -376,7 +376,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 3.2 Command-Engine
 
-- [ ] Spezifikation [`docs/spec/command-engine.md`](spec/command-engine.md): Zustände, Sperrmodi, Pause, Verlauf (S), Entwurf vom 2026-09-30, wartet auf die Prüfung durch den Projektinhaber; enthält auch die Settings-Sektion `commands`
+- [x] Spezifikation [`docs/spec/command-engine.md`](spec/command-engine.md): Zustände, Sperrmodi, Pause, Verlauf (S), vom Projektinhaber geprüft und akzeptiert 2026-09-30; enthält auch die Settings-Sektion `commands`
 - [ ] Instanzen mit Zustandsmaschine (Pending → Running → Completed/Failed/Canceled) (S)
 - [ ] Warteschlange mit fünf Sperrmodi, Unlocked-Commands, Pause/Fortsetzen, eigene Pause für Entrance-Commands (L)
 - [ ] Abbrechen über `context`, Replay, Verlauf als Ringpuffer, Ereignisse `command.instance.*` (M)
@@ -1195,3 +1195,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Ausdrücke umgesetzt (`internal/expr` mit `expr-lang/expr` 1.17.8): Sprache auf B50 begrenzt, Identifier als Variablen, alle Zahlen als `float64`, Grenzen für Größe und Speicher. Phase 3.1 abgeschlossen. |
 | 2026-09-30 | Phase 3.2 begonnen: Entwurf der Spezifikation `command-engine.md` aus der offiziellen Doku und dem Plan, ohne Code des Originals; Lücken der Doku als Festlegungen mit offenen Fragen. |
 | 2026-09-30 | Settings-Sektion „locale“ von 3.2 nach 3.6 verschoben, weil sie an ADR-0022 hängt (Entscheidung des Projektinhabers). |
+| 2026-09-30 | Spezifikation `command-engine.md` vom Projektinhaber geprüft und akzeptiert; offene Fragen werden am Original geprüft, bis dahin gilt das beschriebene Verhalten. |
