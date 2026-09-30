@@ -41,18 +41,3 @@ func matchUnicode(token string) (int, Resolver) {
 	}
 	return len("unicode") + digits, constant(TextValue(string(r)))
 }
-
-// number reads the decimal number at the beginning of s for a pattern and
-// returns it with the count of its digits. ok is false if s does not start
-// with a digit or the number exceeds limit; limit must be below a tenth of
-// the largest value of T.
-func number[T ~int | ~int32](s string, limit T) (n T, digits int, ok bool) {
-	for digits < len(s) && s[digits] >= '0' && s[digits] <= '9' {
-		n = n*10 + T(s[digits]-'0')
-		if n > limit {
-			return 0, 0, false
-		}
-		digits++
-	}
-	return n, digits, digits > 0
-}

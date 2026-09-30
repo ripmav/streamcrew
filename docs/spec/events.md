@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-09-29 |
 | **Bezug** | Roadmap Phase 2.2 (Event-Modell), 3.6, 4.4, 5.1; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0011](../adr/code/0011-event-bus.md); Plan §6.7, Anhang A.1, A.2; [`commands.md`](commands.md) |
-| **Umsetzung** | teilweise: Katalog mit Namen, plattformneutraler Entsprechung und Häufigkeit je Typ in `internal/domain/eventtype`; Umschlag und Bus in `internal/event`. Die Auslöseregeln (B2 bis B6, B20 bis B22) folgen mit den Quellen: Engine (Phase 3.6), Twitch (Phase 4), Chat (Phase 5) |
+| **Umsetzung** | teilweise: Katalog mit Namen, plattformneutraler Entsprechung und Häufigkeit je Typ in `internal/domain/eventtype`; Umschlag und Bus in `internal/event`; die Namen der Ereigniswerte (B7) als Konstanten in `internal/template`. Die Auslöseregeln (B2 bis B6, B20 bis B22) folgen mit den Quellen: Engine (Phase 3.6), Twitch (Phase 4), Chat (Phase 5) |
 
 ## Zweck und Umfang
 

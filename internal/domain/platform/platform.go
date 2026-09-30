@@ -17,6 +17,22 @@ const (
 	Kick    Name = "kick"
 )
 
+// DisplayName returns the name of the platform as the platform writes it,
+// e.g. "YouTube"; the ID for a platform without an adapter; empty for the
+// empty name.
+func (n Name) DisplayName() string {
+	switch n {
+	case Twitch:
+		return "Twitch"
+	case YouTube:
+		return "YouTube"
+	case Kick:
+		return "Kick"
+	default:
+		return string(n)
+	}
+}
+
 // maxLen is the maximum length of a name.
 const maxLen = 32
 

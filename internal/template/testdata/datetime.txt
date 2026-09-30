@@ -1,0 +1,6 @@
+# DateTimeFamily on Monday, 15 June 2009, 13:45:20 in the time zone of the
+# profile (UTC-4), with the formats of the original (B40, B41).
+
+$datetime
+$date / $dateyear-$datemonth-$dateday / $datemonthname / $dayoftheweek
+$time / $timehour:$timeminute:$timesecond / $timedigits
