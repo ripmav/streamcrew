@@ -5,6 +5,8 @@ package template
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -79,4 +81,84 @@ func (s *Scope) location() *time.Location {
 		return time.UTC
 	}
 	return s.Location
+}
+
+// span is the time between two instants in calendar units (B42).
+type span struct {
+	// months are the whole months, years included.
+	months int
+	// days are the days after the whole months.
+	days int
+	// totalDays are all days between the two dates.
+	totalDays int
+}
+
+// spanBetween returns the calendar span from from to to, both taken as dates
+// in loc. A month after the 31st ends on the last day of a shorter month, so
+// 31 January to 1 March is 1 month and 1 day in a common year. A from after
+// to gives the zero span.
+func spanBetween(from, to time.Time, loc *time.Location) span {
+	a, b := dateOf(from.In(loc)), dateOf(to.In(loc))
+	if b.Before(a) {
+		return span{}
+	}
+	months := (b.Year()-a.Year())*12 + int(b.Month()-a.Month())
+	if addMonths(a, months).After(b) {
+		months--
+	}
+	return span{
+		months:    months,
+		days:      daysBetween(addMonths(a, months), b),
+		totalDays: daysBetween(a, b),
+	}
+}
+
+// String formats the span as years, months and days in English, leaving out
+// units without value, e.g. "1 Year, 4 Months, 12 Days"; the zero span is
+// "0 Days" (B42).
+func (s span) String() string {
+	var parts []string
+	for _, u := range []struct {
+		n          int
+		one, other string
+	}{
+		{s.months / 12, "Year", "Years"},
+		{s.months % 12, "Month", "Months"},
+		{s.days, "Day", "Days"},
+	} {
+		if u.n > 0 {
+			parts = append(parts, plural(u.n, u.one, u.other))
+		}
+	}
+	if parts == nil {
+		return "0 Days"
+	}
+	return strings.Join(parts, ", ")
+}
+
+// plural returns n with the singular or plural unit, e.g. "1 Day", "2 Days".
+func plural[T ~int | ~int64](n T, one, other string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return strconv.FormatInt(int64(n), 10) + " " + other
+}
+
+// dateOf returns the calendar date of t as midnight UTC.
+func dateOf(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+// addMonths adds n months to the date t and ends on the last day of the
+// target month if it is shorter.
+func addMonths(t time.Time, n int) time.Time {
+	first := time.Date(t.Year(), t.Month()+time.Month(n), 1, 0, 0, 0, 0, time.UTC)
+	last := first.AddDate(0, 1, -1).Day()
+	return time.Date(first.Year(), first.Month(), min(t.Day(), last), 0, 0, 0, 0, time.UTC)
+}
+
+// daysBetween returns the days from the date a to the date b.
+func daysBetween(a, b time.Time) int {
+	return int(b.Sub(a) / (24 * time.Hour))
 }
