@@ -50,6 +50,8 @@
    - Beim Parsen eines Ausdrucks wird jedes Token durch eine Variable ersetzt (`v0`, `v1` …); `expr` kompiliert den so entstandenen Text einmal. Beim Auswerten gehen die aufgelösten Werte als Variablen hinein: Zahlen als `float64`, sonst als Text (B51). Werte werden nie Teil des Ausdruckstexts.
    - `expr.DisableAllBuiltins()` mit einer Freigabeliste der Funktionen, die Rechnen und Runden brauchen; `expr.MaxNodes` begrenzt die Größe, das Speicherbudget der VM die Auswertung (B52).
    - Das Ergebnis ist eine Zahl, ein Wahrheitswert oder Text; Fehler gehen an die Action.
+
+   *Präzisiert am 2026-09-30: Ein Prüfer auf dem Syntaxbaum lässt nur zu, was die Spezifikation in B50 nennt, und lehnt etwa Arrays, Zugriffe auf Felder, Bereiche und weitere Funktionen ab. Alle Zahlen sind `float64`, auch die Zahlen im Ausdruck selbst; `%` ersetzt ein Patch durch `math.Mod`, weil `expr` den Rest nur für ganze Zahlen kennt. Die Variablen sind beim Kompilieren nicht typisiert (`AllowUndefinedVariables`), ihre Namen prüft der Prüfer. Text in Anführungszeichen mit Identifiern wird als Ganzes zu einer Text-Variablen. Alle Identifier eines Ausdrucks löst ein Rendervorgang auf (`template.Engine.RenderEach`, B21). Ergebnisse, die keine endliche Zahl sind, gelten als Fehler.*
 9. **Tests** ([Code-ADR-0006](0006-teststrategie.md)): Golden Files mit Template, Kontext und Ausgabe je Familie in `internal/template/testdata`; tabellengetriebene Tests für Rangfolge, Kodierung und Randfälle; `testing/synctest` für Datum, Zeit und Uptime; Fuzz-Tests für `Parse` und `Render` (keine Panics, ohne bekannte Identifier gleich der Eingabe) und für Ausdrücke; ein Benchmark für das Rendern.
 
 ## Betrachtete Alternativen
@@ -89,6 +91,6 @@
 - [x] Kern von `internal/template` umsetzen (Roadmap 3.1), erledigt 2026-09-30
 - [x] Familien für Argumente, Nachricht, Datum und Zeit, Zufallszahlen, Stream, Counter, Ereigniswerte, Command-Name und Plattform, erledigt 2026-09-30
 - [x] Nutzer-Familien mit Zufallsnutzer (Roadmap 3.1), erledigt 2026-09-30
-- [ ] `internal/expr` umsetzen (Roadmap 3.1); `expr-lang/expr` in `go.mod` aufnehmen und die Lizenzprüfung der CI laufen lassen
+- [x] `internal/expr` umsetzen (Roadmap 3.1); `expr-lang/expr` 1.17.8 in `go.mod` aufgenommen, Lizenzprüfung grün, erledigt 2026-09-30
 - [ ] Die Special-Identifier-Action (Roadmap 3.3) setzt lokale und globale Werte über die Quellen aus Punkt 2
 - [ ] Namen und Eigenschaften nach der rechtlichen Einschätzung (Gate O, O.1) bestätigen oder austauschen
