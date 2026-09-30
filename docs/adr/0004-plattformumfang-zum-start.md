@@ -5,7 +5,7 @@
 | **Status** | Akzeptiert |
 | **Datum** | 2026-09-27 |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
-| **Bezug** | Plan §5.1 und §6.11; Roadmap Phasen 3, 4 und 9 |
+| **Bezug** | Plan §5.1 und §6.11; Roadmap Phasen 3 und 4, Backlog (weitere Plattformen) |
 
 ## Kontext
 
@@ -42,4 +42,8 @@
 
 **Folgearbeiten:**
 
-- [ ] Go/No-Go für YouTube und Kick nach M2 (Roadmap Phase 9)
+- [ ] Go/No-Go für YouTube und Kick, wenn sie aus dem Backlog der Roadmap wieder eingeplant werden (bis 2026-09-30: nach M2, Roadmap Phase 9)
+
+## Nachtrag 2026-09-30
+
+Der Projektinhaber hat weitere Plattformen (YouTube, Kick, Multiplattform-Betrieb) aus der Roadmap-Phase 9 ins Backlog verschoben; sie gehören nicht mehr zu Core 1.0. Die Entscheidung dieses ADR, zum Start nur Twitch anzubinden, bleibt. Das Go/No-Go je Plattform fällt, wenn sie wieder eingeplant werden. Der Meilenstein M5 heißt seitdem „Integrationen Tier 1“; „erst ab M5“ in den Konsequenzen meint den früheren Meilenstein „M5 Multiplattform“.

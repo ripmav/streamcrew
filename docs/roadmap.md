@@ -14,7 +14,7 @@
 - **Checkboxen:** `[ ]` offen, `[x]` erledigt. Eine Aufgabe wird **sofort nach Abschluss abgehakt**; größere Änderungen an der Roadmap kommen in die Änderungshistorie am Ende.
 - **Prioritäten:** wie in Plan §5.
   - P0: MVP (M2)
-  - P1: Core 1.0 (M8)
+  - P1: Core 1.0 (M7)
   - P2: nach 1.0
   - P3: nur bei Bedarf
 
@@ -56,13 +56,12 @@ flowchart LR
     P5 --> P6
     P6 --> P7["Phase 7<br/>Overlays und Medien"]
     P6 --> P8["Phase 8<br/>Economy und Spiele"]
-    P6 --> P9["Phase 9<br/>Weitere Plattformen"]
-    P6 --> P11["Phase 11<br/>Dev-API, MCP, Webhooks"]
-    P7 --> P10["Phase 10<br/>Integrationen"]
-    P8 --> P12["Phase 12<br/>Härtung, Core 1.0"]
-    P9 --> P12
-    P10 --> P12
-    P11 --> P12
+    P6 --> P10["Phase 10<br/>Dev-API, MCP, Webhooks"]
+    P7 --> P9["Phase 9<br/>Integrationen"]
+    P9 --> P10
+    P8 --> P11["Phase 11<br/>Härtung, Core 1.0"]
+    P9 --> P11
+    P10 --> P11
     P6 --> D["Desktop D0 bis D7"]
     P6 --> W["Web W0 bis W7"]
     P9 -.-> R["Relay R0 bis R2 (optional)"]
@@ -80,10 +79,11 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | **M2** Headless-MVP (Twitch) | 4–6 | echter Twitch-Kanal ohne GUI betreibbar; API `v1alpha1`, CLI, TUI; Releases und Container-Image | 13–17 | 23–31 |
 | **M3** Overlays und Medien | 7 | Alerts mit Bild, Ton und TTS in OBS; Widgets live; OBS-Steuerung | 5–7 | 28–38 |
 | **M4** Economy und Community | 8 (P1) | Währung, Ränge, Inventar, 5 Spiele, Giveaways, Queue, Quotes | 8–11 | 36–49 |
-| **M5** Multiplattform | 9 (P1) | Twitch, YouTube und Kick gleichzeitig mit gemeinsamen Commands | 8–11 | 44–60 |
-| **M6** Integrationen Tier 1 | 10 (P1) | Spenden von Streamlabs, StreamElements und Ko-fi; Discord; Scripting | 4–6 | 48–66 |
-| **M7** Offen und erweiterbar | 11 (P1) | Developer-API, MCP-Server, eingehende Webhooks, Command-Bundles | 3–4 | 51–70 |
-| **M8** Core 1.0 | 12 | alle P1-Aufgaben erledigt; Security-, Last- und Chaos-Tests bestanden; API `v1` eingefroren | 3–4 | **54–74** |
+| **M5** Integrationen Tier 1 | 9 (P1) | Spenden von Streamlabs, StreamElements und Ko-fi; Discord; Scripting; gemeinsamer Webhook-Eingang | 5–7 | 41–56 |
+| **M6** Offen und erweiterbar | 10 (P1) | Developer-API, MCP-Server, eingehende Webhooks, Command-Bundles | 3–4 | 44–60 |
+| **M7** Core 1.0 | 11 | alle P1-Aufgaben erledigt; Security-, Last- und Chaos-Tests bestanden; API `v1` eingefroren | 3–4 | **47–64** |
+
+Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 im [Backlog](#backlog-später-oder-nicht-geplant) (Entscheidung des Projektinhabers); ihr früherer Meilenstein „M5 Multiplattform“ entfällt, die folgenden Meilensteine rücken nach.
 
 ### Statusübersicht
 
@@ -91,17 +91,16 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 |---|---|
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
-| Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (11.2) |
+| Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
 | Phase 3: Engine, Templates, Actions, Mock | in Arbeit: Code-ADR-0012 und Spezifikation `template.md` akzeptiert; als Nächstes die Umsetzung der Template-Engine (3.1) |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
 | Phase 7: Overlays und Medien | offen |
 | Phase 8: Economy, Community, Spiele | offen |
-| Phase 9: Weitere Plattformen | offen |
-| Phase 10: Integrationen, Scripting, Agent | offen |
-| Phase 11: Developer-API, MCP, Webhooks, Import | offen |
-| Phase 12: Härtung und Core 1.0 | offen |
+| Phase 9: Integrationen, Scripting, Agent | offen |
+| Phase 10: Developer-API, MCP, Webhooks, Import | offen |
+| Phase 11: Härtung und Core 1.0 | offen |
 | Desktop-Track D0–D7 | offen (ab M2) |
 | Web-Track W0–W7 | offen (ab M2) |
 | Relay-Track R0–R2 (optional) | offen |
@@ -164,7 +163,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | Rechtlicher Teil von ADR-0021 (Import, Identifier-Namen) | Gate O, O.1 | am Ende, vor Gate O |
 | Optional: schriftliche Erlaubnis von Blazing Cacti | Gate O, O.1 | vor Gate O |
 | Namensprüfung für den endgültigen Namen | Gate O, O.1 | vor Gate O, möglichst früher |
-| Plan §15: Bedeutung des Imports, eigener Datenbestand | Phase 11.2 | vor ADR-0021 (Umsetzung) |
+| Plan §15: Bedeutung des Imports, eigener Datenbestand | Phase 10.2 | vor ADR-0021 (Umsetzung) |
 | Plan §15: Zielsysteme der Desktop-App, Signierung und Notarisierung | Desktop-Track D0 | vor dem Paketierungs-Spike |
 | Plan §15: Web-Stack | Web-Track W0 (ADR-0018) | vor W0 |
 | Plan §15: verfügbare Kapazität pro Woche | Querschnittsaufgaben | spätestens zur Kalibrierung nach M1 |
@@ -323,7 +322,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [ ] Weitere Settings-Sektionen mit ihren Funktionen: allgemein, Chat, Commands, Moderation, Overlay, Locale (ab Phase 3) (S); übertragen nach 3.2, weil jede Sektion mit ihrer Funktion entsteht
 - [x] Event-Modell, technischer Teil (M), erledigt 2026-09-29 (`internal/event`): Umschlag (ID, Zeit, Quelle, Typ, Nutzlast), Katalog mit typisierter Nutzlast und Namensregel, erste Typen `app.started`, `app.stopping`, `supervisor.status`
 - [x] Katalog der fachlichen Event-Typen als stabile Strings, nach Spezifikation (Plan Anhang A.1) (S), erledigt 2026-09-29 (`internal/domain/eventtype`, mit plattformneutraler Entsprechung und Häufigkeit je Typ)
-- [ ] Zuordnungstabelle zu den numerischen IDs des Originals für den späteren Import, vorbehaltlich der rechtlichen Einschätzung (Gate O, O.1) (S); übertragen nach 11.2 (Typ-Mapping des Importers)
+- [ ] Zuordnungstabelle zu den numerischen IDs des Originals für den späteren Import, vorbehaltlich der rechtlichen Einschätzung (Gate O, O.1) (S); übertragen nach 10.2 (Typ-Mapping des Importers)
 
 ### 2.3 Event-Bus
 
@@ -580,7 +579,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - `UserService`, `CounterService`, `SettingsService`, `BackupService`
 - [ ] Ereignisstrom (Server-Streaming) mit Filtern und Wiederaufsetzen ab den letzten N Ereignissen (M)
 - [ ] Prompt-Mechanismus (Information, Bestätigung, Eingabe) mit Antwort-RPC (S)
-- [ ] Agent-Schnittstelle skizzieren (nur Vertrag, Umsetzung Phase 10), damit `v1` sie später aufnehmen kann (S)
+- [ ] Agent-Schnittstelle skizzieren (nur Vertrag, Umsetzung Phase 9), damit `v1` sie später aufnehmen kann (S)
 
 ### 6.2 API-Server
 
@@ -751,83 +750,34 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ---
 
-## Phase 9: Weitere Plattformen
-
-| | |
-|---|---|
-| **Ziel** | YouTube und Kick als vollwertige Plattformen; Multiplattform-Betrieb |
-| **Voraussetzungen** | Phase 6; Go/No-Go je Plattform nach M2 (ADR-0004) |
-| **Aufwand** | 8–11 PW (P1); 4–6 PW zusätzlich für Velora und VPZone (P3) |
-| **ADRs** | 0015, 0016 |
-
-### 9.0 Entscheidung
-
-- [ ] Go/No-Go für YouTube und Kick nach M2 treffen und in einem ADR festhalten. Bei No-Go wandert die Plattform ins Backlog, und M5 entfällt bzw. schrumpft. (S)
-
-### 9.1 Multiplattform
-
-- [ ] Standardplattform, Senden an alle oder bestimmte Plattformen, Plattformfilter in Commands und Requirements, Rollen-Mapping (M)
-- [ ] Gemeinsamer Webhook-Eingang: Routing, Signaturprüfung als Schnittstelle, Deduplizierung. Er wird von Kick, Diensten (Phase 10) und Webhook-Commands (Phase 11) genutzt. (M)
-
-### 9.2 YouTube
-
-- [ ] ADR-0016 Chat-Streaming; Anleitung für eigene Google-Cloud-Credentials (S)
-- [ ] OAuth: Loopback + PKCE, Server-Callback, Einfügen des Codes als Fallback (M)
-- [ ] Chat-Empfang (L):
-  - Livestream-Erkennung
-  - gRPC-Client für `liveChatMessages.streamList`, generiert aus `stream_list.proto`
-  - quota-schonender Polling-Fallback
-- [ ] Chat senden und löschen, Timeout und Bann, Mitgliedschaften, Super Chats und Super Stickers, Jewels (L)
-- [ ] YouTube-Action, Events, Quota-Überwachung (M)
-
-### 9.3 Kick
-
-- [ ] ADR-0015 Eingehende Webhooks und Relay (S):
-  - Server-Modus mit Reverse Proxy
-  - Tunnel-Anleitung
-  - Relay optional
-- [ ] OAuth 2.1 + PKCE; Anleitung für eine eigene Kick-App (M)
-- [ ] Webhook-Empfang: Kick-Signaturprüfung, Deduplizierung, erneutes Abonnieren nach automatischer Kündigung durch Kick (M)
-- [ ] REST-Client (L):
-  - Chat senden, Moderation, Kanal aktualisieren, Belohnungen
-  - Events: Follow, Abos, Geschenke, Belohnungen, Kicks, Livestream-Status
-- [ ] Kick-Action sowie Kick-Channel-Points- und Kick-Kicks-Commands (M)
-
-### 9.4 Velora und VPZone (P3)
-
-- [ ] Offizielle API-Dokumentation sichten, Aufwand schätzen, Go/No-Go (S)
-- [ ] Adapter umsetzen (je L), falls Go
-
-**Exit-Kriterien (M5):**
-
-- Ein gleichzeitiger Stream auf Twitch, YouTube und Kick läuft mit gemeinsamen Commands und gemeinsamer Währung.
-- Plattformübergreifend verknüpfte Nutzer werden korrekt zusammengeführt.
-
----
-
-## Phase 10: Integrationen, Scripting, Agent
+## Phase 9: Integrationen, Scripting, Agent
 
 | | |
 |---|---|
 | **Ziel** | wichtigste Dienste anbinden, Skripte ermöglichen, Host-Fähigkeiten für Remote-Betrieb |
-| **Voraussetzungen** | Phase 7; für Webhook-Dienste den Webhook-Eingang aus 9.1, sonst hier bauen |
-| **Aufwand** | 4–6 PW (P1); 8–12 PW für P2 (Tier 2, Agent); 4–6 PW für P3 (Tier 3) |
-| **ADRs** | 0017 |
+| **Voraussetzungen** | Phase 7 |
+| **Aufwand** | 5–7 PW (P1); 8–12 PW für P2 (Tier 2, Agent); 4–6 PW für P3 (Tier 3) |
+| **ADRs** | 0015, 0017 |
 
-### 10.1 Grundlagen
+### 9.1 Grundlagen
 
+- [ ] ADR-0015 Eingehende Webhooks und Relay (S), aus der früheren Phase 9 (weitere Plattformen) übernommen, weil Dienste und Webhook-Commands sie brauchen:
+  - Server-Modus mit Reverse Proxy
+  - Tunnel-Anleitung
+  - Relay optional
+- [ ] Gemeinsamer Webhook-Eingang: Routing, Signaturprüfung als Schnittstelle, Deduplizierung. Ihn nutzen Dienste wie Ko-fi (9.2), Webhook-Commands (10.1) und später Kick (Backlog). (M)
 - [ ] Integrations-Registry: Konfigurationsschema, Status, Secrets, OAuth für Dienste, Anbindung an den Webhook-Eingang (M)
 - [ ] Spike Socket.IO-Client (Kandidat `zishang520/socket.io`) gegen Streamlabs (S)
 - [ ] Gemeinsames Spendenmodell (Betrag, Währung, Nachricht, Quelle) mit generischem Spenden-Event (S)
 
-### 10.2 Tier 1 (P1)
+### 9.2 Tier 1 (P1)
 
 - [ ] Discord: Webhook-Nachrichten, optional Bot (M)
 - [ ] Streamlabs: Spenden (M)
 - [ ] StreamElements: Spenden (M)
 - [ ] Ko-fi per Webhook: Tipps, Mitgliedschaften, Shop (S)
 
-### 10.3 Scripting (P1)
+### 9.3 Scripting (P1)
 
 - [ ] ADR-0017 Scripting (S)
 - [ ] `goja`-Sandbox (M):
@@ -836,7 +786,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - API für Parameter, Identifier und Chat
 - [ ] Script-Action mit Tests (S)
 
-### 10.4 Tier 2 (P2)
+### 9.4 Tier 2 (P2)
 
 - [ ] VTube Studio, Voicemod, SAMMI, Lumia Stream, Streamlabs Desktop, Meld Studio (je S–M)
 - [ ] Tiltify, Patreon, Fourthwall, Throne, TipeeeStream (je S–M)
@@ -845,20 +795,20 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [ ] TTS: Amazon Polly, ElevenLabs (je S)
 - [ ] 7TV-Emotes (S)
 
-### 10.5 Tier 3 (P3)
+### 9.5 Tier 3 (P3)
 
 - [ ] PolyPop, XSplit, T.I.T.S., VTS Pog, Veadotube, VConnect, RahiTuber, Mtion Studio (je S–M)
 - [ ] DonorDrive, JustGiving, TreatStream, Rainmaker, Pally (je S)
 - [ ] TTS Monster, Uberduck, ResponsiveVoice (je S)
 - [ ] Alejo-Pronomen, Musik-Player (je S)
 
-### 10.6 Agent (P2)
+### 9.6 Agent (P2)
 
 - [ ] Agent-Protokoll in der API umsetzen, Unterkommando `streamcrew agent`. Auch die Desktop-App nutzt es für Hotkeys und Eingabe ([ADR-0005](adr/0005-core-in-desktop-builds.md)). (M)
 - [ ] Capabilities: Tastatur/Maus, globale Hotkeys, lokales Audio, externe Programme. Die Umsetzung ist plattformspezifisch, CGO bleibt auf den Agent beschränkt. (L)
 - [ ] Hotkey-Konfiguration und Zuordnung zu Commands (S)
 
-**Exit-Kriterien (M6 = Tier 1 + Scripting):**
+**Exit-Kriterien (M5 = Tier 1 + Scripting):**
 
 - Spenden von Streamlabs, StreamElements und Ko-fi lösen Commands aus.
 - Beim Stream-Start geht eine Discord-Nachricht raus.
@@ -866,7 +816,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ---
 
-## Phase 11: Developer-API, MCP, Webhooks, Import
+## Phase 10: Developer-API, MCP, Webhooks, Import
 
 | | |
 |---|---|
@@ -875,7 +825,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Aufwand** | 3–4 PW (P1); 4–6 PW zusätzlich für P2 (Import) |
 | **ADRs** | 0021 (Umsetzung) |
 
-### 11.1 Offene Schnittstellen (P1)
+### 10.1 Offene Schnittstellen (P1)
 
 - [ ] Developer-API (REST per Transcoding oder eigene Handler) mit generierter OpenAPI-Dokumentation (M)
 - [ ] MCP-Server mit `modelcontextprotocol/go-sdk` (M):
@@ -885,7 +835,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [ ] Webhook-Command-Typ: Endpunkt je Webhook, Secret oder Signatur, JSON-Pfade als Identifier (M)
 - [ ] Command-Bundles teilen: Export und Import als Datei oder URL, optional signiert (S)
 
-### 11.2 Import (P2)
+### 10.2 Import (P2)
 
 - [ ] Nutzerimport aus CSV und XLSX (S)
 - [ ] Klären, wie wichtig die Übernahme bestehender Mix-It-Up-Daten ist und ob es einen eigenen Datenbestand gibt (Plan §15, aus Phase 0 übertragen) (S)
@@ -898,19 +848,19 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [ ] Testdaten für den Import aus einer eigenen Testinstallation erzeugen, nicht aus fremden Beständen (S)
 - [ ] Kompatibilitätsfassade für die Developer-API (Pfade `/api/v2/…`), nur nach rechtlicher Prüfung (M) (P3)
 
-**Exit-Kriterien (M7):**
+**Exit-Kriterien (M6):**
 
 - Steuerung über die Developer-API (Stream-Deck-artig), über MCP-Clients und über eingehende Webhooks funktioniert.
 - Command-Bundles lassen sich austauschen.
 
 ---
 
-## Phase 12: Härtung und Core 1.0
+## Phase 11: Härtung und Core 1.0
 
 | | |
 |---|---|
 | **Ziel** | Stabilität, Sicherheit, Performance, vollständige Dokumentation; API `v1` |
-| **Voraussetzungen** | alle P1-Aufgaben der Phasen 8–11 |
+| **Voraussetzungen** | alle P1-Aufgaben der Phasen 8–10 |
 | **Aufwand** | 3–4 PW |
 | **ADRs** | [0013](adr/0013-sicherheitsmodell.md) (final) |
 
@@ -925,7 +875,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [ ] Dokumentation vervollständigen: Nutzer- und Betriebshandbuch, API-Referenz, Spezifikationen; EN und DE vollständig (L)
 - [ ] Release-Prozess: Changelog, signierte Artefakte, SBOM, optionaler Update-Hinweis über den Release-Feed (M)
 
-**Exit-Kriterien (M8 Core 1.0):**
+**Exit-Kriterien (M7 Core 1.0):**
 
 - Alle P1-Aufgaben sind erledigt, und es gibt keine offenen kritischen Findings.
 - Last-, Chaos- und Upgrade-Tests sind grün.
@@ -994,7 +944,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### D7: Agent und Release (2–3 PW)
 
-- [ ] Agent-Fähigkeiten über das Agent-Protokoll (Phase 10.6): globale Hotkeys, Tastatur- und Mausaktionen. Lokales Audio spielt der Core selbst. (L)
+- [ ] Agent-Fähigkeiten über das Agent-Protokoll (Phase 9.6): globale Hotkeys, Tastatur- und Mausaktionen. Lokales Audio spielt der Core selbst. (L)
 - [ ] Paketierung je Plattform in der gewählten Build-Variante („mitgeliefert“ mit zwei Binaries oder „eingebunden“ mit einem), Signierung (Windows, macOS), Notarisierung (macOS), Update-Hinweis (M)
 
 **Exit-Kriterien:** Die Desktop-App deckt alle P1-Funktionen des Cores ab, lokal mit mitgeliefertem Core und remote. Ein Absturz oder das Schließen der App beendet den Core nicht, außer der Nutzer wünscht es. Die Pakete für die Zielsysteme sind signiert.
@@ -1058,8 +1008,8 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 | | |
 |---|---|
-| **Ziel** | Webhooks für Desktop-Nutzer ohne öffentliche URL (Kick, Spendendienste) |
-| **Voraussetzungen** | ADR-0015 (Phase 9) |
+| **Ziel** | Webhooks für Desktop-Nutzer ohne öffentliche URL (Spendendienste; Kick, sobald es aus dem Backlog kommt) |
+| **Voraussetzungen** | ADR-0015 (Phase 9.1) |
 | **Aufwand** | 2–3 PW |
 
 ### R0: Entscheidung
@@ -1147,9 +1097,26 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 
 ## Backlog: später oder nicht geplant
 
+**Weitere Plattformen** (bis 2026-09-30 Phase 9; ins Backlog verschoben durch Entscheidung des Projektinhabers). Priorität und Go/No-Go je Plattform ([ADR-0004](adr/0004-plattformumfang-zum-start.md)) werden festgelegt, wenn sie wieder eingeplant werden; dann wird daraus eine eigene Phase. Der gemeinsame Webhook-Eingang und ADR-0015 sind nach Phase 9.1 gewandert. Grobe Schätzung: 7–10 PW für YouTube, Kick und den Multiplattform-Betrieb, 4–6 PW für Velora und VPZone (P3). ADR-0016 (YouTube-Chat-Streaming) gehört dazu.
+
+- Multiplattform:
+  - Standardplattform, Senden an alle oder bestimmte Plattformen, Plattformfilter in Commands und Requirements, Rollen-Mapping (M)
+- YouTube:
+  - ADR-0016 Chat-Streaming; Anleitung für eigene Google-Cloud-Credentials (S)
+  - OAuth: Loopback + PKCE, Server-Callback, Einfügen des Codes als Fallback (M)
+  - Chat-Empfang (L): Livestream-Erkennung; gRPC-Client für `liveChatMessages.streamList`, generiert aus `stream_list.proto`; quota-schonender Polling-Fallback
+  - Chat senden und löschen, Timeout und Bann, Mitgliedschaften, Super Chats und Super Stickers, Jewels (L)
+  - YouTube-Action, Events, Quota-Überwachung (M)
+- Kick:
+  - OAuth 2.1 + PKCE; Anleitung für eine eigene Kick-App (M)
+  - Webhook-Empfang über den gemeinsamen Eingang (9.1): Kick-Signaturprüfung, Deduplizierung, erneutes Abonnieren nach automatischer Kündigung durch Kick (M)
+  - REST-Client (L): Chat senden, Moderation, Kanal aktualisieren, Belohnungen; Events: Follow, Abos, Geschenke, Belohnungen, Kicks, Livestream-Status
+  - Kick-Action sowie Kick-Channel-Points- und Kick-Kicks-Commands (M)
+- Velora und VPZone (P3): offizielle API-Dokumentation sichten, Aufwand schätzen, Go/No-Go (S); Adapter umsetzen (je L), falls Go
+- Exit-Kriterien, wenn die Plattformen eingeplant werden: Ein gleichzeitiger Stream auf Twitch, YouTube und Kick läuft mit gemeinsamen Commands und gemeinsamer Währung; plattformübergreifend verknüpfte Nutzer werden korrekt zusammengeführt.
+
 **P3 (nur bei Bedarf):**
 
-- Velora und VPZone
 - Integrationen aus Tier 3
 - Discord Reactive Voice
 - Musik-Player, Alejo-Pronomen
@@ -1219,3 +1186,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Rechtliche Einschätzung und rechtlicher Teil von ADR-0021 ans Ende verschoben, vor Gate O (Entscheidung des Projektinhabers); bis dahin gilt alles als rechtlich unbedenklich. Spezifikation `template.md`: keine Maskierung von `$` (B7). |
 | 2026-09-30 | Spezifikation `template.md` vom Projektinhaber geprüft und akzeptiert; offene Fragen werden am Original geprüft, bis dahin gilt das beschriebene Verhalten. |
 | 2026-09-30 | Code-ADR-0017 „Klar definierte Signale statt magischer Werte“ vorgeschlagen, nach einer Vorgabe des Projektinhabers: keine Werte mit Doppelbedeutung in Schnittstellen, benannte Ausgänge, Fehler nur für Fehler. Die Folgearbeiten nennen den bestehenden Code, der umgestellt wird. |
+| 2026-09-30 | Weitere Plattformen (bisher Phase 9: YouTube, Kick, Multiplattform, Velora und VPZone) ins Backlog verschoben (Entscheidung des Projektinhabers); die übrigen Phasen bleiben in ihrer Reihenfolge und rücken nach: Integrationen 9, Developer-API 10, Härtung 11; die Meilensteine M6 bis M8 werden M5 bis M7, „M5 Multiplattform“ entfällt. Der gemeinsame Webhook-Eingang und ADR-0015 sind nach 9.1 gewandert, weil Dienste und Webhook-Commands sie brauchen; die Integrationen wachsen dadurch auf 5–7 PW, Core 1.0 liegt bei 47–64 PW. Plan §1, §5, §5.1, §12.1, §13, §14 und §15, ADR-0004 (Nachtrag), die Phasenverweise in ADR-0010, ADR-0011, ADR-0013, Code-ADR-0007, Code-ADR-0011 und Code-ADR-0012, die Spezifikationen und Code-Kommentare angepasst. |

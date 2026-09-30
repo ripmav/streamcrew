@@ -97,7 +97,7 @@
 **Negativ und Risiken:**
 
 - Eine Abhängigkeit mehr: `github.com/sony/gobreaker/v2` (MIT, in der Allowlist).
-- Die Standardwerte sind Schätzungen. Sie werden mit dem Test-Stream aus Phase 4 und den Chaos-Tests aus Phase 12 überprüft.
+- Die Standardwerte sind Schätzungen. Sie werden mit dem Test-Stream aus Phase 4 und den Chaos-Tests aus Phase 11 überprüft.
 - Ein Breaker je API kann bei einem einzelnen dauerhaft defekten Endpunkt die ganze API sperren, wenn nur dieser Endpunkt aufgerufen wird. Die Quote-Regel und das Zählfenster mildern das; tritt es auf, bekommt der Endpunkt einen eigenen Breaker.
 - Der Zustand „halb offen“ wird erst beim nächsten Aufruf sichtbar, nicht genau nach Ablauf der 30 s.
 
@@ -108,4 +108,4 @@
 - [ ] Im Code-ADR zum HTTP-Client die Reihenfolge Wiederholung → Breaker → Rate-Limiter → Anfrage festhalten und den Breaker einbauen (Roadmap Phase 4.2)
 - [ ] Breaker für `twitch.helix` und `twitch.auth` (Roadmap Phase 4.1 und 4.2), später für die übrigen Plattformen und Integrationen
 - [ ] Zustandswechsel als Ereignis auf den Event-Bus legen und in API und Frontends anzeigen (Roadmap Phase 4 bzw. 6)
-- [ ] Standardwerte nach dem Test-Stream (Phase 4) und den Chaos-Tests (Phase 12) überprüfen
+- [ ] Standardwerte nach dem Test-Stream (Phase 4) und den Chaos-Tests (Phase 11) überprüfen
