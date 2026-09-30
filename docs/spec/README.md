@@ -42,7 +42,7 @@ Die Regeln setzen [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-orig
 | [`counters-and-quotes.md`](counters-and-quotes.md) | Counter und Quotes | Phase 2.2 | Geprüft, Datenmodell umgesetzt |
 | [`events.md`](events.md) | Ereigniskatalog: stabile Typnamen, Auslöseregeln | Phase 2.2 | Geprüft, Katalog umgesetzt |
 | [`template.md`](template.md) | `$`-Identifier-Engine: Syntax, Auflösung, Kodierung, Ausdrücke, Abweichungen | Phase 3.1 | Geprüft, umgesetzt |
-| `command-engine.md` | Command-Instanzen, Warteschlange, Sperrmodi, Pause, Verlauf | Phase 3 | geplant |
+| [`command-engine.md`](command-engine.md) | Command-Instanzen, Warteschlange, Sperrmodi, Aufrufe, Pause, Verlauf, Settings-Sektion `commands` | Phase 3.2 | Geprüft |
 | `twitch-events.md` | Zuordnung der Twitch-Events und ihrer Identifier | Phase 4 | geplant |
 | `moderation.md` | Filter, Strikes, Teilnahmeregeln | Phase 5 | geplant |
 | `overlays.md` | Overlay-Items, Widgets, Protokoll | Phase 7 | geplant |
