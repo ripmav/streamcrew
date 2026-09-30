@@ -66,25 +66,30 @@ func (s State) Final() bool {
 }
 
 // Params are the data of a run (B80). The engine copies them when it queues
-// an instance; the copy must not be changed.
+// an instance; the copy must not be changed. Where a field says "none", the
+// run has no such thing; no value stands for another one (Code-ADR-0017).
 type Params struct {
-	// Platform is the platform the command was triggered on; empty if none.
+	// Platform is the platform the command was triggered on; empty if the
+	// run has none, e.g. a timer.
 	Platform platform.Name
-	// User is the triggering user; nil if there is none, e.g. for a timer.
+	// User is the triggering user; nil if the run has none, e.g. a timer.
 	User *user.User
-	// Target is the user the run is about; nil means the triggering user
-	// (spec template.md, B60).
+	// Target is the user the run is about (B81). The caller sets the one
+	// it knows, e.g. the target of an event, or nil. The engine sets the
+	// target of the run before queuing: without one from the caller, the
+	// triggering user. It is nil only in a run without a user.
 	Target *user.User
 	// Args are the arguments: the words after the trigger, with quoted text
 	// as one argument.
 	Args []string
-	// ArgsText is the text after the trigger as written; empty means the
-	// arguments joined by spaces.
+	// ArgsText is the text after the trigger as written; empty if there is
+	// none. It must not be empty if there are arguments.
 	ArgsText string
 	// Message is the triggering chat message, with the trigger; empty if
 	// there is none.
 	Message string
-	// Emotes are the emote codes in Message as the platform marks them.
+	// Emotes are the emote codes in Message as the platform marks them;
+	// there are none without a message.
 	Emotes []string
 	// Values are the values of the run, e.g. the values of an event (spec
 	// events.md, B7), by identifier name without "$".
@@ -112,7 +117,9 @@ type ActionError struct {
 
 // Instance is an instance as the history keeps it and the events of the
 // engine carry it (B60, B61). It is a copy; it does not change with the
-// instance.
+// instance. Lists are never nil, so JSON has empty arrays; fields that do
+// not apply are left out: the user without one, the start and end times
+// before the state has them.
 type Instance struct {
 	ID          id.ID         `json:"id"`
 	CommandID   id.ID         `json:"commandId"`
@@ -124,11 +131,11 @@ type Instance struct {
 	// name on Platform.
 	UserID    id.ID         `json:"userId,omitzero"`
 	UserName  string        `json:"userName,omitempty"`
-	Args      []string      `json:"args,omitempty"`
+	Args      []string      `json:"args"`
 	QueuedAt  time.Time     `json:"queuedAt"`
 	StartedAt time.Time     `json:"startedAt,omitzero"`
 	EndedAt   time.Time     `json:"endedAt,omitzero"`
-	Errors    []ActionError `json:"errors,omitempty"`
+	Errors    []ActionError `json:"errors"`
 }
 
 // instance is an instance while the engine knows it. The fields below the
@@ -200,11 +207,11 @@ func (in *instance) snapshot() Instance {
 		Source:      in.source,
 		State:       in.state,
 		Platform:    in.params.Platform,
-		Args:        slices.Clone(in.params.Args),
+		Args:        append([]string{}, in.params.Args...),
 		QueuedAt:    in.queuedAt,
 		StartedAt:   in.startedAt,
 		EndedAt:     in.endedAt,
-		Errors:      slices.Clone(in.errors),
+		Errors:      append([]ActionError{}, in.errors...),
 	}
 	if u := in.params.User; u != nil {
 		s.UserID = u.ID

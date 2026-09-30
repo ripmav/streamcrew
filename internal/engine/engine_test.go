@@ -35,7 +35,7 @@ func TestLifecycle(t *testing.T) {
 		ada := &user.User{ID: id.New(), Identities: []user.Identity{{Platform: platform.Twitch, Login: "ada", DisplayName: "Ada"}}}
 		hug := f.command("hug", command.KindChat, f.journal.note("one"), f.journal.note("two"))
 		queued := time.Now()
-		instanceID := f.start(hug, engine.Params{Platform: platform.Twitch, User: ada, Args: []string{"@bob"}})
+		instanceID := f.start(hug, engine.Params{Platform: platform.Twitch, User: ada, Args: []string{"@bob"}, ArgsText: "@bob"})
 
 		assert.Equal(t, []string{"one", "two"}, f.journal.get())
 		assert.Equal(t, []string{"queued hug", "started hug", "completed hug"}, f.events())
@@ -54,6 +54,7 @@ func TestLifecycle(t *testing.T) {
 			QueuedAt:    queued,
 			StartedAt:   queued,
 			EndedAt:     queued,
+			Errors:      []engine.ActionError{},
 		}, in)
 		assert.True(t, in.State.Final())
 		assert.False(t, engine.StateRunning.Final())
@@ -70,7 +71,6 @@ func TestErrorPolicy(t *testing.T) {
 		lines  []string
 		event  string
 	}{
-		{"", engine.StateCompleted, []string{"fail", "after"}, "completed x"},
 		{command.ErrorContinue, engine.StateCompleted, []string{"fail", "after"}, "completed x"},
 		{command.ErrorAbort, engine.StateFailed, []string{"fail"}, "failed x"},
 	} {
@@ -362,7 +362,7 @@ func TestPause(t *testing.T) {
 			f.journal.hold("x", "running", release), f.journal.note("running goes on")), engine.Params{})
 		require.NoError(t, f.engine.Pause(t.Context(), engine.PauseAll))
 		require.NoError(t, f.engine.Pause(t.Context(), engine.PauseAll))
-		assert.True(t, f.engine.Paused(engine.PauseAll))
+		assert.True(t, paused(t, f.engine, engine.PauseAll))
 
 		unlocked := f.command("unlocked", command.KindEvent, f.journal.note("unlocked"))
 		unlocked.Unlocked = true
@@ -378,11 +378,12 @@ func TestPause(t *testing.T) {
 		require.NoError(t, f.engine.Resume(t.Context(), engine.PauseAll))
 		require.NoError(t, f.engine.Resume(t.Context(), engine.PauseAll))
 		synctest.Wait()
-		assert.False(t, f.engine.Paused(engine.PauseAll))
+		assert.False(t, paused(t, f.engine, engine.PauseAll))
 
-		require.Error(t, f.engine.Pause(t.Context(), "timers"))
-		require.Error(t, f.engine.Resume(t.Context(), "timers"))
-		assert.False(t, f.engine.Paused("timers"))
+		require.ErrorIs(t, f.engine.Pause(t.Context(), "timers"), engine.ErrUnknownPauseScope)
+		require.ErrorIs(t, f.engine.Resume(t.Context(), "timers"), engine.ErrUnknownPauseScope)
+		_, err := f.engine.Paused("timers")
+		require.ErrorIs(t, err, engine.ErrUnknownPauseScope)
 		lines := f.journal.get()
 		require.Len(t, lines, 4)
 		assert.Equal(t, []string{"running", "running goes on"}, lines[:2])
@@ -487,13 +488,17 @@ func TestCancelAll(t *testing.T) {
 // TestTimeLimit covers B72: an action that runs past its time limit fails.
 func TestTimeLimit(t *testing.T) {
 	t.Parallel()
+	hang := action{typ: "hang", fn: func(ctx context.Context, _ *engine.Run) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}}
 	for _, tc := range []struct {
-		name  string
-		limit time.Duration
-		want  time.Duration
+		name string
+		hang command.Action
+		want time.Duration
 	}{
-		{"default", 0, engine.DefaultTimeLimit},
-		{"own", 5 * time.Minute, 5 * time.Minute},
+		{"default", hang, engine.DefaultTimeLimit},
+		{"own", limited{action: hang, limit: 5 * time.Minute}, 5 * time.Minute},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -501,12 +506,8 @@ func TestTimeLimit(t *testing.T) {
 				f := newFixture(t, settings.LockPerCommandType)
 				defer f.stop()
 
-				hang := action{typ: "hang", limit: tc.limit, fn: func(ctx context.Context, _ *engine.Run) error {
-					<-ctx.Done()
-					return ctx.Err()
-				}}
 				began := time.Now()
-				instanceID := f.start(f.command("x", command.KindChat, hang, f.journal.note("after")), engine.Params{})
+				instanceID := f.start(f.command("x", command.KindChat, tc.hang, f.journal.note("after")), engine.Params{})
 				time.Sleep(tc.want)
 				synctest.Wait()
 
@@ -519,6 +520,24 @@ func TestTimeLimit(t *testing.T) {
 			})
 		})
 	}
+}
+
+// TestInvalidTimeLimit: an action whose own time limit is not positive
+// fails without running.
+func TestInvalidTimeLimit(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.LockPerCommandType)
+		defer f.stop()
+
+		for _, limit := range []time.Duration{0, -time.Second} {
+			instanceID := f.start(f.command("x", command.KindChat, limited{action: f.journal.note("ran"), limit: limit}), engine.Params{})
+			in, _ := f.engine.Instance(instanceID)
+			require.Len(t, in.Errors, 1)
+			assert.Contains(t, in.Errors[0].Message, engine.ErrInvalidTimeLimit.Error())
+		}
+		assert.Empty(t, f.journal.get())
+	})
 }
 
 // TestQueueFull covers B15.
@@ -559,8 +578,9 @@ func TestHistory(t *testing.T) {
 		assert.Equal(t, ids[len(ids)-1], h[len(h)-1].ID)
 		_, ok := f.engine.Instance(ids[4])
 		assert.False(t, ok, "dropped from the history")
-		_, err := f.engine.Replay(t.Context(), ids[4])
-		require.ErrorIs(t, err, engine.ErrNotFound)
+		replayed := f.engine.Replay(t.Context(), ids[4])
+		require.Len(t, replayed, 1)
+		require.ErrorIs(t, replayed[0].Err, engine.ErrNotFound)
 	})
 }
 
@@ -580,7 +600,7 @@ func TestReplay(t *testing.T) {
 			}}
 		}
 		cmd := f.command("x", command.KindChat, echo("old"))
-		first := f.start(cmd, engine.Params{Args: []string{"a"}})
+		first := f.start(cmd, engine.Params{Args: []string{"a"}, ArgsText: "a"})
 		gone := f.command("gone", command.KindChat)
 		deleted := f.start(gone, engine.Params{})
 
@@ -590,14 +610,17 @@ func TestReplay(t *testing.T) {
 		f.commands.delete(gone.ID)
 		f.events()
 
-		replays, err := f.engine.Replay(ctx, first, deleted, first)
-		require.ErrorIs(t, err, errNoCommand, "B102")
-		require.Len(t, replays, 2)
+		replayed := f.engine.Replay(ctx, first, deleted, first)
 		synctest.Wait()
+		require.Len(t, replayed, 3)
+		assert.Equal(t, []engine.Replayed{{From: deleted, Err: replayed[1].Err}}, replayed[1:2])
+		require.ErrorIs(t, replayed[1].Err, errNoCommand, "B102")
 
 		assert.Equal(t, []string{"old a", "new a", "new a"}, f.journal.get())
-		for _, replay := range replays {
-			in, _ := f.engine.Instance(replay)
+		for _, r := range []engine.Replayed{replayed[0], replayed[2]} {
+			require.NoError(t, r.Err)
+			assert.Equal(t, first, r.From)
+			in, _ := f.engine.Instance(r.Instance)
 			assert.Equal(t, engine.SourceReplay, in.Source)
 			assert.Equal(t, []string{"a"}, in.Args)
 			assert.Equal(t, engine.StateCompleted, in.State)
@@ -631,12 +654,14 @@ func TestScope(t *testing.T) {
 			assert.Equal(t, loc, s.Location)
 			assert.Equal(t, "greet", run.Command().Name)
 			assert.False(t, run.InstanceID().IsZero())
+			assert.Same(t, run.Params().User, s.Target, "without a target from the caller, the triggering user (B81)")
 			text, err := render.Render(ctx, template.Parse("$raid $mood"), s, template.Text)
 			f.journal.add(text)
 			f.journal.add(s.Message + " / " + run.Params().Emotes[0])
 			return err
 		}}
 		f.start(f.command("greet", command.KindEvent, set, read), engine.Params{
+			User:    &user.User{ID: id.New()},
 			Message: "hello Kappa",
 			Emotes:  []string{"Kappa"},
 			Values:  map[string]template.Value{"raid": template.IntValue(5)},
@@ -693,32 +718,100 @@ func TestShutdown(t *testing.T) {
 func TestNotRunning(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		e := engine.New(&commandStore{})
-		_, err := e.Start(t.Context(), command.Command{Name: "x"}, engine.Params{})
+		e, err := engine.New(&commandStore{})
+		require.NoError(t, err)
+		cmd := command.Command{Name: "x", Kind: command.KindChat, ErrorPolicy: command.ErrorContinue}
+		_, err = e.Start(t.Context(), cmd, engine.Params{})
 		require.ErrorIs(t, err, engine.ErrNotRunning)
 
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		require.NoError(t, e.Run(ctx))
-		require.Error(t, e.Run(ctx))
-		_, err = e.Start(t.Context(), command.Command{Name: "x"}, engine.Params{})
+		require.ErrorIs(t, e.Run(ctx), engine.ErrAlreadyRunning)
+		_, err = e.Start(t.Context(), cmd, engine.Params{})
 		require.ErrorIs(t, err, engine.ErrClosed)
 	})
 }
 
-// TestSettingsError: an instance is not queued without its settings.
+// TestSettingsError: an instance is not queued without valid settings.
 func TestSettingsError(t *testing.T) {
 	t.Parallel()
+	broken := errors.New("disk on fire")
+	withLockMode := func(m settings.LockMode) engine.Config {
+		cfg := engine.DefaultConfig()
+		cfg.Commands.LockMode = m
+		return cfg
+	}
+	for _, tc := range []struct {
+		name string
+		cfg  engine.Config
+		err  error
+		want error
+	}{
+		{"unreadable", engine.DefaultConfig(), broken, broken},
+		{"no time zone", engine.Config{Commands: settings.DefaultCommands()}, nil, engine.ErrInvalidConfig},
+		{"no lock mode", withLockMode(""), nil, engine.ErrInvalidConfig},
+		{"unknown lock mode", withLockMode("per_user"), nil, engine.ErrInvalidConfig},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				f := newFixture(t, settings.LockPerCommandType,
+					engine.WithConfig(func(context.Context) (engine.Config, error) { return tc.cfg, tc.err }))
+				defer f.stop()
+
+				_, err := f.engine.Start(t.Context(), f.command("x", command.KindChat), engine.Params{})
+				require.ErrorIs(t, err, tc.want)
+				assert.Empty(t, f.engine.History())
+			})
+		})
+	}
+}
+
+// TestInvalidRun: the engine does not queue a command it cannot run or
+// parameters that contradict each other.
+func TestInvalidRun(t *testing.T) {
+	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		broken := errors.New("disk on fire")
-		f := newFixture(t, settings.LockPerCommandType,
-			engine.WithConfig(func(context.Context) (engine.Config, error) { return engine.Config{}, broken }))
+		f := newFixture(t, settings.LockPerCommandType)
 		defer f.stop()
 
-		_, err := f.engine.Start(t.Context(), f.command("x", command.KindChat), engine.Params{})
-		require.ErrorIs(t, err, broken)
+		for _, tc := range []struct {
+			name string
+			edit func(cmd *command.Command, p *engine.Params)
+			want error
+		}{
+			{"unknown kind", func(cmd *command.Command, _ *engine.Params) { cmd.Kind = "webhook" }, engine.ErrInvalidCommand},
+			{"no error policy", func(cmd *command.Command, _ *engine.Params) { cmd.ErrorPolicy = "" }, engine.ErrInvalidCommand},
+			{"empty action", func(cmd *command.Command, _ *engine.Params) { cmd.Actions = []command.Action{nil} }, engine.ErrInvalidCommand},
+			{"arguments without text", func(_ *command.Command, p *engine.Params) { p.Args = []string{"a"} }, engine.ErrInvalidParams},
+			{"emotes without message", func(_ *command.Command, p *engine.Params) { p.Emotes = []string{"Kappa"} }, engine.ErrInvalidParams},
+		} {
+			cmd := f.command("x", command.KindChat)
+			var p engine.Params
+			tc.edit(&cmd, &p)
+			_, err := f.engine.Start(t.Context(), cmd, p)
+			require.ErrorIs(t, err, tc.want, tc.name)
+		}
 		assert.Empty(t, f.engine.History())
 	})
+}
+
+// TestOptions: an option without a value is an error, not a default.
+func TestOptions(t *testing.T) {
+	t.Parallel()
+	for name, opt := range map[string]engine.Option{
+		"logger":           engine.WithLogger(nil),
+		"publisher":        engine.WithPublisher(nil),
+		"settings":         engine.WithConfig(nil),
+		"visual and audio": engine.WithVisualAudio(nil),
+		"no timeout":       engine.WithShutdownTimeout(0),
+	} {
+		_, err := engine.New(&commandStore{}, opt)
+		require.ErrorIs(t, err, engine.ErrInvalidOption, name)
+	}
+	_, err := engine.New(nil)
+	require.ErrorIs(t, err, engine.ErrInvalidOption, "commands")
 }
 
 // TestLogs: skipped actions, dropped commands and failed events are logged.
@@ -801,5 +894,38 @@ func TestCancelRightAfterStart(t *testing.T) {
 		require.NoError(t, f.engine.Cancel(t.Context(), instanceID))
 		synctest.Wait()
 		assert.Equal(t, engine.StateCanceled, f.state(instanceID))
+	})
+}
+
+// TestDefaults: without options, the engine runs with DefaultConfig and
+// publishes nothing.
+func TestDefaults(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		e, err := engine.New(&commandStore{})
+		require.NoError(t, err)
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan struct{})
+		go func() {
+			assert.NoError(t, e.Run(ctx))
+			close(done)
+		}()
+		synctest.Wait()
+
+		ran := false
+		cmd := command.Command{Name: "x", Kind: command.KindChat, ErrorPolicy: command.ErrorContinue, Actions: []command.Action{
+			action{typ: "x", fn: func(_ context.Context, run *engine.Run) error {
+				ran = run.Scope().Location == time.UTC && run.Scope().ArgDelimiter == "|"
+				return nil
+			}},
+		}}
+		instanceID, err := e.Start(t.Context(), cmd, engine.Params{})
+		require.NoError(t, err)
+		synctest.Wait()
+		in, _ := e.Instance(instanceID)
+		assert.Equal(t, engine.StateCompleted, in.State)
+		assert.True(t, ran)
+		cancel()
+		<-done
 	})
 }

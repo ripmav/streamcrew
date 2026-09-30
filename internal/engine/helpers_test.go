@@ -28,12 +28,10 @@ import (
 type action struct {
 	typ      string
 	fn       func(ctx context.Context, run *engine.Run) error
-	limit    time.Duration
 	children []command.Action
 }
 
 func (a action) DocType() string            { return a.typ }
-func (a action) TimeLimit() time.Duration   { return a.limit }
 func (a action) Children() []command.Action { return a.children }
 func (a action) Perform(ctx context.Context, run *engine.Run) error {
 	if a.fn == nil {
@@ -41,6 +39,14 @@ func (a action) Perform(ctx context.Context, run *engine.Run) error {
 	}
 	return a.fn(ctx, run)
 }
+
+// limited is an action with its own time limit.
+type limited struct {
+	action
+	limit time.Duration
+}
+
+func (l limited) TimeLimit() time.Duration { return l.limit }
 
 // unknown is an action the engine cannot run.
 type unknown struct{ typ string }
@@ -160,7 +166,7 @@ func newFixture(t *testing.T, mode settings.LockMode, opts ...engine.Option) *fi
 	catalog := event.NewCatalog()
 	require.NoError(t, engine.RegisterEvents(catalog))
 	bus := event.NewBus(nil, event.WithCatalog(catalog))
-	cfg := engine.Config{Commands: settings.DefaultCommands()}
+	cfg := engine.DefaultConfig()
 	cfg.Commands.LockMode = mode
 	f := &fixture{
 		t:        t,
@@ -170,7 +176,9 @@ func newFixture(t *testing.T, mode settings.LockMode, opts ...engine.Option) *fi
 		journal:  &journal{},
 	}
 	opts = append([]engine.Option{engine.WithPublisher(bus), engine.WithConfig(f.configs.get)}, opts...)
-	f.engine = engine.New(f.commands, opts...)
+	var err error
+	f.engine, err = engine.New(f.commands, opts...)
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	var wg sync.WaitGroup
@@ -186,7 +194,9 @@ func newFixture(t *testing.T, mode settings.LockMode, opts ...engine.Option) *fi
 
 // command returns an enabled command of kind that f's store knows.
 func (f *fixture) command(name string, kind command.Kind, actions ...command.Action) command.Command {
-	cmd := command.Command{ID: id.New(), Name: name, Kind: kind, Enabled: true, Actions: actions}
+	cmd := command.Command{
+		ID: id.New(), Name: name, Kind: kind, Enabled: true, ErrorPolicy: command.ErrorContinue, Actions: actions,
+	}
 	f.commands.put(cmd)
 	return cmd
 }
@@ -261,4 +271,12 @@ func (r *records) messages() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.msgs)
+}
+
+// paused reports whether scope is paused.
+func paused(t *testing.T, e *engine.Engine, scope engine.PauseScope) bool {
+	t.Helper()
+	p, err := e.Paused(scope)
+	require.NoError(t, err)
+	return p
 }

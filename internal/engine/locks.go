@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"fmt"
 	"iter"
 	"maps"
 	"slices"
@@ -18,33 +19,37 @@ type Container interface {
 	Children() []command.Action
 }
 
-// locks returns the locks an instance of cmd needs under mode (B20 to B29).
-// They are fixed when the instance is queued (B28).
-func (e *Engine) locks(cmd command.Command, mode settings.LockMode) []string {
-	if cmd.Unlocked || len(cmd.Actions) == 0 {
-		return nil // B27, B29
+// locks returns the locks an instance of cmd needs under mode (B20 to B29);
+// none is an empty list. They are fixed when the instance is queued (B28).
+func (e *Engine) locks(cmd command.Command, mode settings.LockMode) ([]string, error) {
+	switch {
+	case !mode.Valid():
+		return nil, fmt.Errorf("%w: unknown lock mode %q", ErrInvalidConfig, mode)
+	case cmd.Unlocked, len(cmd.Actions) == 0:
+		return []string{}, nil // B27, B29
 	}
 	switch mode {
-	case settings.LockNone:
-		return nil
-	case settings.LockSingular:
-		return []string{"singular"}
+	case settings.LockPerCommandType:
+		return []string{"kind:" + string(cmd.Kind)}, nil
 	case settings.LockPerActionType:
 		types := make(map[string]struct{})
 		for a := range allActions(cmd.Actions) {
 			types["action:"+a.DocType()] = struct{}{}
 		}
-		return slices.Sorted(maps.Keys(types))
+		return slices.Sorted(maps.Keys(types)), nil
 	case settings.LockVisualAudio:
 		for a := range allActions(cmd.Actions) {
 			if e.visualAudio(a.DocType()) {
-				return []string{"visual_audio"}
+				return []string{"visual_audio"}, nil
 			}
 		}
-		return nil
+		return []string{}, nil
+	case settings.LockSingular:
+		return []string{"singular"}, nil
+	case settings.LockNone:
+		return []string{}, nil
 	default:
-		// settings.LockPerCommandType, the default (B20).
-		return []string{"kind:" + string(cmd.Kind)}
+		return nil, fmt.Errorf("%w: unknown lock mode %q", ErrInvalidConfig, mode)
 	}
 }
 

@@ -68,9 +68,6 @@ func instanceEvent(s State) event.Type {
 // keeps the events in the order of the state changes (B61); the bus never
 // blocks. e.mu is held.
 func (e *Engine) publishLocked(ctx context.Context, typ event.Type, payload any) {
-	if e.publisher == nil {
-		return
-	}
 	env := event.New(event.Source{Kind: event.SourceSystem, Name: "engine"}, typ, payload)
 	if err := e.publisher.Publish(ctx, env); err != nil {
 		e.logger.ErrorContext(ctx, "publishing an event failed", "type", typ, "error", err)

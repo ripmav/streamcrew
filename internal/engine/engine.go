@@ -41,6 +41,10 @@ const (
 )
 
 var (
+	// ErrInvalidOption is returned by New for an option without a value.
+	ErrInvalidOption = errors.New("invalid option")
+	// ErrAlreadyRunning is returned by a second call of Run.
+	ErrAlreadyRunning = errors.New("the command engine runs already")
 	// ErrNotRunning is returned for an instance queued before Run.
 	ErrNotRunning = errors.New("the command engine is not running")
 	// ErrClosed is returned for an instance queued after the core began to
@@ -51,6 +55,18 @@ var (
 	// ErrNotFound is returned for an instance that is neither queued,
 	// running nor in the history.
 	ErrNotFound = errors.New("command instance not found")
+	// ErrInvalidConfig is returned when the settings the engine reads are
+	// not valid.
+	ErrInvalidConfig = errors.New("invalid command engine settings")
+	// ErrInvalidCommand is returned for a command the engine cannot run:
+	// an unknown kind or error policy, or an empty action.
+	ErrInvalidCommand = errors.New("invalid command")
+	// ErrInvalidParams is returned for parameters that contradict each
+	// other, e.g. arguments without the text they come from.
+	ErrInvalidParams = errors.New("invalid run parameters")
+	// ErrUnknownPauseScope is returned for a pause scope the engine does
+	// not know.
+	ErrUnknownPauseScope = errors.New("unknown pause scope")
 )
 
 // Commands loads commands; *command.Service implements it.
@@ -66,47 +82,102 @@ type Publisher interface {
 }
 
 // Config holds the settings of the profile that the engine reads whenever it
-// queues an instance, so changes apply from the next one (B28, B90).
+// queues an instance, so changes apply from the next one (B28, B90). Both
+// fields are required.
 type Config struct {
 	// Commands is the settings section "commands".
 	Commands settings.Commands
-	// Location is the time zone of the profile for templates; nil means
-	// UTC.
+	// Location is the time zone of the profile for templates.
 	Location *time.Location
 }
 
-// Option configures an Engine.
-type Option func(*Engine)
+// DefaultConfig returns the settings the engine reads unless WithConfig
+// sets a function: settings.DefaultCommands and UTC.
+func DefaultConfig() Config {
+	return Config{Commands: settings.DefaultCommands(), Location: time.UTC}
+}
 
-// WithLogger sets the logger; the default discards.
+// validate checks cfg.
+func (cfg Config) validate() error {
+	if err := cfg.Commands.Validate(); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidConfig, err)
+	}
+	if cfg.Location == nil {
+		return fmt.Errorf("%w: no time zone", ErrInvalidConfig)
+	}
+	return nil
+}
+
+// Option configures an Engine. An option without a value, such as a nil
+// logger, makes New fail with ErrInvalidOption; to keep a default, leave the
+// option out.
+type Option func(*Engine) error
+
+// WithLogger sets the logger; without it, the engine logs nothing.
 func WithLogger(l *slog.Logger) Option {
-	return func(e *Engine) { e.logger = l }
+	return func(e *Engine) error {
+		if l == nil {
+			return fmt.Errorf("%w: nil logger", ErrInvalidOption)
+		}
+		e.logger = l
+		return nil
+	}
 }
 
-// WithPublisher sets where the events of the engine go (B61); without one,
-// there are none.
+// WithPublisher sets where the events of the engine go (B61); without it,
+// the engine publishes none.
 func WithPublisher(p Publisher) Option {
-	return func(e *Engine) { e.publisher = p }
+	return func(e *Engine) error {
+		if p == nil {
+			return fmt.Errorf("%w: nil publisher", ErrInvalidOption)
+		}
+		e.publisher = p
+		return nil
+	}
 }
 
-// WithConfig sets the function that reads the settings; the default returns
-// settings.DefaultCommands and UTC.
+// WithConfig sets the function that reads the settings; without it, the
+// engine uses DefaultConfig.
 func WithConfig(fn func(ctx context.Context) (Config, error)) Option {
-	return func(e *Engine) { e.config = fn }
+	return func(e *Engine) error {
+		if fn == nil {
+			return fmt.Errorf("%w: nil settings function", ErrInvalidOption)
+		}
+		e.config = fn
+		return nil
+	}
 }
 
 // WithVisualAudio sets which action types are visual or audio for the lock
 // mode "visual_audio" (B23); the action type registry (Code-ADR-0013) knows
-// it. The default is none.
+// it. Without it, no action type is.
 func WithVisualAudio(fn func(actionType string) bool) Option {
-	return func(e *Engine) { e.visualAudio = fn }
+	return func(e *Engine) error {
+		if fn == nil {
+			return fmt.Errorf("%w: nil visual and audio function", ErrInvalidOption)
+		}
+		e.visualAudio = fn
+		return nil
+	}
 }
 
 // WithShutdownTimeout sets how long running instances may go on when the
-// core stops (B55); the default is DefaultShutdownTimeout.
+// core stops (B55); it must be positive. Without it, the engine uses
+// DefaultShutdownTimeout.
 func WithShutdownTimeout(d time.Duration) Option {
-	return func(e *Engine) { e.shutdownTimeout = d }
+	return func(e *Engine) error {
+		if d <= 0 {
+			return fmt.Errorf("%w: shutdown timeout %s is not positive", ErrInvalidOption, d)
+		}
+		e.shutdownTimeout = d
+		return nil
+	}
 }
+
+// noPublisher publishes nothing; it stands in without WithPublisher.
+type noPublisher struct{}
+
+func (noPublisher) Publish(context.Context, event.Envelope) error { return nil }
 
 // phase is the life cycle of the engine.
 type phase int
@@ -148,40 +219,40 @@ type Engine struct {
 
 // New returns an engine that loads commands from commands, e.g. to replay
 // an instance with the current version of its command.
-func New(commands Commands, opts ...Option) *Engine {
+func New(commands Commands, opts ...Option) (*Engine, error) {
+	if commands == nil {
+		return nil, fmt.Errorf("new command engine: %w: nil commands", ErrInvalidOption)
+	}
 	e := &Engine{
 		commands:        commands,
+		publisher:       noPublisher{},
+		logger:          slog.New(slog.DiscardHandler),
+		config:          func(context.Context) (Config, error) { return DefaultConfig(), nil },
+		visualAudio:     func(string) bool { return false },
 		shutdownTimeout: DefaultShutdownTimeout,
 		active:          make(map[id.ID]*instance),
 		held:            make(map[string]struct{}),
 		changed:         make(chan struct{}),
 	}
+	var errs []error
 	for _, opt := range opts {
-		opt(e)
+		errs = append(errs, opt(e))
 	}
-	if e.logger == nil {
-		e.logger = slog.New(slog.DiscardHandler)
+	if err := errors.Join(errs...); err != nil {
+		return nil, fmt.Errorf("new command engine: %w", err)
 	}
-	if e.config == nil {
-		e.config = func(context.Context) (Config, error) {
-			return Config{Commands: settings.DefaultCommands()}, nil
-		}
-	}
-	if e.visualAudio == nil {
-		e.visualAudio = func(string) bool { return false }
-	}
-	return e
+	return e, nil
 }
 
 // Run takes instances until ctx ends, then shuts down (B55): it takes no
 // new instances, cancels the queued ones, gives the running ones the
 // shutdown timeout to end and cancels them after it. Run returns when the
-// last instance has ended; it returns an error only if it is called twice.
+// last instance has ended; a second call returns ErrAlreadyRunning.
 func (e *Engine) Run(ctx context.Context) error {
 	e.mu.Lock()
 	if e.phase != phaseIdle {
 		e.mu.Unlock()
-		return errors.New("run command engine: Run was already called")
+		return fmt.Errorf("run command engine: %w", ErrAlreadyRunning)
 	}
 	e.phase = phaseRunning
 	e.mu.Unlock()
@@ -231,37 +302,49 @@ func (e *Engine) Start(ctx context.Context, cmd command.Command, p Params) (id.I
 	return e.queue(ctx, cmd, SourceManual, p)
 }
 
+// Replayed is the result of replaying one instance (B54).
+type Replayed struct {
+	// From is the instance of the history that was to be replayed.
+	From id.ID
+	// Instance is the new instance if Err is nil.
+	Instance id.ID
+	// Err says why From was not replayed: ErrNotFound for an instance that
+	// is not in the history, the error of loading its command, e.g. for a
+	// deleted one (B102), or why it could not be queued.
+	Err error
+}
+
 // Replay queues instances of the history again (B54): each as a new
 // instance with the same parameters and the current version of its command,
-// without requirements, costs and cooldowns. It returns the IDs of the new
-// instances. An instance that is not in the history, or whose command was
-// deleted (B102), is skipped; the error names it.
-func (e *Engine) Replay(ctx context.Context, instanceIDs ...id.ID) ([]id.ID, error) {
-	var (
-		replays []id.ID
-		errs    []error
-	)
+// without requirements, costs and cooldowns. It returns one result per
+// instance, in the given order; one that fails does not stop the others.
+func (e *Engine) Replay(ctx context.Context, instanceIDs ...id.ID) []Replayed {
+	results := make([]Replayed, 0, len(instanceIDs))
 	for _, instanceID := range instanceIDs {
-		e.mu.Lock()
-		in := e.findLocked(instanceID)
-		e.mu.Unlock()
-		if in == nil {
-			errs = append(errs, fmt.Errorf("replay %s: %w", instanceID, ErrNotFound))
-			continue
-		}
-		cmd, err := e.commands.Command(ctx, in.cmd.ID)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("replay %s: %w", instanceID, err))
-			continue
-		}
-		replay, err := e.queue(ctx, cmd, SourceReplay, in.params)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("replay %s: %w", instanceID, err))
-			continue
-		}
-		replays = append(replays, replay)
+		r := Replayed{From: instanceID}
+		r.Instance, r.Err = e.replay(ctx, instanceID)
+		results = append(results, r)
 	}
-	return replays, errors.Join(errs...)
+	return results
+}
+
+// replay queues one instance of the history again.
+func (e *Engine) replay(ctx context.Context, instanceID id.ID) (id.ID, error) {
+	e.mu.Lock()
+	in := e.findLocked(instanceID)
+	e.mu.Unlock()
+	if in == nil {
+		return id.ID{}, fmt.Errorf("replay %s: %w", instanceID, ErrNotFound)
+	}
+	cmd, err := e.commands.Command(ctx, in.cmd.ID)
+	if err != nil {
+		return id.ID{}, fmt.Errorf("replay %s: %w", instanceID, err)
+	}
+	replay, err := e.queue(ctx, cmd, SourceReplay, in.params)
+	if err != nil {
+		return id.ID{}, fmt.Errorf("replay %s: %w", instanceID, err)
+	}
+	return replay, nil
 }
 
 // Cancel cancels an instance (B50): a queued one ends at once, a running one
@@ -318,12 +401,15 @@ func (e *Engine) Resume(ctx context.Context, scope PauseScope) error {
 	return nil
 }
 
-// Paused reports whether scope is paused; false for an unknown scope.
-func (e *Engine) Paused(scope PauseScope) bool {
+// Paused reports whether scope is paused.
+func (e *Engine) Paused(scope PauseScope) (bool, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	paused, err := e.pausedLocked(scope)
-	return err == nil && *paused
+	if err != nil {
+		return false, err
+	}
+	return *paused, nil
 }
 
 // pausedLocked returns the flag of scope. e.mu is held.
@@ -332,7 +418,7 @@ func (e *Engine) pausedLocked(scope PauseScope) (*bool, error) {
 	case PauseAll:
 		return &e.paused, nil
 	default:
-		return nil, fmt.Errorf("unknown pause scope %q", scope)
+		return nil, fmt.Errorf("%w %q", ErrUnknownPauseScope, scope)
 	}
 }
 
@@ -361,11 +447,18 @@ func (e *Engine) Instance(instanceID id.ID) (Instance, bool) {
 
 // queue queues an instance of cmd.
 func (e *Engine) queue(ctx context.Context, cmd command.Command, src Source, p Params) (id.ID, error) {
-	cfg, err := e.config(ctx)
-	if err != nil {
-		return id.ID{}, fmt.Errorf("queue command %q: read settings: %w", cmd.Name, err)
+	if err := checkRun(cmd, p); err != nil {
+		return id.ID{}, fmt.Errorf("queue command %q: %w", cmd.Name, err)
 	}
-	in := newInstance(cmd, src, p, cfg, e.locks(cmd, cfg.Commands.LockMode))
+	cfg, err := e.readConfig(ctx)
+	if err != nil {
+		return id.ID{}, fmt.Errorf("queue command %q: %w", cmd.Name, err)
+	}
+	locks, err := e.locks(cmd, cfg.Commands.LockMode)
+	if err != nil {
+		return id.ID{}, fmt.Errorf("queue command %q: %w", cmd.Name, err)
+	}
+	in := newInstance(cmd, src, withTarget(p), cfg, locks)
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -396,6 +489,48 @@ func (e *Engine) queue(ctx context.Context, cmd command.Command, src Source, p P
 	e.wg.Go(func() { e.await(ictx, in) })
 	e.scheduleLocked(ctx)
 	return in.id, nil
+}
+
+// readConfig reads and checks the settings.
+func (e *Engine) readConfig(ctx context.Context) (Config, error) {
+	cfg, err := e.config(ctx)
+	if err != nil {
+		return Config{}, fmt.Errorf("read settings: %w", err)
+	}
+	if err := cfg.validate(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+// checkRun checks that the engine can run cmd with p: a known kind and error
+// policy, no empty action, and parameters that agree with each other.
+func checkRun(cmd command.Command, p Params) error {
+	if !cmd.Kind.Valid() {
+		return fmt.Errorf("%w: unknown kind %q", ErrInvalidCommand, cmd.Kind)
+	}
+	if !cmd.ErrorPolicy.Valid() {
+		return fmt.Errorf("%w: unknown error policy %q", ErrInvalidCommand, cmd.ErrorPolicy)
+	}
+	if slices.Contains(cmd.Actions, nil) {
+		return fmt.Errorf("%w: empty action", ErrInvalidCommand)
+	}
+	if len(p.Args) > 0 && p.ArgsText == "" {
+		return fmt.Errorf("%w: arguments without the text after the trigger", ErrInvalidParams)
+	}
+	if len(p.Emotes) > 0 && p.Message == "" {
+		return fmt.Errorf("%w: emotes without a message", ErrInvalidParams)
+	}
+	return nil
+}
+
+// withTarget returns p with the target of the run (B81): the one the caller
+// knows, e.g. of an event, and otherwise the triggering user.
+func withTarget(p Params) Params {
+	if p.Target == nil {
+		p.Target = p.User
+	}
+	return p
 }
 
 // await waits until in gets its locks, then runs it. If in is canceled while

@@ -22,9 +22,11 @@ type Performer interface {
 }
 
 // TimeLimiter is an action with its own time limit, such as a wait that
-// lasts longer than the default (B72).
+// lasts longer than DefaultTimeLimit (B72). An action without it has
+// DefaultTimeLimit.
 type TimeLimiter interface {
-	// TimeLimit returns the time limit; 0 means DefaultTimeLimit.
+	// TimeLimit returns the time limit; it must be positive, or the action
+	// fails with ErrInvalidTimeLimit without running.
 	TimeLimit() time.Duration
 }
 
@@ -35,6 +37,9 @@ var (
 	// ErrTimeLimit is the error of an action that ran past its time limit
 	// (B72).
 	ErrTimeLimit = errors.New("action time limit exceeded")
+	// ErrInvalidTimeLimit is the error of an action whose own time limit
+	// is not positive.
+	ErrInvalidTimeLimit = errors.New("invalid action time limit")
 )
 
 // Run is an instance as its actions see it (plan §6.9). The actions of an
@@ -89,7 +94,7 @@ func (e *Engine) execute(ctx context.Context, in *instance) {
 		e.logger.WarnContext(ctx, "action failed",
 			"instance", in.id, "command", in.cmd.Name, "position", i+1, "action_type", a.DocType(), "error", err)
 		e.failAction(in, i+1, a.DocType(), err)
-		if in.cmd.ErrorPolicy == command.ErrorAbort {
+		if abort(in.cmd.ErrorPolicy) {
 			state = StateFailed // B71
 			break
 		}
@@ -100,12 +105,27 @@ func (e *Engine) execute(ctx context.Context, in *instance) {
 	e.finish(ctx, in, state)
 }
 
+// abort reports whether an instance ends after a failed action (B71). The
+// policy was checked when the instance was queued.
+func abort(p command.ErrorPolicy) bool {
+	switch p {
+	case command.ErrorAbort:
+		return true
+	case command.ErrorContinue:
+		return false
+	default:
+		return true
+	}
+}
+
 // perform runs one action within its time limit (B72). A panic in the
 // action is its error.
 func (e *Engine) perform(ctx context.Context, run *Run, a Performer) (err error) {
 	limit := DefaultTimeLimit
-	if l, ok := a.(TimeLimiter); ok && l.TimeLimit() > 0 {
-		limit = l.TimeLimit()
+	if l, ok := a.(TimeLimiter); ok {
+		if limit = l.TimeLimit(); limit <= 0 {
+			return fmt.Errorf("%w: %s", ErrInvalidTimeLimit, limit)
+		}
 	}
 	actx, cancel := context.WithTimeoutCause(ctx, limit, ErrTimeLimit)
 	defer cancel()
