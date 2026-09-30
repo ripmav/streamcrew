@@ -8,7 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -112,11 +112,13 @@ func (ks *KeySet) marshal() ([]byte, error) {
 	for id, k := range ks.keys {
 		out.Keys[id] = base64.StdEncoding.EncodeToString(k)
 	}
-	return json.Marshal(out)
+	return json.Marshal(out, json.Deterministic(true))
 }
 
 func parseKeySet(data []byte, source string) (*KeySet, error) {
 	var in keySetJSON
+	// Unknown fields are ignored on purpose, so that a key file written by a
+	// newer version stays readable (Code-ADR-0018).
 	if err := json.Unmarshal(data, &in); err != nil {
 		return nil, fmt.Errorf("key set from %s: %w", source, err)
 	}

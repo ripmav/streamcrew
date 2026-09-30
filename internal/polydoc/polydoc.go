@@ -9,11 +9,15 @@
 // the types, decodes the current version strictly, migrates older versions
 // step by step and keeps unknown types and too new versions unchanged, so
 // that no data is lost.
+//
+// JSON goes through encoding/json/v2 (Code-ADR-0018): documents are read
+// strictly and written deterministically.
 package polydoc
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"maps"
@@ -34,23 +38,25 @@ type Document interface {
 // Raw is implemented by values that carry their original JSON, such as the
 // placeholders for unknown types. Encode writes it unchanged.
 type Raw interface {
-	RawJSON() json.RawMessage
+	RawJSON() jsontext.Value
 }
 
 // Unknown holds a document the registry cannot decode: an unknown type or a
 // newer version than supported. The family turns it into a placeholder
 // value that is not executed.
 type Unknown struct {
-	Type    string
+	Type string
+	// Version is the schemaVersion of the document; 0 if it has none.
 	Version int
-	Raw     json.RawMessage
+	Raw     jsontext.Value
 	Reason  string
 }
 
-// Migration upgrades a document by one version. It works on the decoded
-// JSON object without the header keys, in which numbers are json.Number,
-// and must not keep references to it.
-type Migration func(doc map[string]any) error
+// Migration upgrades a document by one version. It works on the members of
+// the JSON object without the header keys, each as its raw JSON, so that
+// numbers keep their precision (Code-ADR-0018). It must not keep references
+// to them.
+type Migration func(doc map[string]jsontext.Value) error
 
 // Entry describes one type of a family.
 type Entry[T Document] struct {
@@ -107,33 +113,32 @@ func (r *Registry[T]) Types() []string {
 	return slices.Sorted(maps.Keys(r.entries))
 }
 
-// Version returns the current version of a type, or 0 if it is unknown.
-func (r *Registry[T]) Version(typ string) int {
-	return r.entries[typ].Version
+// Version returns the current version of a type; ok is false if the type is
+// not registered.
+func (r *Registry[T]) Version(typ string) (version int, ok bool) {
+	e, ok := r.entries[typ]
+	return e.Version, ok
 }
 
 // Decode reads a document. Unknown types and versions newer than supported
-// come back as the family's placeholder, without an error.
+// come back as the family's placeholder, without an error. A document
+// without schemaVersion is in the current version of its type, as
+// handwritten documents may be (Code-ADR-0010).
 func (r *Registry[T]) Decode(data []byte) (T, error) {
 	var zero T
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
-	var doc map[string]any
-	if err := dec.Decode(&doc); err != nil {
+	var doc map[string]jsontext.Value
+	if err := json.Unmarshal(data, &doc); err != nil {
 		return zero, fmt.Errorf("%s: decode document: %w", r.family, err)
 	}
 	if doc == nil {
 		return zero, fmt.Errorf("%s: document is not a JSON object", r.family)
 	}
-	if dec.More() {
-		return zero, fmt.Errorf("%s: trailing data after the document", r.family)
-	}
 
-	typ, ok := doc[KeyType].(string)
-	if !ok || typ == "" {
+	var typ string
+	if raw, ok := doc[KeyType]; !ok || json.Unmarshal(raw, &typ) != nil || typ == "" {
 		return zero, fmt.Errorf("%s: missing or invalid %q", r.family, KeyType)
 	}
-	version, err := schemaVersion(doc)
+	version, hasVersion, err := schemaVersion(doc)
 	if err != nil {
 		return zero, fmt.Errorf("%s %q: %w", r.family, typ, err)
 	}
@@ -142,7 +147,7 @@ func (r *Registry[T]) Decode(data []byte) (T, error) {
 	if !ok {
 		return r.placeholder(typ, version, data, "unknown type")
 	}
-	if version == 0 {
+	if !hasVersion {
 		version = e.Version
 	}
 	if version > e.Version {
@@ -156,7 +161,7 @@ func (r *Registry[T]) Decode(data []byte) (T, error) {
 			return zero, fmt.Errorf("%s %q: migrate version %d to %d: %w", r.family, typ, v, v+1, err)
 		}
 	}
-	body, err := json.Marshal(doc)
+	body, err := json.Marshal(doc, json.Deterministic(true))
 	if err != nil {
 		return zero, fmt.Errorf("%s %q: %w", r.family, typ, err)
 	}
@@ -178,14 +183,14 @@ func (r *Registry[T]) Encode(v T) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("%s: encode unregistered type %q", r.family, typ)
 	}
-	body, err := json.Marshal(v)
+	body, err := json.Marshal(v, json.Deterministic(true))
 	if err != nil {
 		return nil, fmt.Errorf("%s %q: %w", r.family, typ, err)
 	}
 	if len(body) < 2 || body[0] != '{' {
 		return nil, fmt.Errorf("%s %q: value does not encode to a JSON object", r.family, typ)
 	}
-	var fields map[string]json.RawMessage
+	var fields map[string]jsontext.Value
 	if err := json.Unmarshal(body, &fields); err != nil {
 		return nil, fmt.Errorf("%s %q: %w", r.family, typ, err)
 	}
@@ -196,7 +201,7 @@ func (r *Registry[T]) Encode(v T) ([]byte, error) {
 		return nil, fmt.Errorf("%s %q: field %q is reserved", r.family, typ, KeySchemaVersion)
 	}
 
-	name, err := json.Marshal(typ)
+	name, err := jsontext.AppendQuote(nil, typ)
 	if err != nil {
 		return nil, fmt.Errorf("%s %q: %w", r.family, typ, err)
 	}
@@ -219,10 +224,11 @@ func (r *Registry[T]) placeholder(typ string, version int, data []byte, reason s
 		var zero T
 		return zero, fmt.Errorf("%s %q: %s", r.family, typ, reason)
 	}
-	var compact bytes.Buffer
-	raw := json.RawMessage(slices.Clone(data))
-	if err := json.Compact(&compact, data); err == nil {
-		raw = compact.Bytes()
+	// Decode has read data as a JSON object, so compacting succeeds.
+	raw := jsontext.Value(slices.Clone(data))
+	if err := raw.Compact(); err != nil {
+		var zero T
+		return zero, fmt.Errorf("%s %q: %w", r.family, typ, err)
 	}
 	return r.unknown(Unknown{Type: typ, Version: version, Raw: raw, Reason: reason}), nil
 }
@@ -230,30 +236,24 @@ func (r *Registry[T]) placeholder(typ string, version int, data []byte, reason s
 // errVersion is returned for an invalid schemaVersion.
 var errVersion = errors.New("invalid schemaVersion")
 
-// schemaVersion reads the version; 0 means absent.
-func schemaVersion(doc map[string]any) (int, error) {
+// schemaVersion reads the version of doc; ok is false if doc has none.
+func schemaVersion(doc map[string]jsontext.Value) (version int, ok bool, err error) {
 	raw, ok := doc[KeySchemaVersion]
 	if !ok {
-		return 0, nil
+		return 0, false, nil
 	}
-	n, ok := raw.(json.Number)
-	if !ok {
-		return 0, fmt.Errorf("%w: %v", errVersion, raw)
+	var v int64
+	if err := json.Unmarshal(raw, &v); err != nil || v < 1 || v > 1<<20 {
+		return 0, false, fmt.Errorf("%w: %s", errVersion, raw)
 	}
-	v, err := n.Int64()
-	if err != nil || v < 1 || v > 1<<20 {
-		return 0, fmt.Errorf("%w: %s", errVersion, n)
-	}
-	return int(v), nil
+	return int(v), true, nil
 }
 
 // Strict decodes the fields of a document into C and rejects unknown fields,
 // so that typos in handwritten documents are noticed.
 func Strict[C any](data []byte) (C, error) {
 	var c C
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&c); err != nil {
+	if err := json.Unmarshal(data, &c, json.RejectUnknownMembers(true)); err != nil {
 		return c, err
 	}
 	return c, nil

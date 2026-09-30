@@ -3,7 +3,7 @@
 package polydoc_test
 
 import (
-	"encoding/json"
+	json "encoding/json/v2"
 	"testing"
 	"time"
 
