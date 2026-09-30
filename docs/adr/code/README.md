@@ -21,5 +21,6 @@ Es gelten dieselben Konventionen und dieselbe Vorlage ([`../TEMPLATE.md`](../TEM
 | [0011](0011-event-bus.md) | Event-Bus | Akzeptiert | 2026-09-29 |
 | [0012](0012-template-engine.md) | Template-Engine | Akzeptiert | 2026-09-29 |
 | [0017](0017-klare-signale-statt-magischer-werte.md) | Klar definierte Signale statt magischer Werte | Vorgeschlagen | 2026-09-30 |
+| [0018](0018-json-v2.md) | JSON mit `encoding/json/v2` | Vorgeschlagen | 2026-09-30 |
 
-Die geplanten Code-ADRs stehen im ADR-Backlog von [`plan.md`](../../plan.md) (§12.2). Code-ADR-0017 bekam die erste Nummer hinter dem Backlog, weil Spezifikationen und Code schon auf die vorgesehenen Nummern 0013 bis 0016 verweisen.
+Die geplanten Code-ADRs stehen im ADR-Backlog von [`plan.md`](../../plan.md) (§12.2). Code-ADR-0017 und Code-ADR-0018 bekamen die Nummern hinter dem Backlog, weil Spezifikationen und Code schon auf die vorgesehenen Nummern 0013 bis 0016 verweisen.
