@@ -12,7 +12,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -149,7 +150,7 @@ func writeZip(path string, m Manifest, dbPath string) (err error) {
 	defer func() { err = errors.Join(err, f.Close()) }()
 
 	zw := zip.NewWriter(f)
-	manifest, err := json.MarshalIndent(m, "", "  ")
+	manifest, err := json.Marshal(m, jsontext.Multiline(true), jsontext.WithIndent("  "), json.Deterministic(true))
 	if err != nil {
 		return err
 	}
@@ -227,7 +228,9 @@ func readManifest(zr *zip.Reader) (Manifest, error) {
 	}
 	defer f.Close()
 	var m Manifest
-	if err := json.NewDecoder(io.LimitReader(f, 1<<20)).Decode(&m); err != nil {
+	// Unknown fields are ignored on purpose, so that a backup written by a
+	// newer version shows its manifest (Code-ADR-0018).
+	if err := json.UnmarshalRead(io.LimitReader(f, 1<<20), &m); err != nil {
 		return Manifest{}, fmt.Errorf("%w: manifest: %w", ErrCorrupt, err)
 	}
 	if m.FormatVersion < 1 || m.FormatVersion > FormatVersion {

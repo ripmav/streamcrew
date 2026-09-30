@@ -4,7 +4,8 @@ package command
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"fmt"
 
 	"github.com/ripmav/streamcrew/internal/polydoc"
@@ -24,7 +25,7 @@ type UnknownAction struct{ polydoc.Unknown }
 func (u UnknownAction) DocType() string { return u.Type }
 
 // RawJSON implements polydoc.Raw.
-func (u UnknownAction) RawJSON() json.RawMessage { return u.Raw }
+func (u UnknownAction) RawJSON() jsontext.Value { return u.Raw }
 
 // Codec converts between commands and their stored form. Build it in the
 // composition root; it is safe for concurrent use.
@@ -86,7 +87,7 @@ func (c *Codec) Command(rec Record) (Command, error) {
 }
 
 // encodeList writes a JSON array of documents.
-func encodeList[T polydoc.Document](r *polydoc.Registry[T], items []T) (json.RawMessage, error) {
+func encodeList[T polydoc.Document](r *polydoc.Registry[T], items []T) (jsontext.Value, error) {
 	var buf bytes.Buffer
 	buf.WriteByte('[')
 	for i, item := range items {
@@ -107,11 +108,11 @@ func encodeList[T polydoc.Document](r *polydoc.Registry[T], items []T) (json.Raw
 }
 
 // decodeList reads a JSON array of documents; empty input is an empty list.
-func decodeList[T polydoc.Document](r *polydoc.Registry[T], data json.RawMessage) ([]T, error) {
+func decodeList[T polydoc.Document](r *polydoc.Registry[T], data jsontext.Value) ([]T, error) {
 	if len(data) == 0 {
 		return []T{}, nil
 	}
-	var docs []json.RawMessage
+	var docs []jsontext.Value
 	if err := json.Unmarshal(data, &docs); err != nil {
 		return nil, fmt.Errorf("decode document list: %w", err)
 	}

@@ -12,7 +12,7 @@ package settings
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"strings"
@@ -98,9 +98,9 @@ func Save(ctx context.Context, svc *Service, s Section) error {
 // unknown keeps a section this version cannot read.
 type unknown struct{ polydoc.Unknown }
 
-func (u unknown) DocType() string          { return u.Type }
-func (u unknown) RawJSON() json.RawMessage { return u.Raw }
-func (unknown) validate() error            { return errors.New("unknown settings section") }
+func (u unknown) DocType() string         { return u.Type }
+func (u unknown) RawJSON() jsontext.Value { return u.Raw }
+func (unknown) validate() error           { return errors.New("unknown settings section") }
 
 const (
 	sectionBackups  = "backups"

@@ -539,7 +539,7 @@ Die Sperrmodi entsprechen fachlich dem Original. Commands mit dem Flag „unlock
 ### 6.9 Actions, Requirements und Typkatalog
 
 - **Registry:** Jeder Action-Typ registriert einen Descriptor. Er enthält eine stabile Typ-ID, eine Schemaversion, eine Kategorie, i18n-Schlüssel, ein JSON-Schema der Konfiguration, UI-Hinweise (etwa Textfeld, Template, Nutzer, Dauer, Farbe, Datei, Command-Referenz) und die benötigten Capabilities.
-- **Speicherung:** Commands sind JSON-Dokumente mit `type`-Diskriminator und `schemaVersion`. Migrationen laufen pro Typversion (Code-ADR-0010). Die Kodierung nutzt vorerst `encoding/json` (Code-ADR-0010, Punkt 7). `encoding/json/v2` ist in go1.27.1 ohne `GOEXPERIMENT` verfügbar (berichtigt 2026-09-30); der Wechsel braucht ein ergänzendes Code-ADR.
+- **Speicherung:** Commands sind JSON-Dokumente mit `type`-Diskriminator und `schemaVersion`. Migrationen laufen pro Typversion (Code-ADR-0010). Die Kodierung nutzt `encoding/json/v2` mit strengem Lesen und deterministischem Schreiben ([Code-ADR-0018](adr/code/0018-json-v2.md)).
 - **Typkatalog über die API:** `ListActionTypes` und Co. liefern Descriptors samt Schema. Frontends rendern daraus generische Editoren. Spezialeditoren gibt es nur, wo es sich lohnt, etwa für Conditional und für Overlay-Positionen.
 - **Requirements** folgen demselben Muster (Validieren, Ausführen bzw. Kosten abbuchen, Fehlermeldung).
 
@@ -893,7 +893,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | WebSocket | `github.com/coder/websocket` | Kandidat | kontextfähig, gepflegt, auch in `n8n-go` genutzt |
 | SQLite | `modernc.org/sqlite` | gesetzt | CGO-frei; zwei Pools (Schreiben, Lesen); Code-ADR-0008 |
 | SQL/Migrationen | `sqlc` (per `go run` gepinnt), `pressly/goose/v3` | gesetzt | typisiert, eingebettet; bewährt in `n8n-go`; Code-ADR-0008 |
-| JSON | `encoding/json/v2` | Kandidat | stdlib; polymorphes Dekodieren über eigene Unmarshaler. In go1.27.1 ohne `GOEXPERIMENT` verfügbar (berichtigt 2026-09-30); `internal/polydoc` nutzt bis zu einem ergänzenden Code-ADR `encoding/json`, die Template-Engine `encoding/json/jsontext` für die Kodierung JSON |
+| JSON | `encoding/json/v2` und `encoding/json/jsontext` | gesetzt | stdlib; strenges Lesen, deterministisches Schreiben, polymorphe Dokumente über `internal/polydoc` ([Code-ADR-0018](adr/code/0018-json-v2.md)) |
 | JSON-Schema | `github.com/google/jsonschema-go` | Kandidat | auch vom MCP-Go-SDK genutzt |
 | YAML | `go.yaml.in/yaml/v3` | gesetzt | Konfigurationsdatei und Commands als Code; offizieller Nachfolger von `gopkg.in/yaml.v3` (Code-ADR-0005) |
 | OAuth | `golang.org/x/oauth2` | Kandidat | Device Flow und PKCE eingebaut |
@@ -923,7 +923,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 - `errors.AsType`
 - `sync.WaitGroup.Go`
 - `http.CrossOriginProtection`
-- `encoding/json/v2`: in go1.27.1 ohne `GOEXPERIMENT` verfügbar (berichtigt 2026-09-30); für `internal/polydoc` nach einem ergänzenden Code-ADR
+- `encoding/json/v2` und `encoding/json/jsontext` für alles JSON (Code-ADR-0018)
 - `slog.NewMultiHandler`
 - Iteratoren (`range over func`) für Repository-Abfragen
 
