@@ -92,7 +92,7 @@ type Stats struct {
 	LastSeen  time.Time
 	// DonatedCents is the sum of donations in hundredths of the main
 	// currency unit; converting currencies is up to the donation
-	// integrations (roadmap phase 10).
+	// integrations (roadmap phase 9).
 	DonatedCents int64
 	// Strikes counts moderation strikes.
 	Strikes int64
