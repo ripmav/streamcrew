@@ -152,7 +152,7 @@ func renderGolden(t *testing.T, e *template.Engine, s *template.Scope, name stri
 	require.NoError(t, err)
 	var got bytes.Buffer
 	for line := range strings.Lines(string(in)) {
-		line = strings.TrimSuffix(line, "\n")
+		line = strings.TrimRight(line, "\r\n") // also for files with CRLF line ends
 		switch {
 		case line == "":
 		case strings.HasPrefix(line, "#"):
