@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12) |
-| **Stand** | 2026-09-29 |
+| **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12); Phase 2 abgeschlossen (PR #36) |
+| **Stand** | 2026-09-30 |
 | **Grundlage** | [`plan.md`](plan.md) (Architektur, Prioritäten, Risiken), [`starting.md`](starting.md), [`adr/`](adr/README.md) |
 | **Aktuelle Phase** | Phase 3: Engine, Templates, Actions, Mock (in Arbeit) |
 
@@ -92,7 +92,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (11.2) |
-| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: Code-ADR-0012 akzeptiert; die Spezifikation der Template-Engine (3.1) wartet auf die Prüfung |
+| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: Code-ADR-0012 und Spezifikation `template.md` akzeptiert; als Nächstes die Umsetzung der Template-Engine (3.1) |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
@@ -160,8 +160,8 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 | Aufgabe | jetzt in | fällig |
 |---|---|---|
-| Rechtliche Einschätzung (extern): BSL, EULA, Code als Hilfestellung, MIT-Datei, Import, `$`-Identifier-Namen | Gate O, O.1 | Soll vor Phase 3 (Template-Engine mit den Identifier-Namen), Muss vor Gate O |
-| Rechtlicher Teil von ADR-0021 (Import, Identifier-Namen) | Gate O, O.1 | Soll vor Phase 3 |
+| Rechtliche Einschätzung (extern): BSL, EULA, Code als Hilfestellung, MIT-Datei, Import, `$`-Identifier-Namen | Gate O, O.1 | am Ende, vor Gate O (Entscheidung des Projektinhabers vom 2026-09-30) |
+| Rechtlicher Teil von ADR-0021 (Import, Identifier-Namen) | Gate O, O.1 | am Ende, vor Gate O |
 | Optional: schriftliche Erlaubnis von Blazing Cacti | Gate O, O.1 | vor Gate O |
 | Namensprüfung für den endgültigen Namen | Gate O, O.1 | vor Gate O, möglichst früher |
 | Plan §15: Bedeutung des Imports, eigener Datenbestand | Phase 11.2 | vor ADR-0021 (Umsetzung) |
@@ -352,13 +352,13 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | | |
 |---|---|
 | **Ziel** | plattformneutrale Ausführung von Commands, testbar ohne Live-Plattform |
-| **Voraussetzungen** | Phase 2; möglichst die rechtliche Einschätzung zu den `$`-Identifier-Namen (Gate O, O.1) |
+| **Voraussetzungen** | Phase 2; die `$`-Identifier-Namen gelten als rechtlich unbedenklich, bis die Einschätzung am Ende (Gate O, O.1) etwas anderes ergibt |
 | **Aufwand** | 5–7 PW |
 | **ADRs** | 0022; Code-ADRs 0012, 0013 |
 
 ### 3.1 Template-Engine
 
-- [ ] Spezifikation [`docs/spec/template.md`](spec/template.md) (S), Entwurf vom 2026-09-29, wartet auf die Prüfung durch den Projektinhaber; Identifier-Namen unter Interop-Vorbehalt (Entscheidung des Projektinhabers):
+- [x] Spezifikation [`docs/spec/template.md`](spec/template.md) (S), vom Projektinhaber geprüft und akzeptiert 2026-09-30; Identifier-Namen unter Interop-Vorbehalt (Entscheidung des Projektinhabers):
   - Syntax und Auflösungsreihenfolge
   - Regel „längster Präfix“
   - Kodierung
@@ -1088,14 +1088,14 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### O.1 Recht und Herkunft
 
-- [ ] Rechtliche Einschätzung einholen (extern); aus Phase 0 übertragen, möglichst vor Phase 3, spätestens vor Gate O. Themen:
+- [ ] Rechtliche Einschätzung einholen (extern); aus Phase 0 übertragen, am Ende vor Gate O (Entscheidung des Projektinhabers vom 2026-09-30; bis dahin gilt alles als rechtlich unbedenklich). Themen:
   - BSL §2 und §3.1–3.5, Urheberrecht (abgeleitetes Werk), Marken
   - EULA §1 (kein Reverse Engineering)
   - Nutzung des Codes als Hilfestellung (ADR-0001)
   - die MIT-Datei `MixItUp.Base/LICENSE.txt`
   - die Import-Funktion (Interoperabilität)
   - die Übernahme der `$`-Identifier-Namen
-- [ ] Rechtlichen Teil von ADR-0021 (Import, Identifier-Namen) entscheiden, möglichst vor Phase 3; danach in ADR-0001 unter „Interop-Ausnahmen“ den Link auf das neue ADR nachtragen (S)
+- [ ] Rechtlichen Teil von ADR-0021 (Import, Identifier-Namen) entscheiden, am Ende vor Gate O; danach in ADR-0001 unter „Interop-Ausnahmen“ den Link auf das neue ADR nachtragen (S)
 - [ ] Optional (Option D): Blazing Cacti um eine schriftliche Erlaubnis bitten und die Antwort dokumentieren (S)
 - [ ] Herkunfts-Review (M):
   - Alle Spezifikationen haben einen Quellennachweis.
@@ -1216,3 +1216,5 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-29 | CI-Cache neu bewertet (aus Phase 1.1): ein `actions/cache`-Eintrag je Linux-Job statt eines gemeinsamen setup-go-Caches. Abgerechnete Minuten je Push von 11 auf 5, Cross-Build von 334 s auf 111 s. |
 | 2026-09-29 | Phase 3 begonnen, mit Interop-Vorbehalt für die `$`-Identifier-Namen statt auf die rechtliche Einschätzung zu warten (Entscheidung des Projektinhabers). Entwurf der Spezifikation `template.md` aus der offiziellen Doku und dem Plan, ohne Code des Originals; Code-ADR-0012 Template-Engine vorgeschlagen. |
 | 2026-09-29 | Code-ADR-0012 Template-Engine vom Projektinhaber abgenommen, ohne Änderungen. |
+| 2026-09-30 | Rechtliche Einschätzung und rechtlicher Teil von ADR-0021 ans Ende verschoben, vor Gate O (Entscheidung des Projektinhabers); bis dahin gilt alles als rechtlich unbedenklich. Spezifikation `template.md`: keine Maskierung von `$` (B7). |
+| 2026-09-30 | Spezifikation `template.md` vom Projektinhaber geprüft und akzeptiert; offene Fragen werden am Original geprüft, bis dahin gilt das beschriebene Verhalten. |

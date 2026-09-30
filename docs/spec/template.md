@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
-| **Stand** | 2026-09-29 |
-| **Bezug** | Roadmap Phase 3.1; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0009](../adr/code/0009-ids-und-zeit.md), [Code-ADR-0012](../adr/code/0012-template-engine.md) (vorgeschlagen); Plan §3, §6.10, Anhang A.6; [`commands.md`](commands.md), [`counters-and-quotes.md`](counters-and-quotes.md), [`events.md`](events.md), [`users-and-roles.md`](users-and-roles.md) |
+| **Status** | Geprüft |
+| **Stand** | 2026-09-30 |
+| **Bezug** | Roadmap Phase 3.1; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0009](../adr/code/0009-ids-und-zeit.md), [Code-ADR-0012](../adr/code/0012-template-engine.md); Plan §3, §6.10, Anhang A.6; [`commands.md`](commands.md), [`counters-and-quotes.md`](counters-and-quotes.md), [`events.md`](events.md), [`users-and-roles.md`](users-and-roles.md) |
 | **Umsetzung** | noch offen (geplant: `internal/template`, Ausdrücke in `internal/expr`) |
 
 ## Zweck und Umfang
@@ -44,6 +44,7 @@ Nicht Teil dieser Spezifikation:
 | B4 | Ein bekannter Identifier, der im Kontext keinen Wert hat, bleibt ebenfalls unverändert stehen, etwa `$arg3text` bei zwei Argumenten oder `$targetusername` ohne Zielnutzer. So lässt sich „nicht ersetzt“ erkennen. | Q3 |
 | B5 | Eingesetzte Werte werden nie erneut ausgewertet. Schreibt ein Zuschauer `$streamerusername` in ein Argument, erscheint genau dieser Text. | QP (§6.10), A1 |
 | B6 | Ein Muster enthält Zahlen im Namen. Es gilt nur, wenn die Zahlen gültig sind; sonst behandelt die Regel des längsten Präfixes das Token wie jedes andere. | Q1 |
+| B7 | Es gibt keine Maskierung: Ein `$` vor einem Identifier-Namen leitet immer ein Token ein, auch `$$` maskiert nicht (B71). Ein wörtliches `$` vor einem Identifier-Namen entsteht mit `$unicode36` (B78). | Entscheidung des Projektinhabers |
 
 ### Quellen und Reihenfolge
 
@@ -136,6 +137,7 @@ Die Tabellen nennen die Namen, die das MVP (Roadmap 3.1) auflöst. Alle Namen si
 | B75 | Ein Argument enthält `%26` oder `&` und landet in einer URL | Es wird maskiert und verändert die Adresse nicht (B30). | B30 |
 | B76 | Ein Ausdruck enthält ein Argument mit Buchstaben, etwa `$arg1text * 2` mit „zwei“ | Fehler der Action nach B52, kein Ergebnis im Chat | B51, B52 |
 | B77 | Sehr lange Templates oder viele Tokens | Die Laufzeit wächst linear mit der Länge; es gibt keine verschachtelte Auswertung (B5). | B5 |
+| B78 | `$unicode36username` | `$unicode36` ergibt `$`, der Rest „username“ bleibt Text; die Ausgabe ist wörtlich `$username` und wird nicht erneut ausgewertet. | B2, B5, B7, B33 |
 
 ## Abweichungen vom Original
 
@@ -150,7 +152,7 @@ Die Tabellen nennen die Namen, die das MVP (Roadmap 3.1) auflöst. Alle Namen si
 
 ## Akzeptanzkriterien
 
-- [ ] B1, B2, B70–B72: Golden Files mit Templates und erwarteter Ausgabe, auch für Groß- und Kleinschreibung.
+- [ ] B1, B2, B7, B70–B72, B78: Golden Files mit Templates und erwarteter Ausgabe, auch für Groß- und Kleinschreibung.
 - [ ] B3, B4, B6, B73: Tabellengetriebener Test: unbekannte, leere und ungültige Identifier bleiben unverändert.
 - [ ] B5: Ein Wert, der selbst Identifier enthält, erscheint unverändert; das gilt für alle Quellen aus B10.
 - [ ] B10, B11: Rangfolge und längster Präfix über Quellen hinweg, etwa lokaler Wert gegen Counter gegen eingebauten Identifier.
@@ -167,7 +169,6 @@ Die Tabellen nennen die Namen, die das MVP (Roadmap 3.1) auflöst. Alle Namen si
 - B1: Unterscheidet das Original Groß- und Kleinschreibung von Identifiern tatsächlich nicht (so im Audit, Plan §3)?
 - B4: Bleiben im Original Identifier ohne Wert, etwa `$arg3text` bei zwei Argumenten, als Text stehen, oder werden sie leer?
 - B22/A5: Gehören im Original mehrere Eigenschaften von `$randomuser…` in einem Text zum selben Nutzer?
-- Gibt es im Original eine Möglichkeit, ein `$` vor einem Identifier-Namen als Text zu schreiben (Maskierung)? streamcrew hat bisher keine.
 - B41: Welche Formate für Datum und Zeitspannen nutzt das Original bei anderen Sprachen als Englisch?
 - A3: Welche Jace-Funktionen nutzen bestehende Commands, und wie heißen ihre Entsprechungen in `expr`?
 
@@ -190,3 +191,5 @@ Die Tabellen nennen die Namen, die das MVP (Roadmap 3.1) auflöst. Alle Namen si
 | Datum | Änderung |
 |---|---|
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals; Identifier-Namen unter Interop-Vorbehalt (Entscheidung des Projektinhabers) |
+| 2026-09-30 | Keine Maskierung von `$` (Entscheidung des Projektinhabers): B7 und Randfall B78 ergänzt, offene Frage dazu entfernt; Verweis auf Code-ADR-0012 (akzeptiert) aktualisiert |
+| 2026-09-30 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
