@@ -1054,6 +1054,7 @@ Aus den globalen Regeln, verbindlich für alle Repos:
   - kein `init()`, keine globalen Variablen, kein `panic` zur Steuerung
   - Doc-Kommentare für alle exportierten Bezeichner
   - `With…`-Benennung für Varianten und Optionen (z. B. `ConnectWithTimeout`, `WithLogger`)
+  - keine magischen Werte: benannte Ausgänge statt Sonderwerten, ausdrücklich gesetzte Standardwerte, Fehler nur für Fehler ([Code-ADR-0017](adr/code/0017-klare-signale-statt-magischer-werte.md), vorgeschlagen)
 
 ### 11.2 Teststrategie
 
@@ -1179,6 +1180,7 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0014 | `0014-http-client.md` | Retry, Rate-Limits, Fehlerklassen; Einbau des Circuit Breakers (Code-ADR-0007) | 4 |
 | 0015 | `0015-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |
 | 0016 | `0016-codegenerierung.md` | buf, esbuild in `go generate`; die sqlc-Konventionen stehen in Code-ADR-0008 | 6 |
+| 0017 | `0017-klare-signale-statt-magischer-werte.md` | Werte ohne Doppelbedeutung, benannte Ausgänge, Fehler nur für Fehler; **vorgeschlagen** | 3 |
 
 ---
 
