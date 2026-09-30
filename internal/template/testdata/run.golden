@@ -1,0 +1,4 @@
+# RunFamily for the command "shoutout" on Twitch.
+in:  "$commandname on $streamingplatform"
+out: "shoutout on Twitch"
+

@@ -41,7 +41,7 @@ Die Regeln setzen [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-orig
 | [`commands.md`](commands.md) | Datenmodell der Commands: Arten, Trigger, Gruppen, Anforderungen | Phase 2.2 | Geprüft, Datenmodell umgesetzt |
 | [`counters-and-quotes.md`](counters-and-quotes.md) | Counter und Quotes | Phase 2.2 | Geprüft, Datenmodell umgesetzt |
 | [`events.md`](events.md) | Ereigniskatalog: stabile Typnamen, Auslöseregeln | Phase 2.2 | Geprüft, Katalog umgesetzt |
-| [`template.md`](template.md) | `$`-Identifier-Engine: Syntax, Auflösung, Kodierung, Ausdrücke, Abweichungen | Phase 3.1 | Geprüft, Kern umgesetzt |
+| [`template.md`](template.md) | `$`-Identifier-Engine: Syntax, Auflösung, Kodierung, Ausdrücke, Abweichungen | Phase 3.1 | Geprüft, teilweise umgesetzt |
 | `command-engine.md` | Command-Instanzen, Warteschlange, Sperrmodi, Pause, Verlauf | Phase 3 | geplant |
 | `twitch-events.md` | Zuordnung der Twitch-Events und ihrer Identifier | Phase 4 | geplant |
 | `moderation.md` | Filter, Strikes, Teilnahmeregeln | Phase 5 | geplant |
