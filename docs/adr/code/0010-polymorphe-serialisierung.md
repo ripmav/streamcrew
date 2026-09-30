@@ -74,4 +74,4 @@
 - [x] `internal/polydoc` mit Registry, Migrationskette, `Unknown` und Fuzz-Test umsetzen (Roadmap Phase 2.2), erledigt 2026-09-29
 - [x] Golden Files für die Versionen der ersten echten Typen, erledigt 2026-09-29 für die Anforderungsarten der Commands (`internal/domain/command/testdata`, neu geschrieben mit `STREAMCREW_UPDATE_GOLDEN=1`); die Action-Typen folgen in Phase 3 nach demselben Muster
 - [ ] Die Typ-Registry in Phase 3 auf `internal/polydoc` aufbauen
-- [ ] Ergänzendes Code-ADR zum Wechsel von `internal/polydoc` auf `encoding/json/v2` (Punkt 7); die Bedingung ist seit go1.27.1 erfüllt (berichtigt 2026-09-30)
+- [x] Ergänzendes Code-ADR zum Wechsel von `internal/polydoc` auf `encoding/json/v2` (Punkt 7); die Bedingung ist seit go1.27.1 erfüllt (berichtigt 2026-09-30); erledigt 2026-09-30 mit [Code-ADR-0018](0018-json-v2.md)
