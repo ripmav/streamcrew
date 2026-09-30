@@ -33,3 +33,24 @@ func TestDisplayName(t *testing.T) {
 		assert.Equal(t, want, name.DisplayName())
 	}
 }
+
+func TestProfileURL(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  platform.Name
+		login string
+		id    string
+		want  string
+	}{
+		{platform.Twitch, "alice", "123", "https://www.twitch.tv/alice"},
+		{platform.YouTube, "Alice", "UC123", "https://www.youtube.com/channel/UC123"},
+		{platform.Kick, "alice_99", "7", "https://kick.com/alice_99"},
+		{platform.Kick, "a/b?c", "7", "https://kick.com/a%2Fb%3Fc"},
+		{platform.Twitch, "", "123", ""},
+		{platform.YouTube, "alice", "", ""},
+		{"velora", "alice", "1", ""},
+	}
+	for _, tc := range tests {
+		assert.Equal(t, tc.want, tc.name.ProfileURL(tc.login, tc.id), tc.name)
+	}
+}

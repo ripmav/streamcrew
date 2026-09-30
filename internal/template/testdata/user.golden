@@ -1,0 +1,65 @@
+# UserFamily on 15 June 2009, 13:45:20 in the time zone of the profile (UTC-4)
+# on Twitch. Alice triggers the run, Bob is the target; the arguments are
+# "@Bob", "chessqueen" and "nobody". In the chat are Carol, who is excluded,
+# and Dave, a follower and subscriber.
+# B60: the triggering user
+in:  "$username / $userdisplayname / $userfulldisplayname / $userid"
+out: "alice_99 / Ålice / Ålice (alice_99) / 0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d"
+
+in:  "$userurl $useravatar $usercolor"
+out: "https://www.twitch.tv/alice_99 https://static.example/alice.png #1E90FF"
+
+in:  "$userroles | $userdisplayroles | $userprimaryrole | $usertitle"
+out: "Moderator, Subscriber, Regular, Follower | Moderator, Subscriber, Regular, Follower | Moderator | Moderator"
+
+in:  "$userisfollower $userisregular $userissubscriber $userisvip $userismod $userisspecialtyexcluded"
+out: "true true true false true false"
+
+in:  "$usertime ($userhours h $usermins min), $usertotalstreamswatched streams, $usertotalchatmessagessent messages"
+out: "2 Hours & 12 Mins (2 h 12 min), 10 streams, 100 messages"
+
+in:  "$usertotalcommandsrun commands, $usertotaltimestagged tags, $usertotalamountdonated donated, $usermoderationstrikes strikes"
+out: "12 commands, 3 tags, 12.34 donated, 2 strikes"
+
+# B42: spans in years, months and days
+in:  "$useraccountage ($useraccountdays days)"
+out: "4 Years (1461 days)"
+
+in:  "$userfollowage = $userfollowdays days = $userfollowmonths months = $userfollowyears years"
+out: "1 Year, 4 Months, 12 Days = 498 days = 16 months = 1 years"
+
+in:  "$usersubage ($usersubdays days, $usersubmonths months, $usersubtier)"
+out: "4 Months (120 days, 4 months, Tier 1)"
+
+in:  "$userlastseenage ($userlastseendays days) since $userlastseendate"
+out: "3 Days (3 days) since 6/12/2009 10:01 PM"
+
+in:  "$usernotes"
+out: "likes chess"
+
+# B2: the rest of the token stays
+in:  "$usernames $UserNameX"
+out: "alice_99s alice_99X"
+
+# the target; data the platform did not report has no value (B4)
+in:  "$targetusername: $targetuserdisplayname / $targetuserfulldisplayname / $targetusertitle / $targetuserroles"
+out: "bob: Bob / Bob / Chess Master / User"
+
+in:  "$targetusercolor / $targetuserfollowage / $targetusersubtier / $targetuserisfollower"
+out: "$targetusercolor / $targetuserfollowage / $targetusersubtier / false"
+
+# streamer, bot and the users the arguments name
+in:  "$streamerusername $streameruserprimaryrole / $botusername $botuserroles"
+out: "chessqueen Streamer / chessbot User"
+
+in:  "$arg1username $arg2username $arg3username $arg4username $arg1userfollowage"
+out: "bob chessqueen $arg3username $arg4username $arg1userfollowage"
+
+# random users; the excluded user is never picked (B22)
+in:  "$randomusername $randomfolloweruserdisplayname $randomsubscriberusername $randomregularusername"
+out: "dave Dave dave $randomregularusername"
+
+# B4, B6: unknown properties, subjects without property, invalid numbers
+in:  "$userfoo $user $targetuser $arg0username $argusername"
+out: "$userfoo $user $targetuser $arg0username $argusername"
+
