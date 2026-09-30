@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-09-30 |
 | **Bezug** | Roadmap Phase 3.1; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0009](../adr/code/0009-ids-und-zeit.md), [Code-ADR-0012](../adr/code/0012-template-engine.md); Plan §3, §6.10, Anhang A.6; [`commands.md`](commands.md), [`counters-and-quotes.md`](counters-and-quotes.md), [`events.md`](events.md), [`users-and-roles.md`](users-and-roles.md) |
-| **Umsetzung** | noch offen (geplant: `internal/template`, Ausdrücke in `internal/expr`) |
+| **Umsetzung** | Kern umgesetzt: `internal/template` mit Syntax, Quellen, Auswertung, Kodierung, `$linebreak` und `$unicode<n>` (B1–B7, B10–B12, B20, B21, B23, B24, B30–B33). Offen: Identifier-Familien des MVP mit Zufallsnutzer (B22), Datum und Zeit (B40–B43) und Ausdrücke in `internal/expr` (B50–B52) |
 
 ## Zweck und Umfang
 
@@ -152,17 +152,17 @@ Die Tabellen nennen die Namen, die das MVP (Roadmap 3.1) auflöst. Alle Namen si
 
 ## Akzeptanzkriterien
 
-- [ ] B1, B2, B7, B70–B72, B78: Golden Files mit Templates und erwarteter Ausgabe, auch für Groß- und Kleinschreibung.
-- [ ] B3, B4, B6, B73: Tabellengetriebener Test: unbekannte, leere und ungültige Identifier bleiben unverändert.
-- [ ] B5: Ein Wert, der selbst Identifier enthält, erscheint unverändert; das gilt für alle Quellen aus B10.
-- [ ] B10, B11: Rangfolge und längster Präfix über Quellen hinweg, etwa lokaler Wert gegen Counter gegen eingebauten Identifier.
-- [ ] B20: Ein Resolver, dessen Identifier nicht vorkommt, wird nicht aufgerufen; einer, der mehrfach vorkommt, einmal.
+- [x] B1, B2, B7, B70–B72, B78: Golden Files mit Templates und erwarteter Ausgabe, auch für Groß- und Kleinschreibung.
+- [x] B3, B4, B6, B73: Tabellengetriebener Test: unbekannte, leere und ungültige Identifier bleiben unverändert.
+- [x] B5: Ein Wert, der selbst Identifier enthält, erscheint unverändert; das gilt für alle Quellen aus B10.
+- [x] B10, B11: Rangfolge und längster Präfix über Quellen hinweg, etwa lokaler Wert gegen Counter gegen eingebauten Identifier.
+- [x] B20: Ein Resolver, dessen Identifier nicht vorkommt, wird nicht aufgerufen; einer, der mehrfach vorkommt, einmal.
 - [ ] B21, B22: `$randomnumber` zieht je Vorkommen neu; ein Zufallsnutzer bleibt innerhalb eines Rendervorgangs derselbe.
-- [ ] B23, B24: Fehler einer Quelle und Abbruch des Kontexts.
-- [ ] B30, B31, B75: Tabelle je Kodierung mit Sonderzeichen in Werten und im Template.
+- [x] B23, B24: Fehler einer Quelle und Abbruch des Kontexts.
+- [x] B30, B31, B75: Tabelle je Kodierung mit Sonderzeichen in Werten und im Template.
 - [ ] B40–B43: Datum, Uhrzeit, Zeitspannen und Uptime in einer festen Zeitzone (`testing/synctest`).
 - [ ] B50–B52, B76: Ausdrücke mit Zahlen, Text, Fehlern und Grenzen.
-- [ ] Fuzz-Test: Rendern bricht bei keiner Eingabe ab; ohne bekannte Identifier ist die Ausgabe gleich der Eingabe.
+- [x] Fuzz-Test: Rendern bricht bei keiner Eingabe ab; ohne bekannte Identifier ist die Ausgabe gleich der Eingabe.
 
 ## Offene Fragen
 
@@ -193,3 +193,4 @@ Die Tabellen nennen die Namen, die das MVP (Roadmap 3.1) auflöst. Alle Namen si
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals; Identifier-Namen unter Interop-Vorbehalt (Entscheidung des Projektinhabers) |
 | 2026-09-30 | Keine Maskierung von `$` (Entscheidung des Projektinhabers): B7 und Randfall B78 ergänzt, offene Frage dazu entfernt; Verweis auf Code-ADR-0012 (akzeptiert) aktualisiert |
 | 2026-09-30 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
+| 2026-09-30 | Kern umgesetzt (`internal/template`). Festlegungen dabei: Ein eigener Name kollidiert (B12), wenn er mit einem eingebauten Namen oder dem festen Anfang eines Musters beginnt oder der Anfang eines solchen ist. Scheitert eine Quelle beim Suchen der Namen, bleibt sie für den Rest des Rendervorgangs außen vor, und ihre Tokens bleiben stehen (B23). Ein gescheiterter Identifier gilt im selben Rendervorgang weiter als gescheitert (B21) und wird einmal geloggt. `$unicode<n>` erlaubt führende Nullen. Ungültiges UTF-8 wird bei der Kodierung JSON zu U+FFFD. |

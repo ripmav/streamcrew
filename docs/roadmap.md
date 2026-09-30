@@ -92,7 +92,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
-| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: Code-ADR-0012 und Spezifikation `template.md` akzeptiert; als Nächstes die Umsetzung der Template-Engine (3.1) |
+| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: Kern der Template-Engine umgesetzt (3.1); als Nächstes die Identifier-Familien und Ausdrücke |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
@@ -363,8 +363,8 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - Kodierung
   - bewusste Abweichungen vom Original
 - [x] [Code-ADR-0012](adr/code/0012-template-engine.md) Template-Engine (S), akzeptiert 2026-09-29: Tokenizer mit Präfixbaum, Präfix-Familien, Kodierung je Ausgabeort, Ausdrücke mit `expr-lang/expr`
-- [ ] Tokenizer und Resolver-Registry (statisch, Muster, dynamische Namen); bedarfsgesteuerte Auflösung mit `context`; Cache pro Rendervorgang (M)
-- [ ] Kodierungsmodi: Text, URL, HTML, JSON (S)
+- [x] Tokenizer und Resolver-Registry (statisch, Muster, dynamische Namen); bedarfsgesteuerte Auflösung mit `context`; Cache pro Rendervorgang (M), erledigt 2026-09-30: `internal/template`
+- [x] Kodierungsmodi: Text, URL, HTML, JSON (S)
 - [ ] Identifier-Familien für das MVP (M):
   - Nutzer, Ziel, Streamer, Bot
   - Argumente
@@ -372,7 +372,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - Zufall, Stream, Counter, letzte Ereignisse
   - Command-Name, Plattform
 - [ ] Ausdrücke mit `expr-lang/expr`: Rechnen, Vergleiche (S)
-- [ ] Golden-Tests und Fuzz-Targets (S)
+- [ ] Golden-Tests und Fuzz-Targets (S); für den Kern erledigt (`FuzzRender`, `testdata/syntax.golden`), die Familien folgen
 
 ### 3.2 Command-Engine
 
@@ -1187,3 +1187,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Spezifikation `template.md` vom Projektinhaber geprüft und akzeptiert; offene Fragen werden am Original geprüft, bis dahin gilt das beschriebene Verhalten. |
 | 2026-09-30 | Code-ADR-0017 „Klar definierte Signale statt magischer Werte“ vorgeschlagen, nach einer Vorgabe des Projektinhabers: keine Werte mit Doppelbedeutung in Schnittstellen, benannte Ausgänge, Fehler nur für Fehler. Die Folgearbeiten nennen den bestehenden Code, der umgestellt wird. |
 | 2026-09-30 | Weitere Plattformen (bisher Phase 9: YouTube, Kick, Multiplattform, Velora und VPZone) ins Backlog verschoben (Entscheidung des Projektinhabers); die übrigen Phasen bleiben in ihrer Reihenfolge und rücken nach: Integrationen 9, Developer-API 10, Härtung 11; die Meilensteine M6 bis M8 werden M5 bis M7, „M5 Multiplattform“ entfällt. Der gemeinsame Webhook-Eingang und ADR-0015 sind nach 9.1 gewandert, weil Dienste und Webhook-Commands sie brauchen; die Integrationen wachsen dadurch auf 5–7 PW, Core 1.0 liegt bei 47–64 PW. Plan §1, §5, §5.1, §12.1, §13, §14 und §15, ADR-0004 (Nachtrag), die Phasenverweise in ADR-0010, ADR-0011, ADR-0013, Code-ADR-0007, Code-ADR-0011 und Code-ADR-0012, die Spezifikationen und Code-Kommentare angepasst. |
+| 2026-09-30 | Phase 3.1 begonnen, als neuer Stack nach Feature: Kern der Template-Engine (`internal/template`: Tokenizer, Präfixbaum, Muster, dynamische Quellen, Cache je Rendervorgang, Kodierung, `$linebreak`, `$unicode<n>`, Golden Files, Fuzz-Test, Benchmark), danach Identifier-Familien und Ausdrücke. |

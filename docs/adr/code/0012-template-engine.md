@@ -41,6 +41,8 @@
    - `URL`: `url.QueryEscape`, danach `+` durch `%20` ersetzt; so bleibt nur `A–Z a–z 0–9 - . _ ~` unmaskiert, und der Wert passt in Pfad wie Query.
    - `HTML`: `html.EscapeString`.
    - `JSON`: Inhalt eines JSON-Strings ohne Anführungszeichen, mit `encoding/json` ohne HTML-Maskierung.
+
+   *Präzisiert am 2026-09-30: `JSON` nutzt `jsontext.AppendQuote` aus `encoding/json/jsontext` (Go 1.27). Es maskiert kein HTML und ersetzt ungültiges UTF-8 durch U+FFFD, statt abzubrechen.*
 7. **Werte:** `Value` trägt den Text und optional eine Zahl. Datum, Uhrzeit und Zeitspannen formatiert die Engine mit Zeitzone und Locale des Profils (B40–B42); bis zur Locale-Einstellung mit den Formaten des Originals. Die Formate liegen in `internal/template`, nicht verstreut in den Resolvern.
 8. **Ausdrücke mit `expr-lang/expr`** im Paket `internal/expr`:
    - Beim Parsen eines Ausdrucks wird jedes Token durch eine Variable ersetzt (`v0`, `v1` …); `expr` kompiliert den so entstandenen Text einmal. Beim Auswerten gehen die aufgelösten Werte als Variablen hinein: Zahlen als `float64`, sonst als Text (B51). Werte werden nie Teil des Ausdruckstexts.
@@ -82,6 +84,8 @@
 **Folgearbeiten:**
 
 - [x] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) und das ADR-Backlog in Plan §12.2 anpassen, erledigt 2026-09-29
-- [ ] `internal/template` und `internal/expr` umsetzen (Roadmap 3.1); `expr-lang/expr` in `go.mod` aufnehmen und die Lizenzprüfung der CI laufen lassen
+- [x] Kern von `internal/template` umsetzen (Roadmap 3.1), erledigt 2026-09-30
+- [ ] Identifier-Familien des MVP in `internal/template` (Roadmap 3.1)
+- [ ] `internal/expr` umsetzen (Roadmap 3.1); `expr-lang/expr` in `go.mod` aufnehmen und die Lizenzprüfung der CI laufen lassen
 - [ ] Die Special-Identifier-Action (Roadmap 3.3) setzt lokale und globale Werte über die Quellen aus Punkt 2
 - [ ] Namen und Eigenschaften nach der rechtlichen Einschätzung (Gate O, O.1) bestätigen oder austauschen
