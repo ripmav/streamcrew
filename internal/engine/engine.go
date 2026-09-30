@@ -469,7 +469,7 @@ func (e *Engine) queue(ctx context.Context, cmd command.Command, src Source, p P
 	if err != nil {
 		return id.ID{}, fmt.Errorf("queue command %q: %w", cmd.Name, err)
 	}
-	return e.enqueue(ctx, cmd, src, p, cfg, admission{})
+	return e.enqueue(ctx, cmd, src, p, cfg, admission{}, origin{})
 }
 
 // admission says how an instance enters the queue.
@@ -483,7 +483,7 @@ type admission struct {
 
 // enqueue queues an instance of cmd with the settings cfg; cmd and p are
 // checked.
-func (e *Engine) enqueue(ctx context.Context, cmd command.Command, src Source, p Params, cfg Config, adm admission) (id.ID, error) {
+func (e *Engine) enqueue(ctx context.Context, cmd command.Command, src Source, p Params, cfg Config, adm admission, org origin) (id.ID, error) {
 	locks, err := e.locks(cmd, cfg.Commands.LockMode)
 
 	e.mu.Lock()
@@ -498,21 +498,26 @@ func (e *Engine) enqueue(ctx context.Context, cmd command.Command, src Source, p
 		return id.ID{}, err
 	}
 
-	in := newInstance(cmd, src, withTarget(p), cfg, locks)
+	in := newInstance(cmd, src, withTarget(p), cfg, locks, org)
 	// The instance outlives the request that queued it; it ends through its
 	// own cancel function.
 	ictx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	in.cancel = cancel
-	e.active[in.id] = in
 	e.pending = append(e.pending, in)
+	e.addLocked(ctx, in)
+	e.wg.Go(func() { e.await(ictx, in) })
+	e.scheduleLocked(ctx)
+	return in.id, nil
+}
+
+// addLocked makes in known as active and in the history. e.mu is held.
+func (e *Engine) addLocked(ctx context.Context, in *instance) {
+	e.active[in.id] = in
 	e.history = append(e.history, in)
 	if len(e.history) > HistorySize {
 		e.history = slices.Delete(e.history, 0, len(e.history)-HistorySize)
 	}
 	e.publishLocked(ctx, TypeInstanceQueued, in.snapshot())
-	e.wg.Go(func() { e.await(ictx, in) })
-	e.scheduleLocked(ctx)
-	return in.id, nil
 }
 
 // readConfig reads and checks the settings.
