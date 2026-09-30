@@ -36,7 +36,7 @@ Nicht Teil dieser Spezifikation, sondern von `command-engine.md` (Phase 3):
 | ID | Regel | Quellen |
 |---|---|---|
 | B1 | Jeder Command hat eine ID (UUIDv7), einen Namen, eine Art, einen Schalter „aktiv“, einen Schalter „freigegeben“, optional eine Gruppe, eine Menge von Anforderungen und eine geordnete Liste von Actions. | Q3, Q4 |
-| B2 | Die Arten teilen den Großteil ihrer Merkmale; sie unterscheiden sich im Auslöser. Arten zum Start (P0): `chat`, `event`, `timer`, `action_group`. Später: nutzerspezifische Chat-Commands (P1), vorgefertigte Commands (Phase 5.6), Kanalpunkte (Phase 4), Spiele (Phase 8), Webhooks (Phase 11), Stream Pass (P2). | Q3, QP (Plan §5.2) |
+| B2 | Die Arten teilen den Großteil ihrer Merkmale; sie unterscheiden sich im Auslöser. Arten zum Start (P0): `chat`, `event`, `timer`, `action_group`. Später: nutzerspezifische Chat-Commands (P1), vorgefertigte Commands (Phase 5.6), Kanalpunkte (Phase 4), Spiele (Phase 8), Webhooks (Phase 10), Stream Pass (P2). | Q3, QP (Plan §5.2) |
 | B3 | Ein inaktiver Command wird nie automatisch ausgelöst; von Hand gestartet (Test in der Oberfläche, API) kann er trotzdem werden. | Q3 („Play“ zum Testen), Q8 (Schalter aktiv/inaktiv) |
 | B4 | Actions sind polymorphe Dokumente mit `type` und `schemaVersion`; ihre Reihenfolge ist die Ausführungsreihenfolge. Unbekannte Action-Typen bleiben erhalten und werden nicht ausgeführt. | Code-ADR-0010 |
 | B5 | Freigegeben heißt: Der Command läuft sofort, auch wenn ein anderer Command derselben Sperrgruppe gerade läuft. Wie gesperrt wird, legt eine globale Einstellung fest (je Art, je Action-Art, visuell/akustisch, eine Sperre für alles, keine). | Q3 |

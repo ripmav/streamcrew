@@ -69,7 +69,7 @@
 
 **Negativ und Risiken:**
 
-- Ein Konsument mit zu kleinem Puffer verliert Ereignisse. Puffergrößen für kritische Konsumenten werden mit den Lasttests (Phase 12) überprüft.
+- Ein Konsument mit zu kleinem Puffer verliert Ereignisse. Puffergrößen für kritische Konsumenten werden mit den Lasttests (Phase 11) überprüft.
 - `Payload any` prüft den Typ erst zur Laufzeit. Ein Test stellt sicher, dass jeder veröffentlichte Typ im Katalog steht und die Nutzlast den dort genannten Go-Typ hat.
 - Keine globale Reihenfolge über Produzenten hinweg; wer sie braucht, ordnet nach Zeitstempel und ID.
 
