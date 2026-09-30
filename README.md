@@ -163,7 +163,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `internal/domain/command` | Commands: Arten, Trigger, Gruppen, Anforderungen, Actions als polymorphe Dokumente ([Spezifikation](docs/spec/commands.md)) |
 | `internal/domain/user` | Nutzer mit Plattform-Identitäten und Statistiken ([Spezifikation](docs/spec/users-and-roles.md)) |
 | `internal/domain/counter`, `internal/domain/quote` | Counter und Quotes ([Spezifikation](docs/spec/counters-and-quotes.md)) |
-| `internal/template` | Templates mit `$`-Identifiern: Tokenizer, Präfixbaum, Quellen, Cache je Rendervorgang, Kodierung ([Spezifikation](docs/spec/template.md), [Code-ADR-0012](docs/adr/code/0012-template-engine.md)) |
+| `internal/template` | Templates mit `$`-Identifiern: Tokenizer, Präfixbaum, Quellen, Cache je Rendervorgang, Kodierung und die Identifier-Familien ([Spezifikation](docs/spec/template.md), [Code-ADR-0012](docs/adr/code/0012-template-engine.md)) |
 | `internal/event` | Ereignisse, Katalog und nicht blockierender Event-Bus ([Code-ADR-0011](docs/adr/code/0011-event-bus.md)) |
 | `internal/polydoc` | polymorphe JSON-Dokumente mit Typ, Version und Migrationen ([Code-ADR-0010](docs/adr/code/0010-polymorphe-serialisierung.md)) |
 | `internal/store` | SQLite je Profil, goose-Migrationen, sqlc-Abfragen und die Repositories der Domänenpakete ([Code-ADR-0008](docs/adr/code/0008-datenbankzugriff.md)) |
