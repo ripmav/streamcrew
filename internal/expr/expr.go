@@ -61,7 +61,10 @@ func builtins() []string {
 // concurrent use; actions compile their expressions when a command is
 // loaded.
 type Expression struct {
-	src     string
+	src string
+	// prefix starts the names of the variables; it does not occur in src,
+	// so no name in the text can be taken for a variable.
+	prefix  string
 	vars    []variableDef
 	program *vm.Program
 }
@@ -83,8 +86,9 @@ func Compile(text string) (*Expression, error) {
 	var src strings.Builder
 	var vars []variableDef
 	names := make(map[string]bool)
+	prefix := variablePrefix(text)
 	add := func(v variableDef) {
-		name := variable(len(vars))
+		name := variable(prefix, len(vars))
 		vars = append(vars, v)
 		names[name] = true
 		src.WriteString(" " + name + " ")
@@ -140,7 +144,7 @@ func Compile(text string) (*Expression, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %q: %w", ErrInvalid, text, err)
 	}
-	return &Expression{src: text, vars: vars, program: program}, nil
+	return &Expression{src: text, prefix: prefix, vars: vars, program: program}, nil
 }
 
 // String returns the text x was compiled from.
@@ -166,9 +170,9 @@ func (x *Expression) Eval(ctx context.Context, e *template.Engine, s *template.S
 	env := make(map[string]any, len(texts))
 	for i, text := range texts {
 		if x.vars[i].quoted {
-			env[variable(i)] = text
+			env[variable(x.prefix, i)] = text
 		} else {
-			env[variable(i)] = typed(text)
+			env[variable(x.prefix, i)] = typed(text)
 		}
 	}
 	machine := vm.VM{MemoryBudget: memoryBudget}
@@ -237,9 +241,21 @@ func hasTokens(t template.Template) bool {
 	return false
 }
 
+// variablePrefix returns the start of the variable names for text: "v",
+// followed by as many underscores as it takes so that it occurs nowhere in
+// text. A name in the text, such as v0, is then never taken for a variable
+// and stays an unknown name, which the checker rejects (B50).
+func variablePrefix(text string) string {
+	prefix := "v"
+	for strings.Contains(text, prefix) {
+		prefix += "_"
+	}
+	return prefix
+}
+
 // variable returns the name of the variable for the i-th token.
-func variable(i int) string {
-	return "v" + strconv.Itoa(i)
+func variable(prefix string, i int) string {
+	return prefix + strconv.Itoa(i)
 }
 
 // typed returns a decimal number as float64 and anything else as text

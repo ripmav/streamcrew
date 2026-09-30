@@ -98,6 +98,7 @@ func TestEval_Identifiers_B51(t *testing.T) {
 		{"single and back quotes", "'$arg1text' + `$arg2text`", []string{"a", "b"}, expr.Result{Kind: expr.Text, Text: "ab"}},
 		{"code in quotes stays text", `"$arg1text"`, []string{`" + 1 + "`}, expr.Result{Kind: expr.Text, Text: `" + 1 + "`}},
 		{"quotes without identifiers", `"5$ \"x\"" == '5$ "x"'`, nil, expr.Result{Kind: expr.Bool, Bool: true}},
+		{"v in the text", `$arg1text == "v0 v_0" && $arg2text == 'v__1'`, []string{"v0 v_0", "v__1"}, expr.Result{Kind: expr.Bool, Bool: true}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -150,6 +151,12 @@ func TestCompile_Invalid(t *testing.T) {
 		`$ == "$arg1text"`,
 		"5$",
 		"v1 + $arg1text",
+		// Names like those of the variables are unknown names as well
+		// (review of PR #46).
+		"v0 == $arg1text",
+		"v0 + $arg1text",
+		"v_0 + $arg1text + $arg2text",
+		"v__1 == $arg1text + $arg2text",
 		"[1, 2]",
 		"{a: 1}",
 		"1 ? 2 : 3",
