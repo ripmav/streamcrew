@@ -388,9 +388,9 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 Reihenfolge: erst die Bereinigung nach Code-ADR-0017, dann die Doku als unterster PR eines neuen Stacks (Spezifikation `actions.md` und Code-ADR-0013), danach die Umsetzung nach Features. Die Actions testen gegen Fakes der Ports; die Mock-Plattform (3.6) und Twitch (Phase 4) liefern die echten.
 
-- [ ] Vorab: bestehenden Code nach [Code-ADR-0017](adr/code/0017-klare-signale-statt-magischer-werte.md) bereinigen (S):
+- [x] Vorab: bestehenden Code nach [Code-ADR-0017](adr/code/0017-klare-signale-statt-magischer-werte.md) bereinigen (S), erledigt 2026-09-30:
   - `template.Scope` ohne Sonderwerte: kein leeres Trennzeichen für `|`, keine fehlende Zeitzone für UTC, kein fehlendes Ziel für den auslösenden Nutzer, kein leerer Text nach dem Trigger für „Argumente mit Leerzeichen“; erledigt 2026-09-30
-  - Settings-Sektion „time“: `system` statt leerer Zeitzone, als neue Version der Sektion mit Migration (Entscheidung des Projektinhabers vom 2026-09-30)
+  - Settings-Sektion „time“: `system` statt leerer Zeitzone, als neue Version der Sektion mit Migration (Entscheidung des Projektinhabers vom 2026-09-30); erledigt 2026-09-30, Version 2
 - [ ] Spezifikation [`docs/spec/actions.md`](spec/README.md): Verhalten der P0-Actions aus der offiziellen Doku, ohne Code des Originals (M):
   - je Action Konfiguration, Ablauf, gesetzte Identifier, Fehlerfälle
   - die Grenze für Wiederholungen ([`command-engine.md`](spec/command-engine.md), B74)
@@ -1229,3 +1229,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Wechsel auf `encoding/json/v2` nach Code-ADR-0018 umgesetzt: alle acht Pakete in einem Schritt, strenges Lesen, deterministisches Schreiben, Migrationen in `internal/polydoc` auf `jsontext.Value`; die von v1 geschriebenen Golden Files bleiben Byte für Byte gleich. |
 | 2026-09-30 | 3.3 und 3.4 startklar gemacht: Reihenfolge (Bereinigung nach Code-ADR-0017, dann Doku, dann Umsetzung), neue Aufgaben für die Spezifikationen `actions.md` und `requirements.md` und für die Plattform-Ports nach Plan §6.11; ADR-0022 aus 3.6 nach 3.4 vorgezogen, weil die Fehlermeldungen der Anforderungen übersetzt werden. Die Zeitzone heißt künftig `system` statt leer (Entscheidung des Projektinhabers). |
 | 2026-09-30 | Template-Scope nach Code-ADR-0017 bereinigt: `Render` und `RenderEach` lehnen einen Scope ohne Zeitzone, ohne Trennzeichen oder mit Argumenten ohne Text ab (`template.ErrInvalidScope`); ohne Ziel hat `$targetuser…` keinen Wert, weil die Engine das Ziel setzt. |
+| 2026-09-30 | Settings-Sektion „time“ in Version 2: Die Systemzone heißt `system` statt leer, die Migration setzt den Wert in gespeicherten Profilen (Entscheidung des Projektinhabers, Code-ADR-0017). Die Bereinigung vor 3.3 ist damit erledigt. |
