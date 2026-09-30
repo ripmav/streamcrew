@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -177,4 +178,10 @@ func golden(t *testing.T, name string, got []byte) {
 	want, err := os.ReadFile(path)
 	require.NoError(t, err, "create it with STREAMCREW_UPDATE_GOLDEN=1")
 	assert.Equal(t, string(want), string(got))
+}
+
+// scope returns a scope with what a render needs: the time zone UTC and the
+// argument delimiter "|".
+func scope() template.Scope {
+	return template.Scope{Location: time.UTC, ArgDelimiter: "|"}
 }

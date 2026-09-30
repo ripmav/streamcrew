@@ -20,7 +20,7 @@ import (
 // identifiers from every source.
 func TestRender_ValuesAreNotEvaluatedAgain_B5(t *testing.T) {
 	t.Parallel()
-	var s template.Scope
+	s := scope()
 	s.SetValue("message", template.TextValue("$username $unicode36time $$time"))
 	e := template.New(newRegistry(t), template.WithSources(mapSource{"quote": "$time says $username"}))
 
@@ -38,7 +38,7 @@ func TestRender_Ranking_B10_B11(t *testing.T) {
 	global := mapSource{"score": "global", "scorex": "global long"}
 	counters := mapSource{"score": "counter", "scorexy": "counter long"}
 	local := func() *template.Scope {
-		var s template.Scope
+		s := scope()
 		s.SetValue("score", template.TextValue("local"))
 		s.SetValue("user", template.TextValue("local user"))
 		return &s
@@ -52,9 +52,9 @@ func TestRender_Ranking_B10_B11(t *testing.T) {
 		want    string
 	}{
 		{"value of the run first", []template.Source{global, counters}, local(), "$score", "local"},
-		{"then global values", []template.Source{global, counters}, nil, "$score", "global"},
-		{"then dynamic names", []template.Source{counters}, nil, "$score", "counter"},
-		{"then built-in identifiers", nil, nil, "$score", "built-in"},
+		{"then global values", []template.Source{global, counters}, new(scope()), "$score", "global"},
+		{"then dynamic names", []template.Source{counters}, new(scope()), "$score", "counter"},
+		{"then built-in identifiers", nil, new(scope()), "$score", "built-in"},
 		{"longer global beats value of the run", []template.Source{global, counters}, local(), "$scorex", "global long"},
 		{"longer counter beats global", []template.Source{global, counters}, local(), "$scorexyz", "counter longz"},
 		{"longer built-in beats value of the run", nil, local(), "$username $userx", "Alice local userx"},
@@ -88,7 +88,7 @@ func TestRender_ResolvesOnDemandOnce_B20_B21(t *testing.T) {
 		}},
 	}
 	e := template.New(newRegistry(t, family))
-	var s template.Scope
+	s := scope()
 
 	assert.Equal(t, "Alice", render(t, e, "$username", &s))
 	assert.Zero(t, cached.Load(), "an identifier that does not occur is not resolved")
@@ -109,7 +109,7 @@ func TestRender_ResolverError_B23(t *testing.T) {
 	t.Parallel()
 	logger, logs := logBuffer()
 	e := template.New(newRegistry(t), template.WithLogger(logger))
-	var s template.Scope
+	s := scope()
 	s.SetValue("secret", template.TextValue("hunter2"))
 
 	assert.Equal(t, "$followage, $FollowAge; Alice", render(t, e, "$followage, $FollowAge; $username", &s))
@@ -129,11 +129,11 @@ func TestRender_SourceError_B23(t *testing.T) {
 		template.WithLogger(logger),
 		template.WithSources(failingSource{&calls}, mapSource{"deaths": "3"}))
 
-	assert.Equal(t, "Alice died 3 times, $wins wins", render(t, e, "$username died $deaths times, $wins wins", nil))
+	assert.Equal(t, "Alice died 3 times, $wins wins", render(t, e, "$username died $deaths times, $wins wins", new(scope())))
 	assert.Equal(t, int64(1), calls.Load())
 	assert.Equal(t, 1, strings.Count(logs.String(), "identifier source skipped"), logs.String())
 
-	render(t, e, "$deaths", nil)
+	render(t, e, "$deaths", new(scope()))
 	assert.Equal(t, int64(2), calls.Load(), "the next render asks the source again")
 }
 
@@ -145,15 +145,15 @@ func TestRender_Canceled_B24(t *testing.T) {
 
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err := template.New(registry).Render(canceled, template.Parse("Hi $username"), nil, template.Text)
+	_, err := template.New(registry).Render(canceled, template.Parse("Hi $username"), new(scope()), template.Text)
 	require.ErrorIs(t, err, context.Canceled)
 
 	expired, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 	defer cancel()
-	_, err = template.New(registry).Render(expired, template.Parse("Hi $username"), nil, template.Text)
+	_, err = template.New(registry).Render(expired, template.Parse("Hi $username"), new(scope()), template.Text)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
-	out, err := template.New(registry).Render(canceled, template.Parse("no identifiers"), nil, template.Text)
+	out, err := template.New(registry).Render(canceled, template.Parse("no identifiers"), new(scope()), template.Text)
 	require.NoError(t, err, "a text without tokens needs no context")
 	assert.Equal(t, "no identifiers", out)
 }
@@ -170,14 +170,14 @@ func TestRender_CanceledWhileResolving_B24(t *testing.T) {
 			return template.Value{}, false, ctx.Err()
 		},
 	}}}
-	_, err := template.New(newRegistry(t, slow)).Render(ctx, template.Parse("$slow"), nil, template.Text)
+	_, err := template.New(newRegistry(t, slow)).Render(ctx, template.Parse("$slow"), new(scope()), template.Text)
 	require.ErrorIs(t, err, context.Canceled)
 
 	var calls atomic.Int64
 	ctx, cancel = context.WithCancel(t.Context())
 	defer cancel()
 	source := cancelingSource{cancel: cancel, calls: &calls}
-	_, err = template.New(nil, template.WithSources(source)).Render(ctx, template.Parse("$x"), nil, template.Text)
+	_, err = template.New(nil, template.WithSources(source)).Render(ctx, template.Parse("$x"), new(scope()), template.Text)
 	require.ErrorIs(t, err, context.Canceled)
 }
 
@@ -195,7 +195,7 @@ func (c cancelingSource) Match(ctx context.Context, _ *template.Scope, _ string)
 
 func TestRender_UnknownEncoding(t *testing.T) {
 	t.Parallel()
-	_, err := template.New(nil).Render(t.Context(), template.Parse("x"), nil, template.Encoding(99))
+	_, err := template.New(nil).Render(t.Context(), template.Parse("x"), new(scope()), template.Encoding(99))
 	require.Error(t, err)
 	assert.Equal(t, "unknown", template.Encoding(99).String())
 }
@@ -227,7 +227,7 @@ func TestScope_Memo(t *testing.T) {
 		}},
 	}}
 	e := template.New(newRegistry(t, family))
-	var s template.Scope
+	s := scope()
 
 	assert.Equal(t, "Stream title|Stream title", render(t, e, "$streamtitle|$streamtitleagain", &s))
 	assert.Equal(t, int64(1), loads.Load())
@@ -252,7 +252,7 @@ func TestScope_Memo(t *testing.T) {
 func TestScope_Share(t *testing.T) {
 	t.Parallel()
 	e := template.New(nil)
-	var caller template.Scope
+	caller := scope()
 	assert.Empty(t, caller.Values())
 
 	called := caller.Share()
@@ -280,11 +280,33 @@ func BenchmarkRender(b *testing.B) {
 	e := template.New(newRegistry(b), template.WithSources(mapSource{"deaths": "3"}))
 	tmpl := template.Parse("Hey $username, it is $time ($timedigits). $deaths deaths so far; " +
 		"arguments: $arg1text and $arg2text. Unknown: $nothing. Cost: 5$.")
-	var s template.Scope
+	s := scope()
 	s.SetValue("raidviewercount", template.IntValue(12))
 	for b.Loop() {
 		if _, err := e.Render(b.Context(), tmpl, &s, template.Text); err != nil {
 			b.Fatal(err)
 		}
 	}
+}
+
+// TestRender_InvalidScope: a scope without the time zone or the argument
+// delimiter of the profile, or with arguments but without their text, is
+// rejected instead of falling back to a default (Code-ADR-0017).
+func TestRender_InvalidScope(t *testing.T) {
+	t.Parallel()
+	e := template.New(newRegistry(t))
+	valid := scope()
+	for name, s := range map[string]*template.Scope{
+		"no scope":               nil,
+		"no time zone":           {ArgDelimiter: "|"},
+		"no argument delimiter":  {Location: time.UTC},
+		"arguments without text": {Location: time.UTC, ArgDelimiter: "|", Args: []string{"a"}},
+	} {
+		_, err := e.Render(t.Context(), template.Parse("$time"), s, template.Text)
+		require.ErrorIs(t, err, template.ErrInvalidScope, name)
+		_, err = e.RenderEach(t.Context(), []template.Template{template.Parse("$time")}, s)
+		require.ErrorIs(t, err, template.ErrInvalidScope, name)
+	}
+	_, err := e.Render(t.Context(), template.Parse("$time"), &valid, template.Text)
+	require.NoError(t, err)
 }
