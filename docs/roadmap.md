@@ -92,7 +92,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
-| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); 3.2 Command-Engine abgeschlossen (Settings-Sektion „commands“, Warteschlange, Ausführung, Auslösen, Aufrufe); 3.3 begonnen, die Spezifikation `actions.md` ist geprüft |
+| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); 3.2 Command-Engine abgeschlossen (Settings-Sektion „commands“, Warteschlange, Ausführung, Auslösen, Aufrufe); 3.3 und 3.4 begonnen, die Spezifikation `actions.md` ist geprüft, `requirements.md` wartet auf die Prüfung |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
@@ -420,7 +420,7 @@ Reihenfolge: erst die Bereinigung nach Code-ADR-0017, dann die Doku als unterste
 
 Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022), dann die Umsetzung. Die Engine ruft den Requirement-Service über den Port `engine.Requirements` auf (seit 3.2); die Fehler-Cooldowns sitzen in der Engine.
 
-- [ ] Spezifikation [`docs/spec/requirements.md`](spec/README.md): Prüfung der Anforderungsarten aus der offiziellen Doku, ohne Code des Originals (M):
+- [ ] Spezifikation [`docs/spec/requirements.md`](spec/requirements.md): Prüfung der Anforderungsarten aus der offiziellen Doku, ohne Code des Originals (M), Entwurf vom 2026-09-30, wartet auf die Prüfung durch den Projektinhaber:
   - Reihenfolge der Prüfungen, Kosten und Cooldowns erst, wenn alle erfüllt sind ([`command-engine.md`](spec/command-engine.md), B10)
   - Fehlermeldungen je Art, wann der Nutzer sie erfährt (`Rejection.Tell`), Schwelle als „wartend“
   - Argumente: Typen, Pflicht, Werte als Identifier ([`commands.md`](spec/commands.md), B45)
@@ -1231,4 +1231,5 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Template-Scope nach Code-ADR-0017 bereinigt: `Render` und `RenderEach` lehnen einen Scope ohne Zeitzone, ohne Trennzeichen oder mit Argumenten ohne Text ab (`template.ErrInvalidScope`); ohne Ziel hat `$targetuser…` keinen Wert, weil die Engine das Ziel setzt. |
 | 2026-09-30 | Settings-Sektion „time“ in Version 2: Die Systemzone heißt `system` statt leer, die Migration setzt den Wert in gespeicherten Profilen (Entscheidung des Projektinhabers, Code-ADR-0017). Die Bereinigung vor 3.3 ist damit erledigt. |
 | 2026-09-30 | Phase 3.3 begonnen: Entwurf der Spezifikation `actions.md` für die 15 plattformneutralen P0-Actions aus der offiziellen Doku und dem Plan, ohne Code des Originals; Lücken der Doku als Festlegungen mit offenen Fragen. Aufgabe `moderation` an die Arten der Doku angepasst. |
+| 2026-09-30 | Phase 3.4 begonnen: Entwurf der Spezifikation `requirements.md` aus der offiziellen Doku und dem Plan, ohne Code des Originals: feste Reihenfolge der Prüfungen, Meldungen und wann der Nutzer sie erfährt, Argumente als Werte des Durchlaufs, Schwelle als wartend, Währung, Rang und Inventar bis Phase 8 als fehlerhafte Verweise. |
 | 2026-10-01 | Spezifikation `actions.md` vom Projektinhaber geprüft und akzeptiert. |

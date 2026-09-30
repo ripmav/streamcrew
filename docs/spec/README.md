@@ -44,7 +44,7 @@ Die Regeln setzen [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-orig
 | [`template.md`](template.md) | `$`-Identifier-Engine: Syntax, Auflösung, Kodierung, Ausdrücke, Abweichungen | Phase 3.1 | Geprüft, umgesetzt |
 | [`command-engine.md`](command-engine.md) | Command-Instanzen, Warteschlange, Sperrmodi, Aufrufe, Pause, Verlauf, Settings-Sektion `commands` | Phase 3.2 | Geprüft, umgesetzt (B74 mit Roadmap 3.3) |
 | [`actions.md`](actions.md) | Verhalten der P0-Actions: Konfiguration, Ablauf, Identifier, Fehlerfälle | Phase 3.3 | Geprüft |
-| `requirements.md` | Prüfung der Anforderungsarten, Fehlermeldungen, Kosten und Cooldowns | Phase 3.4 | geplant |
+| [`requirements.md`](requirements.md) | Prüfung der Anforderungsarten, Fehlermeldungen, Kosten und Cooldowns | Phase 3.4 | Entwurf |
 | `twitch-events.md` | Zuordnung der Twitch-Events und ihrer Identifier | Phase 4 | geplant |
 | `moderation.md` | Filter, Strikes, Teilnahmeregeln | Phase 5 | geplant |
 | `overlays.md` | Overlay-Items, Widgets, Protokoll | Phase 7 | geplant |

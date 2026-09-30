@@ -17,7 +17,7 @@ Nicht Teil dieser Spezifikation:
 
 - die Typ-Registry mit Descriptor, JSON-Schema und UI-Hinweisen (Code-ADR-0013)
 - Warteschlange, Sperren, Aufrufe, Fehlerpolitik und Verlauf ([`command-engine.md`](command-engine.md))
-- die Prüfung der Anforderungen (`requirements.md`, Roadmap 3.4)
+- die Prüfung der Anforderungen ([`requirements.md`](requirements.md))
 - die Twitch-Action mit Clips, Markern, Umfragen und Werbung (Roadmap Phase 4)
 - die P1-Actions, etwa Overlay, Sound, Sprachausgabe und Consumables
 - Filter der Moderation und was nach einer Zahl von Strikes geschieht (`moderation.md`, Phase 5)
@@ -87,7 +87,7 @@ Nicht Teil dieser Spezifikation:
 | B34 | `enable`, `disable` und `toggle` ändern den Schalter „aktiv“ des Commands dauerhaft wie eine Änderung in der Oberfläche; sie wirken auf Instanzen, die danach eingereiht werden ([`command-engine.md`](command-engine.md), B3). `enable_group` und `disable_group` tun das für alle Commands der Gruppe. Ein Command, der schon den Zielzustand hat, bleibt unverändert; das ist kein Scheitern. | Q7 |
 | B35 | `cancel_all` bricht alle eingereihten und laufenden Instanzen ab, auch die eigene; sie endet dann als `canceled` ([`command-engine.md`](command-engine.md), B51). | Q7 |
 | B36 | `pause`, `unpause`, `pause_entrance` und `unpause_entrance` wirken wie Pause und Fortsetzen über die Oberfläche ([`command-engine.md`](command-engine.md), B40–B42). | Q7 |
-| B37 | `start_cooldown` startet den Cooldown des genannten Commands, als wäre er gerade eingereiht worden, nach dessen Cooldown-Art (`requirements.md`, Roadmap 3.4); bei den Arten je Nutzer für den Nutzer dieses Durchlaufs. Ohne Cooldown-Anforderung gibt es nichts zu tun; das ist kein Scheitern. Eine Art je Nutzer in einem Durchlauf ohne Nutzer lässt die Action scheitern. | Q7 |
+| B37 | `start_cooldown` startet den Cooldown des genannten Commands, als wäre er gerade eingereiht worden, nach dessen Cooldown-Art ([`requirements.md`](requirements.md)); bei den Arten je Nutzer für den Nutzer dieses Durchlaufs. Ohne Cooldown-Anforderung gibt es nichts zu tun; das ist kein Scheitern. Eine Art je Nutzer in einem Durchlauf ohne Nutzer lässt die Action scheitern. | Q7 |
 | B38 | `exit` beendet die eigene Instanz als `completed`; weitere Actions laufen nicht ([`command-engine.md`](command-engine.md), B4). In einem Command, der mit Warten aufgerufen wurde, endet nur dieser; der Aufrufer macht mit seiner nächsten Action weiter. | Q7 |
 
 ### Counter
