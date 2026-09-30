@@ -52,7 +52,7 @@ Die Regeln gelten für jede Schnittstelle im Projekt: exportierte Go-APIs, Ports
 **Folgearbeiten:**
 
 - [ ] Nach der Annahme Status setzen und den Index in [`README.md`](README.md) anpassen
-- [ ] Command-Engine (Phase 3.2, PR #48 bis #51) vor dem Merge umstellen: Ergebnistypen für die Anforderungen, das Auslösen und die Aufrufe; ausdrückliche Fehlerpolitik, Zeitlimits, Argumente von Aufrufen, Einstellungen und Zielnutzer
+- [x] Command-Engine (Phase 3.2, PR #48 bis #51) vor dem Merge umstellen: Ergebnistypen für die Anforderungen, das Auslösen und die Aufrufe; ausdrückliche Fehlerpolitik, Zeitlimits, Argumente von Aufrufen, Einstellungen und Zielnutzer; erledigt 2026-09-30
 - [ ] Bestehenden Code umstellen, jeweils mit Tests und angepasster Spezifikation:
   - `settings.Time.TimeZone`: leer heißt Systemzeitzone (Code-ADR-0009); braucht eine neue Entscheidung des Projektinhabers und eine neue Version der Sektion
   - `template.Scope` (Phase 3.1, PR #42 bis #45): `ArgDelimiter` leer heißt `|`, `Location` `nil` heißt UTC, `Target` `nil` heißt auslösender Nutzer, `ArgsText` leer heißt „Argumente mit Leerzeichen“
