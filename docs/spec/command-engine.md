@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-09-30 |
 | **Bezug** | Roadmap Phase 3.2; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0004](../adr/code/0004-nebenlaeufigkeit-und-supervisor.md), [Code-ADR-0011](../adr/code/0011-event-bus.md), [Code-ADR-0012](../adr/code/0012-template-engine.md); Plan §5, §6.8, §6.9; [`commands.md`](commands.md), [`template.md`](template.md), [`events.md`](events.md), [`users-and-roles.md`](users-and-roles.md) |
-| **Umsetzung** | noch offen (geplant: `internal/engine`, Settings-Sektion `commands` in `internal/settings`) |
+| **Umsetzung** | Settings-Sektion `commands` in `internal/settings` (B90); Fehlerpolitik im Datenmodell der Commands (B71, `internal/domain/command`, Migration 0005). Die Engine folgt in `internal/engine`. |
 
 ## Zweck und Umfang
 
@@ -180,7 +180,7 @@ Nicht Teil dieser Spezifikation:
 - [ ] B60–B62: Verlauf als Ringpuffer; Ereignisse je Zustandswechsel in der richtigen Reihenfolge.
 - [ ] B70–B74: Fehlerpolitik, Zeitlimit, Tiefe und Zyklen von Aufrufen.
 - [ ] B80–B82: Parameter und Zielnutzer im Scope der Templates.
-- [ ] B90: Settings-Sektion mit Standardwerten, Prüfung und Migration nach Code-ADR-0010.
+- [x] B90: Settings-Sektion mit Standardwerten, Prüfung und Migration nach Code-ADR-0010.
 - [ ] Nebenläufigkeit: alle Tests der Engine mit `-race`; ein Lasttest mit vielen gleichzeitig ausgelösten Commands in jedem Sperrmodus.
 
 ## Offene Fragen
@@ -212,3 +212,4 @@ Nicht Teil dieser Spezifikation:
 |---|---|
 | 2026-09-30 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
 | 2026-09-30 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
+| 2026-09-30 | Settings-Sektion `commands` und Fehlerpolitik im Datenmodell umgesetzt. Festlegungen dabei: Die Sektion hat die Felder `lockMode`, `errorCooldown`, `errorCooldownDuration` (Go-Dauer, Code-ADR-0009) und `argDelimiter`. Eine Dauer von 0 hält keine Fehlermeldung zurück; negative Dauern sind ungültig. Das Trennzeichen darf nicht leer sein und keine Steuerzeichen enthalten, sonst ist es frei. Eine leere Fehlerpolitik gilt als `continue`; gespeichert wird immer der Wert. |

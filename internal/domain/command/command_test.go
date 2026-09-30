@@ -95,6 +95,11 @@ func TestValidate(t *testing.T) {
 		Name: "follow alert", Kind: command.KindEvent, Event: eventtype.ChannelFollow}.Validate())
 	require.NoError(t, command.Command{Name: "reminder", Kind: command.KindTimer}.Validate())
 	require.NoError(t, command.Command{Name: "shared", Kind: command.KindActionGroup}.Validate())
+	for _, p := range []command.ErrorPolicy{"", command.ErrorContinue, command.ErrorAbort} {
+		c := validChat()
+		c.ErrorPolicy = p
+		require.NoError(t, c.Validate(), p)
+	}
 
 	tests := map[string]func(*command.Command){
 		"empty name":          func(c *command.Command) { c.Name = " " },
@@ -117,6 +122,7 @@ func TestValidate(t *testing.T) {
 		"invalid requirement": func(c *command.Command) { c.Requirements = []command.Requirement{command.RoleRequirement{}} },
 		"nil requirement":     func(c *command.Command) { c.Requirements = []command.Requirement{nil} },
 		"nil action":          func(c *command.Command) { c.Actions = []command.Action{nil} },
+		"unknown policy":      func(c *command.Command) { c.ErrorPolicy = "retry" },
 		"unknown requirement x2": func(c *command.Command) {
 			c.Requirements = []command.Requirement{unknownRequirement("x"), unknownRequirement("x")}
 		},
@@ -133,6 +139,14 @@ func TestValidate(t *testing.T) {
 
 func unknownRequirement(typ string) command.UnknownRequirement {
 	return command.UnknownRequirement{Type: typ, Version: 1, Raw: []byte(`{"type":"` + typ + `"}`)}
+}
+
+// TestErrorPolicyDefault covers B71 of the spec command-engine.md: an empty
+// policy means continue.
+func TestErrorPolicyDefault(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, command.ErrorContinue, command.ErrorPolicy("").OrDefault())
+	assert.Equal(t, command.ErrorAbort, command.ErrorAbort.OrDefault())
 }
 
 func TestValidateGroup(t *testing.T) {

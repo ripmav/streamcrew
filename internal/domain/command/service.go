@@ -56,6 +56,7 @@ func (s *Service) Save(ctx context.Context, cmd Command) (Command, error) {
 	if cmd.ID.IsZero() {
 		cmd.ID = id.New()
 	}
+	cmd.ErrorPolicy = cmd.ErrorPolicy.OrDefault()
 	cmd.CreatedAt, cmd.UpdatedAt = stamps(cmd.CreatedAt)
 	rec, err := s.codec.Record(cmd)
 	if err != nil {

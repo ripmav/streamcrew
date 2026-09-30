@@ -44,7 +44,7 @@ func (q *Queries) DeleteTriggers(ctx context.Context, commandID string) error {
 }
 
 const getCommand = `-- name: GetCommand :one
-SELECT id, name, kind, enabled, unlocked, group_id, wildcard, event_type, requirements, actions, created_at, updated_at FROM commands WHERE id = ?
+SELECT id, name, kind, enabled, unlocked, group_id, wildcard, event_type, requirements, actions, created_at, updated_at, error_policy FROM commands WHERE id = ?
 `
 
 func (q *Queries) GetCommand(ctx context.Context, id string) (Command, error) {
@@ -63,6 +63,7 @@ func (q *Queries) GetCommand(ctx context.Context, id string) (Command, error) {
 		&i.Actions,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ErrorPolicy,
 	)
 	return i, err
 }
@@ -176,7 +177,7 @@ func (q *Queries) ListCommandGroups(ctx context.Context) ([]CommandGroup, error)
 }
 
 const listCommands = `-- name: ListCommands :many
-SELECT id, name, kind, enabled, unlocked, group_id, wildcard, event_type, requirements, actions, created_at, updated_at FROM commands ORDER BY name, id
+SELECT id, name, kind, enabled, unlocked, group_id, wildcard, event_type, requirements, actions, created_at, updated_at, error_policy FROM commands ORDER BY name, id
 `
 
 func (q *Queries) ListCommands(ctx context.Context) ([]Command, error) {
@@ -201,6 +202,7 @@ func (q *Queries) ListCommands(ctx context.Context) ([]Command, error) {
 			&i.Actions,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ErrorPolicy,
 		); err != nil {
 			return nil, err
 		}
@@ -245,8 +247,8 @@ func (q *Queries) ListTriggers(ctx context.Context, commandID string) ([]string,
 const putCommand = `-- name: PutCommand :exec
 INSERT INTO commands (
     id, name, kind, enabled, unlocked, group_id, wildcard, event_type,
-    requirements, actions, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    error_policy, requirements, actions, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE SET
     name = excluded.name,
     kind = excluded.kind,
@@ -255,6 +257,7 @@ ON CONFLICT (id) DO UPDATE SET
     group_id = excluded.group_id,
     wildcard = excluded.wildcard,
     event_type = excluded.event_type,
+    error_policy = excluded.error_policy,
     requirements = excluded.requirements,
     actions = excluded.actions,
     updated_at = excluded.updated_at
@@ -269,6 +272,7 @@ type PutCommandParams struct {
 	GroupID      sql.NullString
 	Wildcard     int64
 	EventType    sql.NullString
+	ErrorPolicy  string
 	Requirements string
 	Actions      string
 	CreatedAt    int64
@@ -285,6 +289,7 @@ func (q *Queries) PutCommand(ctx context.Context, arg PutCommandParams) error {
 		arg.GroupID,
 		arg.Wildcard,
 		arg.EventType,
+		arg.ErrorPolicy,
 		arg.Requirements,
 		arg.Actions,
 		arg.CreatedAt,

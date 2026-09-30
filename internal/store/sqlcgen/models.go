@@ -21,6 +21,7 @@ type Command struct {
 	Actions      string
 	CreatedAt    int64
 	UpdatedAt    int64
+	ErrorPolicy  string
 }
 
 type CommandGroup struct {

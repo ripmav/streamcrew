@@ -54,6 +54,7 @@ func TestCommandKeepsUnknownActions(t *testing.T) {
 	assert.True(t, saved.Enabled)
 	assert.True(t, saved.Unlocked)
 	assert.True(t, saved.Wildcard)
+	assert.Equal(t, command.ErrorContinue, saved.ErrorPolicy, "the default (spec command-engine.md, B71)")
 	assert.Equal(t, cmd.Requirements, saved.Requirements)
 
 	loaded, err := svc.Command(ctx, saved.ID)
@@ -68,6 +69,11 @@ func TestCommandKeepsUnknownActions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, saved.CreatedAt, resaved.CreatedAt)
 	assert.Equal(t, loaded.Actions, resaved.Actions)
+
+	loaded.ErrorPolicy = command.ErrorAbort
+	aborting, err := svc.Save(ctx, loaded)
+	require.NoError(t, err)
+	assert.Equal(t, command.ErrorAbort, aborting.ErrorPolicy)
 }
 
 // TestTriggersAsEntered covers B11, B12 and B60: triggers are stored without
