@@ -248,7 +248,7 @@ type Commands struct {
 	// ErrorCooldown is the mode of the error cooldown (B12).
 	ErrorCooldown ErrorCooldown `json:"errorCooldown"`
 	// ErrorCooldownDuration is how long an error message holds back the next
-	// one; 0 holds back none.
+	// one; a duration of 0 holds back nothing.
 	ErrorCooldownDuration polydoc.Duration `json:"errorCooldownDuration"`
 	// ArgDelimiter separates the delimited arguments of templates (spec
 	// template.md, $argdelimited...).
@@ -267,6 +267,11 @@ func DefaultCommands() Commands {
 
 // DocType implements polydoc.Document.
 func (Commands) DocType() string { return sectionCommands }
+
+// Validate checks the section, e.g. before the command engine uses it.
+func (c Commands) Validate() error {
+	return c.validate()
+}
 
 func (c Commands) validate() error {
 	if !c.LockMode.Valid() {

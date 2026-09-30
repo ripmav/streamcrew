@@ -90,7 +90,7 @@ func (s *Store) PutCommand(ctx context.Context, rec command.Record) error {
 			GroupID:      nullID(rec.GroupID),
 			Wildcard:     flag(rec.Wildcard),
 			EventType:    eventType,
-			ErrorPolicy:  string(rec.ErrorPolicy.OrDefault()),
+			ErrorPolicy:  string(rec.ErrorPolicy),
 			Requirements: documents(rec.Requirements),
 			Actions:      documents(rec.Actions),
 			CreatedAt:    rec.CreatedAt.UnixMilli(),

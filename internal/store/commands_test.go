@@ -26,7 +26,7 @@ func commandService(t *testing.T) (*command.Service, *command.Codec) {
 }
 
 func chatCommand(name string, enabled bool, triggers ...string) command.Command {
-	return command.Command{Name: name, Kind: command.KindChat, Enabled: enabled, Triggers: triggers}
+	return command.Command{Name: name, Kind: command.KindChat, Enabled: enabled, Triggers: triggers, ErrorPolicy: command.ErrorContinue}
 }
 
 // TestCommandKeepsUnknownActions covers B1 and B4: a command with actions of
@@ -39,7 +39,7 @@ func TestCommandKeepsUnknownActions(t *testing.T) {
 	actions := json.RawMessage(`[{"type":"chat.send","schemaVersion":1,"message":"Hi $username!"},{"type":"obs.scene","schemaVersion":4,"scene":"Main"}]`)
 	cmd, err := codec.Command(command.Record{
 		Name: "hug", Kind: command.KindChat, Enabled: true, Unlocked: true, Triggers: []string{"hug"}, Wildcard: true,
-		Actions: actions,
+		ErrorPolicy: command.ErrorContinue, Actions: actions,
 	})
 	require.NoError(t, err)
 	cmd.Requirements = []command.Requirement{
@@ -54,7 +54,7 @@ func TestCommandKeepsUnknownActions(t *testing.T) {
 	assert.True(t, saved.Enabled)
 	assert.True(t, saved.Unlocked)
 	assert.True(t, saved.Wildcard)
-	assert.Equal(t, command.ErrorContinue, saved.ErrorPolicy, "the default (spec command-engine.md, B71)")
+	assert.Equal(t, command.ErrorContinue, saved.ErrorPolicy, "spec command-engine.md, B71")
 	assert.Equal(t, cmd.Requirements, saved.Requirements)
 
 	loaded, err := svc.Command(ctx, saved.ID)
@@ -127,7 +127,7 @@ func TestOneCommandPerEventType(t *testing.T) {
 	ctx := t.Context()
 	svc, _ := commandService(t)
 
-	follow := command.Command{Name: "follow alert", Kind: command.KindEvent, Event: eventtype.ChannelFollow}
+	follow := command.Command{Name: "follow alert", Kind: command.KindEvent, Event: eventtype.ChannelFollow, ErrorPolicy: command.ErrorContinue}
 	saved, err := svc.Save(ctx, follow)
 	require.NoError(t, err)
 	assert.Equal(t, eventtype.ChannelFollow, saved.Event)

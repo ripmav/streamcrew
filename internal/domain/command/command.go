@@ -55,28 +55,20 @@ type ErrorPolicy string
 // Error policies.
 const (
 	// ErrorContinue runs the next action; the instance completes and keeps
-	// the errors in its history. It is the default.
+	// the errors in its history. New commands start with it.
 	ErrorContinue ErrorPolicy = "continue"
 	// ErrorAbort ends the instance as failed.
 	ErrorAbort ErrorPolicy = "abort"
 )
 
-// Valid reports whether p is a known error policy or empty.
+// Valid reports whether p is a known error policy.
 func (p ErrorPolicy) Valid() bool {
 	switch p {
-	case "", ErrorContinue, ErrorAbort:
+	case ErrorContinue, ErrorAbort:
 		return true
 	default:
 		return false
 	}
-}
-
-// OrDefault returns p, or ErrorContinue if p is empty.
-func (p ErrorPolicy) OrDefault() ErrorPolicy {
-	if p == "" {
-		return ErrorContinue
-	}
-	return p
 }
 
 // Header holds the fields of a command apart from its requirements and
@@ -99,8 +91,8 @@ type Header struct {
 	Wildcard bool
 	// Event is the event type of an event command (B20).
 	Event event.Type
-	// ErrorPolicy says what happens after an action fails; empty means
-	// ErrorContinue (spec command-engine.md, B71).
+	// ErrorPolicy says what happens after an action fails (spec
+	// command-engine.md, B71); it must be set.
 	ErrorPolicy ErrorPolicy
 	// CreatedAt and UpdatedAt are maintained by the service.
 	CreatedAt time.Time
