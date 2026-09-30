@@ -55,6 +55,7 @@ func sleepUntil(t time.Time) {
 func TestArgumentFamily_Golden(t *testing.T) {
 	t.Parallel()
 	s := template.Scope{
+		Location: time.UTC, ArgDelimiter: "|",
 		Args:     []string{"add", "Best stream ever", "|", "Alice"},
 		ArgsText: `add "Best stream ever" | Alice`,
 	}
@@ -70,10 +71,10 @@ func TestArgumentFamily(t *testing.T) {
 		text  string
 		want  string
 	}{
-		{"no arguments", template.Scope{}, "[$allargs] $argcount $argdelimitedcount $arg1text", "[] 0 0 $arg1text"},
-		{"text from the arguments", template.Scope{Args: []string{"a", "b"}}, "$allargs", "a b"},
-		{"no text after the number", template.Scope{Args: []string{"a", "b"}}, "$arg1x $arg2 $arg1:2", "$arg1x $arg2 $arg1:2"},
-		{"own delimiter", template.Scope{ArgsText: " a ; b;;c ", ArgDelimiter: ";"}, "$argdelimitedcount:$argdelimited2text:$argdelimited3text:$argdelimited4text", "4:b::c"},
+		{"no arguments", template.Scope{Location: time.UTC, ArgDelimiter: "|"}, "[$allargs] $argcount $argdelimitedcount $arg1text", "[] 0 0 $arg1text"},
+		{"text after the trigger as written", template.Scope{Location: time.UTC, ArgDelimiter: "|", Args: []string{"a", "b"}, ArgsText: "a  b"}, "$allargs", "a  b"},
+		{"no text after the number", template.Scope{Location: time.UTC, ArgDelimiter: "|", Args: []string{"a", "b"}, ArgsText: "a b"}, "$arg1x $arg2 $arg1:2", "$arg1x $arg2 $arg1:2"},
+		{"own delimiter", template.Scope{Location: time.UTC, ArgsText: " a ; b;;c ", ArgDelimiter: ";"}, "$argdelimitedcount:$argdelimited2text:$argdelimited3text:$argdelimited4text", "4:b::c"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -86,6 +87,7 @@ func TestArgumentFamily(t *testing.T) {
 func TestMessageFamily_Golden(t *testing.T) {
 	t.Parallel()
 	s := template.Scope{
+		Location: time.UTC, ArgDelimiter: "|",
 		Message: "Hello Kappa world  Kappa PogChamp",
 		Emotes:  []string{"Kappa", "Kappa", "PogChamp"},
 	}
@@ -95,7 +97,7 @@ func TestMessageFamily_Golden(t *testing.T) {
 func TestMessageFamily(t *testing.T) {
 	t.Parallel()
 	e := template.New(mvpRegistry(t, nil))
-	var s template.Scope
+	s := scope()
 	assert.Equal(t, "$message $messagenoemotes $messageemotecount", render(t, e, "$message $messagenoemotes $messageemotecount", &s))
 
 	s.SetValue(template.EventMessage, template.TextValue("Thanks for the sub!"))
@@ -105,11 +107,11 @@ func TestMessageFamily(t *testing.T) {
 func TestDateTimeFamily_Golden_B40_B41(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		sleepUntil(time.Date(2009, time.June, 15, 17, 45, 20, 0, time.UTC))
-		s := template.Scope{Location: profileZone()}
+		s := template.Scope{ArgDelimiter: "|", Location: profileZone()}
 		renderGolden(t, template.New(mvpRegistry(t, nil)), &s, "datetime")
 
-		var utc template.Scope
-		assert.Equal(t, "5:45 PM", render(t, template.New(mvpRegistry(t, nil)), "$time", &utc), "without a time zone UTC applies")
+		utc := scope()
+		assert.Equal(t, "5:45 PM", render(t, template.New(mvpRegistry(t, nil)), "$time", &utc))
 	})
 }
 
@@ -118,7 +120,7 @@ func TestDateTimeFamily_Padding(t *testing.T) {
 		sleepUntil(time.Date(2026, time.January, 5, 9, 7, 3, 0, time.UTC))
 		e := template.New(mvpRegistry(t, nil))
 		assert.Equal(t, "1/5/2026 9:07 AM|2026-01-05|09:07:03|0907|Monday",
-			render(t, e, "$datetime|$dateyear-$datemonth-$dateday|$timehour:$timeminute:$timesecond|$timedigits|$dayoftheweek", nil))
+			render(t, e, "$datetime|$dateyear-$datemonth-$dateday|$timehour:$timeminute:$timesecond|$timedigits|$dayoftheweek", new(scope())))
 	})
 }
 
@@ -141,10 +143,10 @@ func TestRandomFamily_B21_B73(t *testing.T) {
 		"$randomnumber1:" + strings.Repeat("9", 20):       "$randomnumber1:" + strings.Repeat("9", 20),
 		"$randomnumber" + strconv.Itoa(1<<53) + ":" + "1": "$randomnumber" + strconv.Itoa(1<<53) + ":1",
 	} {
-		assert.Equal(t, want, render(t, e, text, nil), text)
+		assert.Equal(t, want, render(t, e, text, new(scope())), text)
 	}
 
-	out := render(t, e, strings.Repeat("$randomnumber2 ", 64), nil)
+	out := render(t, e, strings.Repeat("$randomnumber2 ", 64), new(scope()))
 	seen := map[string]int{}
 	for v := range strings.FieldsSeq(out) {
 		seen[v]++
@@ -152,7 +154,7 @@ func TestRandomFamily_B21_B73(t *testing.T) {
 	assert.Len(t, seen, 2, "both numbers appear in 64 draws: %v", seen)
 	assert.Equal(t, 64, seen["1"]+seen["2"])
 
-	for v := range strings.FieldsSeq(render(t, e, strings.Repeat("$randomnumber10:12 ", 32), nil)) {
+	for v := range strings.FieldsSeq(render(t, e, strings.Repeat("$randomnumber10:12 ", 32), new(scope()))) {
 		n, err := strconv.Atoi(v)
 		require.NoError(t, err)
 		assert.True(t, n >= 10 && n <= 12, n)
@@ -186,7 +188,7 @@ func TestStreamFamily_Golden_B43(t *testing.T) {
 			Chatters:  new(int64(30)),
 			StartedAt: time.Now().Add(-(2*time.Hour + 21*time.Minute + 43*time.Second)),
 		}}
-		s := template.Scope{Platform: platform.Twitch, Location: profileZone()}
+		s := template.Scope{ArgDelimiter: "|", Platform: platform.Twitch, Location: profileZone()}
 		renderGolden(t, template.New(mvpRegistry(t, stream)), &s, "stream")
 		assert.Equal(t, int64(5), calls.Load(), "one call per render, and the golden file has five templates")
 	})
@@ -199,7 +201,7 @@ func TestStreamFamily_Uptime_B43(t *testing.T) {
 			StartedAt: time.Now(),
 		}}
 		e := template.New(mvpRegistry(t, stream))
-		s := template.Scope{Platform: platform.Twitch}
+		s := template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch}
 		const text = "$streamuptimetotal $streamuptimehours $streamuptimeminutes $streamuptimeseconds"
 		assert.Equal(t, "0:00 0 0 0", render(t, e, text, &s))
 		time.Sleep(26*time.Hour + 5*time.Minute + 7*time.Second)
@@ -226,7 +228,7 @@ func TestStreamFamily_NoValue(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := template.Scope{Platform: tc.platform}
+			s := template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: tc.platform}
 			assert.Equal(t, tc.want, render(t, template.New(mvpRegistry(t, tc.states)), text, &s))
 		})
 	}
@@ -254,7 +256,7 @@ func TestCounterSource_Golden(t *testing.T) {
 		{Name: "x", Value: 5},
 	}}
 	e := template.New(mvpRegistry(t, nil), template.WithSources(template.CounterSource(counters)))
-	renderGolden(t, e, nil, "counter")
+	renderGolden(t, e, new(scope()), "counter")
 	assert.Equal(t, int64(5), calls.Load(), "one call per render, and the golden file has five templates")
 }
 
@@ -272,7 +274,7 @@ func TestCounterSource_Display(t *testing.T) {
 	} {
 		counters := fakeCounters{calls: new(atomic.Int64), list: []counter.Counter{{Name: "c", Value: value}}}
 		e := template.New(nil, template.WithSources(template.CounterSource(counters)))
-		assert.Equal(t, want, render(t, e, "$cdisplay", nil))
+		assert.Equal(t, want, render(t, e, "$cdisplay", new(scope())))
 	}
 }
 
@@ -281,21 +283,21 @@ func TestCounterSource_Error(t *testing.T) {
 	logger, logs := logBuffer()
 	counters := fakeCounters{calls: new(atomic.Int64), err: errors.New("database locked")}
 	e := template.New(mvpRegistry(t, nil), template.WithLogger(logger), template.WithSources(template.CounterSource(counters)))
-	assert.Equal(t, "$deaths and 2 arguments", render(t, e, "$deaths and $argcount arguments", &template.Scope{Args: []string{"a", "b"}}))
+	assert.Equal(t, "$deaths and 2 arguments", render(t, e, "$deaths and $argcount arguments", &template.Scope{Location: time.UTC, ArgDelimiter: "|", Args: []string{"a", "b"}, ArgsText: "a b"}))
 	assert.Contains(t, logs.String(), "database locked")
 }
 
 func TestRunFamily_Golden(t *testing.T) {
 	t.Parallel()
-	s := template.Scope{Platform: platform.Twitch, CommandName: "shoutout"}
+	s := template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch, CommandName: "shoutout"}
 	renderGolden(t, template.New(mvpRegistry(t, nil)), &s, "run")
 }
 
 func TestRunFamily(t *testing.T) {
 	t.Parallel()
 	e := template.New(mvpRegistry(t, nil))
-	assert.Equal(t, "$commandname $streamingplatform", render(t, e, "$commandname $streamingplatform", nil))
-	assert.Equal(t, "velora", render(t, e, "$streamingplatform", &template.Scope{Platform: "velora"}))
+	assert.Equal(t, "$commandname $streamingplatform", render(t, e, "$commandname $streamingplatform", new(scope())))
+	assert.Equal(t, "velora", render(t, e, "$streamingplatform", &template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: "velora"}))
 }
 
 // TestRegistry_ReservedMVP checks typical counter names against the families

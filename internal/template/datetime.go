@@ -75,11 +75,8 @@ func (s *Scope) now() time.Time {
 	return t.In(s.location())
 }
 
-// location returns the time zone of the profile.
+// location returns the time zone of the profile, which Render has checked.
 func (s *Scope) location() *time.Location {
-	if s.Location == nil {
-		return time.UTC
-	}
 	return s.Location
 }
 
