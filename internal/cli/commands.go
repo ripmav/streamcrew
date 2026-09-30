@@ -4,7 +4,8 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -223,7 +224,10 @@ func (c doctorCmd) Run(ctx context.Context, e *Env) error {
 }
 
 func writeJSON(w io.Writer, v any) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(v)
+	out, err := json.Marshal(v, jsontext.Multiline(true), jsontext.WithIndent("  "), json.Deterministic(true))
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(append(out, '\n'))
+	return err
 }
