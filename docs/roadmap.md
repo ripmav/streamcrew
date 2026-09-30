@@ -382,7 +382,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [ ] Abbrechen über `context`, Replay, Verlauf als Ringpuffer, Ereignisse `command.instance.*` (M)
 - [ ] Runner-Parameter pro Nutzer, Auflösung des Ziel-Nutzers, Rekursions- und Zyklenschutz, Zeitlimits je Action (M)
 - [ ] Nebenläufigkeitstests mit `testing/synctest` und `-race` (M)
-- [ ] Settings-Sektionen mit ihren Funktionen, aus 2.2 übertragen: „commands“ (Sperrmodus, Fehler-Cooldowns) und „locale“ hier, „general“, „chat“ und „moderation“ mit Phase 5, „overlay“ mit Phase 7 (S)
+- [ ] Settings-Sektionen mit ihren Funktionen, aus 2.2 übertragen: „commands“ (Sperrmodus, Fehler-Cooldowns) hier, „locale“ mit ADR-0022 in 3.6 (Entscheidung des Projektinhabers vom 2026-09-30), „general“, „chat“ und „moderation“ mit Phase 5, „overlay“ mit Phase 7 (S)
 
 ### 3.3 Action-Framework und P0-Actions
 
@@ -426,6 +426,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - Deduplizierung
 - [ ] Trigger-Erkennung: `!`-Präfix, Wildcards, längster Treffer, Argumente inkl. Anführungszeichen (M)
 - [ ] ADR-0022 Internationalisierung; Grundgerüst mit EN und DE (S)
+- [ ] Settings-Sektion „locale“ (Sprache und Formate des Profils), aus 3.2 verschoben; danach Datums-, Zeit- und Zahlenformate der Templates nach der Locale ([`template.md`](spec/template.md), B41) (S)
 
 **Exit-Kriterien (M1):**
 
@@ -1193,3 +1194,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Nutzer-Familien umgesetzt: Subjekt mal Eigenschaft für auslösenden Nutzer, Ziel, Streamer, Bot, `arg<n>user` und Zufallsnutzer über den Port `template.Users`; Zeitspannen in Jahren, Monaten und Tagen; `platform.Name.ProfileURL`. |
 | 2026-09-30 | Ausdrücke umgesetzt (`internal/expr` mit `expr-lang/expr` 1.17.8): Sprache auf B50 begrenzt, Identifier als Variablen, alle Zahlen als `float64`, Grenzen für Größe und Speicher. Phase 3.1 abgeschlossen. |
 | 2026-09-30 | Phase 3.2 begonnen: Entwurf der Spezifikation `command-engine.md` aus der offiziellen Doku und dem Plan, ohne Code des Originals; Lücken der Doku als Festlegungen mit offenen Fragen. |
+| 2026-09-30 | Settings-Sektion „locale“ von 3.2 nach 3.6 verschoben, weil sie an ADR-0022 hängt (Entscheidung des Projektinhabers). |
