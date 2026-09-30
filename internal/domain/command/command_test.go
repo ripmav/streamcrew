@@ -81,6 +81,7 @@ func TestMatches(t *testing.T) {
 func validChat() command.Command {
 	return command.Command{
 		Name: "hug", Kind: command.KindChat, Enabled: true, Triggers: []string{"hug", "umarmen"},
+		ErrorPolicy: command.ErrorContinue,
 		Requirements: []command.Requirement{
 			command.RoleRequirement{Role: role.Follower},
 			command.CooldownRequirement{Scope: command.CooldownPerUser, Duration: polydoc.Duration(30 * time.Second)},
@@ -92,9 +93,14 @@ func TestValidate(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, validChat().Validate())
 	require.NoError(t, command.Command{
-		Name: "follow alert", Kind: command.KindEvent, Event: eventtype.ChannelFollow}.Validate())
-	require.NoError(t, command.Command{Name: "reminder", Kind: command.KindTimer}.Validate())
-	require.NoError(t, command.Command{Name: "shared", Kind: command.KindActionGroup}.Validate())
+		Name: "follow alert", Kind: command.KindEvent, Event: eventtype.ChannelFollow, ErrorPolicy: command.ErrorContinue}.Validate())
+	require.NoError(t, command.Command{Name: "reminder", Kind: command.KindTimer, ErrorPolicy: command.ErrorContinue}.Validate())
+	require.NoError(t, command.Command{Name: "shared", Kind: command.KindActionGroup, ErrorPolicy: command.ErrorAbort}.Validate())
+	for _, p := range []command.ErrorPolicy{command.ErrorContinue, command.ErrorAbort} {
+		c := validChat()
+		c.ErrorPolicy = p
+		require.NoError(t, c.Validate(), p)
+	}
 
 	tests := map[string]func(*command.Command){
 		"empty name":          func(c *command.Command) { c.Name = " " },
@@ -117,6 +123,8 @@ func TestValidate(t *testing.T) {
 		"invalid requirement": func(c *command.Command) { c.Requirements = []command.Requirement{command.RoleRequirement{}} },
 		"nil requirement":     func(c *command.Command) { c.Requirements = []command.Requirement{nil} },
 		"nil action":          func(c *command.Command) { c.Actions = []command.Action{nil} },
+		"unknown policy":      func(c *command.Command) { c.ErrorPolicy = "retry" },
+		"no policy":           func(c *command.Command) { c.ErrorPolicy = "" },
 		"unknown requirement x2": func(c *command.Command) {
 			c.Requirements = []command.Requirement{unknownRequirement("x"), unknownRequirement("x")}
 		},
