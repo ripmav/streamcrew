@@ -4,7 +4,10 @@
 // (ADR-0004: Twitch at the start, more platforms in the roadmap backlog).
 package platform
 
-import "fmt"
+import (
+	"fmt"
+	"net/url"
+)
 
 // Name is the stable ID of a platform, e.g. "twitch". It appears in the
 // database, in the API and as the source name of platform events.
@@ -31,6 +34,27 @@ func (n Name) DisplayName() string {
 	default:
 		return string(n)
 	}
+}
+
+// ProfileURL returns the address of an account's channel page on the
+// platform, from its login name or, on YouTube, its channel ID; empty for a
+// platform without an adapter or a missing name.
+func (n Name) ProfileURL(login, platformUserID string) string {
+	var base, key string
+	switch n {
+	case Twitch:
+		base, key = "https://www.twitch.tv/", login
+	case YouTube:
+		base, key = "https://www.youtube.com/channel/", platformUserID
+	case Kick:
+		base, key = "https://kick.com/", login
+	default:
+		return ""
+	}
+	if key == "" {
+		return ""
+	}
+	return base + url.PathEscape(key)
 }
 
 // maxLen is the maximum length of a name.

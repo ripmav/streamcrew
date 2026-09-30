@@ -88,7 +88,7 @@
 - [x] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) und das ADR-Backlog in Plan §12.2 anpassen, erledigt 2026-09-29
 - [x] Kern von `internal/template` umsetzen (Roadmap 3.1), erledigt 2026-09-30
 - [x] Familien für Argumente, Nachricht, Datum und Zeit, Zufallszahlen, Stream, Counter, Ereigniswerte, Command-Name und Plattform, erledigt 2026-09-30
-- [ ] Nutzer-Familien mit Zufallsnutzer (Roadmap 3.1)
+- [x] Nutzer-Familien mit Zufallsnutzer (Roadmap 3.1), erledigt 2026-09-30
 - [ ] `internal/expr` umsetzen (Roadmap 3.1); `expr-lang/expr` in `go.mod` aufnehmen und die Lizenzprüfung der CI laufen lassen
 - [ ] Die Special-Identifier-Action (Roadmap 3.3) setzt lokale und globale Werte über die Quellen aus Punkt 2
 - [ ] Namen und Eigenschaften nach der rechtlichen Einschätzung (Gate O, O.1) bestätigen oder austauschen

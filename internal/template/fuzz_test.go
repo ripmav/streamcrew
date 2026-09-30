@@ -26,6 +26,7 @@ func FuzzRender(f *testing.F) {
 		"$followage $targetusername", "a$:b$1:2$", "\xff$user\x00name",
 		"$arg1:3text $argdelimited2text $randomnumber5:10 $randomnumber0",
 		"$deathsdisplay $datetime $streamuptimetotal $messagenoemotes",
+		"$userfollowage $targetuserroles $arg1username $randomuserid $botuser",
 	} {
 		f.Add(seed)
 	}
@@ -33,9 +34,18 @@ func FuzzRender(f *testing.F) {
 	e := template.New(newRegistry(f), template.WithSources(mapSource{"deaths": "3"}))
 	counters := fakeCounters{calls: new(atomic.Int64), list: []counter.Counter{{Name: "deaths", Value: 1234}}}
 	stream := fakeStream{calls: new(atomic.Int64), state: template.StreamState{Live: true, Title: "t", StartedAt: time.Now()}}
-	mvp := template.New(mvpRegistry(f, stream), template.WithSources(template.CounterSource(counters)))
+	alice, bob, users := testUsers()
+	all, err := template.NewRegistry(
+		template.CharacterFamily(), template.ArgumentFamily(), template.MessageFamily(),
+		template.DateTimeFamily(), template.RandomFamily(), template.StreamFamily(stream),
+		template.RunFamily(), template.UserFamily(users),
+	)
+	require.NoError(f, err)
+	mvp := template.New(all, template.WithSources(template.CounterSource(counters)))
 	scope := template.Scope{
 		Platform: platform.Twitch,
+		User:     &alice,
+		Target:   &bob,
 		Message:  "!cmd a b | c Kappa",
 		Emotes:   []string{"Kappa"},
 		Args:     []string{"a", "b", "|", "c", "Kappa"},
