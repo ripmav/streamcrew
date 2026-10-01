@@ -12,16 +12,16 @@
 // the rendered texts. An inserted value thus never becomes a function or a
 // separator, even if it contains parentheses or commas.
 //
-// A function is a name of ASCII letters, regardless of case, directly
-// followed by "(", that does not continue a word or a $ token. Parameters
+// A function is one of the names of B52, regardless of case, directly
+// followed by "(", that does not continue a word or a $ token. Other names
+// with parentheses, such as "Score(s)", are text. Parameters
 // are separated by commas and are not trimmed: a space after a comma
 // belongs to the parameter. Parentheses without a name pair up inside a
 // parameter and are text, so are the commas between them. A parameter that
 // starts and ends with a double quote, directly after "(" or "," and
 // directly before "," or ")", is text with commas and parentheses; $
 // identifiers in it are inserted, as in quoted text of an expression. A
-// name without its closing parenthesis stays text; an unknown name with one
-// is an error.
+// function name without its closing parenthesis stays text (B53).
 package textfunc
 
 import (
@@ -34,9 +34,9 @@ import (
 )
 
 var (
-	// ErrInvalid is wrapped by the errors of Parse: an unknown function, a
-	// wrong number of parameters, a fixed pattern or date that is invalid,
-	// or functions nested too deeply (B55).
+	// ErrInvalid is wrapped by the errors of Parse: a wrong number of
+	// parameters, a fixed pattern or date that is invalid, or functions
+	// nested too deeply (B55).
 	ErrInvalid = errors.New("invalid text functions")
 	// ErrEvaluation is wrapped by the errors of EvalWithTexts: an invalid
 	// pattern or date, a date in the wrong direction (B55), or a result
@@ -76,7 +76,7 @@ type call struct {
 }
 
 // Parse reads the structure of the functions in src (B53). It returns an
-// error wrapping ErrInvalid for an unknown function, a wrong number of
+// error wrapping ErrInvalid for a function with a wrong number of
 // parameters, a pattern of count or a date of datefrom or dateto that has
 // no identifiers and is invalid, and functions nested deeper than MaxDepth.
 func Parse(src string) (*Text, error) {
@@ -182,8 +182,8 @@ type parser struct {
 	depth int
 }
 
-// parsedCall is the outcome of parsing a call; ok is false if the name
-// has no closing parenthesis and stays text.
+// parsedCall is the outcome of parsing a call; ok is false if the name is
+// no function or has no closing parenthesis, so that it stays text.
 type parsedCall struct {
 	call *call
 	end  int
@@ -265,9 +265,13 @@ func (p *parser) call(at, paren int) parsedCall {
 }
 
 // parseCall parses the call whose name starts at at and whose "(" is at
-// paren.
+// paren. A name that is no function stays text, its parentheses too.
 func (p *parser) parseCall(at, paren int) parsedCall {
 	name := strings.ToLower(p.src[at:paren])
+	fn, known := functions()[name]
+	if !known {
+		return parsedCall{}
+	}
 	p.depth++
 	defer func() { p.depth-- }()
 	if p.depth > MaxDepth {
@@ -295,11 +299,7 @@ func (p *parser) parseCall(at, paren int) parsedCall {
 		}
 		i++ // the comma
 	}
-	fn, known := functions()[name]
-	switch {
-	case !known:
-		return parsedCall{err: fmt.Errorf("unknown function %q", name)}
-	case len(params) != fn.params:
+	if len(params) != fn.params {
 		return parsedCall{err: fmt.Errorf("%s takes %d parameters, not %d", name, fn.params, len(params))}
 	}
 	for i, param := range params {

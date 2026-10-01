@@ -95,6 +95,10 @@ func TestFunctions(t *testing.T) {
 		{"no closing parenthesis: tolower(ABC", nil, "no closing parenthesis: tolower(ABC"},
 		{"outer without closing: toupper(tolower(ABC)", nil, "outer without closing: toupper(abc"},
 		{"after a digit: 5tolower(A)", nil, "after a digit: 5tolower(A)"},
+		{"B53 other names: Score(s) unknown(x, y)", nil, "B53 other names: Score(s) unknown(x, y)"},
+		{"in a word: xtolower(A)", nil, "in a word: xtolower(A)"},
+		{"functions inside: Score(toupper(a))", nil, "functions inside: Score(A)"},
+		{"inside a function: tolower(Score(A, B))", nil, "inside a function: score(a, b)"},
 		{"after a token: $arg1texttolower(A)", []string{"x"}, "after a token: xtolower(A)"},
 		{"a token is no function: $tolower(A)", nil, "a token is no function: $tolower(A)"},
 		{"spaces belong to parameters: replace(a b, b, c)", nil, "spaces belong to parameters: a c"},
@@ -110,10 +114,6 @@ func TestFunctions(t *testing.T) {
 func TestParseFails(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ src, want string }{
-		{"unknown(x)", `unknown function "unknown"`},
-		{"Score(s)", `unknown function "score"`},
-		{"xtolower(A)", `unknown function "xtolower"`},
-		{"tolower(unknown(x))", `unknown function "unknown"`},
 		{"tolower(a,b)", "tolower takes 1 parameters, not 2"},
 		{"replace(a,b)", "replace takes 3 parameters, not 2"},
 		{"count(abc,[)", "count: invalid pattern"},
@@ -199,6 +199,8 @@ func TestParseIsLinear(t *testing.T) {
 		strings.Repeat("tolower(a) ", 20_000),
 		strings.Repeat("x (a, b) ", 20_000),
 		strings.Repeat("a(b) c(", 50) + strings.Repeat(" text", 20_000),
+		strings.Repeat("tolower(", 20_000),
+		strings.Repeat("score(", 20_000),
 	} {
 		_, err := textfunc.Parse(src)
 		if err != nil {

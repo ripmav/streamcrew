@@ -71,9 +71,10 @@ func TestSpecialIdentifier(t *testing.T) {
 			f.special(values.SpecialText, "greeting", "replace($greeting,Hello,Bye)", false), f.show("$greeting"),
 			f.special(values.SpecialText, "inserted", "toupper($arg3text)", false), f.show("$inserted"),
 			f.special(values.SpecialText, "empty", "", false), f.show("[$empty]"),
+			f.special(values.SpecialText, "score", "Score(s): toupper($arg1text)", false), f.show("$score"),
 		}, "world", "10.5", "a),removespaces(b")
 		assert.Empty(t, in.Errors)
-		assert.Equal(t, []string{"Hello WORLD", "21.5", "21", "0", "Bye WORLD", "A),REMOVESPACES(B", "[]"}, f.lines.get())
+		assert.Equal(t, []string{"Hello WORLD", "21.5", "21", "0", "Bye WORLD", "A),REMOVESPACES(B", "[]", "Score(s): WORLD"}, f.lines.get())
 		assert.Zero(t, f.globals.Len(), "values of the run only")
 	})
 }
@@ -206,7 +207,6 @@ func TestSpecialIdentifierValidate(t *testing.T) {
 		{"unknown kind", func(s *values.SpecialIdentifier) { s.Kind = "math" }, `kind: invalid action: unknown kind "math"`},
 		{"B5 upper case", func(s *values.SpecialIdentifier) { s.Name = "Greeting" }, "name: invalid action"},
 		{"B50 $ in the name", func(s *values.SpecialIdentifier) { s.Name = "$x" }, "name: invalid action"},
-		{"B55 unknown function", func(s *values.SpecialIdentifier) { s.Value = "Score(1)" }, `value: invalid action: invalid text functions: unknown function "score"`},
 		{"wrong number of parameters", func(s *values.SpecialIdentifier) { s.Value = "replace(a,b)" }, "replace takes 3 parameters, not 2"},
 		{"B55 fixed invalid pattern", func(s *values.SpecialIdentifier) { s.Value = "count(a,[)" }, "count: invalid pattern"},
 		{"B55 fixed invalid date", func(s *values.SpecialIdentifier) { s.Value = "datefrom(1.1.2025)" }, `datefrom: invalid date "1.1.2025"`},
