@@ -51,7 +51,7 @@ func (c Combine) Valid() bool {
 // Else has the position len(Actions)+1 in the path of the history
 // (actions.md B9).
 type Conditional struct {
-	action.Common `json:",inline"`
+	action.Common `json:",embed"`
 	// Clauses are one or more.
 	Clauses Clauses `json:"clauses,omitzero"`
 	// Combine says how the results of the clauses combine.
