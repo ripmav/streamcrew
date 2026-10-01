@@ -396,11 +396,16 @@ Reihenfolge: erst die Bereinigung nach Code-ADR-0017, dann die Doku als unterste
   - die Grenze für Wiederholungen ([`command-engine.md`](spec/command-engine.md), B74)
   - was mit den Ausgängen eines Aufrufs geschieht (`engine.Run.Call`: abgeschlossen, eingereiht, inaktiv, abgelehnt, wartend)
   - globale Werte der Action `specialidentifier`: Lebensdauer und Speicherung, als Quelle der Templates ([`template.md`](spec/template.md), B10)
-- [ ] Code-ADR-0013 Typ-Registry (M): Descriptor mit
+- [ ] [Code-ADR-0013](adr/code/0013-typ-registry.md) Typ-Registry (M), vorgeschlagen 2026-10-01, wartet auf die Prüfung durch den Projektinhaber: Descriptor mit
   - Typ-ID, Version, Kategorie, i18n-Schlüsseln
   - JSON-Schema und UI-Hinweisen
   - benötigten Capabilities
-  - Anschluss an die Engine (seit 3.2): Actions setzen `engine.Performer` um, optional `engine.TimeLimiter` (B72) und `engine.Container` für verschachtelte Actions (B22); die Registry liefert die Funktion für `engine.WithVisualAudio` (B23); „aktuellen Command beenden“ gibt `engine.ErrStop` zurück, die Command-Action nutzt `engine.Run.Call`
+  - Anschluss an die Engine (seit 3.2): Actions setzen `engine.Performer` um, verschachtelte zusätzlich `engine.Container` (B22); die Registry setzt den Port für Bild und Ton (B23) und die Capabilities um; „aktuellen Command beenden“ gibt `engine.ErrStop` zurück, die Command-Action nutzt `engine.Run.Call`
+- [ ] Action-Framework nach Code-ADR-0013 (vorgeschlagen), vor den einzelnen Typen (M):
+  - `internal/capability`; `internal/action` mit Registry, Feldtypen (`Template`, `Amount`, `ResultName`), Schema-Bausteinen mit `github.com/google/jsonschema-go` und Konformitätstest
+  - `internal/polydoc`: Kind-Actions als Dokumente derselben Familie, höchstens 16 Ebenen tief
+  - Engine: Schalter „aktiv“, Kind-Actions über `Run.PerformChild` mit Fehlerpolitik und Pfad im Verlauf, Zeitlimit als anhaltbarer Timer mit `Run.LimitTo`, Port `engine.ActionTypes` statt `engine.WithVisualAudio`
+  - Speichern: Verweise, Namen der Ergebniswerte, Warnungen bei fehlenden Capabilities
 - [ ] Plattform-Ports nach Plan §6.11 in `internal/platform` (S): `Chat` (senden, antworten, flüstern, löschen), `Moderation`, Kanalinformation, Nutzer nachschlagen; die Actions nutzen sie, die Mock-Plattform (3.6) und Twitch (Phase 4) setzen sie um
 - [ ] Capability-Prüfung je Betriebsmodus nach [ADR-0013](adr/0013-sicherheitsmodell.md): Warnung beim Speichern, Verweigerung bei Ausführung (S)
 - [ ] `wait`, `random`, `group`, `repeat` mit der Grenze aus B74 (S)
@@ -1233,3 +1238,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Phase 3.3 begonnen: Entwurf der Spezifikation `actions.md` für die 15 plattformneutralen P0-Actions aus der offiziellen Doku und dem Plan, ohne Code des Originals; Lücken der Doku als Festlegungen mit offenen Fragen. Aufgabe `moderation` an die Arten der Doku angepasst. |
 | 2026-09-30 | Phase 3.4 begonnen: Entwurf der Spezifikation `requirements.md` aus der offiziellen Doku und dem Plan, ohne Code des Originals: feste Reihenfolge der Prüfungen, Meldungen und wann der Nutzer sie erfährt, Argumente als Werte des Durchlaufs, Schwelle als wartend, Währung, Rang und Inventar bis Phase 8 als fehlerhafte Verweise. |
 | 2026-10-01 | Spezifikationen `actions.md` und `requirements.md` vom Projektinhaber geprüft und akzeptiert. |
+| 2026-10-01 | Code-ADR-0013 „Typ-Registry für Actions“ vorgeschlagen: Typ-IDs der P0-Actions, Descriptor mit Schema aus `github.com/google/jsonschema-go`, Kind-Actions als verschachtelte Dokumente, Prüfen beim Speichern und die Erweiterungen der Engine für Schalter „aktiv“, Kind-Actions mit eigenem Zeitlimit, Pfade im Verlauf und Capabilities. Neue Aufgabe „Action-Framework“ in 3.3. |

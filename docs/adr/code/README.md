@@ -20,6 +20,7 @@ Es gelten dieselben Konventionen und dieselbe Vorlage ([`../TEMPLATE.md`](../TEM
 | [0010](0010-polymorphe-serialisierung.md) | Polymorphe Serialisierung | Akzeptiert | 2026-09-29 |
 | [0011](0011-event-bus.md) | Event-Bus | Akzeptiert | 2026-09-29 |
 | [0012](0012-template-engine.md) | Template-Engine | Akzeptiert | 2026-09-29 |
+| [0013](0013-typ-registry.md) | Typ-Registry für Actions | Vorgeschlagen | 2026-10-01 |
 | [0017](0017-klare-signale-statt-magischer-werte.md) | Klar definierte Signale statt magischer Werte | Vorgeschlagen | 2026-09-30 |
 | [0018](0018-json-v2.md) | JSON mit `encoding/json/v2` | Akzeptiert | 2026-09-30 |
 
