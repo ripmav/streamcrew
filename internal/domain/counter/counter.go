@@ -81,16 +81,11 @@ func (c Counter) CheckReserved(r Reserver) error {
 }
 
 // Add adds delta, which may be negative (B2). If the result would leave the
-// range of int64, the value stops at the limit and Add returns ErrOverflow
-// (B43); storing the clamped value is up to the caller.
+// range of int64, Add returns ErrOverflow and the value stays as it was
+// (B43).
 func (c *Counter) Add(delta int64) error {
-	switch {
-	case delta > 0 && c.Value > math.MaxInt64-delta:
-		c.Value = math.MaxInt64
-		return fmt.Errorf("counter %q: %w", c.Name, ErrOverflow)
-	case delta < 0 && c.Value < math.MinInt64-delta:
-		c.Value = math.MinInt64
-		return fmt.Errorf("counter %q: %w", c.Name, ErrOverflow)
+	if delta > 0 && c.Value > math.MaxInt64-delta || delta < 0 && c.Value < math.MinInt64-delta {
+		return fmt.Errorf("counter %q: %d %+d: %w", c.Name, c.Value, delta, ErrOverflow)
 	}
 	c.Value += delta
 	return nil
@@ -117,10 +112,8 @@ type Repository interface {
 	// is replaced with a new one.
 	CreateCounter(ctx context.Context, c Counter) (Counter, error)
 	// UpdateCounter changes a counter in one transaction: fn gets the stored
-	// counter and changes it with Add, Set or Reset; an error from fn
-	// discards the change. To store the value an overflow stopped at (B43),
-	// fn must not return the ErrOverflow of Add but report it by other means,
-	// as TestCounterOverflowStopsAtLimit in internal/store shows.
+	// counter and changes it with Add, Set or Reset; an error from fn, such
+	// as the ErrOverflow of Add, discards the change (B43).
 	UpdateCounter(ctx context.Context, name string, fn func(*Counter) error) (Counter, error)
 	DeleteCounter(ctx context.Context, name string) error
 	// ResetCountersOnStart sets the counters with ResetOnStart to 0 (B3) and

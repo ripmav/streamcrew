@@ -72,23 +72,20 @@ func TestCounterOperations(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
-// TestCounterOverflowStopsAtLimit covers B43: the caller stores the clamped
-// value and reports the overflow.
-func TestCounterOverflowStopsAtLimit(t *testing.T) {
+// TestCounterOverflowKeepsValue covers B43: an overflow fails the update,
+// and the stored value stays as it was.
+func TestCounterOverflowKeepsValue(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	s := openStore(t)
 	_, err := s.CreateCounter(ctx, counter.Counter{Name: "big", Value: math.MaxInt64 - 1})
 	require.NoError(t, err)
 
-	var overflow error
-	c, err := s.UpdateCounter(ctx, "big", func(c *counter.Counter) error {
-		overflow = c.Add(10)
-		return nil
-	})
+	_, err = s.UpdateCounter(ctx, "big", func(c *counter.Counter) error { return c.Add(10) })
+	require.ErrorIs(t, err, counter.ErrOverflow)
+	c, err := s.Counter(ctx, "big")
 	require.NoError(t, err)
-	require.ErrorIs(t, overflow, counter.ErrOverflow)
-	assert.Equal(t, int64(math.MaxInt64), c.Value)
+	assert.Equal(t, int64(math.MaxInt64-1), c.Value)
 }
 
 // TestResetCountersOnStart covers B3.
