@@ -31,7 +31,8 @@
 - Vorgaben des Projektinhabers vom 2026-10-01:
   - Dienste wie Twitch sind ohne Eintrag in einer Allowlist erreichbar.
   - Die Allowlist nimmt IP-Adressen, Netze in CIDR-Schreibweise und Hostnamen.
-  - Änderungen der Allowlist greifen möglichst sofort, ohne Neustart.
+  - Änderungen der Allowlist greifen möglichst sofort, ohne Neustart; ebenso Änderungen der Rechte und Wurzeln.
+  - Die Flags heißen kurz `--grant` und `--revoke`.
 
 ## Entscheidung
 
@@ -47,7 +48,7 @@
    | `script` | Skripte in einer Sandbox: JavaScript-Action | an | an |
 
    - `host:input` läuft laut ADR-0013 über den Agent. Bis es ihn gibt, ist die Capability in keinem Modus an; sie lässt sich trotzdem freigeben.
-   - Die Menge entsteht einmal beim Start und gilt für alle Profile des Cores. Eine Änderung braucht einen Neustart.
+   - Die Menge gilt für alle Profile des Cores. Ändern sich `grant` oder `revoke` in der Datei, gilt die neue Menge ohne Neustart (Punkt 5). Den Modus selbst ändert nur ein Neustart.
 
 2. **Abweichungen:** zwei Listen von Capabilities.
 
@@ -73,7 +74,7 @@
    - **Form:** eine Map wie `--log-component-level`. Das Flag lässt sich wiederholen. In der Umgebungsvariable trennt `;` die Einträge, in der Datei steht ein YAML-Objekt. Standard: keine Wurzel.
    - **Name:** 1 bis 32 Kleinbuchstaben, Ziffern und `_`. Commands nennen die Wurzel nur über ihren Namen, nie über den Pfad. So lassen sie sich zwischen Rechnern und Betriebssystemen übertragen.
    - **Verzeichnis:** ein absoluter Pfad. Relative Pfade und `~` sind ein Fehler, weil das Arbeitsverzeichnis eines Dienstes nicht feststeht. Eine Wurzel darf das Datenverzeichnis weder sein noch enthalten noch darin liegen; sonst könnten Commands aus Importen die Profildatenbank, Schlüssel oder den API-Token lesen ([ADR-0013](../0013-sicherheitsmodell.md), Kontext).
-   - **Fehlende Verzeichnisse:** Fehlt ein Verzeichnis beim Start oder ist es keines, warnt der Core im Log und in `streamcrew doctor`, startet aber, etwa wenn ein externes Laufwerk nicht eingehängt ist. Die Datei-Action öffnet die Wurzel bei jedem Zugriff neu mit `os.OpenRoot` und scheitert, solange sie fehlt.
+   - **Fehlende Verzeichnisse:** Fehlt ein Verzeichnis beim Start oder beim Nachladen oder ist es keines, warnt der Core im Log und in `streamcrew doctor`, startet aber, etwa wenn ein externes Laufwerk nicht eingehängt ist. Die Datei-Action schlägt den Namen bei jedem Zugriff in der aktuellen Liste nach (Punkt 5), öffnet die Wurzel neu mit `os.OpenRoot` und scheitert, solange sie fehlt.
    - **Ohne `host:fs`:** Wurzeln sind dann erlaubt, wirken aber nicht; der Core warnt.
 
 4. **Netzziele** (ADR-0013, Punkt 4; B77):
@@ -106,29 +107,37 @@
    - **Prüfung beim Verbindungsaufbau:** Ein eigener Dialer prüft die tatsächlich verbundene Adresse jeder Verbindung, auch bei Weiterleitungen. Erlaubt ist sie, wenn sie in keinem gesperrten Netz liegt, in einem Netz der Allowlist liegt oder der angefragte Hostname in der Allowlist steht. Er liest dabei die jeweils aktuelle Allowlist (Punkt 5).
    - **Außerhalb des Server-Modus** gibt es keinen SSRF-Schutz, wie ADR-0013 es vorsieht. Eine gesetzte Allowlist wirkt dort nicht; der Core warnt.
 
-5. **Allowlist ohne Neustart ändern:**
+5. **Einstellungen ohne Neustart ändern:** `grant`, `revoke`, `file_root` und `outbound_allow` greifen nach einer Änderung der Datei ohne Neustart.
    - **Nachladen:** Der Core prüft die Konfigurationsdatei jede Sekunde auf einen geänderten Inhalt; gemeint ist die Datei aus `--config` oder `config.yaml` im Standard-Datenverzeichnis. Eine Datei, die erst nach dem Start entsteht, zählt ebenso.
-   - **Wirkung:** Ändert sich `outbound_allow`, gilt die neue Liste für jede danach aufgebaute Verbindung. Der HTTP-Client der Action `web_request` schließt dazu seine ungenutzten offenen Verbindungen, damit keine alte Verbindung an der neuen Liste vorbeiführt. Das Log nennt jede übernommene Änderung (Info).
-   - **Fehler:** Ist die Datei ungültig, unlesbar oder fehlt sie, bleibt die bisherige Liste gültig. Log (Warnung) und `streamcrew doctor` nennen den Grund. Das gilt auch für eine gelöschte Datei, weil manche Editoren beim Speichern die Datei kurz entfernen. Leeren lässt sich die Liste mit `outbound_allow: []`.
-   - **Vorrang:** Er bleibt wie in Code-ADR-0005. Ist die Allowlist per Flag oder Umgebungsvariable gesetzt, gilt sie fest für die Laufzeit; Änderungen in der Datei wirken dann nicht, und der Core sagt das beim Start einmal im Log.
-   - **Nur die Allowlist:** Andere geänderte Schlüssel greifen erst nach einem Neustart, auch Rechte und Wurzeln. Das Log nennt sie.
-   - **Sicherheit:** Die Datei liegt lokal. Wer sie ändern kann, hat lokalen Zugriff, wie ADR-0013, Punkt 3, es für das Erweitern von Rechten verlangt. Über die API lässt sich die Liste nicht ändern.
-   - **Umsetzung:** ein Runnable unter dem Supervisor ([Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md)) in `internal/config`. Es vergleicht den Inhalt der Datei, nicht ihre Änderungszeit, und gibt eine geprüfte Liste über einen atomar getauschten Wert an den Dialer.
+   - **Ganz oder gar nicht:** Der Core prüft die geänderte Datei wie beim Start (Punkte 2 bis 4) und übernimmt die vier Einstellungen nur gemeinsam. So passen Rechte, Wurzeln und Allowlist immer zueinander.
+   - **Fehler:** Ist die Datei ungültig, unlesbar oder fehlt sie, bleiben die bisherigen Werte gültig. Log (Warnung) und `streamcrew doctor` nennen den Grund. Das gilt auch für eine gelöschte Datei, weil manche Editoren beim Speichern die Datei kurz entfernen. Wer eine Einstellung zurücknehmen will, ändert sie, etwa auf `outbound_allow: []`, oder entfernt den Schlüssel aus der Datei.
+   - **Wirkung:**
+     - **Rechte:** Engine und Speichern lesen die Menge bei jeder Prüfung neu (B7). Eine Action, die schon läuft, läuft zu Ende; die nächste Action, auch in derselben Instanz, wird gegen die neue Menge geprüft.
+     - **Wurzeln:** Der nächste Zugriff der Datei-Action und das nächste Speichern nutzen die neue Liste. Eine entfernte Wurzel lässt die nächste Datei-Action scheitern (B102); ein Zugriff, der schon läuft, endet normal.
+     - **Allowlist:** Sie gilt für jede danach aufgebaute Verbindung. Der HTTP-Client der Action `web_request` schließt dazu seine ungenutzten offenen Verbindungen, damit keine alte Verbindung an der neuen Liste vorbeiführt.
+     - Das Log nennt jede übernommene Änderung mit altem und neuem Wert (Info).
+   - **Vorrang:** Er bleibt wie in Code-ADR-0005 und gilt je Einstellung. Was per Flag oder Umgebungsvariable gesetzt ist, gilt fest für die Laufzeit; Änderungen dieses Schlüssels in der Datei wirken dann nicht, und der Core sagt das beim Start einmal im Log.
+   - **Übrige Einstellungen:** Für die Einstellungen aus Code-ADR-0005, etwa Modus, Datenverzeichnis, Profil, Adresse und Logging, bleibt es beim Neustart. Geänderte Schlüssel davon nennt das Log mit dem Hinweis, dass sie erst nach einem Neustart gelten.
+   - **Sicherheit:** Die Datei liegt lokal. Wer sie ändern kann, hat lokalen Zugriff, wie ADR-0013, Punkt 3, es für das Erweitern von Rechten verlangt. Über die API lassen sich diese Einstellungen nicht ändern.
+   - **Umsetzung:**
+     - ein Runnable unter dem Supervisor ([Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md)) in `internal/config`
+     - Es vergleicht den Inhalt der Datei, nicht ihre Änderungszeit.
+     - Es gibt eine geprüfte Momentaufnahme der vier Einstellungen über einen atomar getauschten Wert an ihre Nutzer. Die Typ-Registry bekommt dafür eine Quelle der aktuellen Menge statt einer festen Menge.
 
 6. **Umgebung für externe Programme** (B117): `internal/config` liest die Umgebung des Prozesses einmal beim Start und gibt sie ohne die Variablen `STREAMCREW_*` an die Composition Root, die sie der Action `external_program` übergibt. Sie gehört nicht zur angezeigten Konfiguration, weil sie Secrets enthalten kann.
 
 7. **Prüfen und Anzeigen:**
    - **Fehler:** Alle Konfigurationsfehler werden gesammelt (Code-ADR-0005, Punkt 8); `streamcrew` endet mit Exit-Code `2`.
    - **`streamcrew config show`:** zeigt `grant`, `revoke`, `file_root` und `outbound_allow` so, wie sie gesetzt sind, im Format der Datei.
-   - **Start-Log:** Die wirksamen Capabilities, die Wurzeln und die Allowlist stehen beim Start im Log (Info).
-   - **`streamcrew doctor`** nennt sie ebenfalls, die Allowlist so, wie sie gerade gilt, und warnt:
+   - **Log:** Die wirksamen Capabilities, die Wurzeln und die Allowlist stehen beim Start und nach jeder übernommenen Änderung im Log (Info).
+   - **`streamcrew doctor`** nennt sie ebenfalls, so wie sie gerade gelten, und warnt:
      - bei Host-Capabilities (`host:*`), die im Server-Modus freigegeben sind
      - bei fehlenden Wurzeln und bei Wurzeln ohne `host:fs`
      - bei einer Allowlist außerhalb des Server-Modus
      - wenn die Datei beim letzten Nachladen ungültig war
 
 8. **Anschluss im Code:**
-   - **Composition Root:** gibt die Menge an `action.NewRegistry` (Engine und Speichern), die Wurzeln an den Port `command.Roots` und an die Datei-Action, die jeweils aktuelle Allowlist an den Dialer im HTTP-Client der Action `web_request`.
+   - **Composition Root:** gibt die Quelle der aktuellen Menge an `action.NewRegistry` (Engine und Speichern), die aktuellen Wurzeln an den Port `command.Roots` und an die Datei-Action, die aktuelle Allowlist an den Dialer im HTTP-Client der Action `web_request`. Die Registry nimmt damit statt einer festen Menge eine Quelle ([Code-ADR-0013](0013-typ-registry.md), Punkt 3, wird dort vermerkt).
    - **Komponenten:** bekommen nur ihre eigenen Werte, nicht `config.Config` ([Code-ADR-0002](0002-dependency-injection.md)).
 
 ## Betrachtete Alternativen
@@ -142,11 +151,12 @@
 | eine fehlende Wurzel beim Start als Fehler; Wurzeln beim Start öffnen und offen halten | ein nicht eingehängtes Laufwerk verhinderte den Start des ganzen Cores; offene Verzeichnisse ließen sich nicht verschieben |
 | Allowlist nur aus Adressen und Netzen | Dienstnamen in Container-Netzen, etwa `http://homeassistant:8123`, haben wechselnde Adressen |
 | Allowlist mit Platzhaltern (`*.local`) oder Ports | mehr als bisher nötig und schwerer zu überblicken; lässt sich später ergänzen |
-| Allowlist nur beim Start lesen | jede Änderung bräuchte einen Neustart des Cores, also eine Unterbrechung während des Streams (Vorgabe des Projektinhabers) |
+| Einstellungen nur beim Start lesen | jede Änderung bräuchte einen Neustart des Cores, also eine Unterbrechung während des Streams (Vorgabe des Projektinhabers) |
+| längere Flags `--capability-allow` und `--capability-deny` | eindeutiger, aber länger; die Vorgabe des Projektinhabers sind kurze Flags |
 | Dateiänderungen über Ereignisse des Betriebssystems (`fsnotify`) | eine Abhängigkeit mehr; Ereignisse fehlen auf Netzlaufwerken und bei Dateien, die per Symlink getauscht werden, etwa ConfigMaps in Kubernetes. Den Inhalt jede Sekunde zu vergleichen ist billig und auf jedem System gleich |
 | Neu laden auf `SIGHUP` | gibt es unter Windows nicht, und man muss daran denken, das Signal zu schicken |
 | Allowlist über die API ändern | widerspricht ADR-0013, Punkt 3 |
-| Rechte und Wurzeln ebenfalls ohne Neustart | nicht gefordert; die Menge der Capabilities geht beim Start in die Registry. Lässt sich später ergänzen |
+| jede Einstellung einzeln übernehmen, auch wenn eine andere ungültig ist | Rechte, Wurzeln und Allowlist könnten kurz nicht zueinander passen, etwa eine neue Wurzel ohne das zugehörige `host:fs` |
 | SSRF-Schutz auch in Desktop und Daemon | sperrte Ziele im Heimnetz, die dort gewollt sind; ADR-0013 sieht den Schutz nur im Server-Modus vor |
 | Umgebung für Programme über eine Allowlist von Variablen | mehr Konfiguration; B117 legt fest, dass Programme alles außer `STREAMCREW_*` bekommen |
 
@@ -159,12 +169,14 @@
 - **Übertragbare Commands:** Sie nennen Wurzeln über Namen und bleiben ohne Pfade des Rechners.
 - **Container:** Dienstnamen lassen sich freigeben, ohne Adressen festzuschreiben.
 - **Plattformen ohne Einstellung:** Twitch und andere Dienste mit festen Zielen brauchen keinen Eintrag; öffentliche Ziele aus Commands sind in jedem Modus offen.
-- **Allowlist ohne Unterbrechung:** Änderungen greifen nach höchstens etwa einer Sekunde, ohne Neustart.
+- **Ohne Unterbrechung:** Änderungen an Rechten, Wurzeln und Allowlist greifen nach höchstens etwa einer Sekunde, ohne Neustart.
 
 **Negativ und Risiken:**
 
-- **Neustart:** Änderungen an Rechten und Wurzeln brauchen weiter einen Neustart; nur die Allowlist greift sofort. Ist sie per Flag oder Umgebungsvariable gesetzt, entfällt das Nachladen.
-- **Nachladen:** Der Core liest die Datei jede Sekunde. Nach einem Tippfehler gilt die alte Liste weiter, bis die Datei wieder gültig ist; nur Log und `doctor` zeigen das.
+- **Feste Werte:** Was per Flag oder Umgebungsvariable gesetzt ist, lässt sich nur mit einem Neustart ändern. Modus, Datenverzeichnis und die übrigen Einstellungen aus Code-ADR-0005 brauchen weiter einen Neustart.
+- **Nachladen:** Der Core liest die Datei jede Sekunde. Nach einem Tippfehler gelten die alten Werte weiter, bis die Datei wieder gültig ist; nur Log und `doctor` zeigen das.
+- **Rechte im laufenden Command:** Ändern sie sich während einer Instanz, prüft die Engine ihre späteren Actions schon gegen die neuen Rechte. Eine Instanz kann so teils mit, teils ohne ein Recht laufen.
+- **Registry:** `action.NewRegistry` nimmt statt einer festen Menge eine Quelle; das ändert eine Schnittstelle aus Code-ADR-0013.
 - **Allowlist mit Hostnamen:** Ein Hostname gibt alle Adressen frei, in die er aufgelöst wird. Wer einen Namen freigibt, vertraut seiner Namensauflösung.
 - **Gesperrte Netze:** Die Liste ist ein Entwurf. Die Bedrohungsanalyse in Phase 11 kann sie erweitern, ebenso die Prüfung der Wurzeln gegen weitere sensible Verzeichnisse.
 - **Neue Einstellungen:** Sie müssen in README, `config show` und `doctor` nachgezogen werden.
@@ -172,7 +184,7 @@
 **Folgearbeiten:**
 
 - [ ] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen; Code-ADR-0005 und ADR-0013 als ergänzt vermerken
-- [ ] `internal/config`: `grant`, `revoke`, `file_root`, `outbound_allow` mit Prüfung, die Menge der Capabilities je Modus und die Umgebung für Programme. Composition Root, Start-Log, `doctor` und README-Tabelle (Roadmap 3.3, „Capability-Prüfung je Betriebsmodus“)
+- [ ] `internal/config`: `grant`, `revoke`, `file_root`, `outbound_allow` mit Prüfung, die Menge der Capabilities je Modus, das Nachladen der Datei und die Umgebung für Programme. Typ-Registry mit einer Quelle der Menge, Composition Root, Log, `doctor` und README-Tabelle (Roadmap 3.3, „Capability-Prüfung je Betriebsmodus“)
 - [ ] Wurzeln in der Datei-Action und hinter `command.Roots` (Roadmap 3.3, `file`)
 - [ ] Umgebung ohne `STREAMCREW_*` in der Action `external_program` (Roadmap 3.3)
-- [ ] SSRF-Dialer mit gesperrten Netzen und Allowlist, Nachladen der Allowlist aus der Datei ohne Neustart (Roadmap 3.3, `web_request`)
+- [ ] SSRF-Dialer mit gesperrten Netzen und der aktuellen Allowlist, ungenutzte Verbindungen nach einer Änderung schließen (Roadmap 3.3, `web_request`)
