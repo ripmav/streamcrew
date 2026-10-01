@@ -115,7 +115,7 @@ type ports struct {
 
 // Wait waits before the next action runs (actions.md B10).
 type Wait struct {
-	action.Common `json:",inline"`
+	action.Common `json:",embed"`
 	// Seconds is the duration, fractions allowed, from 0 to 3600.
 	Seconds action.Amount `json:"seconds,omitzero"`
 	ports   *ports
@@ -156,7 +156,7 @@ func (w Wait) Perform(ctx context.Context, run *engine.Run) error {
 
 // Group runs its child actions in order (actions.md B14).
 type Group struct {
-	action.Common `json:",inline"`
+	action.Common `json:",embed"`
 	Actions       []command.Action `json:"actions"`
 }
 
@@ -177,7 +177,7 @@ func (g Group) Perform(ctx context.Context, run *engine.Run) error {
 
 // Repeat runs its child actions in order, Count times (actions.md B15).
 type Repeat struct {
-	action.Common `json:",inline"`
+	action.Common `json:",embed"`
 	// Count is a whole number from 0 to 1000 (command-engine.md B74).
 	Count   action.Amount    `json:"count,omitzero"`
 	Actions []command.Action `json:"actions"`

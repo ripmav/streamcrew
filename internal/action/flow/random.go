@@ -48,7 +48,7 @@ func (d Draw) Valid() bool {
 // Random draws Count of its child actions and runs them in the order they
 // were drawn (actions.md B11 to B13).
 type Random struct {
-	action.Common `json:",inline"`
+	action.Common `json:",embed"`
 	// Count is how many draws there are, a whole number from 0 to 1000; a
 	// new random action draws once.
 	Count action.Amount `json:"count,omitzero"`
