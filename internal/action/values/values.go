@@ -30,7 +30,8 @@ const maxExact = 1<<53 - 1
 
 // amountRange is the range of the amount of add and the value of set
 // (actions.md B4, B40): whole numbers that expressions compute exactly.
-// The counter itself holds 64 bits (counters-and-quotes.md, B5).
+// The counter itself and its step hold 64 bits (counters-and-quotes.md,
+// B5, B8).
 func amountRange() action.Range {
 	return action.Range{Min: -maxExact, Max: maxExact, Integer: true}
 }
@@ -40,8 +41,13 @@ type CounterKind string
 
 // The kinds of the counter action.
 const (
-	// CounterAdd adds an amount, which may be negative. New counter
-	// actions add 1.
+	// CounterIncrement adds the step of the counter (counters-and-quotes.md,
+	// B8). New counter actions do this.
+	CounterIncrement CounterKind = "increment"
+	// CounterDecrement subtracts the step of the counter.
+	CounterDecrement CounterKind = "decrement"
+	// CounterAdd adds an amount, which may be negative; the amount is 1
+	// unless the action gives one.
 	CounterAdd CounterKind = "add"
 	// CounterSet sets the value.
 	CounterSet CounterKind = "set"
@@ -52,7 +58,7 @@ const (
 // CounterKinds returns the kinds of the counter action, in the order
 // editors show them.
 func CounterKinds() []CounterKind {
-	return []CounterKind{CounterAdd, CounterSet, CounterReset}
+	return []CounterKind{CounterIncrement, CounterDecrement, CounterAdd, CounterSet, CounterReset}
 }
 
 // Valid reports whether k is a known kind.
@@ -94,7 +100,7 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 			Version:  1,
 			Category: action.CategoryValues,
 			Schema:   counterSchema(),
-		}.WithKinds(CounterAdd, func(k CounterKind) (Counter, bool) {
+		}.WithKinds(CounterIncrement, func(k CounterKind) (Counter, bool) {
 			if !k.Valid() {
 				return Counter{}, false
 			}
@@ -108,10 +114,12 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 }
 
 // counterSchema returns the schema of the counter action: add has an
-// amount, set a value, reset neither.
+// amount, set a value, the other kinds neither.
 func counterSchema() *schema.Schema {
 	return schema.Kinds(
 		[]schema.Property{{Name: "counter", Schema: schema.CounterName(), Required: true}},
+		schema.Variant{Kind: string(CounterIncrement)},
+		schema.Variant{Kind: string(CounterDecrement)},
 		schema.Variant{Kind: string(CounterAdd), Props: []schema.Property{
 			{Name: "amount", Schema: amountRange().Schema()},
 		}},
@@ -177,11 +185,16 @@ func (c Counter) References() []command.Reference {
 }
 
 // Perform implements engine.Performer. The change is stored at once and is
-// atomic; a missing counter and a result beyond 64 bits let the action
+// atomic, and increment and decrement read the step in the same
+// transaction; a missing counter and a result beyond 64 bits let the action
 // fail, and the value stays as it was (B41, B42).
 func (c Counter) Perform(ctx context.Context, run *engine.Run) error {
 	var change func(*counter.Counter) error
 	switch c.Kind {
+	case CounterIncrement:
+		change = (*counter.Counter).Increment
+	case CounterDecrement:
+		change = (*counter.Counter).Decrement
 	case CounterAdd:
 		delta, err := c.Amount.Eval(ctx, c.ports.Templates, run.Scope(), amountRange())
 		if err != nil {

@@ -4,6 +4,7 @@ package values_test
 
 import (
 	"context"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"math"
@@ -125,7 +126,7 @@ func (f *fixture) counter(k values.CounterKind, name string, amount action.Amoun
 		c.Amount = amount
 	case values.CounterSet:
 		c.Value = amount
-	case values.CounterReset:
+	case values.CounterIncrement, values.CounterDecrement, values.CounterReset:
 	}
 	return c
 }
@@ -183,6 +184,8 @@ func TestConformance(t *testing.T) {
 		{Name: "add an expression", Doc: `{"type":"counter","kind":"add","counter":"Deaths2","amount":"$arg1text * 2"}`, Valid: true},
 		{Name: "set", Doc: `{"type":"counter","kind":"set","counter":"deaths","value":9007199254740991}`, Valid: true},
 		{Name: "reset", Doc: `{"type":"counter","enabled":false,"kind":"reset","counter":"deaths"}`, Valid: true},
+		{Name: "increment", Doc: `{"type":"counter","kind":"increment","counter":"points"}`, Valid: true},
+		{Name: "decrement", Doc: `{"type":"counter","kind":"decrement","counter":"points"}`, Valid: true},
 		{Name: "counter missing", Doc: `{"type":"counter","kind":"reset"}`},
 		{Name: "name with a space", Doc: `{"type":"counter","kind":"reset","counter":"my deaths"}`},
 		{Name: "name too long", Doc: `{"type":"counter","kind":"reset","counter":"` + strings.Repeat("a", 65) + `"}`},
@@ -195,24 +198,36 @@ func TestConformance(t *testing.T) {
 		{Name: "set without value", Doc: `{"type":"counter","kind":"set","counter":"deaths"}`},
 		{Name: "set with an amount", Doc: `{"type":"counter","kind":"set","counter":"deaths","value":1,"amount":1}`},
 		{Name: "reset with an amount", Doc: `{"type":"counter","kind":"reset","counter":"deaths","amount":1}`},
+		{Name: "increment with an amount", Doc: `{"type":"counter","kind":"increment","counter":"points","amount":10}`},
+		{Name: "decrement with a value", Doc: `{"type":"counter","kind":"decrement","counter":"points","value":1}`},
 		{Name: "empty expression", Doc: `{"type":"counter","kind":"add","counter":"deaths","amount":""}`},
 	}}.Run(t)
 }
 
 // TestCounter covers actions.md B40 and B43: following actions see the new
-// value; names are case-insensitive.
+// value; names are case-insensitive; increment and decrement use the step
+// of the counter (counters-and-quotes.md, B8).
 func TestCounter(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		f := newFixture(t, counter.Counter{Name: "deaths", Value: 5}, counter.Counter{Name: "other", Value: 7})
+		f := newFixture(t,
+			counter.Counter{Name: "deaths", Value: 5, Step: counter.DefaultStep},
+			counter.Counter{Name: "points", Step: 10},
+			counter.Counter{Name: "other", Value: 7, Step: counter.DefaultStep})
 		in := f.start([]command.Action{
 			f.counter(values.CounterAdd, "deaths", action.Fixed(1)), f.show("$deaths"),
 			f.counter(values.CounterAdd, "DEATHS", action.Expression("$arg1text")), f.show("$deaths"),
 			f.counter(values.CounterSet, "deaths", action.Fixed(1234567)), f.show("$deaths $deathsdisplay"),
 			f.counter(values.CounterReset, "Deaths", action.Amount{}), f.show("$deaths"),
+			f.counter(values.CounterIncrement, "deaths", action.Amount{}), f.show("$deaths"),
+			f.counter(values.CounterIncrement, "points", action.Amount{}),
+			f.counter(values.CounterIncrement, "Points", action.Amount{}), f.show("$points"),
+			f.counter(values.CounterDecrement, "points", action.Amount{}),
+			f.counter(values.CounterDecrement, "points", action.Amount{}),
+			f.counter(values.CounterDecrement, "points", action.Amount{}), f.show("$points"),
 		}, "-10")
 		assert.Empty(t, in.Errors)
-		assert.Equal(t, []string{"6", "-4", "1234567 1,234,567", "0"}, f.lines.get())
+		assert.Equal(t, []string{"6", "-4", "1234567 1,234,567", "0", "1", "20", "-10"}, f.lines.get())
 		assert.Equal(t, int64(7), f.counters.value("other"))
 	})
 }
@@ -234,14 +249,16 @@ func TestCounterFails(t *testing.T) {
 		{"B41 missing counter", values.CounterReset, "lives", action.Amount{}, nil, `counter: counter "lives": not found`},
 		{"B42 beyond 64 bits", values.CounterAdd, "big", action.Fixed(10), nil, "counter value out of range"},
 		{"B42 below 64 bits", values.CounterAdd, "small", action.Fixed(-2), nil, "counter value out of range"},
+		{"B42 a step beyond 64 bits", values.CounterIncrement, "big", action.Amount{}, nil, "counter value out of range"},
+		{"B42 a step below 64 bits", values.CounterDecrement, "small", action.Amount{}, nil, "counter value out of range"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			synctest.Test(t, func(t *testing.T) {
 				f := newFixture(t,
-					counter.Counter{Name: "deaths", Value: 5},
-					counter.Counter{Name: "big", Value: math.MaxInt64 - 1},
-					counter.Counter{Name: "small", Value: math.MinInt64 + 1})
+					counter.Counter{Name: "deaths", Value: 5, Step: counter.DefaultStep},
+					counter.Counter{Name: "big", Value: math.MaxInt64 - 1, Step: 2},
+					counter.Counter{Name: "small", Value: math.MinInt64 + 1, Step: 2})
 				before := f.counters.all()
 				a := f.counter(tc.kind, tc.of, tc.by)
 				require.NoError(t, a.Validate())
@@ -259,7 +276,7 @@ func TestCounterFails(t *testing.T) {
 func TestCounterConcurrent(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		f := newFixture(t, counter.Counter{Name: "hugs"})
+		f := newFixture(t, counter.New("hugs"))
 		add := make([]command.Action, 100)
 		for i := range add {
 			add[i] = f.counter(values.CounterAdd, "hugs", action.Fixed(1))
@@ -288,8 +305,9 @@ func TestValidate(t *testing.T) {
 	require.True(t, ok)
 	c, ok := d.New().(values.Counter)
 	require.True(t, ok)
-	assert.Equal(t, values.CounterAdd, c.Kind, "a new counter action adds")
-	assert.Equal(t, action.Fixed(1), c.Amount, "one")
+	assert.Equal(t, values.CounterIncrement, c.Kind, "a new counter action adds the step")
+	assert.True(t, c.Amount.IsZero(), "no amount")
+	assert.True(t, c.Value.IsZero(), "no value")
 	require.ErrorContains(t, c.Validate(), "counter: invalid action: invalid counter", "it has no counter yet")
 
 	for _, tc := range []struct {
@@ -298,6 +316,8 @@ func TestValidate(t *testing.T) {
 		want   string
 	}{
 		{"unknown kind", func(c *values.Counter) { c.Kind = "multiply" }, `kind: invalid action: unknown kind "multiply"`},
+		{"increment with an amount", func(c *values.Counter) { c.Kind = values.CounterIncrement }, "amount: invalid action: only add has an amount"},
+		{"decrement with an amount", func(c *values.Counter) { c.Kind = values.CounterDecrement }, "amount: invalid action: only add has an amount"},
 		{"add without amount", func(c *values.Counter) { c.Amount = action.Amount{} }, "amount: invalid action: no amount"},
 		{"add with a value", func(c *values.Counter) { c.Value = action.Fixed(1) }, "value: invalid action: only set has a value"},
 		{"set with an amount", func(c *values.Counter) { c.Kind, c.Value = values.CounterSet, action.Fixed(1) }, "amount: invalid action: only add has an amount"},
@@ -308,13 +328,37 @@ func TestValidate(t *testing.T) {
 	} {
 		c, ok := d.New().(values.Counter)
 		require.True(t, ok)
-		c.Counter = "deaths"
+		c.Kind, c.Counter, c.Amount = values.CounterAdd, "deaths", action.Fixed(1)
 		require.NoError(t, c.Validate(), tc.name)
 		tc.change(&c)
 		assert.ErrorContains(t, c.Validate(), tc.want, tc.name)
 	}
 	for _, k := range values.CounterKinds() {
 		require.True(t, k.Valid(), k)
+	}
+}
+
+// TestDecodeDefaults: an add without an amount adds 1; the other kinds
+// have no amount.
+func TestDecodeDefaults(t *testing.T) {
+	t.Parallel()
+	reg, _ := registry(t, &counters{})
+	d, ok := reg.Descriptor(values.TypeCounter)
+	require.True(t, ok)
+	for doc, want := range map[string]values.Counter{
+		`{"kind":"add","counter":"deaths"}`:       {Common: action.On(), Kind: values.CounterAdd, Counter: "deaths", Amount: action.Fixed(1)},
+		`{"kind":"increment","counter":"deaths"}`: {Common: action.On(), Kind: values.CounterIncrement, Counter: "deaths"},
+		`{"kind":"decrement","counter":"deaths"}`: {Common: action.On(), Kind: values.CounterDecrement, Counter: "deaths"},
+	} {
+		a, err := d.Decode([]byte(doc), json.DefaultOptionsV2())
+		require.NoError(t, err, doc)
+		c, ok := a.(values.Counter)
+		require.True(t, ok, doc)
+		assert.Equal(t, want.Kind, c.Kind, doc)
+		assert.Equal(t, want.Counter, c.Counter, doc)
+		assert.Equal(t, want.Amount, c.Amount, doc)
+		assert.True(t, c.Value.IsZero(), doc)
+		assert.Equal(t, want.Common, c.Common, doc)
 	}
 }
 
