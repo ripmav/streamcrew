@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
-| **Stand** | 2026-09-30 |
+| **Status** | Geprüft |
+| **Stand** | 2026-10-01 |
 | **Bezug** | Roadmap Phase 3.3; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [ADR-0013](../adr/0013-sicherheitsmodell.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0012](../adr/code/0012-template-engine.md), Code-ADR-0013 (geplant), [Code-ADR-0017](../adr/code/0017-klare-signale-statt-magischer-werte.md); Plan §5.3, §6.9, §6.10, §6.11; [`command-engine.md`](command-engine.md), [`template.md`](template.md), [`commands.md`](commands.md), [`counters-and-quotes.md`](counters-and-quotes.md), [`users-and-roles.md`](users-and-roles.md) |
 | **Umsetzung** | noch offen (Roadmap 3.3). Voraussetzungen: Typ-Registry nach Code-ADR-0013 und die Plattform-Ports nach Plan §6.11. Der Anschluss an die Engine braucht zwei Ergänzungen, die Code-ADR-0013 festlegt: inaktive Actions (B1) und Kind-Actions mit eigenem Zeitlimit (B8). |
 
@@ -292,3 +292,4 @@ Nicht Teil dieser Spezifikation:
 | Datum | Änderung |
 |---|---|
 | 2026-09-30 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
+| 2026-10-01 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
