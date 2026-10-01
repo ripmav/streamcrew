@@ -45,7 +45,7 @@ func TestLoad(t *testing.T) {
 		t.Run(string(mode), func(t *testing.T) {
 			t.Parallel()
 			synctest.Test(t, func(t *testing.T) {
-				f := newFixture(t, mode, engine.WithVisualAudio(func(typ string) bool { return typ == "sound" }))
+				f := newFixtureWithTypes(t, mode, visual("sound"))
 				defer f.stop()
 
 				var (
