@@ -66,6 +66,52 @@ func (d Descriptor) WithNew[A command.Action](newA func() A) Descriptor {
 	return d
 }
 
+// WithKinds returns d with New and Decode for actions of type A that have
+// kinds (point 4), e.g. the command action. newKind makes an action of a
+// kind with the defaults of that kind and the ports of the type; ok is
+// false for an unknown kind. New makes one of the kind first.
+//
+// Decode reads the member "kind" first and starts from the defaults of
+// that kind, so that no default of another kind slips into the action. The
+// members the schema requires for the kind must be there. The schema is
+// built with schema.Kinds.
+func (d Descriptor) WithKinds[A command.Action, K ~string](first K, newKind func(kind K) (A, bool)) Descriptor {
+	d.New = func() command.Action {
+		a, _ := newKind(first)
+		return a
+	}
+	d.Decode = func(data []byte, opts json.Options) (command.Action, error) {
+		if d.Schema == nil {
+			return nil, fmt.Errorf("%w: type %q has no schema", ErrInvalid, d.Type)
+		}
+		var head struct {
+			Kind *string `json:"kind"`
+		}
+		if err := json.Unmarshal(data, &head); err != nil {
+			return nil, err
+		}
+		if head.Kind == nil {
+			return nil, fmt.Errorf("%w: member %q is missing", ErrInvalid, schema.KeyKind)
+		}
+		a, ok := newKind(K(*head.Kind))
+		if !ok {
+			return nil, fmt.Errorf("%w: unknown kind %q", ErrInvalid, *head.Kind)
+		}
+		required := d.Schema.Required
+		if alt, ok := d.Schema.Variant(schema.KeyKind, *head.Kind); ok {
+			required = alt.Required
+		}
+		if err := requireMembers(data, required); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(data, &a, json.RejectUnknownMembers(true), opts); err != nil {
+			return nil, err
+		}
+		return a, nil
+	}
+	return d
+}
+
 // entry returns the polydoc entry of d.
 func (d Descriptor) entry() polydoc.Entry[command.Action] {
 	return polydoc.Entry[command.Action]{Type: d.Type, Version: d.Version, Decode: d.Decode, Migrations: d.Migrations}
