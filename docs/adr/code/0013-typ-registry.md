@@ -87,6 +87,8 @@
 4. **Konfiguration einer Action:**
    - Eine Action ist ein Struct aus ihrer Konfiguration und einem unexportierten Verweis auf ihre Ports. `Decode` ist eine Closure der Composition Root, die die Ports einsetzt; JSON sieht nur die Konfiguration.
    - Jede Action hat das Feld `enabled`, den Schalter „aktiv“ (B1). Es kommt über das eingebettete `action.Common` mit dem Tag `json:",inline"`. Es ist kein Kopfschlüssel von `polydoc`, weil andere Familien wie Anforderungen und Settings-Sektionen keinen solchen Schalter haben.
+
+     *Korrigiert am 2026-10-01: In `encoding/json/v2` von Go 1.27 heißt die Option `embed`; `inline` stammt aus einer früheren Fassung des Pakets, wird heute stillschweigend ignoriert und wirkte nur, weil eingebettete Go-Felder ohne Namen ohnehin eingebettet werden. Action-Typen nutzen `json:",embed"`.*
    - Gemeinsame Feldtypen setzen die Regeln aus `actions.md` an einer Stelle um:
      - `action.Template`: Text mit `$`-Identifiern, gerendert erst beim Ausführen (B3). Die Kodierung wählt die Action je Ausgabeort (Code-ADR-0012).
      - `action.Amount`: eine Mengenangabe, in JSON eine Zahl (fester Wert) oder ein Text (Ausdruck nach `template.md`, B50–B52). Zu jedem Feld gehört ein `action.Range` aus Minimum, Maximum und der Angabe, ob nur ganze Zahlen gelten. Derselbe Wert geht ins Schema und gilt beim Ausführen (B4); feste Werte prüft schon das Speichern.

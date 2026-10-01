@@ -26,7 +26,7 @@ import (
 
 // probe is an action type with a template, an amount and a result name.
 type probe struct {
-	action.Common `json:",inline"`
+	action.Common `json:",embed"`
 	Message       action.Template   `json:"message"`
 	Seconds       action.Amount     `json:"seconds,omitzero"`
 	Result        action.ResultName `json:"result"`
@@ -60,7 +60,7 @@ func probeType() action.Descriptor {
 
 // box is an action type with child actions.
 type box struct {
-	action.Common `json:",inline"`
+	action.Common `json:",embed"`
 	Actions       []command.Action `json:"actions"`
 }
 
@@ -79,7 +79,7 @@ func boxType() action.Descriptor {
 
 // switcher is an action type with kinds; only kind "a" has the amount n.
 type switcher struct {
-	action.Common `json:",inline"`
+	action.Common `json:",embed"`
 	Kind          string        `json:"kind"`
 	N             action.Amount `json:"n,omitzero"`
 }
@@ -116,7 +116,7 @@ func switcherType() action.Descriptor {
 
 // renamed is at version 2: version 1 called "message" "text".
 type renamed struct {
-	action.Common `json:",inline"`
+	action.Common `json:",embed"`
 	Message       action.Template `json:"message"`
 }
 

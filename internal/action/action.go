@@ -64,7 +64,7 @@ func (c Category) Valid() bool {
 }
 
 // Common holds the members every action has (Code-ADR-0013, point 4).
-// Action types embed it with the tag `json:",inline"`.
+// Action types embed it with the tag `json:",embed"`.
 type Common struct {
 	// Active is the switch "active" (actions.md B1); in JSON "enabled".
 	Active bool `json:"enabled"`
