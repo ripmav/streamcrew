@@ -84,8 +84,8 @@ type Schema struct {
 	Items *Schema `json:"items,omitempty"`
 	// Enum lists the allowed texts.
 	Enum []string `json:"enum,omitempty"`
-	// Const is the only allowed text.
-	Const *string `json:"const,omitempty"`
+	// Const is the only allowed value, as JSON.
+	Const jsontext.Value `json:"const,omitempty"`
 	// Minimum and Maximum bound a number, both included.
 	Minimum *float64 `json:"minimum,omitempty"`
 	Maximum *float64 `json:"maximum,omitempty"`
@@ -96,6 +96,11 @@ type Schema struct {
 	Pattern string `json:"pattern,omitempty"`
 	// OneOf are alternatives of which exactly one must match.
 	OneOf []*Schema `json:"oneOf,omitempty"`
+	// AllOf are schemas that must all match, e.g. rules between members.
+	AllOf []*Schema `json:"allOf,omitempty"`
+	// If and Then: a value that matches If must match Then.
+	If   *Schema `json:"if,omitempty"`
+	Then *Schema `json:"then,omitempty"`
 	// Default is the value a new action has (Code-ADR-0013, point 4).
 	Default jsontext.Value `json:"default,omitempty"`
 	// UI is the hint for generic editors.
@@ -202,7 +207,7 @@ func Kinds(common []Property, variants ...Variant) *Schema {
 	kind := Property{Name: "kind", Schema: Choice(kinds...), Required: true}
 	s := Document(append([]Property{kind}, common...)...)
 	for _, v := range variants {
-		alt := Object(append(append(append(header(), Property{Name: "kind", Schema: &Schema{Const: new(v.Kind)}, Required: true}), common...), v.Props...)...)
+		alt := Object(append(append(append(header(), Property{Name: "kind", Schema: &Schema{Const: quote(v.Kind)}, Required: true}), common...), v.Props...)...)
 		s.OneOf = append(s.OneOf, alt)
 		// The members of all variants, for editors that read the top level.
 		for _, p := range v.Props {
@@ -213,6 +218,24 @@ func Kinds(common []Property, variants ...Variant) *Schema {
 		}
 	}
 	return s
+}
+
+// Needs adds to s the rule that the switch flag may be on only while the
+// switch other is on, e.g. "remember across runs" only with "no repeats"
+// (actions.md B13). A missing switch is off.
+func (s *Schema) Needs(flag, other string) {
+	on := jsontext.Value("true")
+	s.AllOf = append(s.AllOf, &Schema{
+		If:   &Schema{Properties: Properties{{Name: flag, Schema: &Schema{Const: on}}}, Required: []string{flag}},
+		Then: &Schema{Properties: Properties{{Name: other, Schema: &Schema{Const: on}}}, Required: []string{other}},
+	})
+}
+
+// quote returns text as a JSON string. Type IDs and kinds are ASCII; were
+// they not valid UTF-8, the invalid bytes would become U+FFFD.
+func quote(text string) jsontext.Value {
+	v, _ := jsontext.AppendQuote(nil, text)
+	return v
 }
 
 // Switch returns a yes or no field.
@@ -271,7 +294,7 @@ func Actions() *Schema {
 func (s *Schema) BindType(typ string) {
 	for i, p := range s.Properties {
 		if p.Name == "type" {
-			s.Properties[i].Schema = &Schema{Type: "string", Const: new(typ)}
+			s.Properties[i].Schema = &Schema{Type: "string", Const: quote(typ)}
 		}
 	}
 	for _, alt := range s.OneOf {
@@ -315,7 +338,7 @@ func (s *Schema) Validate() error {
 			return fmt.Errorf("property %q: %w", p.Name, err)
 		}
 	}
-	for _, sub := range append(slices.Clone(s.OneOf), s.Items) {
+	for _, sub := range append(append(slices.Clone(s.OneOf), s.AllOf...), s.Items, s.If, s.Then) {
 		if sub == nil {
 			continue
 		}
@@ -343,6 +366,12 @@ func (s *Schema) Clone() *Schema {
 	for i := range c.OneOf {
 		c.OneOf[i] = c.OneOf[i].Clone()
 	}
+	c.AllOf = slices.Clone(s.AllOf)
+	for i := range c.AllOf {
+		c.AllOf[i] = c.AllOf[i].Clone()
+	}
+	c.If, c.Then = s.If.Clone(), s.Then.Clone()
+	c.Const = slices.Clone(s.Const)
 	c.Default = slices.Clone(s.Default)
 	return &c
 }

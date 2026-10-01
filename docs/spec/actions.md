@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-10-01 |
 | **Bezug** | Roadmap Phase 3.3; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [ADR-0013](../adr/0013-sicherheitsmodell.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0012](../adr/code/0012-template-engine.md), [Code-ADR-0013](../adr/code/0013-typ-registry.md), [Code-ADR-0017](../adr/code/0017-klare-signale-statt-magischer-werte.md); Plan §5.3, §6.9, §6.10, §6.11; [`command-engine.md`](command-engine.md), [`template.md`](template.md), [`commands.md`](commands.md), [`counters-and-quotes.md`](counters-and-quotes.md), [`users-and-roles.md`](users-and-roles.md) |
-| **Umsetzung** | noch offen (Roadmap 3.3). Voraussetzungen: Typ-Registry nach [Code-ADR-0013](../adr/code/0013-typ-registry.md) und die Plattform-Ports nach Plan §6.11. Der Anschluss an die Engine braucht zwei Ergänzungen, die [Code-ADR-0013](../adr/code/0013-typ-registry.md) festlegt: inaktive Actions (B1) und Kind-Actions mit eigenem Zeitlimit (B8). |
+| **Umsetzung** | in Arbeit (Roadmap 3.3). Gemeinsame Regeln (B1–B9) in der Typ-Registry `internal/action` und der Engine nach [Code-ADR-0013](../adr/code/0013-typ-registry.md). Warten, Zufall, Gruppe und Wiederholen (B10–B15) in `internal/action/flow`. Die übrigen Typen folgen; die Plattform-Ports nach Plan §6.11 fehlen noch. |
 
 ## Zweck und Umfang
 
@@ -235,7 +235,7 @@ Nicht Teil dieser Spezifikation:
 ## Akzeptanzkriterien
 
 - [ ] B1–B9: inaktive Actions und Kind-Actions; Rendern beim Ausführen; Mengenangaben mit Bereichen und ganzen Zahlen; Sichtbarkeit von Ergebniswerten in Instanz und Aufrufen; Kollision von Namen beim Speichern; fehlende Capability; Zeitlimits einschließlich Kind-Actions; Fehlerpolitik in Kind-Actions mit Pfad im Verlauf.
-- [ ] B10–B15, B200–B204: Warten mit `testing/synctest`; Zufall mit fester Zufallsquelle, auch „ohne Wiederholung“ und über Ausführungen; Gruppe; Wiederholen mit Grenze.
+- [x] B10–B15, B200–B204: Warten mit `testing/synctest`; Zufall mit fester Zufallsquelle, auch „ohne Wiederholung“ und über Ausführungen; Gruppe; Wiederholen mit Grenze.
 - [ ] B20–B29, B205–B207: Tabelle je Vergleich mit Zahlen, Text, Schreibweise und Grenzfällen; Verknüpfungen; „falsch“-Zweig; Wiederholen bis zur Grenze.
 - [ ] B30–B38, B208, B209: jede Art der Command-Action gegen eine Engine mit Fakes; jeder Ausgang von `engine.Run.Call`.
 - [ ] B40–B43, B220: Counter-Arten, Anlegen beim Speichern, gleichzeitiges Addieren, Überlauf.
@@ -294,3 +294,4 @@ Nicht Teil dieser Spezifikation:
 | 2026-09-30 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
 | 2026-10-01 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
 | 2026-10-01 | Typ-IDs nach Code-ADR-0013 eingetragen: `special_identifier`, `platform_message`, `web_request`, `user_lookup`, `external_program` statt der Arbeitsnamen. Das Verhalten ist unverändert. |
+| 2026-10-01 | Warten, Zufall, Gruppe und Wiederholen umgesetzt (`internal/action/flow`). Festlegungen dabei: Die Felder heißen `seconds` (Warten), `count`, `unique`, `remember` und `actions` (Zufall), `actions` (Gruppe) sowie `count` und `actions` (Wiederholen). Eine neue Zufalls-Action zieht einmal; Warten und Wiederholen haben keine Voreinstellung für Dauer und Anzahl, das Feld ist Pflicht. Mengen werden einmal beim Start der Action ausgewertet. Gezogen werden nur aktive Kind-Actions; Kind-Actions unbekannten Typs nehmen nicht teil, weil sie nicht laufen können. Das Gedächtnis über Ausführungen (B13) gilt je Command, Änderungszeitpunkt des Commands und Pfad der Action: Ist in einer Ausführung nichts mehr übrig, beginnt die Auswahl dort von vorn; ist nach einer Ausführung jede Kind-Action einmal gezogen, beginnt sie bei der nächsten von vorn. Warten setzt sein Zeitlimit, sobald die Dauer feststeht, auf die Dauer plus 5 s (B8). |
