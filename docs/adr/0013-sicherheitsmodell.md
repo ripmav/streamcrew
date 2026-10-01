@@ -70,6 +70,6 @@
 
 - [x] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) anpassen und die Backlog-Nummern in Plan und Roadmap nachziehen, erledigt 2026-09-29
 - [ ] Capabilities in Descriptors und Engine-Prüfung (Roadmap Phase 3)
-- [ ] Startkonfiguration für abweichende Capabilities und die SSRF-Allowlist (Roadmap Phase 3 bzw. mit der WebRequest-Action)
+- [ ] Startkonfiguration für abweichende Capabilities und die SSRF-Allowlist (Roadmap Phase 3 bzw. mit der WebRequest-Action); Format in [Code-ADR-0019](code/0019-host-rechte-in-der-startkonfiguration.md) (vorgeschlagen)
 - [ ] API-Tokens mit Scopes, lokaler Admin-Token, Bremse für Fehlversuche (Roadmap Phase 6.2)
 - [ ] Bedrohungsanalyse und endgültiges Sicherheitsmodell (Roadmap Phase 11)

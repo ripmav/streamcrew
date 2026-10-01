@@ -1198,6 +1198,7 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0016 | `0016-codegenerierung.md` | buf, esbuild in `go generate`; die sqlc-Konventionen stehen in Code-ADR-0008 | 6 |
 | 0017 | `0017-klare-signale-statt-magischer-werte.md` | Werte ohne Doppelbedeutung, benannte Ausgänge, Fehler nur für Fehler; **vorgeschlagen** | 3 |
 | 0018 | `0018-json-v2.md` | `encoding/json/v2` für alles JSON, strenges Lesen, reproduzierbares Schreiben; ergänzt Code-ADR-0010; **akzeptiert** | 3 |
+| 0019 | `0019-host-rechte-in-der-startkonfiguration.md` | Capabilities je Betriebsmodus mit `grant` und `revoke`, freigegebene Wurzeln, Allowlist für Netzziele, Umgebung für Programme; ergänzt Code-ADR-0005; **vorgeschlagen** | 3 |
 
 ---
 
