@@ -434,7 +434,7 @@ flowchart TB
 | Application Services | `internal/chat`, `internal/user`, `internal/economy`, `internal/timer`, `internal/moderation`, … | Anwendungsfälle, Transaktionen, Ereignisse | Domäne, Engine, Ports |
 | Engine | `internal/engine`, `internal/action`, `internal/requirement`, `internal/template`, `internal/expr` | Commands ausführen, Templates rendern | Domäne, Ports |
 | Domäne | `internal/domain/...` | Entitäten, Wertobjekte, Regeln | stdlib |
-| Adapter | `internal/platform/*`, `internal/integration/*`, `internal/store`, `internal/secret`, `internal/overlay`, `internal/media` | Außenwelt | Ports, Domäne |
+| Adapter | `internal/connector/*`, `internal/integration/*`, `internal/store`, `internal/secret`, `internal/overlay`, `internal/media` | Außenwelt | Ports, Domäne |
 
 ### 6.4 Funktionale Entsprechungen (Original → Go-Port)
 
@@ -455,7 +455,7 @@ Die Tabelle ist eine Landkarte der Zuständigkeiten, keine Code-Übernahme.
 | Currency/Inventory/StreamPass/RedemptionStore | `internal/economy` |
 | Spiele (18) | `internal/games` |
 | `OverlayV3Service` + `OverlayResources` | `internal/overlay` + neu geschriebene Overlay-Runtime |
-| Twitch/YouTube/Kick/Velora/VPZone/Mock | `internal/platform/<name>` |
+| Twitch/YouTube/Kick/Velora/VPZone/Mock | `internal/connector/<name>` |
 | `Services/External/*` | `internal/integration/<name>` |
 | `Windows*Service` (WPF) | Adapter in `internal/media`, `internal/store` usw. bzw. Agent-Capabilities |
 | Developer-API, MCP (WPF) | `internal/api/devapi`, `internal/api/mcp` |
@@ -605,29 +605,37 @@ spec:
 ### 6.11 Plattform-Abstraktion
 
 ```go
-// Platform is the port every streaming platform adapter implements.
+// Platform is the port every platform adapter implements (internal/connector).
 type Platform interface {
-	// ID returns the stable platform identifier, e.g. "twitch".
-	ID() ID
-	// Run connects, receives events and reconnects until ctx is canceled.
-	Run(ctx context.Context) error
-	// Status reports the connection state of the streamer and bot account.
+	// Name returns the name of the platform, e.g. "twitch".
+	Name() platform.Name
+	// Status reports which accounts are connected: streamer and bot.
 	Status() Status
-	// Chat returns the chat operations of the platform.
+	// Chat returns the chat of the channel: send, delete.
 	Chat() Chat
-	// Moderation returns the moderation operations of the platform.
+	// Moderation returns the moderation of the channel.
 	Moderation() Moderation
-	// Channel returns the current channel and stream information.
+	// Users returns the lookup of accounts by login name or ID.
+	Users() Users
+	// Channel returns the current information about the channel and its stream.
 	Channel(ctx context.Context) (ChannelInfo, error)
 }
 
-// ChannelPoints is an optional capability, discovered via type assertion.
+// Replier and Whisperer are optional capabilities of Chat, discovered via
+// type assertion.
+type Whisperer interface {
+	Whisper(ctx context.Context, to user.Identity, m Message) error
+}
+
+// ChannelPoints is an optional capability of a platform (phase 4).
 type ChannelPoints interface {
 	Rewards(ctx context.Context) ([]Reward, error)
 	CompleteRedemption(ctx context.Context, rewardID, redemptionID string) error
 	CancelRedemption(ctx context.Context, rewardID, redemptionID string) error
 }
 ```
+
+- **Umsetzung der Ports:** `internal/connector` (seit Roadmap 3.3; der Name betont die Verbindung nach außen und kollidiert nicht mit `internal/domain/platform`, Entscheidung des Projektinhabers) mit den Ports oben, den Fehlern `ErrNotConnected`, `ErrUnknownUser` und `ErrRefused`, der Menge der Plattformen eines Profils (`Set`) und der Suche eines Kontos erst unter den bekannten Nutzern, dann über die Plattform (`FindAccount`). Die Adapter liegen darunter, etwa `internal/connector/mock` (3.6) und `internal/connector/twitch` (Phase 4); Verbinden, Empfangen und erneutes Verbinden laufen je Adapter als Runnable des Supervisors ([Code-ADR-0004](adr/code/0004-nebenlaeufigkeit-und-supervisor.md)). Fakes für Tests in `internal/connector/connectortest`.
 
 - **Optionale Capabilities:** Kanalpunkte, Umfragen, Vorhersagen, Clips, Raids, Shoutouts, Werbung und Marker werden per Type Assertion erkannt. Das Typsystem bildet ab, dass Plattformen verschieden viel können.
 - **Konten:** pro Plattform ein Streamer-Konto und optional ein Bot-Konto. Nachrichten gehen über den Bot, wenn er verbunden ist.
