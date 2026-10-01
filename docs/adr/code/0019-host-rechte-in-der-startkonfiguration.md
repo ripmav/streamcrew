@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-10-01 |
-| **Entscheidung durch** | … (Abnahme durch den Projektinhaber ausstehend) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Ergänzt [Code-ADR-0005](0005-konfiguration.md) und setzt Punkt 3 und 4 von [ADR-0013](../0013-sicherheitsmodell.md) um; [ADR-0003](../0003-betriebsmodi.md); Plan §6.5, §6.15, §6.21; Roadmap Phase 3.3; [`actions.md`](../../spec/actions.md) B7, B77, B100–B102, B117; [Code-ADR-0013](0013-typ-registry.md), [Code-ADR-0017](0017-klare-signale-statt-magischer-werte.md) |
 
 ## Kontext
@@ -183,7 +183,7 @@
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen; Code-ADR-0005 und ADR-0013 als ergänzt vermerken
+- [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen; Code-ADR-0005 und ADR-0013 als ergänzt vermerken, erledigt 2026-10-01
 - [ ] `internal/config`: `grant`, `revoke`, `file_root`, `outbound_allow` mit Prüfung, die Menge der Capabilities je Modus, das Nachladen der Datei und die Umgebung für Programme. Typ-Registry mit einer Quelle der Menge, Composition Root, Log, `doctor` und README-Tabelle (Roadmap 3.3, „Capability-Prüfung je Betriebsmodus“)
 - [ ] Wurzeln in der Datei-Action und hinter `command.Roots` (Roadmap 3.3, `file`)
 - [ ] Umgebung ohne `STREAMCREW_*` in der Action `external_program` (Roadmap 3.3)

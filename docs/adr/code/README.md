@@ -23,6 +23,6 @@ Es gelten dieselben Konventionen und dieselbe Vorlage ([`../TEMPLATE.md`](../TEM
 | [0013](0013-typ-registry.md) | Typ-Registry für Actions | Akzeptiert | 2026-10-01 |
 | [0017](0017-klare-signale-statt-magischer-werte.md) | Klar definierte Signale statt magischer Werte | Vorgeschlagen | 2026-09-30 |
 | [0018](0018-json-v2.md) | JSON mit `encoding/json/v2` | Akzeptiert | 2026-09-30 |
-| [0019](0019-host-rechte-in-der-startkonfiguration.md) | Host-Rechte in der Startkonfiguration | Vorgeschlagen | 2026-10-01 |
+| [0019](0019-host-rechte-in-der-startkonfiguration.md) | Host-Rechte in der Startkonfiguration | Akzeptiert | 2026-10-01 |
 
 Die geplanten Code-ADRs stehen im ADR-Backlog von [`plan.md`](../../plan.md) (§12.2). Code-ADR-0017 bis Code-ADR-0019 bekamen die Nummern hinter dem Backlog, weil Spezifikationen und Code schon auf die vorgesehenen Nummern 0013 bis 0016 verweisen.
