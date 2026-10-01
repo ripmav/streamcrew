@@ -81,7 +81,7 @@ func (serveCmd) Run(ctx context.Context, e *Env) error {
 	if err != nil {
 		return err
 	}
-	a, err := app.New(ctx, *cfg, app.WithConsole(e.Stderr), app.WithSecretKey(e.SecretKey))
+	a, err := app.New(ctx, *cfg, app.WithConsole(e.Stderr), app.WithSecretKey(e.SecretKey), app.WithConfigFile(e.File))
 	if err != nil {
 		return err
 	}
@@ -204,7 +204,13 @@ func (c doctorCmd) Run(ctx context.Context, e *Env) error {
 	if err != nil {
 		return err
 	}
-	results := doctor.Run(ctx, doctor.Config{DataDir: cfg.DataDir, ConfigFile: e.File.Path(), Listen: cfg.Listen})
+	rights, err := cfg.Rights()
+	if err != nil {
+		return &usageError{err: err}
+	}
+	results := doctor.Run(ctx, doctor.Config{
+		DataDir: cfg.DataDir, ConfigFile: e.File.Path(), Listen: cfg.Listen, Rights: doctorRights(rights),
+	})
 	if c.Output == "json" {
 		err = writeJSON(e.Stdout, results)
 	} else {
@@ -221,6 +227,15 @@ func (c doctorCmd) Run(ctx context.Context, e *Env) error {
 		return &reportedError{err: errors.New("doctor found problems")}
 	}
 	return nil
+}
+
+// doctorRights returns the rights in the form of the doctor report.
+func doctorRights(r config.Rights) doctor.Rights {
+	caps := []string{}
+	for _, c := range r.Capabilities.List() {
+		caps = append(caps, string(c))
+	}
+	return doctor.Rights{Capabilities: caps, Roots: r.Roots, Outbound: r.Outbound.Entries(), Warnings: r.Warnings()}
 }
 
 func writeJSON(w io.Writer, v any) error {
