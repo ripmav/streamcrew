@@ -20,7 +20,22 @@
   - Mengenangaben als Ausdrücke mit festem Bereich (B4), Namen von Ergebniswerten (B5), Verweise auf Commands, Gruppen und Counter, die das Speichern prüft (B31, B41)
   - endgültige Typ-IDs statt der Arbeitsnamen
 - Kind-Actions sind selbst Dokumente der Familie. `internal/polydoc` dekodiert bisher nur flache Dokumente.
-- Plan §8 nennt `github.com/google/jsonschema-go` als Kandidaten für JSON-Schema. Geprüft am 2026-10-01: aktuell v0.4.3; die Bibliothek bietet das Datenmodell für die Entwürfe 2020-12 und 07, das Auflösen von Verweisen, die Validierung und eine Ableitung aus Go-Typen per Reflection, die die `json`-Tags nach den Regeln von v1 liest.
+- Plan §8 nennt `github.com/google/jsonschema-go` als Kandidaten für JSON-Schema. Am 2026-10-01 liefen drei aktiv gepflegte Go-Bibliotheken gegen die offizielle JSON-Schema-Test-Suite (Stand 2026-09-21), mit Formatprüfung für die Format-Tests:
+
+  | | `google/jsonschema-go` v0.4.3 | `santhosh-tekuri/jsonschema/v6` v6.0.3 | `kaptinlin/jsonschema` v0.9.10 |
+  |---|---|---|---|
+  | 2020-12, Pflichtteil | 1298/1301 | 1301/1301 | 1284/1301 |
+  | draft-07, Pflichtteil | 929/929 | 929/929 | 925/929 |
+  | 2020-12, optionale Tests | 120/162 | 147/162 | 117/162 |
+  | 2020-12, Formatprüfung | 408/874, `format` wird nicht geprüft | 744/874 | 809/874 |
+  | Entwürfe | 2020-12, 07 | 2020-12, 2019-09, 07, 06, 04 | 2020-12, 2019-09, 07, 06, 04 |
+  | letztes Release, Commits seit April 2026 | 2026-04-17, 2 | 2026-06-28, 8 | 2026-09-13, 80 |
+  | Abhängigkeiten | keine | `golang.org/x/text` | sieben direkte, darunter `goccy/go-yaml` und `go-json-experiment/json` |
+  | Lizenz | MIT | Apache-2.0 | MIT |
+
+  - `google/jsonschema-go` kennt keine eigenen Vokabulare, prüft `format` nicht und wird kaum weiterentwickelt.
+  - `kaptinlin/jsonschema` scheitert im Pflichtteil: Ein leeres `enum` lässt jeden Wert zu, `content*` wird ohne Einstellung geprüft, und ein Fall von `$dynamicRef` schlägt fehl.
+  - `santhosh-tekuri/jsonschema` besteht den ganzen Pflichtteil. Die optionalen Fehler kommen fast alle von Go-RE2 statt ECMA-262; die Engine lässt sich austauschen. Bei der Formatprüfung fehlen Randfälle bei `idn-hostname`, `hostname`, `uri-template`, `uri` und `email`. Eigene Vokabulare, Formatprüfung und die Ausgabeformate der Spezifikation sind vorhanden. Ein Datenmodell zum Bauen von Schemas bietet sie nicht.
 
 ## Entscheidung
 
@@ -41,7 +56,7 @@
 
 2. **Pakete:**
    - `internal/capability`: das Enum `Capability` mit den Namen aus ADR-0013 und die Menge der vorhandenen Capabilities, die die Composition Root aus Betriebsmodus und Startkonfiguration bildet.
-   - `internal/action`: Descriptor, Kategorie, Registry, die gemeinsamen Feldtypen (Punkt 4), Bausteine für Schemas (Punkt 6) und in `internal/action/actiontest` der gemeinsame Konformitätstest (Punkt 9).
+   - `internal/action`: Descriptor, Kategorie, Registry und die gemeinsamen Feldtypen (Punkt 4); in `internal/action/schema` der Schema-Typ mit seinen Bausteinen (Punkt 6); in `internal/action/actiontest` der gemeinsame Konformitätstest (Punkt 9).
    - Ein Paket je Kategorie: `internal/action/flow`, `…/commands`, `…/values`, `…/chat`, `…/network`, `…/moderation`, `…/users` und `…/host`. Jedes liefert `Descriptors(…) []action.Descriptor` mit den Ports, die seine Typen brauchen. Die Ports sind kleine Schnittstellen im Paket selbst. Registriert wird in der Composition Root mit `action.NewRegistry`, nicht per `init()` (Code-ADR-0002).
 
 3. **Descriptor und Registry:**
@@ -55,14 +70,14 @@
    	Category     Category                // e.g. CategoryNetwork
    	Capabilities []capability.Capability // needed to run; empty for none
    	VisualAudio  bool                    // shares the lock "visual_audio" (command-engine.md B23)
-   	Schema       *jsonschema.Schema      // configuration of the current version, with UI hints
+   	Schema       schema.Schema           // configuration of the current version, with UI hints
    	New          func() command.Action   // a new action with the defaults for creating one
    	Decode       func(data []byte, opts json.Options) (command.Action, error)
    	Migrations   []polydoc.Migration     // Migrations[i] upgrades version i+1 to i+2
    }
    ```
 
-   - Die Registry prüft jeden Descriptor beim Aufbau: Typ-ID nach Punkt 1 und eindeutig, Kategorie und Capabilities bekannt, Schema auflösbar, und das Dokument aus `New` besteht Schema und Prüfung. Ein Fehler hält den Start an.
+   - Die Registry prüft jeden Descriptor beim Aufbau: Typ-ID nach Punkt 1 und eindeutig, Kategorie und Capabilities bekannt, ein Schema vorhanden, und das Dokument aus `New` besteht `Validate`. Ein Fehler hält den Start an. Ob das Schema selbst gültig ist, prüft der Konformitätstest (Punkt 9).
    - Sie liefert die Einträge für `command.NewCodec`, die Descriptors in fester Reihenfolge für den Typkatalog (API, Phase 6) und `schema export` (Roadmap 3.5), und sie setzt den Port der Engine um (Punkt 8).
    - Die i18n-Schlüssel folgen aus der Typ-ID und stehen deshalb nicht einzeln im Descriptor: `action.<typ>.name`, `action.<typ>.description`, `action.<typ>.field.<feld>`, `action.<typ>.kind.<art>` und `action.category.<kategorie>`. Der Typkatalog liefert sie ausgeschrieben mit. Die Texte kommen mit ADR-0022.
    - Anforderungen bekommen Descriptors derselben Form (Schema, UI-Hinweise, i18n), sobald der Typkatalog sie braucht (Roadmap 3.5). Capabilities und der Anschluss an die Engine betreffen nur Actions.
@@ -85,9 +100,13 @@
    - `Children()` liefert alle Kind-Actions in fester Reihenfolge, bei der Bedingung erst die für „wahr“, dann die für „falsch“. Der Index darin ist die Position der Kind-Action im Pfad (B9).
 
 6. **JSON-Schema:**
-   - Bibliothek: `github.com/google/jsonschema-go` (Plan §8), Entwurf 2020-12, für das Datenmodell `jsonschema.Schema`, das Auflösen und in Tests die Validierung.
-   - Die Schemas entstehen ausdrücklich im Go-Code jedes Typs, aus Bausteinen in `internal/action`, etwa für Template, Mengenangabe mit Bereich und Art. Sie werden nicht aus den Structs abgeleitet (`jsonschema.For`). Die Bausteine nutzen dieselben Werte wie der Code, etwa `Range` und die Konstanten der Enums, damit Schema und Prüfung nicht auseinanderlaufen.
-   - UI-Hinweise stehen am Feld als eigenes Schlüsselwort `x-ui` (`Schema.Extra`). Es ist ein geschlossenes Enum, zum Start mit `text`, `multiline`, `template`, `amount`, `expression`, `user`, `platform`, `command`, `group`, `counter`, `file_root`, `result_name` und `actions`. Weitere Werte kommen mit den Typen, die sie brauchen, etwa `color` für Overlays. Voreinstellungen stehen als `default`.
+   - Die Schemas folgen dem Entwurf 2020-12. Sie entstehen ausdrücklich im Go-Code jedes Typs, aus Bausteinen in `internal/action/schema`, etwa für Template, Mengenangabe mit Bereich und Art. Sie werden nicht per Reflection aus den Structs abgeleitet. Die Bausteine nutzen dieselben Werte wie der Code, etwa `Range` und die Konstanten der Enums, damit Schema und Prüfung nicht auseinanderlaufen.
+   - **Eigener Schema-Typ:** `schema.Schema` bildet nur die Schlüsselwörter ab, die die Bausteine brauchen, etwa `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `const`, `minimum`, `maximum`, `oneOf`, `default` und `x-ui`. Kodiert wird mit `encoding/json/v2` (Code-ADR-0018). Weitere Schlüsselwörter kommen hinzu, wenn ein Baustein sie braucht.
+   - **Prüfbibliothek:** `github.com/santhosh-tekuri/jsonschema/v6`, nur in Tests (Punkt 9). Sie kommt so nicht ins ausgelieferte Binary.
+   - UI-Hinweise stehen am Feld als eigenes Schlüsselwort `x-ui`. Es ist ein geschlossenes Enum, zum Start mit `text`, `multiline`, `template`, `amount`, `expression`, `user`, `platform`, `command`, `group`, `counter`, `file_root`, `result_name` und `actions`. Weitere Werte kommen mit den Typen, die sie brauchen, etwa `color` für Overlays. Voreinstellungen stehen als `default`.
+   - **Schemas lesen auch Frontends in anderen Sprachen.** Deshalb gilt:
+     - `format` ist nur ein Hinweis für Editoren. Was geprüft werden muss, steht in Enums, Bereichen und `pattern` und im Go-Code, weil Validatoren `format` verschieden oder gar nicht prüfen.
+     - `pattern` kommt nur aus Konstanten in `internal/action/schema` und nutzt nur, was Go-RE2 und ECMA-262 gleich verstehen: Zeichenklassen, Quantoren, Gruppen ohne Namen und Anker, aber keine Rückverweise, kein Lookaround und keine Unicode-Klassen wie `\p{…}`.
    - Der Core prüft Dokumente mit Go-Code (Punkt 7), nicht gegen das Schema. Das Schema beschreibt sie für Editoren, die API und Commands als Code; die Tests halten beides gleich (Punkt 9).
 
 7. **Prüfen beim Speichern:**
@@ -111,7 +130,7 @@
 
 9. **Tests:**
    - Der Konformitätstest aus `internal/action/actiontest` läuft für jeden Descriptor:
-     - Das Schema lässt sich auflösen.
+     - Das Schema besteht mit `santhosh-tekuri/jsonschema` die Prüfung gegen das Meta-Schema von 2020-12. `x-ui` ist dort als eigenes Vokabular registriert, sodass unbekannte Werte auffallen.
      - Das Dokument aus `New` lässt sich kodieren und dekodieren und besteht Schema und `Validate`.
      - Die Felder des kodierten Dokuments und die Eigenschaften des Schemas stimmen überein.
      - Golden Files je Version in `testdata/` werden auf die aktuelle Version migriert (Code-ADR-0010, Punkt 8).
@@ -124,7 +143,9 @@
 | Alternative | Warum nicht |
 |---|---|
 | Typ-IDs mit Punkt je Vorgang, etwa `chat.send`, `moderation.ban` | Aus 15 Typen würden über 50, und die Einstellungen einer Art wären über Typen verstreut. Anforderungen und Settings-Sektionen haben schon einfache IDs wie `cooldown`. |
-| Schema aus den Structs ableiten (`jsonschema.For`, `invopop/jsonschema`) | Die Ableitung liest die Tags nach v1 und kennt `inline` nicht (Code-ADR-0018). Bereiche, Voreinstellungen, Arten und UI-Hinweise bräuchten eine eigene Sprache in Struct-Tags. Dazu käme Reflection im Produktionscode. |
+| `github.com/google/jsonschema-go` (Kandidat aus Plan §8) für Datenmodell und Prüfung | kaum weiterentwickelt, ohne eigene Vokabulare und ohne Formatprüfung (Kontext). Ihr Datenmodell wäre die einzige Stärke; den Teil, den wir brauchen, deckt der eigene Typ ab. |
+| `github.com/kaptinlin/jsonschema` | wird aktiv entwickelt, scheitert aber im Pflichtteil der Test-Suite, etwa beim leeren `enum` (Kontext), und bringt sieben direkte Abhängigkeiten mit |
+| Schema aus den Structs ableiten (`jsonschema.For` von google, `invopop/jsonschema`) | Die Ableitung liest die Tags nach v1 und kennt `inline` nicht (Code-ADR-0018). Bereiche, Voreinstellungen, Arten und UI-Hinweise bräuchten eine eigene Sprache in Struct-Tags. Dazu käme Reflection im Produktionscode. |
 | Schemas als JSON-Dateien neben dem Code | laufen ohne gemeinsame Konstanten mit dem Go-Code auseinander; Bereiche stünden doppelt |
 | Go-Structs aus den Schemas generieren | ein weiterer Build-Schritt; generierter Code lässt sich schlecht um Methoden wie `Perform` und `Validate` ergänzen |
 | Dokumente im Core gegen das Schema prüfen | Die Dokumente würden doppelt dekodiert, und Fehler kämen in zwei Formaten. Regeln wie gültige reguläre Ausdrücke oder Verweise braucht es ohnehin in Go. |
@@ -146,7 +167,8 @@
 
 **Negativ und Risiken:**
 
-- Neue Abhängigkeit `github.com/google/jsonschema-go` vor Version 1.0; Änderungen der API zeigt der Renovate-PR. Sie liefert vor allem das Datenmodell und die Validierung in Tests und lässt sich notfalls ersetzen.
+- Neue Abhängigkeit `github.com/santhosh-tekuri/jsonschema/v6`, nur in Tests. Sie hängt im Wesentlichen an einem Maintainer; fällt sie aus, lässt sie sich ersetzen, ohne dass sich Schemas oder Produktionscode ändern.
+- Der eigene Schema-Typ muss mit jedem neuen Baustein wachsen und kann Schlüsselwörter falsch abbilden. Das fängt die Prüfung gegen das Meta-Schema im Konformitätstest ab.
 - Die von Hand gebauten Schemas können vom Go-Code abweichen. Das fängt der Konformitätstest ab, aber nur für die Beispiele, die er bekommt.
 - Änderungen an gemergtem Code aus Phase 3.2: `engine.Performer`, `engine.TimeLimiter`, `engine.WithVisualAudio` und das Feld `position` im Verlauf. `command-engine.md` bekommt dazu einen Eintrag in der Änderungshistorie.
 - Weil der Kontext einer Action keine Deadline hat, kann sie ihr Limit nicht über `ctx.Deadline()` erfahren. Kein P0-Typ braucht das; ausgehende Anfragen setzen ihre eigenen Zeitlimits (B73).
@@ -155,6 +177,6 @@
 **Folgearbeiten:**
 
 - [ ] Nach der Annahme Status setzen und den Index in [`README.md`](README.md) anpassen
-- [ ] Nach der Annahme Plan §6.9 (Descriptor, Beispiel `chat.send`), §8 (JSON-Schema gewählt) und §12.2 anpassen; in Code-ADR-0010 den Vermerk **Ergänzt durch** setzen und die Folgearbeit „Die Typ-Registry in Phase 3 auf `internal/polydoc` aufbauen“ mit der Umsetzung abhaken
+- [ ] Nach der Annahme Plan §6.9 (Descriptor, Beispiel `chat.send`), §8 (JSON-Schema: eigener Typ, `santhosh-tekuri/jsonschema/v6` in Tests statt des Kandidaten `google/jsonschema-go`) und §12.2 anpassen; in Code-ADR-0010 den Vermerk **Ergänzt durch** setzen und die Folgearbeit „Die Typ-Registry in Phase 3 auf `internal/polydoc` aufbauen“ mit der Umsetzung abhaken
 - [ ] In `actions.md` die Arbeitsnamen durch die Typ-IDs aus Punkt 1 ersetzen und auf dieses ADR verweisen; in `command-engine.md` die Änderungen aus Punkt 8 in der Änderungshistorie festhalten
-- [ ] Umsetzen (Roadmap 3.3), bevor die einzelnen Typen kommen: `internal/capability`, `internal/action` mit Registry, Feldtypen, Schema-Bausteinen und Konformitätstest, verschachtelte Dokumente in `internal/polydoc`, die Erweiterungen der Engine aus Punkt 8 und das Speichern mit Verweisen, Namen und Warnungen
+- [ ] Umsetzen (Roadmap 3.3), bevor die einzelnen Typen kommen: `internal/capability`, `internal/action` mit Registry und Feldtypen, `internal/action/schema` mit Schema-Typ und Bausteinen, der Konformitätstest mit `santhosh-tekuri/jsonschema/v6`, verschachtelte Dokumente in `internal/polydoc`, die Erweiterungen der Engine aus Punkt 8 und das Speichern mit Verweisen, Namen und Warnungen
