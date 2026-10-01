@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
-| **Stand** | 2026-09-30 |
+| **Status** | Geprüft |
+| **Stand** | 2026-10-01 |
 | **Bezug** | Roadmap Phase 3.4; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0017](../adr/code/0017-klare-signale-statt-magischer-werte.md), ADR-0022 (geplant); Plan §5.4, §6.8, §6.9; [`commands.md`](commands.md), [`command-engine.md`](command-engine.md), [`users-and-roles.md`](users-and-roles.md), [`template.md`](template.md), [`actions.md`](actions.md) |
 | **Umsetzung** | noch offen (Roadmap 3.4): Requirement-Service hinter dem Port `engine.Requirements`. Das Datenmodell der Anforderungen gibt es seit Phase 2.2 (`internal/domain/command`). |
 
@@ -203,3 +203,4 @@ Die Meldungen je Art:
 | Datum | Änderung |
 |---|---|
 | 2026-09-30 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
+| 2026-10-01 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
