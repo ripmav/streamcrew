@@ -1,0 +1,13 @@
+{
+  "type": "command",
+  "schemaVersion": 1,
+  "enabled": true,
+  "kind": "run",
+  "command": "0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d",
+  "wait": false,
+  "checkRequirements": true,
+  "args": {
+    "from": "own",
+    "text": "$arg2text x"
+  }
+}
