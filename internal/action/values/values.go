@@ -148,7 +148,7 @@ func (c Counter) Validate() error {
 	if !c.Kind.Valid() {
 		return field("kind", fmt.Errorf("%w: unknown kind %q", action.ErrInvalid, c.Kind))
 	}
-	if err := (counter.Counter{Name: c.Counter}).Validate(); err != nil {
+	if err := counter.ValidateName(c.Counter); err != nil {
 		return field("counter", fmt.Errorf("%w: %w", action.ErrInvalid, err))
 	}
 	if err := only(c.Kind == CounterAdd, c.Amount, "add has an amount"); err != nil {

@@ -5,11 +5,11 @@ SELECT * FROM counters WHERE name = ?;
 SELECT * FROM counters ORDER BY name;
 
 -- name: InsertCounter :exec
-INSERT INTO counters (id, name, value, reset_on_start, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?);
+INSERT INTO counters (id, name, value, step, reset_on_start, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateCounter :exec
-UPDATE counters SET name = ?, value = ?, reset_on_start = ?, updated_at = ? WHERE id = ?;
+UPDATE counters SET name = ?, value = ?, step = ?, reset_on_start = ?, updated_at = ? WHERE id = ?;
 
 -- name: DeleteCounter :execrows
 DELETE FROM counters WHERE name = ?;

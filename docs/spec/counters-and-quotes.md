@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-10-01 |
 | **Bezug** | Roadmap Phase 2.2 (Counter und Quotes), 5.6, 8.3; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md); Plan §5.5, §6.13, Anhang A.3, A.6 |
-| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/counter`, `internal/domain/quote`, Repositories in `internal/store`; Rücksetzen beim Start in `internal/app`. Identifier `$<name>` und `$<name>display` (B1, B4) als Quelle `template.CounterSource`; Abgleich mit eingebauten Identifiern (B7) in `Counter.CheckReserved`, aufgerufen, wenn das Speichern eines Commands einen Counter anlegt, den eine Counter-Action nennt ([`actions.md`](actions.md), B41), später auch über die API (Phase 6). Ändern über die Counter-Action (`internal/action/values`). Offen: Abruf und Format der Quotes per Identifier (B23, B24) mit Phase 3; vorgefertigte Quote-Commands (B22) mit Phase 5.6; Import (B25) |
+| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/counter`, `internal/domain/quote`, Repositories in `internal/store`; Rücksetzen beim Start in `internal/app`. Identifier `$<name>` und `$<name>display` (B1, B4) als Quelle `template.CounterSource`; Abgleich mit eingebauten Identifiern (B7) in `Counter.CheckReserved`, aufgerufen, wenn das Speichern eines Commands einen Counter anlegt, den eine Counter-Action nennt ([`actions.md`](actions.md), B41), später auch über die API (Phase 6). Ändern über die Counter-Action (`internal/action/values`). Schrittweite (B8) als `counter.Counter.Step`, Spalte `step` aus Migration 0006. Offen: Abruf und Format der Quotes per Identifier (B23, B24) mit Phase 3; vorgefertigte Quote-Commands (B22) mit Phase 5.6; Import (B25) |
 
 ## Zweck und Umfang
 
@@ -16,6 +16,7 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 | Begriff | Bedeutung |
 |---|---|
 | Counter | benannter Zahlenwert je Profil, der sich per Action ändern und per Identifier ausgeben lässt |
+| Schrittweite | Betrag, um den ein Schritt den Wert eines Counters erhöht oder verringert |
 | Quote | ein gespeichertes Zitat mit Nummer, Text, Spiel bzw. Kategorie und Zeitpunkt |
 
 ## Verhalten
@@ -25,12 +26,13 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 | ID | Regel | Quellen |
 |---|---|---|
 | B1 | Ein Counter hat einen Namen und einen Wert. Der Name ist zugleich der Name seines Identifiers und deshalb eindeutig je Profil. **[Interop]** `$<name>` | Q6 |
-| B2 | Operationen: um einen Betrag erhöhen oder verringern, auf einen Wert setzen, auf 0 zurücksetzen. | Q6 |
+| B2 | Operationen: um einen Betrag oder um einen Schritt (B8) erhöhen oder verringern, auf einen Wert setzen, auf 0 zurücksetzen. | Q6, A6 |
 | B3 | Ein Counter kann beim Start des Cores auf 0 zurückgesetzt werden (Option je Counter). | Q6 |
 | B4 | Der Wert lässt sich zusätzlich mit Tausendertrennzeichen formatiert ausgeben. **[Interop]** `$<name>display` | Q6 |
 | B5 | Der Wert ist eine ganze Zahl (64 Bit). | Q6 (Beispiele mit ganzen Zahlen), A2 |
 | B6 | Jede Änderung wird sofort gespeichert. | ADR-0012, A1 |
 | B7 | Namen bestehen aus Buchstaben und Ziffern und dürfen nicht mit einem eingebauten Identifier kollidieren. | Q6, A3 |
+| B8 | Ein Counter hat eine Schrittweite, eine ganze Zahl ab 1 (64 Bit). Ohne Angabe ist sie 1, auch für Counter, die es vor der Schrittweite gab. Ein Schritt erhöht oder verringert den Wert um die Schrittweite. | A6 |
 
 ### Quotes
 
@@ -52,6 +54,7 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 | B41 | Quote wird gelöscht | ihre Nummer wird nicht neu vergeben; die übrigen Quotes behalten ihre Nummern | A5 |
 | B42 | Import mit einer Nummer, die es schon gibt | die vorhandene Quote bleibt; der Import meldet den Konflikt | A5 |
 | B43 | Überlauf beim Erhöhen eines Counters | Der Wert bleibt unverändert, die Action scheitert. | B5 |
+| B44 | Schrittweite 0 oder negativ | beim Anlegen und Ändern abgelehnt; der Counter bleibt, wie er war | B8 |
 
 ## Abweichungen vom Original
 
@@ -62,12 +65,14 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 | A3 | Namensregeln nicht dokumentiert | Buchstaben und Ziffern, keine Kollision mit eingebauten Identifiern | eindeutige Auflösung in der Template-Engine (Phase 3) |
 | A4 | nicht dokumentiert | Urheber der Quote wird gespeichert | Nachvollziehbarkeit; optional |
 | A5 | Verhalten der Nummern nach dem Löschen nicht dokumentiert | keine Neuvergabe, keine Umnummerierung | Nummern werden im Chat zitiert und sollen stabil bleiben; zu prüfen |
+| A6 | Der Betrag steht in jeder Counter-Action (Q6). | Zusätzlich hat jeder Counter eine Schrittweite, voreingestellt 1 (B8); Actions erhöhen oder verringern um einen Schritt. | Entscheidung des Projektinhabers: Der Betrag eines Counters steht an einer Stelle statt in jeder Action. |
 
 ## Akzeptanzkriterien
 
 - [x] B1, B40: Counter-Namen sind je Profil eindeutig.
 - [x] B2: Erhöhen, Setzen und Zurücksetzen verändern den gespeicherten Wert.
 - [x] B3: Counter mit Rücksetz-Option stehen nach dem Start auf 0, andere behalten ihren Wert.
+- [x] B8, B44: Neue Counter haben die Schrittweite 1, bestehende erhalten sie bei der Migration; ein Schritt nutzt die gespeicherte Schrittweite; eine Schrittweite unter 1 wird abgelehnt (Integrationstest gegen SQLite).
 - [x] B21, B41: Nummern werden fortlaufend vergeben und nach dem Löschen nicht neu verwendet.
 - [x] B23: zufällige, neueste und Gesamtzahl lassen sich abfragen (Integrationstest gegen SQLite).
 
@@ -95,3 +100,4 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 | 2026-09-29 | Datenmodell umgesetzt. Festlegungen dabei: Counter-Namen bestehen aus 1 bis 64 ASCII-Buchstaben und -Ziffern, weil die Template-Engine Identifier nur aus diesen Zeichen liest, und sind unabhängig von der Schreibweise eindeutig (B1, B7). Bei einem Überlauf bleibt der Wert am Grenzwert; ob er gespeichert wird, entscheidet der Aufrufer (B43). Die neueste Quote ist die mit der höchsten Nummer (B23). Quotes haben zusätzlich eine UUID wie jede Entität (Code-ADR-0009); Nutzer sprechen sie über die Nummer an. |
 | 2026-09-30 | Identifier der Counter umgesetzt (`internal/template`, `internal/domain/counter`). Festlegungen dabei: Tausendertrennzeichen nach Englisch (USA), bis das Profil eine Locale hat (B4; Spezifikation Templates, B41). Ein Name kollidiert (B7), wenn `$<name>` oder `$<name>display` mit einem eingebauten Identifier kollidiert (Spezifikation Templates, B12, B74). |
 | 2026-10-01 | B43 geändert (Entscheidung des Projektinhabers): Bei einem Überlauf bleibt der Wert unverändert, statt am Grenzwert stehen zu bleiben, und die Action scheitert. Eine Änderung gilt damit ganz oder gar nicht, wie es [`actions.md`](actions.md), B42, für die Counter-Action festlegt; die Festlegung vom 2026-09-29 zu B43 entfällt. `counter.Counter.Add` lässt den Wert bei einem Überlauf unverändert. |
+| 2026-10-01 | B8, B44 und A6 ergänzt, B2 erweitert (Entscheidung des Projektinhabers): Jeder Counter hat eine Schrittweite, voreingestellt 1, und lässt sich um einen Schritt erhöhen oder verringern. Umgesetzt als `counter.Counter.Step` mit `Increment` und `Decrement`; `counter.New` legt Counter mit der Schrittweite 1 an. Migration 0006 gibt bestehenden Countern die Schrittweite 1. Festlegungen dabei: Die Schrittweite ist mindestens 1, damit ein Schritt immer in die genannte Richtung geht; nach oben begrenzt sie nur der Wertebereich (B5). Ein Überlauf durch einen Schritt verhält sich wie jeder andere (B43). |
