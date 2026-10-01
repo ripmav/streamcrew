@@ -452,6 +452,54 @@ func TestAmount(t *testing.T) {
 	assert.InDelta(t, 7.0, v, 0)
 }
 
+// TestAmountWithTexts covers actions.md B3: an action renders the
+// identifiers of an amount together with its other templates and gets the
+// same value as Eval.
+func TestAmountWithTexts(t *testing.T) {
+	t.Parallel()
+	whole := action.Range{Min: 0, Max: 1000, Integer: true}
+	engine := template.New(nil)
+	scope := &template.Scope{ArgDelimiter: "|", Location: time.UTC}
+	scope.SetValue("n", template.IntValue(21))
+	scope.SetValue("m", template.IntValue(3))
+	scope.SetValue("word", template.TextValue("abc"))
+
+	a := action.Expression("$n * 2 + $m")
+	ts, err := a.Templates()
+	require.NoError(t, err)
+	rendered, err := engine.RenderEach(t.Context(), append([]template.Template{template.Parse("other $word")}, ts...), scope)
+	require.NoError(t, err)
+	texts := make([]string, len(ts))
+	for i, r := range rendered[1:] {
+		texts[i] = r.Text
+	}
+	v, err := a.EvalWithTexts(texts, whole)
+	require.NoError(t, err)
+	assert.InDelta(t, 45.0, v, 0)
+	_, err = a.EvalWithTexts(texts, action.Range{Min: 0, Max: 10, Integer: true})
+	require.ErrorIs(t, err, action.ErrInvalid, "45 is out of range")
+	_, err = a.EvalWithTexts(texts[:1], whole)
+	require.Error(t, err, "a text is missing")
+
+	ts, err = action.Fixed(7).Templates()
+	require.NoError(t, err)
+	assert.Empty(t, ts, "a fixed number has no templates")
+	v, err = action.Fixed(7).EvalWithTexts(nil, whole)
+	require.NoError(t, err)
+	assert.InDelta(t, 7.0, v, 0)
+	_, err = action.Fixed(1.5).EvalWithTexts(nil, whole)
+	require.ErrorIs(t, err, action.ErrInvalid)
+
+	_, err = action.Expression(`"$word"`).EvalWithTexts([]string{"abc"}, whole)
+	require.ErrorIs(t, err, action.ErrInvalid, "text is not a number")
+	_, err = action.Expression("2 *").Templates()
+	require.ErrorIs(t, err, action.ErrInvalid)
+	_, err = action.Amount{}.Templates()
+	require.ErrorIs(t, err, action.ErrInvalid)
+	_, err = action.Amount{}.EvalWithTexts(nil, whole)
+	require.ErrorIs(t, err, action.ErrInvalid)
+}
+
 // TestCompileRejects: the conformance test catches schemas that the
 // building blocks cannot rule out.
 func TestCompileRejects(t *testing.T) {

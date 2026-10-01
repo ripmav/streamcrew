@@ -157,17 +157,64 @@ func (a Amount) Eval(ctx context.Context, e *template.Engine, s *template.Scope,
 	if v, ok := a.Fixed(); ok {
 		return v, r.Check(v)
 	}
-	if a.expression == "" {
-		return 0, fmt.Errorf("%w: no amount", ErrInvalid)
-	}
-	x, err := expr.Compile(a.expression)
+	x, err := a.compile()
 	if err != nil {
-		return 0, fmt.Errorf("%w: %w", ErrInvalid, err)
+		return 0, err
 	}
 	res, err := x.Eval(ctx, e, s)
 	if err != nil {
 		return 0, err
 	}
+	return number(res, r)
+}
+
+// Templates returns the templates of the identifiers in a, so that an
+// action renders them together with its other templates, in one render
+// (actions.md B3); EvalWithTexts takes their texts. A fixed number has
+// none.
+func (a Amount) Templates() ([]template.Template, error) {
+	if _, ok := a.Fixed(); ok {
+		return nil, nil
+	}
+	x, err := a.compile()
+	if err != nil {
+		return nil, err
+	}
+	return x.Templates(), nil
+}
+
+// EvalWithTexts returns the value of a as Eval does, from texts, the
+// rendered templates of Templates.
+func (a Amount) EvalWithTexts(texts []string, r Range) (float64, error) {
+	if v, ok := a.Fixed(); ok {
+		return v, r.Check(v)
+	}
+	x, err := a.compile()
+	if err != nil {
+		return 0, err
+	}
+	res, err := x.EvalWithTexts(texts)
+	if err != nil {
+		return 0, err
+	}
+	return number(res, r)
+}
+
+// compile returns the expression of a, which is not a fixed number.
+func (a Amount) compile() (*expr.Expression, error) {
+	if a.expression == "" {
+		return nil, fmt.Errorf("%w: no amount", ErrInvalid)
+	}
+	x, err := expr.Compile(a.expression)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+	return x, nil
+}
+
+// number returns the result of an amount's expression; it must be a
+// number in r.
+func number(res expr.Result, r Range) (float64, error) {
 	if res.Kind != expr.Number {
 		return 0, fmt.Errorf("%w: %q is not a number", ErrInvalid, res.String())
 	}
