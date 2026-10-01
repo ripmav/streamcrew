@@ -4,7 +4,7 @@ package flow
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,6 +17,34 @@ import (
 	"github.com/ripmav/streamcrew/internal/engine"
 )
 
+// Draw says how a random action draws (actions.md B11 to B13). The two
+// options of the spec are one choice, because "remember across runs" (B13)
+// exists only with "no repeats" (B12); no combination is invalid
+// (Code-ADR-0017).
+type Draw string
+
+// The ways to draw.
+const (
+	// DrawFree draws each time from all active child actions, so one may
+	// come more than once (B11). New random actions draw so.
+	DrawFree Draw = "free"
+	// DrawUnique draws each child action at most once per run (B12).
+	DrawUnique Draw = "unique"
+	// DrawUniqueRemembered draws as DrawUnique and keeps the drawn child
+	// actions out across runs until all were drawn once (B13).
+	DrawUniqueRemembered Draw = "unique_remembered"
+)
+
+// Draws returns the ways to draw, in the order editors show them.
+func Draws() []Draw {
+	return []Draw{DrawFree, DrawUnique, DrawUniqueRemembered}
+}
+
+// Valid reports whether d is a known way to draw.
+func (d Draw) Valid() bool {
+	return slices.Contains(Draws(), d)
+}
+
 // Random draws Count of its child actions and runs them in the order they
 // were drawn (actions.md B11 to B13).
 type Random struct {
@@ -24,13 +52,11 @@ type Random struct {
 	// Count is how many draws there are, a whole number from 0 to 1000; a
 	// new random action draws once.
 	Count action.Amount `json:"count,omitzero"`
-	// Unique draws each child action at most once per run (B12).
-	Unique bool `json:"unique"`
-	// Remember keeps child actions drawn until all were drawn once, across
-	// runs (B13); only with Unique.
-	Remember bool             `json:"remember"`
-	Actions  []command.Action `json:"actions"`
-	ports    *ports
+	// Draw says whether child actions may repeat, within a run and across
+	// runs.
+	Draw    Draw             `json:"draw"`
+	Actions []command.Action `json:"actions"`
+	ports   *ports
 }
 
 // DocType implements command.Action.
@@ -38,8 +64,8 @@ func (Random) DocType() string { return TypeRandom }
 
 // Validate implements command.Action.
 func (r Random) Validate() error {
-	if r.Remember && !r.Unique {
-		return field("remember", errors.New("only with unique"))
+	if !r.Draw.Valid() {
+		return field("draw", fmt.Errorf("%w: unknown way to draw %q", action.ErrInvalid, r.Draw))
 	}
 	return field("count", r.Count.Validate(countRange()))
 }
@@ -71,19 +97,20 @@ func (r Random) draw(run *engine.Run, count int) []int {
 	if len(candidates) == 0 {
 		return []int{} // B203
 	}
-	if !r.Unique {
-		drawn := make([]int, count)
-		for i := range drawn {
-			drawn[i] = candidates[r.ports.IntN(len(candidates))]
-		}
-		return drawn
-	}
-	if !r.Remember {
+	switch r.Draw {
+	case DrawUnique:
 		return drawUnique(candidates, count, r.ports.IntN)
+	case DrawUniqueRemembered:
+		cmd := run.Command()
+		key := memoryKey{command: cmd.ID, path: pathKey(run.Path())}
+		return r.ports.memory.draw(key, cmd.UpdatedAt, candidates, count, r.ports.IntN)
+	case DrawFree:
 	}
-	cmd := run.Command()
-	key := memoryKey{command: cmd.ID, path: pathKey(run.Path())}
-	return r.ports.memory.draw(key, cmd.UpdatedAt, candidates, count, r.ports.IntN)
+	drawn := make([]int, count)
+	for i := range drawn {
+		drawn[i] = candidates[r.ports.IntN(len(candidates))]
+	}
+	return drawn
 }
 
 // active returns the indexes of the child actions that can run.
@@ -110,8 +137,8 @@ func drawUnique(pool []int, count int, intN func(int) int) []int {
 	return drawn
 }
 
-// memory keeps the child actions that random actions with Remember have
-// drawn, per command and action (B13). It lives in memory only: it starts
+// memory keeps the child actions that random actions with
+// DrawUniqueRemembered have drawn, per command and action (B13). It lives in memory only: it starts
 // anew when the core starts or the command changes.
 type memory struct {
 	mu      sync.Mutex

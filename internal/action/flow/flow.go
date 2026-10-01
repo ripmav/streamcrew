@@ -74,7 +74,7 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 			Category: action.CategoryFlow,
 			Schema:   randomSchema(),
 		}.WithNew(func() Random {
-			return Random{Common: action.On(), Count: action.Fixed(1), Actions: []command.Action{}, ports: ports}
+			return Random{Common: action.On(), Count: action.Fixed(1), Draw: DrawFree, Actions: []command.Action{}, ports: ports}
 		}),
 		action.Descriptor{
 			Type:     TypeGroup,
@@ -96,14 +96,15 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 
 // randomSchema returns the schema of random.
 func randomSchema() *schema.Schema {
-	s := schema.Document(
+	draws := make([]string, 0, len(Draws()))
+	for _, d := range Draws() {
+		draws = append(draws, string(d))
+	}
+	return schema.Document(
 		schema.Property{Name: "count", Schema: countRange().Schema()},
-		schema.Property{Name: "unique", Schema: schema.Switch()},
-		schema.Property{Name: "remember", Schema: schema.Switch()},
+		schema.Property{Name: "draw", Schema: schema.Choice(draws...)},
 		schema.Property{Name: "actions", Schema: schema.Actions()},
 	)
-	s.Needs("remember", "unique")
-	return s
 }
 
 // ports are the ports of the flow types and the memory of random.

@@ -85,10 +85,13 @@ func TestConformance(t *testing.T) {
 			{Name: "negative", Doc: `{"type":"wait","seconds":-1}`},
 		},
 		flow.TypeRandom: {
-			{Name: "full", Doc: `{"type":"random","count":2,"unique":true,"remember":true,"actions":[{"type":"wait","seconds":1},{"type":"obs_scene"}]}`, Valid: true},
+			{Name: "full", Doc: `{"type":"random","count":2,"draw":"unique_remembered","actions":[{"type":"wait","seconds":1},{"type":"obs_scene"}]}`, Valid: true},
 			{Name: "defaults", Doc: `{"type":"random"}`, Valid: true},
-			{Name: "count expression", Doc: `{"type":"random","count":"$arg1text","unique":true}`, Valid: true},
-			{Name: "remember without unique", Doc: `{"type":"random","remember":true}`},
+			{Name: "count expression", Doc: `{"type":"random","count":"$arg1text","draw":"unique"}`, Valid: true},
+			{Name: "free", Doc: `{"type":"random","draw":"free"}`, Valid: true},
+			{Name: "unknown way to draw", Doc: `{"type":"random","draw":"remembered"}`},
+			{Name: "empty way to draw", Doc: `{"type":"random","draw":""}`},
+			{Name: "old switch", Doc: `{"type":"random","unique":true}`},
 			{Name: "count fraction", Doc: `{"type":"random","count":1.5}`},
 			{Name: "count too high", Doc: `{"type":"random","count":1001}`},
 		},
@@ -268,38 +271,38 @@ func TestRandom(t *testing.T) {
 		name     string
 		numbers  []int
 		count    int
-		unique   bool
+		draw     flow.Draw
 		children func(j *actiontest.Journal) []command.Action
 		want     []string
 	}{
 		{
-			name: "B11 repeats allowed", numbers: []int{2, 0, 2}, count: 3,
+			name: "B11 repeats allowed", numbers: []int{2, 0, 2}, count: 3, draw: flow.DrawFree,
 			children: abc, want: []string{"c", "a", "c"},
 		},
 		{
-			name: "B11 more draws than child actions", numbers: []int{0}, count: 4,
+			name: "B11 more draws than child actions", numbers: []int{0}, count: 4, draw: flow.DrawFree,
 			children: abc, want: []string{"a", "a", "a", "a"},
 		},
 		{
-			name: "B204 unique stops when all are drawn", numbers: []int{1}, count: 5, unique: true,
+			name: "B204 unique stops when all are drawn", numbers: []int{1}, count: 5, draw: flow.DrawUnique,
 			children: abc, want: []string{"b", "c", "a"},
 		},
 		{
-			name: "only active child actions are drawn", numbers: []int{0}, count: 2, unique: true,
+			name: "only active child actions are drawn", numbers: []int{0}, count: 2, draw: flow.DrawUnique,
 			children: func(j *actiontest.Journal) []command.Action {
 				return []command.Action{j.Inactive("a"), j.Note("b"), j.Note("c")}
 			},
 			want: []string{"b", "c"},
 		},
 		{
-			name: "B203 no active child actions", numbers: []int{0}, count: 3,
+			name: "B203 no active child actions", numbers: []int{0}, count: 3, draw: flow.DrawFree,
 			children: func(j *actiontest.Journal) []command.Action {
 				return []command.Action{j.Inactive("a")}
 			},
 			want: nil,
 		},
 		{
-			name: "zero draws", numbers: []int{0}, count: 0,
+			name: "zero draws", numbers: []int{0}, count: 0, draw: flow.DrawFree,
 			children: abc, want: nil,
 		},
 	} {
@@ -310,7 +313,7 @@ func TestRandom(t *testing.T) {
 				h := actiontest.NewHarness(t, reg)
 				j := &actiontest.Journal{}
 				r := newAction[flow.Random](t, reg, flow.TypeRandom)
-				r.Count, r.Unique, r.Actions = action.Fixed(float64(tc.count)), tc.unique, tc.children(j)
+				r.Count, r.Draw, r.Actions = action.Fixed(float64(tc.count)), tc.draw, tc.children(j)
 
 				in := h.Start(h.Command("x", r), engine.Params{})
 				assert.Empty(t, in.Errors)
@@ -336,7 +339,7 @@ func TestRandomRemember(t *testing.T) {
 		j := &actiontest.Journal{}
 		remember := func(count int, children ...command.Action) flow.Random {
 			r := newAction[flow.Random](t, reg, flow.TypeRandom)
-			r.Count, r.Unique, r.Remember, r.Actions = action.Fixed(float64(count)), true, true, children
+			r.Count, r.Draw, r.Actions = action.Fixed(float64(count)), flow.DrawUniqueRemembered, children
 			return r
 		}
 		run := func(cmd command.Command) []string {
@@ -399,11 +402,16 @@ func TestValidate(t *testing.T) {
 	t.Parallel()
 	reg := registry(t, numbers(0))
 	r := newAction[flow.Random](t, reg, flow.TypeRandom)
+	assert.Equal(t, flow.DrawFree, r.Draw, "a new random action draws freely")
 	require.NoError(t, r.Validate())
-	r.Remember = true
-	require.ErrorContains(t, r.Validate(), "remember: only with unique")
-	r.Unique = true
-	require.NoError(t, r.Validate())
+	for _, d := range flow.Draws() {
+		r.Draw = d
+		require.NoError(t, r.Validate(), d)
+	}
+	r.Draw = "remembered"
+	require.ErrorContains(t, r.Validate(), `draw: invalid action: unknown way to draw "remembered"`)
+	r.Draw = ""
+	require.ErrorIs(t, r.Validate(), action.ErrInvalid, "the empty value is no way to draw")
 
 	w := newAction[flow.Wait](t, reg, flow.TypeWait)
 	require.ErrorContains(t, w.Validate(), "seconds", "a new wait has no duration yet")
