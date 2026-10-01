@@ -70,6 +70,10 @@ const (
 	// PatternCounterName is the form of counter names: 1 to 64 ASCII
 	// letters and digits (spec counters-and-quotes.md, B7).
 	PatternCounterName = "^[A-Za-z0-9]{1,64}$"
+	// PatternPlatform is the form of the names of platforms: 1 to 32
+	// lowercase ASCII letters and digits, as platform.Name.Validate checks
+	// them.
+	PatternPlatform = "^[a-z0-9]{1,32}$"
 )
 
 // KeyKind is the member that picks the kind of an action document (Kinds).
@@ -330,6 +334,12 @@ func Reference(ui UI) *Schema {
 // CounterName returns the field of the name of a counter (actions.md B41).
 func CounterName() *Schema {
 	return &Schema{Type: "string", Pattern: PatternCounterName, UI: UICounter}
+}
+
+// Platform returns the field of the name of a streaming platform, e.g.
+// "twitch" (actions.md B67, B90).
+func Platform() *Schema {
+	return &Schema{Type: "string", Pattern: PatternPlatform, UI: UIPlatform}
 }
 
 // ResultName returns the field of the name of a result value
