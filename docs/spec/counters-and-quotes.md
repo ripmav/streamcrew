@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-10-01 |
 | **Bezug** | Roadmap Phase 2.2 (Counter und Quotes), 5.6, 8.3; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md); Plan §5.5, §6.13, Anhang A.3, A.6 |
-| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/counter`, `internal/domain/quote`, Repositories in `internal/store`; Rücksetzen beim Start in `internal/app`. Identifier `$<name>` und `$<name>display` (B1, B4) als Quelle `template.CounterSource`; Abgleich mit eingebauten Identifiern (B7) in `Counter.CheckReserved`, aufgerufen, sobald sich Counter anlegen lassen (Actions 3.3, API Phase 6). Offen: Abruf und Format der Quotes per Identifier (B23, B24) mit Phase 3; vorgefertigte Quote-Commands (B22) mit Phase 5.6; Import (B25) |
+| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/counter`, `internal/domain/quote`, Repositories in `internal/store`; Rücksetzen beim Start in `internal/app`. Identifier `$<name>` und `$<name>display` (B1, B4) als Quelle `template.CounterSource`; Abgleich mit eingebauten Identifiern (B7) in `Counter.CheckReserved`, aufgerufen, wenn das Speichern eines Commands einen Counter anlegt, den eine Counter-Action nennt ([`actions.md`](actions.md), B41), später auch über die API (Phase 6). Ändern über die Counter-Action (`internal/action/values`). Offen: Abruf und Format der Quotes per Identifier (B23, B24) mit Phase 3; vorgefertigte Quote-Commands (B22) mit Phase 5.6; Import (B25) |
 
 ## Zweck und Umfang
 

@@ -4,6 +4,7 @@ package store_test
 
 import (
 	"math"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -86,6 +87,30 @@ func TestCounterOverflowKeepsValue(t *testing.T) {
 	c, err := s.Counter(ctx, "big")
 	require.NoError(t, err)
 	assert.Equal(t, int64(math.MaxInt64-1), c.Value)
+}
+
+// TestCounterConcurrentUpdates covers actions.md B42: additions at the
+// same time all count.
+func TestCounterConcurrentUpdates(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+	_, err := s.CreateCounter(ctx, counter.Counter{Name: "hugs"})
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			for range 25 {
+				_, err := s.UpdateCounter(ctx, "HUGS", func(c *counter.Counter) error { return c.Add(1) })
+				assert.NoError(t, err)
+			}
+		})
+	}
+	wg.Wait()
+	c, err := s.Counter(ctx, "hugs")
+	require.NoError(t, err)
+	assert.Equal(t, int64(100), c.Value)
 }
 
 // TestResetCountersOnStart covers B3.
