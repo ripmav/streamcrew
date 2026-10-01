@@ -78,6 +78,8 @@
    ```
 
    - Die Registry prüft jeden Descriptor beim Aufbau: Typ-ID nach Punkt 1 und eindeutig, Kategorie und Capabilities bekannt, ein Schema vorhanden, und das Dokument aus `New` besteht `Validate`. Ein Fehler hält den Start an. Ob das Schema selbst gültig ist, prüft der Konformitätstest (Punkt 9).
+
+     *Umgesetzt am 2026-10-01 mit einer Auflösung zu Punkt 4: Felder ohne Voreinstellung, etwa die Dauer beim Warten, fehlen im Dokument aus `New`. Es kann `Validate` deshalb nicht bestehen. Die Registry prüft stattdessen, dass `New` eine Action des Typs liefert, die sich kodieren lässt und deren Felder im Schema stehen; aus ihr setzt sie die `default`-Werte des Schemas, sodass beide nicht auseinanderlaufen. Schema und `Validate` prüft der Konformitätstest an Beispieldokumenten. `Descriptor.Schema` ist ein Zeiger (`*schema.Schema`); `Descriptor.WithNew` setzt `New` und `Decode` aus einer Konstruktorfunktion.*
    - Sie liefert die Einträge für `command.NewCodec`, die Descriptors in fester Reihenfolge für den Typkatalog (API, Phase 6) und `schema export` (Roadmap 3.5), und sie setzt den Port der Engine um (Punkt 8).
    - Die i18n-Schlüssel folgen aus der Typ-ID und stehen deshalb nicht einzeln im Descriptor: `action.<typ>.name`, `action.<typ>.description`, `action.<typ>.field.<feld>`, `action.<typ>.kind.<art>` und `action.category.<kategorie>`. Der Typkatalog liefert sie ausgeschrieben mit. Die Texte kommen mit ADR-0022.
    - Anforderungen bekommen Descriptors derselben Form (Schema, UI-Hinweise, i18n), sobald der Typkatalog sie braucht (Roadmap 3.5). Capabilities und der Anschluss an die Engine betreffen nur Actions.
@@ -104,6 +106,8 @@
    - **Eigener Schema-Typ:** `schema.Schema` bildet nur die Schlüsselwörter ab, die die Bausteine brauchen, etwa `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `const`, `minimum`, `maximum`, `oneOf`, `default` und `x-ui`. Kodiert wird mit `encoding/json/v2` (Code-ADR-0018). Weitere Schlüsselwörter kommen hinzu, wenn ein Baustein sie braucht.
    - **Prüfbibliothek:** `github.com/santhosh-tekuri/jsonschema/v6`, nur in Tests (Punkt 9). Sie kommt so nicht ins ausgelieferte Binary.
    - UI-Hinweise stehen am Feld als eigenes Schlüsselwort `x-ui`. Es ist ein geschlossenes Enum, zum Start mit `text`, `multiline`, `template`, `amount`, `expression`, `user`, `platform`, `command`, `group`, `counter`, `file_root`, `result_name` und `actions`. Weitere Werte kommen mit den Typen, die sie brauchen, etwa `color` für Overlays. Voreinstellungen stehen als `default`.
+
+     *Umgesetzt am 2026-10-01 mit zwei weiteren Werten, die die Bausteine für Wahrheitswerte und Auswahllisten brauchen: `switch` und `choice`.*
    - **Schemas lesen auch Frontends in anderen Sprachen.** Deshalb gilt:
      - `format` ist nur ein Hinweis für Editoren. Was geprüft werden muss, steht in Enums, Bereichen und `pattern` und im Go-Code, weil Validatoren `format` verschieden oder gar nicht prüfen.
      - `pattern` kommt nur aus Konstanten in `internal/action/schema` und nutzt nur, was Go-RE2 und ECMA-262 gleich verstehen: Zeichenklassen, Quantoren, Gruppen ohne Namen und Anker, aber keine Rückverweise, kein Lookaround und keine Unicode-Klassen wie `\p{…}`.
@@ -133,7 +137,7 @@
 9. **Tests:**
    - Der Konformitätstest aus `internal/action/actiontest` läuft für jeden Descriptor:
      - Das Schema besteht mit `santhosh-tekuri/jsonschema` die Prüfung gegen das Meta-Schema von 2020-12. `x-ui` ist dort als eigenes Vokabular registriert, sodass unbekannte Werte auffallen.
-     - Das Dokument aus `New` lässt sich kodieren und dekodieren und besteht Schema und `Validate`.
+     - Das Dokument aus `New` lässt sich kodieren und dekodieren und besteht Schema und `Validate`. *Umgesetzt mit Beispieldokumenten statt `New` (siehe Vermerk zu Punkt 3); zusätzlich muss jede Eigenschaft des Schemas in einem gültigen Beispiel oder in `New` vorkommen.*
      - Die Felder des kodierten Dokuments und die Eigenschaften des Schemas stimmen überein.
      - Golden Files je Version in `testdata/` werden auf die aktuelle Version migriert (Code-ADR-0010, Punkt 8).
      - Beispieldokumente nimmt das Schema genau dann an, wenn `Validate` sie annimmt.
@@ -180,7 +184,7 @@
 
 - [x] Nach der Annahme Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-10-01
 - [x] Nach der Annahme Plan §2.4, §6.9 (Descriptor, Beispiel `chat.send`), §8 (JSON-Schema: eigener Typ, `santhosh-tekuri/jsonschema/v6` in Tests statt des Kandidaten `google/jsonschema-go`) und §12.2 anpassen und in Code-ADR-0010 den Vermerk **Ergänzt durch** setzen, erledigt 2026-10-01
-- [ ] Die Folgearbeit „Die Typ-Registry in Phase 3 auf `internal/polydoc` aufbauen“ in Code-ADR-0010 mit der Umsetzung abhaken
+- [x] Die Folgearbeit „Die Typ-Registry in Phase 3 auf `internal/polydoc` aufbauen“ in Code-ADR-0010 mit der Umsetzung abhaken, erledigt 2026-10-01
 - [x] In `actions.md` die Arbeitsnamen durch die Typ-IDs aus Punkt 1 ersetzen und auf dieses ADR verweisen, erledigt 2026-10-01
 - [x] In `command-engine.md` die Änderungen aus Punkt 8 mit der Umsetzung in der Änderungshistorie festhalten, erledigt 2026-10-01
 - [ ] Umsetzen (Roadmap 3.3), bevor die einzelnen Typen kommen: `internal/capability`, `internal/action` mit Registry und Feldtypen, `internal/action/schema` mit Schema-Typ und Bausteinen, der Konformitätstest mit `santhosh-tekuri/jsonschema/v6`, verschachtelte Dokumente in `internal/polydoc`, die Erweiterungen der Engine aus Punkt 8 und das Speichern mit Verweisen, Namen und Warnungen

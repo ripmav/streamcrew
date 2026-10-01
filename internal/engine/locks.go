@@ -14,12 +14,10 @@ import (
 
 // Container is an action that holds other actions, such as a condition or
 // a repetition. Their action types count for the locks as well (B22, B23),
-// and it runs them with Run.PerformChild (Code-ADR-0013).
-type Container interface {
-	// Children returns the actions it holds, always in the same order; the
-	// index is the position of a child action in its path (actions.md B9).
-	Children() []command.Action
-}
+// and it runs them with Run.PerformChild (Code-ADR-0013). Children returns
+// them always in the same order; the index is the position of a child
+// action in its path (actions.md B9).
+type Container = command.Parent
 
 // locks returns the locks an instance of cmd needs under mode (B20 to B29);
 // none is an empty list. They are fixed when the instance is queued (B28).
