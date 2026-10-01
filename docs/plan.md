@@ -124,7 +124,7 @@ Zeilen C# in `MixItUp.Base` ohne generierte Ressourcen:
 |---|---|---|
 | Abhängigkeiten | statischer Service Locator, statische `ChannelSession` | Composition Root, Konstruktor-Injektion, keine globalen Zustände |
 | Einstellungen | ein Objekt mit 271 Feldern (JSON) + SQLite | eine SQLite-Datei pro Profil, typisierte und versionierte Sektionen |
-| Polymorphie | `$type` mit .NET-Typnamen | stabile Typ-IDs (z. B. `chat.send`) + `schemaVersion`, Registry |
+| Polymorphie | `$type` mit .NET-Typnamen | stabile Typ-IDs (z. B. `web_request`) + `schemaVersion`, Registry ([Code-ADR-0013](adr/code/0013-typ-registry.md)) |
 | UI-Kopplung | Dialoge im Core, Logik in ViewModels | Aufforderungen und Ereignisse über die API, Logik nur im Core |
 | Nebenläufigkeit | `async void`, Fire-and-forget, feste Wartezeiten | Goroutines mit Besitzer, Abbruch per `context`, Supervisor mit Backoff |
 | Template-Engine | kaskadierendes String-Replace, eifrige Auswertung | Tokenizer, bedarfsgesteuerte Resolver, keine erneute Auswertung eingesetzter Werte |
@@ -538,27 +538,33 @@ Die Sperrmodi entsprechen fachlich dem Original. Commands mit dem Flag „unlock
 
 ### 6.9 Actions, Requirements und Typkatalog
 
-- **Registry:** Jeder Action-Typ registriert einen Descriptor. Er enthält eine stabile Typ-ID, eine Schemaversion, eine Kategorie, i18n-Schlüssel, ein JSON-Schema der Konfiguration, UI-Hinweise (etwa Textfeld, Template, Nutzer, Dauer, Farbe, Datei, Command-Referenz) und die benötigten Capabilities.
+- **Registry:** Jeder Action-Typ registriert einen Descriptor. Er enthält eine stabile Typ-ID, eine Schemaversion, eine Kategorie, i18n-Schlüssel, ein JSON-Schema der Konfiguration, UI-Hinweise (etwa Textfeld, Template, Nutzer, Dauer, Farbe, Datei, Command-Referenz) und die benötigten Capabilities. Einzelheiten, die Typ-IDs der P0-Actions und der Anschluss an die Engine stehen in [Code-ADR-0013](adr/code/0013-typ-registry.md).
 - **Speicherung:** Commands sind JSON-Dokumente mit `type`-Diskriminator und `schemaVersion`. Migrationen laufen pro Typversion (Code-ADR-0010). Die Kodierung nutzt `encoding/json/v2` mit strengem Lesen und deterministischem Schreiben ([Code-ADR-0018](adr/code/0018-json-v2.md)).
 - **Typkatalog über die API:** `ListActionTypes` und Co. liefern Descriptors samt Schema. Frontends rendern daraus generische Editoren. Spezialeditoren gibt es nur, wo es sich lohnt, etwa für Conditional und für Overlay-Positionen.
 - **Requirements** folgen demselben Muster (Validieren, Ausführen bzw. Kosten abbuchen, Fehlermeldung).
 
 ```go
-// Action is a single executable step of a command.
-type Action interface {
-	// Perform executes the action and must honor cancellation of ctx.
+// Performer is an action the engine can run (internal/engine).
+type Performer interface {
+	command.Action
+	// Enabled reports the switch "active"; inactive actions are skipped.
+	Enabled() bool
+	// Perform runs the action and must honor cancellation of ctx.
 	Perform(ctx context.Context, run *engine.Run) error
 }
 
-// Descriptor describes an action type for the registry, the API type
-// catalog and generic editors in all frontends.
+// Descriptor describes an action type for the registry, the type catalog
+// of the API and generic editors (internal/action, Code-ADR-0013).
 type Descriptor struct {
-	Type         string             // stable ID, e.g. "chat.send"
-	Version      int                // configuration schema version
-	Category     string             // e.g. "chat", "media", "integration"
-	Capabilities []string           // e.g. "host:fs", "integration:obs"
-	Schema       *jsonschema.Schema // configuration schema for editors
-	Decode       func(config []byte) (Action, error)
+	Type         string                  // stable type ID, e.g. "web_request"
+	Version      int                     // current schema version, from 1
+	Category     Category                // e.g. CategoryNetwork
+	Capabilities []capability.Capability // needed to run; empty for none
+	VisualAudio  bool                    // shares the lock "visual_audio"
+	Schema       schema.Schema           // configuration, with UI hints
+	New          func() command.Action   // a new action with the defaults for creating one
+	Decode       func(data []byte, opts json.Options) (command.Action, error)
+	Migrations   []polydoc.Migration
 }
 ```
 
@@ -578,7 +584,7 @@ spec:
     cooldown: { scope: per_user, duration: 30s }
     arguments: { min: 1 }
   actions:
-    - type: chat.send
+    - type: chat
       message: "$userdisplayname umarmt $targetuserdisplayname!"
 ```
 
@@ -894,7 +900,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | SQLite | `modernc.org/sqlite` | gesetzt | CGO-frei; zwei Pools (Schreiben, Lesen); Code-ADR-0008 |
 | SQL/Migrationen | `sqlc` (per `go run` gepinnt), `pressly/goose/v3` | gesetzt | typisiert, eingebettet; bewährt in `n8n-go`; Code-ADR-0008 |
 | JSON | `encoding/json/v2` und `encoding/json/jsontext` | gesetzt | stdlib; strenges Lesen, deterministisches Schreiben, polymorphe Dokumente über `internal/polydoc` ([Code-ADR-0018](adr/code/0018-json-v2.md)) |
-| JSON-Schema | `github.com/google/jsonschema-go` | Kandidat | auch vom MCP-Go-SDK genutzt |
+| JSON-Schema | eigener Schema-Typ in `internal/action/schema`; in Tests `github.com/santhosh-tekuri/jsonschema/v6` | gesetzt | als einzige geprüfte Go-Bibliothek besteht sie den Pflichtteil der offiziellen Test-Suite ganz; nicht im Binary ([Code-ADR-0013](adr/code/0013-typ-registry.md)) |
 | YAML | `go.yaml.in/yaml/v3` | gesetzt | Konfigurationsdatei und Commands als Code; offizieller Nachfolger von `gopkg.in/yaml.v3` (Code-ADR-0005) |
 | OAuth | `golang.org/x/oauth2` | Kandidat | Device Flow und PKCE eingebaut |
 | Rate-Limits, Nebenläufigkeit | `golang.org/x/time/rate`, `golang.org/x/sync/errgroup` | Kandidat | `x/`-Pakete |
@@ -1178,7 +1184,7 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0010 | `0010-polymorphe-serialisierung.md` | Diskriminator, Versionen, JSON-Bibliothek; **akzeptiert** | 2 |
 | 0011 | `0011-event-bus.md` | Typisierung, Puffer, Lag; **akzeptiert** | 2 |
 | 0012 | `0012-template-engine.md` | Tokenizer, Präfixregel, Kodierung, Ausdrücke mit `expr-lang/expr`; **akzeptiert** | 3 |
-| 0013 | `0013-typ-registry.md` | Descriptors, Schemas, Capabilities; Typ-IDs, Kind-Actions, Anschluss an die Engine; **vorgeschlagen** | 3 |
+| 0013 | `0013-typ-registry.md` | Descriptors, Schemas, Capabilities; Typ-IDs, Kind-Actions, Anschluss an die Engine; **akzeptiert** | 3 |
 | 0014 | `0014-http-client.md` | Retry, Rate-Limits, Fehlerklassen; Einbau des Circuit Breakers (Code-ADR-0007) | 4 |
 | 0015 | `0015-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |
 | 0016 | `0016-codegenerierung.md` | buf, esbuild in `go generate`; die sqlc-Konventionen stehen in Code-ADR-0008 | 6 |

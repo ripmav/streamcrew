@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-10-01 |
-| **Entscheidung durch** | … (Abnahme durch den Projektinhaber ausstehend) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Plan §6.8, §6.9, §6.15, §8; Roadmap Phase 3.3 bis 3.5; [ADR-0013](../0013-sicherheitsmodell.md); [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0006](0006-teststrategie.md), [Code-ADR-0010](0010-polymorphe-serialisierung.md), [Code-ADR-0012](0012-template-engine.md), [Code-ADR-0017](0017-klare-signale-statt-magischer-werte.md), [Code-ADR-0018](0018-json-v2.md); Spezifikationen [`actions.md`](../../spec/actions.md), [`command-engine.md`](../../spec/command-engine.md) |
 
 ## Kontext
@@ -176,7 +176,9 @@
 
 **Folgearbeiten:**
 
-- [ ] Nach der Annahme Status setzen und den Index in [`README.md`](README.md) anpassen
-- [ ] Nach der Annahme Plan §6.9 (Descriptor, Beispiel `chat.send`), §8 (JSON-Schema: eigener Typ, `santhosh-tekuri/jsonschema/v6` in Tests statt des Kandidaten `google/jsonschema-go`) und §12.2 anpassen; in Code-ADR-0010 den Vermerk **Ergänzt durch** setzen und die Folgearbeit „Die Typ-Registry in Phase 3 auf `internal/polydoc` aufbauen“ mit der Umsetzung abhaken
-- [ ] In `actions.md` die Arbeitsnamen durch die Typ-IDs aus Punkt 1 ersetzen und auf dieses ADR verweisen; in `command-engine.md` die Änderungen aus Punkt 8 in der Änderungshistorie festhalten
+- [x] Nach der Annahme Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-10-01
+- [x] Nach der Annahme Plan §2.4, §6.9 (Descriptor, Beispiel `chat.send`), §8 (JSON-Schema: eigener Typ, `santhosh-tekuri/jsonschema/v6` in Tests statt des Kandidaten `google/jsonschema-go`) und §12.2 anpassen und in Code-ADR-0010 den Vermerk **Ergänzt durch** setzen, erledigt 2026-10-01
+- [ ] Die Folgearbeit „Die Typ-Registry in Phase 3 auf `internal/polydoc` aufbauen“ in Code-ADR-0010 mit der Umsetzung abhaken
+- [x] In `actions.md` die Arbeitsnamen durch die Typ-IDs aus Punkt 1 ersetzen und auf dieses ADR verweisen, erledigt 2026-10-01
+- [ ] In `command-engine.md` die Änderungen aus Punkt 8 mit der Umsetzung in der Änderungshistorie festhalten
 - [ ] Umsetzen (Roadmap 3.3), bevor die einzelnen Typen kommen: `internal/capability`, `internal/action` mit Registry und Feldtypen, `internal/action/schema` mit Schema-Typ und Bausteinen, der Konformitätstest mit `santhosh-tekuri/jsonschema/v6`, verschachtelte Dokumente in `internal/polydoc`, die Erweiterungen der Engine aus Punkt 8 und das Speichern mit Verweisen, Namen und Warnungen
