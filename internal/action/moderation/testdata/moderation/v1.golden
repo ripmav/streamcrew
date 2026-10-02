@@ -1,0 +1,9 @@
+{
+  "type": "moderation",
+  "schemaVersion": 1,
+  "enabled": true,
+  "kind": "timeout",
+  "user": "$targetusername",
+  "seconds": 600,
+  "reason": "Spam by $username"
+}
