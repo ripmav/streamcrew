@@ -1,0 +1,9 @@
+{
+  "type": "file",
+  "schemaVersion": 1,
+  "enabled": true,
+  "kind": "write",
+  "root": "obs",
+  "path": "now playing/$arg1text.txt",
+  "text": "Now: $arg2text"
+}
