@@ -395,25 +395,30 @@ Reihenfolge: erst die Bereinigung nach Code-ADR-0017, dann die Doku als unterste
   - je Action Konfiguration, Ablauf, gesetzte Identifier, Fehlerfälle
   - die Grenze für Wiederholungen ([`command-engine.md`](spec/command-engine.md), B74)
   - was mit den Ausgängen eines Aufrufs geschieht (`engine.Run.Call`: abgeschlossen, eingereiht, inaktiv, abgelehnt, wartend)
-  - globale Werte der Action `specialidentifier`: Lebensdauer und Speicherung, als Quelle der Templates ([`template.md`](spec/template.md), B10)
-- [ ] Code-ADR-0013 Typ-Registry (M): Descriptor mit
+  - globale Werte der Action `special_identifier`: Lebensdauer und Speicherung, als Quelle der Templates ([`template.md`](spec/template.md), B10)
+- [x] [Code-ADR-0013](adr/code/0013-typ-registry.md) Typ-Registry (M), akzeptiert 2026-10-01: Descriptor mit
   - Typ-ID, Version, Kategorie, i18n-Schlüsseln
   - JSON-Schema und UI-Hinweisen
   - benötigten Capabilities
-  - Anschluss an die Engine (seit 3.2): Actions setzen `engine.Performer` um, optional `engine.TimeLimiter` (B72) und `engine.Container` für verschachtelte Actions (B22); die Registry liefert die Funktion für `engine.WithVisualAudio` (B23); „aktuellen Command beenden“ gibt `engine.ErrStop` zurück, die Command-Action nutzt `engine.Run.Call`
+  - Anschluss an die Engine (seit 3.2): Actions setzen `engine.Performer` um, verschachtelte zusätzlich `engine.Container` (B22); die Registry setzt den Port für Bild und Ton (B23) und die Capabilities um; „aktuellen Command beenden“ gibt `engine.ErrStop` zurück, die Command-Action nutzt `engine.Run.Call`
+- [ ] Action-Framework nach [Code-ADR-0013](adr/code/0013-typ-registry.md), vor den einzelnen Typen (M):
+  - `internal/capability`; `internal/action` mit Registry und Feldtypen (`Template`, `Amount`, `ResultName`); `internal/action/schema` mit eigenem Schema-Typ und Bausteinen; Konformitätstest mit `github.com/santhosh-tekuri/jsonschema/v6`, nur in Tests
+  - `internal/polydoc`: Kind-Actions als Dokumente derselben Familie, höchstens 16 Ebenen tief
+  - Engine: Schalter „aktiv“, Kind-Actions über `Run.PerformChild` mit Fehlerpolitik und Pfad im Verlauf, Zeitlimit als anhaltbarer Timer mit `Run.LimitTo`, Port `engine.ActionTypes` statt `engine.WithVisualAudio`
+  - Speichern: Verweise, Namen der Ergebniswerte, Warnungen bei fehlenden Capabilities
 - [ ] Plattform-Ports nach Plan §6.11 in `internal/platform` (S): `Chat` (senden, antworten, flüstern, löschen), `Moderation`, Kanalinformation, Nutzer nachschlagen; die Actions nutzen sie, die Mock-Plattform (3.6) und Twitch (Phase 4) setzen sie um
 - [ ] Capability-Prüfung je Betriebsmodus nach [ADR-0013](adr/0013-sicherheitsmodell.md): Warnung beim Speichern, Verweigerung bei Ausführung (S)
 - [ ] `wait`, `random`, `group`, `repeat` mit der Grenze aus B74 (S)
 - [ ] `conditional`: Vergleiche, Und/Oder, `expr`-Ausdrücke (`internal/expr`), Verzweigungen (M)
 - [ ] `command`: ausführen mit oder ohne Warten über `engine.Run.Call`, aktivieren/deaktivieren, Gruppe schalten (S)
 - [ ] `counter`: setzen, addieren, zurücksetzen (S)
-- [ ] `specialidentifier`: lokale und globale Werte setzen, Ausdrücke; globale Werte als Quelle der Template-Engine (S)
+- [ ] `special_identifier`: lokale und globale Werte setzen, Ausdrücke; globale Werte als Quelle der Template-Engine (S)
 - [ ] `chat`: senden, antworten, flüstern; als Bot oder Streamer, über den Chat-Port (S)
-- [ ] `webrequest`: Methode, Header, Body; JSON-Pfade in Identifier; SSRF-Schutz im Server-Modus (M)
+- [ ] `web_request`: Methode, Header, Body; JSON-Pfade in Identifier; SSRF-Schutz im Server-Modus (M)
 - [ ] `moderation`: Timeout, Nachrichten eines Nutzers entfernen, Chat leeren, Bann, Entbannen, Mod, Strikes, Chat stumm schalten ([`actions.md`](spec/actions.md), B80–B86); VIP kommt mit der Twitch-Action (Phase 4), das Löschen der auslösenden Nachricht mit den Anforderungen (3.4) (S)
-- [ ] `platformmessage`, `userlookup` (S)
+- [ ] `platform_message`, `user_lookup` (S)
 - [ ] `file`: lesen, schreiben, anhängen, Zeile lesen; nur unter freigegebenen Wurzeln via `os.Root` (S)
-- [ ] `externalprogram`: nur mit `host:process`; Timeout; Ausgabe in Identifier (S)
+- [ ] `external_program`: nur mit `host:process`; Timeout; Ausgabe in Identifier (S)
 - [x] Wechsel auf `encoding/json/v2` nach [Code-ADR-0018](adr/code/0018-json-v2.md) (akzeptiert 2026-09-30), vor der Typ-Registry, weil sie auf `internal/polydoc` aufbaut (M), erledigt 2026-09-30
 
 ### 3.4 Requirements
@@ -1233,3 +1238,5 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Phase 3.3 begonnen: Entwurf der Spezifikation `actions.md` für die 15 plattformneutralen P0-Actions aus der offiziellen Doku und dem Plan, ohne Code des Originals; Lücken der Doku als Festlegungen mit offenen Fragen. Aufgabe `moderation` an die Arten der Doku angepasst. |
 | 2026-09-30 | Phase 3.4 begonnen: Entwurf der Spezifikation `requirements.md` aus der offiziellen Doku und dem Plan, ohne Code des Originals: feste Reihenfolge der Prüfungen, Meldungen und wann der Nutzer sie erfährt, Argumente als Werte des Durchlaufs, Schwelle als wartend, Währung, Rang und Inventar bis Phase 8 als fehlerhafte Verweise. |
 | 2026-10-01 | Spezifikationen `actions.md` und `requirements.md` vom Projektinhaber geprüft und akzeptiert. |
+| 2026-10-01 | Code-ADR-0013 „Typ-Registry für Actions“ vorgeschlagen: Typ-IDs der P0-Actions, Descriptor mit eigenem Schema-Typ (geprüft in Tests mit `github.com/santhosh-tekuri/jsonschema/v6`, das als einzige der geprüften Bibliotheken den Pflichtteil der offiziellen Test-Suite ganz besteht), Kind-Actions als verschachtelte Dokumente, Prüfen beim Speichern und die Erweiterungen der Engine für Schalter „aktiv“, Kind-Actions mit eigenem Zeitlimit, Pfade im Verlauf und Capabilities. Neue Aufgabe „Action-Framework“ in 3.3. |
+| 2026-10-01 | Code-ADR-0013 vom Projektinhaber angenommen. Plan §2.4, §6.9, §8 und §12.2 angepasst, Code-ADR-0010 als ergänzt vermerkt, die Typ-IDs in `actions.md` und in den Aufgaben von 3.3 eingetragen. Als Nächstes das Action-Framework. |
