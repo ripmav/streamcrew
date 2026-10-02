@@ -730,6 +730,7 @@ Die Services von `v1alpha1`:
 | `net:outbound` | WebRequest-Action | an | an, mit SSRF-Schutz (keine privaten Netze) |
 | `script` | JavaScript-Action | an (Sandbox) | an (Sandbox), abschaltbar |
 
+- **Einstellungen der Rechte:** Abweichungen vom Standard (`--grant`, `--revoke`), freigegebene Wurzeln (`--file-root`) und die Allowlist für Netzziele im Server-Modus (`--outbound-allow`) stehen in der Konfiguration; Änderungen in der Datei greifen ohne Neustart (Code-ADR-0019). Dienste mit festen Zielen wie die Plattform-Adapter und öffentliche Ziele brauchen keinen Eintrag.
 - **API:** zufällige Tokens mit Scopes (`read`, `control`, `admin`, `overlay`) und Rate-Limit auf Anmeldeversuche. `http.CrossOriginProtection` (ab Go 1.25) schützt vor CSRF, eine CORS-Allowlist gilt für die Web-UI.
 - **Overlay-Endpunkte:** nur lesend, optional mit URL-Token. Eigenes HTML läuft in sandboxed iframes.
 - **Secrets:** tauchen nie in Logs auf. Paketmitschnitte gibt es nur im Debug-Modus und maskiert.
@@ -783,7 +784,7 @@ Läuft der Core auf einem Server, fehlen ihm Fähigkeiten des Streaming-PCs: Tas
 
 ### 6.21 Konfiguration, Logging, Beobachtbarkeit
 
-- **Startkonfiguration:** per `kong` (Flags, Umgebungsvariablen `STREAMCREW_*`, optionale YAML-Konfigurationsdatei; Code-ADR-0005). Laufzeiteinstellungen liegen in der Profildatenbank und sind über die API änderbar.
+- **Startkonfiguration:** per `kong` (Flags, Umgebungsvariablen `STREAMCREW_*`, optionale YAML-Konfigurationsdatei; Code-ADR-0005). Rechte, freigegebene Wurzeln und die Allowlist für Netzziele lädt der Core aus der Datei ohne Neustart nach (Code-ADR-0019). Laufzeiteinstellungen liegen in der Profildatenbank und sind über die API änderbar.
 - **Datenverzeichnis:** `os.UserConfigDir()` bzw. XDG, alternativ `--data-dir` oder ein portabler Modus.
 - **Logging mit `log/slog`:** Text oder JSON, Attribute wie `component`, `platform` und `command_id`. `slog.NewMultiHandler` (in der installierten Toolchain vorhanden) verteilt auf Konsole, Datei mit Rotation und den Log-Stream der API.
 - **Betrieb:** `/healthz` und `/readyz`. Prometheus- oder OpenTelemetry-Export ist optional und standardmäßig aus; nichts wird nach Hause gemeldet ([ADR-0011](adr/0011-keine-telemetrie.md)).
@@ -1198,6 +1199,7 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0016 | `0016-codegenerierung.md` | buf, esbuild in `go generate`; die sqlc-Konventionen stehen in Code-ADR-0008 | 6 |
 | 0017 | `0017-klare-signale-statt-magischer-werte.md` | Werte ohne Doppelbedeutung, benannte Ausgänge, Fehler nur für Fehler; **vorgeschlagen** | 3 |
 | 0018 | `0018-json-v2.md` | `encoding/json/v2` für alles JSON, strenges Lesen, reproduzierbares Schreiben; ergänzt Code-ADR-0010; **akzeptiert** | 3 |
+| 0019 | `0019-host-rechte-in-der-startkonfiguration.md` | Capabilities je Betriebsmodus mit `grant` und `revoke`, freigegebene Wurzeln, Allowlist für Netzziele, alle ohne Neustart änderbar; Umgebung für Programme; ergänzt Code-ADR-0005; **akzeptiert** | 3 |
 
 ---
 
