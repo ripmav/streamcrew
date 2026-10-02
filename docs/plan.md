@@ -1174,7 +1174,7 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0019 | `0019-overlay-architektur.md` | Server, Runtime, Protokoll | 7 | eigene Runtime, JSON über WebSocket |
 | 0020 | `0020-audio-ausgabe.md` | Audio-Sinks | 7 | Overlay als Standard, lokale Ausgabe P1 |
 | 0021 | `0021-import-von-mixitup-daten.md` | Interop-Import, `$`-Namen | 0 (Recht), 10 (Umsetzung) | nach rechtlicher Prüfung |
-| 0022 | `0022-internationalisierung.md` | i18n-Bibliothek, Sprachen | 3 | EN + DE |
+| 0022 | `0022-internationalisierung.md` | i18n-Bibliothek, Sprachen | 3 | **vorgeschlagen**: EN + DE, eigenes Paket auf `golang.org/x/text`, Kataloge im JSON-Format v4 von i18next |
 | 0023 | `0023-release-und-distribution.md` | goreleaser, Docker, Updates | 6 | GitHub-Releases, kein eigener Update-Server; Artefakte nach ADR-0007; Desktop-Pakete nach ADR-0005/0006 |
 | 0024 | `0024-endgueltiger-name-und-branding.md` | endgültiger Name nach Marken- und Domainprüfung | Gate O | `streamcrew` bestätigen oder umbenennen |
 
