@@ -4,6 +4,7 @@ package command
 
 import (
 	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 
@@ -49,8 +50,8 @@ func requirementTypes() []polydoc.Entry[Requirement] {
 // decodeRequirement decodes without validating: a stored requirement that
 // no longer validates, e.g. after a currency was deleted, must not make the
 // command unreadable (B63).
-func decodeRequirement[R Requirement](data []byte) (Requirement, error) {
-	r, err := polydoc.Strict[R](data)
+func decodeRequirement[R Requirement](data []byte, opts json.Options) (Requirement, error) {
+	r, err := polydoc.Strict[R](data, opts)
 	if err != nil {
 		return nil, err
 	}
