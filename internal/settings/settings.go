@@ -47,7 +47,7 @@ func New(repo Repository) (*Service, error) {
 	for _, e := range []polydoc.Entry[Section]{
 		{Type: sectionBackups, Version: 1, Decode: decode[Backups]},
 		{Type: sectionTime, Version: 2, Decode: decode[Time], Migrations: []polydoc.Migration{migrateTimeV1}},
-		{Type: sectionCommands, Version: 1, Decode: decode[Commands]},
+		{Type: sectionCommands, Version: 2, Decode: decode[Commands], Migrations: []polydoc.Migration{migrateCommandsV1}},
 	} {
 		if err := r.Register(e); err != nil {
 			return nil, err
@@ -270,8 +270,20 @@ func (c ErrorCooldown) Valid() bool {
 	}
 }
 
+// Limits of Commands.EntranceMediaGap (spec command-engine.md, B43, B90).
+const (
+	// DefaultEntranceMediaGap is the gap of a profile that never set one.
+	DefaultEntranceMediaGap = 5 * time.Second
+	// MinEntranceMediaGap is the shortest gap.
+	MinEntranceMediaGap = time.Second
+	// MaxEntranceMediaGap is the longest gap.
+	MaxEntranceMediaGap = time.Minute
+)
+
 // Commands configures the command engine (spec command-engine.md, B90).
-// Changes apply to the instances queued afterwards.
+// Changes apply to the instances queued afterwards. Version 1 of the section
+// had no EntranceMediaGap; version 2 has it, and the migration sets
+// DefaultEntranceMediaGap.
 type Commands struct {
 	// LockMode is the lock mode of all commands (B20).
 	LockMode LockMode `json:"lockMode"`
@@ -283,6 +295,10 @@ type Commands struct {
 	// ArgDelimiter separates the delimited arguments of templates (spec
 	// template.md, $argdelimited...).
 	ArgDelimiter string `json:"argDelimiter"`
+	// EntranceMediaGap is how long a picture or sound of a greeting waits
+	// after the playback of the one before (B43), from MinEntranceMediaGap
+	// to MaxEntranceMediaGap.
+	EntranceMediaGap polydoc.Duration `json:"entranceMediaGap"`
 }
 
 // DefaultCommands returns the defaults of B90.
@@ -292,7 +308,21 @@ func DefaultCommands() Commands {
 		ErrorCooldown:         ErrorCooldownPerCommand,
 		ErrorCooldownDuration: polydoc.Duration(10 * time.Second),
 		ArgDelimiter:          "|",
+		EntranceMediaGap:      polydoc.Duration(DefaultEntranceMediaGap),
 	}
+}
+
+// migrateCommandsV1 adds the gap of version 2 with its default.
+func migrateCommandsV1(doc map[string]jsontext.Value) error {
+	if _, ok := doc["entranceMediaGap"]; ok {
+		return errors.New("entrance media gap in version 1")
+	}
+	gap, err := json.Marshal(polydoc.Duration(DefaultEntranceMediaGap))
+	if err != nil {
+		return err
+	}
+	doc["entranceMediaGap"] = gap
+	return nil
 }
 
 // DocType implements polydoc.Document.
@@ -318,6 +348,9 @@ func (c Commands) validate() error {
 	}
 	if strings.IndexFunc(c.ArgDelimiter, unicode.IsControl) >= 0 {
 		return errors.New("the argument delimiter contains a control character")
+	}
+	if gap := c.EntranceMediaGap.Std(); gap < MinEntranceMediaGap || gap > MaxEntranceMediaGap {
+		return fmt.Errorf("entrance media gap %s is not between %s and %s", gap, MinEntranceMediaGap, MaxEntranceMediaGap)
 	}
 	return nil
 }
