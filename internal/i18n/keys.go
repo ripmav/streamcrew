@@ -12,4 +12,15 @@ const (
 	KeyDurationHours   Key = "duration.hours"
 	KeyDurationMinutes Key = "duration.minutes"
 	KeyDurationSeconds Key = "duration.seconds"
+
+	// KeyRequirementRole tells that the command needs the role role or a
+	// higher one (requirements.md, B12).
+	KeyRequirementRole Key = "requirement.role"
+	// KeyRequirementFaulty says that a requirement of the command is broken
+	// (requirements.md, B7, B40); the user is not told.
+	KeyRequirementFaulty Key = "requirement.faulty"
+	// KeyRequirementUnknown says that this version does not know a
+	// requirement of the command (requirements.md, B8); the user is not
+	// told.
+	KeyRequirementUnknown Key = "requirement.unknown"
 )
