@@ -79,12 +79,14 @@ func (s *counters) all() []counter.Counter {
 	return slices.Clone(s.list)
 }
 
-// fixture is a running engine with the counter action and its store.
+// fixture is a running engine with the value types, the counter store and
+// the global values.
 type fixture struct {
 	t         *testing.T
 	reg       *action.Registry
 	harness   *actiontest.Harness
 	counters  *counters
+	globals   *template.Globals
 	templates *template.Engine
 	lines     *lines
 }
@@ -94,23 +96,24 @@ type fixture struct {
 func newFixture(t *testing.T, list ...counter.Counter) *fixture {
 	t.Helper()
 	f := &fixture{t: t, counters: &counters{list: list}, lines: &lines{}}
-	f.reg, f.templates = registry(t, f.counters)
+	f.reg, f.templates, f.globals = registry(t, f.counters)
 	f.harness = actiontest.NewHarness(t, f.reg)
 	return f
 }
 
 // registry returns the value types with a template engine that knows the
-// counters.
-func registry(t *testing.T, cs *counters) (*action.Registry, *template.Engine) {
+// global values and the counters, in the order of template.md, B10.
+func registry(t *testing.T, cs *counters) (*action.Registry, *template.Engine, *template.Globals) {
 	t.Helper()
 	identifiers, err := template.NewRegistry(template.ArgumentFamily(), template.RunFamily())
 	require.NoError(t, err)
-	templates := template.New(identifiers, template.WithSources(template.CounterSource(cs)))
-	ds, err := values.Descriptors(values.Ports{Templates: templates, Counters: cs})
+	globals := template.NewGlobals()
+	templates := template.New(identifiers, template.WithSources(globals, template.CounterSource(cs)))
+	ds, err := values.Descriptors(values.Ports{Templates: templates, Counters: cs, Globals: globals})
 	require.NoError(t, err)
 	reg, err := action.NewRegistry(capability.Set{}, ds...)
 	require.NoError(t, err)
-	return reg, templates
+	return reg, templates, globals
 }
 
 // counter returns a counter action of kind k on the counter name.
@@ -175,7 +178,7 @@ func (p probe) Perform(ctx context.Context, run *engine.Run) error { return p.fn
 
 func TestConformance(t *testing.T) {
 	t.Parallel()
-	reg, _ := registry(t, &counters{})
+	reg, _, _ := registry(t, &counters{})
 	d, ok := reg.Descriptor(values.TypeCounter)
 	require.True(t, ok)
 	actiontest.Suite{Descriptor: d, Update: update(), Examples: []actiontest.Example{
@@ -300,7 +303,7 @@ func TestCounterConcurrent(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	t.Parallel()
-	reg, _ := registry(t, &counters{})
+	reg, _, _ := registry(t, &counters{})
 	d, ok := reg.Descriptor(values.TypeCounter)
 	require.True(t, ok)
 	c, ok := d.New().(values.Counter)
@@ -342,7 +345,7 @@ func TestValidate(t *testing.T) {
 // have no amount.
 func TestDecodeDefaults(t *testing.T) {
 	t.Parallel()
-	reg, _ := registry(t, &counters{})
+	reg, _, _ := registry(t, &counters{})
 	d, ok := reg.Descriptor(values.TypeCounter)
 	require.True(t, ok)
 	for doc, want := range map[string]values.Counter{
@@ -371,8 +374,17 @@ func TestReferences(t *testing.T) {
 
 func TestDescriptorsNeedPorts(t *testing.T) {
 	t.Parallel()
-	_, err := values.Descriptors(values.Ports{Counters: &counters{}})
-	require.Error(t, err)
-	_, err = values.Descriptors(values.Ports{Templates: template.New(nil)})
-	require.Error(t, err)
+	full := values.Ports{Templates: template.New(nil), Counters: &counters{}, Globals: template.NewGlobals()}
+	_, err := values.Descriptors(full)
+	require.NoError(t, err)
+	for name, change := range map[string]func(p *values.Ports){
+		"templates": func(p *values.Ports) { p.Templates = nil },
+		"counters":  func(p *values.Ports) { p.Counters = nil },
+		"globals":   func(p *values.Ports) { p.Globals = nil },
+	} {
+		p := full
+		change(&p)
+		_, err := values.Descriptors(p)
+		assert.Error(t, err, name)
+	}
 }

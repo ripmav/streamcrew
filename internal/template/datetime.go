@@ -133,6 +133,15 @@ func (s span) String() string {
 	return strings.Join(parts, ", ")
 }
 
+// FormatSpan returns the calendar span from from to to as text, as the
+// identifiers of ages write it (B42), e.g. "1 Year, 4 Months, 12 Days";
+// both are taken as dates in loc. A from after to gives "0 Days". The text
+// functions datefrom and dateto of the special identifier action use it
+// (spec actions.md, B54).
+func FormatSpan(from, to time.Time, loc *time.Location) string {
+	return spanBetween(from, to, loc).String()
+}
+
 // plural returns n with the singular or plural unit, e.g. "1 Day", "2 Days".
 func plural[T ~int | ~int64](n T, one, other string) string {
 	if n == 1 {
