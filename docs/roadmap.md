@@ -401,11 +401,11 @@ Reihenfolge: erst die Bereinigung nach Code-ADR-0017, dann die Doku als unterste
   - JSON-Schema und UI-Hinweisen
   - benötigten Capabilities
   - Anschluss an die Engine (seit 3.2): Actions setzen `engine.Performer` um, verschachtelte zusätzlich `engine.Container` (B22); die Registry setzt den Port für Bild und Ton (B23) und die Capabilities um; „aktuellen Command beenden“ gibt `engine.ErrStop` zurück, die Command-Action nutzt `engine.Run.Call`
-- [ ] Action-Framework nach [Code-ADR-0013](adr/code/0013-typ-registry.md), vor den einzelnen Typen (M):
+- [x] Action-Framework nach [Code-ADR-0013](adr/code/0013-typ-registry.md), vor den einzelnen Typen (M), erledigt 2026-10-01:
   - `internal/capability`; `internal/action` mit Registry und Feldtypen (`Template`, `Amount`, `ResultName`); `internal/action/schema` mit eigenem Schema-Typ und Bausteinen; Konformitätstest mit `github.com/santhosh-tekuri/jsonschema/v6`, nur in Tests; erledigt 2026-10-01
   - `internal/polydoc`: Kind-Actions als Dokumente derselben Familie, höchstens 16 Ebenen tief; erledigt 2026-10-01 (`polydoc.MaxDepth`, `polydoc.ErrTooDeep`)
   - Engine: Schalter „aktiv“, Kind-Actions über `Run.PerformChild` mit Fehlerpolitik und Pfad im Verlauf, Zeitlimit als anhaltbarer Timer mit `Run.LimitTo`, Port `engine.ActionTypes` statt `engine.WithVisualAudio`; erledigt 2026-10-01, mit `internal/capability`
-  - Speichern: Verweise, Namen der Ergebniswerte, Warnungen bei fehlenden Capabilities
+  - Speichern: Verweise, Namen der Ergebniswerte, Warnungen bei fehlenden Capabilities; erledigt 2026-10-01 (`command.Service.Save` mit `command.Checks`, Ergebnis `command.Saved`)
 - [ ] Plattform-Ports nach Plan §6.11 in `internal/platform` (S): `Chat` (senden, antworten, flüstern, löschen), `Moderation`, Kanalinformation, Nutzer nachschlagen; die Actions nutzen sie, die Mock-Plattform (3.6) und Twitch (Phase 4) setzen sie um
 - [ ] Capability-Prüfung je Betriebsmodus nach [ADR-0013](adr/0013-sicherheitsmodell.md): Warnung beim Speichern, Verweigerung bei Ausführung (S)
 - [ ] `wait`, `random`, `group`, `repeat` mit der Grenze aus B74 (S)
@@ -1243,3 +1243,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-01 | `internal/polydoc` liest und schreibt verschachtelte Dokumente derselben Familie über die Registry, höchstens 16 Ebenen tief (Code-ADR-0013, Punkt 5); `Entry.Decode` und `polydoc.Strict` bekommen dafür die Optionen der Registry. |
 | 2026-10-01 | Engine nach Code-ADR-0013, Punkt 8: Schalter „aktiv“, Kind-Actions über `engine.Run.PerformChild` mit Fehlerpolitik und Pfad im Verlauf, Zeitlimit als anhaltbarer Timer (`engine.Run.LimitTo`), Capability-Prüfung über den Port `engine.ActionTypes` (Pflichtparameter von `engine.New`, ersetzt `engine.WithVisualAudio`); neues Paket `internal/capability`. |
 | 2026-10-01 | Typ-Registry `internal/action` nach Code-ADR-0013: Descriptor mit Kategorie, Capabilities und eigenem JSON-Schema (`internal/action/schema`), dessen `default`-Werte aus `New` kommen; Dekodieren ab den Voreinstellungen mit Pflichtfeldern; Feldtypen `Template`, `Amount` (Zahl oder Ausdruck, mit Bereich) und `ResultName`; Konformitätstest `internal/action/actiontest` mit `santhosh-tekuri/jsonschema/v6` (nur in Tests, nicht im Binary). `command.Action` hat jetzt `Validate`, und `Command.Validate` prüft Kind-Actions mit Pfad. |
+| 2026-10-01 | Speichern nach Code-ADR-0013, Punkt 7: `command.Service.Save` prüft die Verweise der Actions auf Commands und Gruppen, die Namen ihrer Ergebniswerte, legt fehlende Counter an und gibt Warnungen zu fehlenden Capabilities und unbekannten Wurzeln zurück (`command.Saved`). Das Action-Framework ist damit fertig; als Nächstes die einzelnen Action-Typen. |
