@@ -168,7 +168,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `internal/cli` | Definition der Kommandozeile (`cli.Root`) mit allen Unterkommandos, Fehler und Exit-Codes |
 | `internal/app` | Composition Root: verdrahtet alles, Bereitschaft ([Code-ADR-0002](docs/adr/code/0002-dependency-injection.md)) |
 | `internal/config` | Startkonfiguration, Konfigurationsdatei, Datenverzeichnis ([Code-ADR-0005](docs/adr/code/0005-konfiguration.md)); Rechte je Betriebsmodus, Wurzeln und Allowlist mit Nachladen ohne Neustart ([Code-ADR-0019](docs/adr/code/0019-host-rechte-in-der-startkonfiguration.md)) |
-| `internal/netguard` | Schutz der Verbindungen aus Commands: Allowlist für Netzziele im Server-Modus ([ADR-0013](docs/adr/0013-sicherheitsmodell.md), [Code-ADR-0019](docs/adr/code/0019-host-rechte-in-der-startkonfiguration.md)) |
+| `internal/netguard` | Schutz der Verbindungen aus Commands: SSRF-Dialer, der im Server-Modus interne Netze sperrt, und die Allowlist für Netzziele ([ADR-0013](docs/adr/0013-sicherheitsmodell.md), [Code-ADR-0019](docs/adr/code/0019-host-rechte-in-der-startkonfiguration.md)) |
 | `internal/logging` | slog-Handler, Level je Komponente, Rotation, Maskierung ([Code-ADR-0003](docs/adr/code/0003-fehler-und-logging.md)) |
 | `internal/supervisor` | Runnables mit Neustart, Backoff und geordnetem Shutdown ([Code-ADR-0004](docs/adr/code/0004-nebenlaeufigkeit-und-supervisor.md)) |
 | `internal/httpserver` | HTTP-Server mit `/healthz`, `/readyz`, pprof |
@@ -190,6 +190,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `internal/action/values` | Actions für Werte: Counter mit Schritten, Betrag, Setzen und Zurücksetzen; Special Identifier mit Textfunktionen, Rechnen und globalen Werten ([Spezifikation](docs/spec/actions.md), B40–B57) |
 | `internal/action/chat` | Chat-Action: Nachrichten und Antworten an alle verbundenen Plattformen, Flüstern, als Bot oder Streamer; Plattformnachricht an eine Plattform ([Spezifikation](docs/spec/actions.md), B60–B67) |
 | `internal/action/moderation` | Moderation-Action: Timeout, Bann, Nachrichten entfernen, Chat leeren, Mod, Strikes, stummer Chat ([Spezifikation](docs/spec/actions.md), B80–B86) |
+| `internal/action/network` | Web-Request: Methoden, Header, Body nach Content-Type, Antwort als Text oder über JSON-Pfade; Grenzen für Zeit, Größe und Weiterleitungen ([Spezifikation](docs/spec/actions.md), B70–B77) |
 | `internal/action/host` | Datei-Action unter freigegebenen Wurzeln mit atomarem Ersetzen; externes Programm: starten, warten mit Zeitlimit und Ausgabe, über das System öffnen, Argumente ohne Shell ([Spezifikation](docs/spec/actions.md), B100–B117) |
 | `internal/action/users` | Nutzersuche nach Name oder Plattform-ID, mit Ergebniswerten ([Spezifikation](docs/spec/actions.md), B90–B93) |
 | `internal/connector` | Ports der Streaming-Plattformen: Chat mit Antworten und Flüstern, Moderation, Nutzersuche, Kanalinformation; die Plattformen eines Profils und die Suche von Konten; Fakes in `internal/connector/connectortest` ([Plan §6.11](docs/plan.md)) |

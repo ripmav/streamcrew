@@ -1,0 +1,31 @@
+{
+  "type": "web_request",
+  "schemaVersion": 1,
+  "enabled": true,
+  "kind": "post",
+  "url": "https://api.example.invalid/users/$arg1text",
+  "headers": [
+    {
+      "name": "Content-Type",
+      "value": "application/json"
+    },
+    {
+      "name": "Authorization",
+      "value": "Bearer $token"
+    }
+  ],
+  "body": "{\"name\":\"$username\"}",
+  "response": {
+    "as": "json",
+    "values": [
+      {
+        "path": "job\\title",
+        "name": "title"
+      },
+      {
+        "path": "items\\0\\id",
+        "name": "first"
+      }
+    ]
+  }
+}
