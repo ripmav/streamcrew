@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 // Package counter is the model of counters (spec counters-and-quotes.md, B1
-// to B7): named whole numbers of a profile, e.g. deaths in a game, that
+// to B8): named whole numbers of a profile, e.g. deaths in a game, that
 // actions change and identifiers print.
 //
 // The identifiers $<name> and $<name>display (B1, B4) come from the counter
@@ -25,6 +25,9 @@ type Counter struct {
 	// unique per profile regardless of case (B1).
 	Name  string
 	Value int64
+	// Step is what Increment adds and Decrement subtracts, at least 1 (B8).
+	// New counters have DefaultStep.
+	Step int64
 	// ResetOnStart sets the value to 0 when the core starts (B3).
 	ResetOnStart bool
 	// CreatedAt and UpdatedAt are maintained by the repository.
@@ -42,16 +45,37 @@ var ErrInvalid = errors.New("invalid counter")
 // maxNameLen is the maximum length of a counter name.
 const maxNameLen = 64
 
-// Validate checks a counter before it is stored: the name consists of 1 to
-// 64 ASCII letters and digits, because the template engine reads identifier
-// names from these characters only (B7, plan §6.10).
+// DefaultStep is the step of a new counter (B8).
+const DefaultStep = 1
+
+// New returns a new counter with the name: value 0, DefaultStep, not reset
+// on start.
+func New(name string) Counter {
+	return Counter{Name: name, Step: DefaultStep}
+}
+
+// Validate checks a counter before it is stored: a valid name (ValidateName)
+// and a step of at least 1 (B8).
 func (c Counter) Validate() error {
-	if c.Name == "" || len(c.Name) > maxNameLen {
-		return fmt.Errorf("%w: name %q: want 1 to %d characters", ErrInvalid, c.Name, maxNameLen)
+	if err := ValidateName(c.Name); err != nil {
+		return err
 	}
-	for _, r := range c.Name {
+	if c.Step < 1 {
+		return fmt.Errorf("%w: counter %q: step %d: want at least 1", ErrInvalid, c.Name, c.Step)
+	}
+	return nil
+}
+
+// ValidateName checks the name of a counter: 1 to 64 ASCII letters and
+// digits, because the template engine reads identifier names from these
+// characters only (B7, plan §6.10).
+func ValidateName(name string) error {
+	if name == "" || len(name) > maxNameLen {
+		return fmt.Errorf("%w: name %q: want 1 to %d characters", ErrInvalid, name, maxNameLen)
+	}
+	for _, r := range name {
 		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
-			return fmt.Errorf("%w: name %q: only ASCII letters and digits are allowed", ErrInvalid, c.Name)
+			return fmt.Errorf("%w: name %q: only ASCII letters and digits are allowed", ErrInvalid, name)
 		}
 	}
 	return nil
@@ -81,19 +105,25 @@ func (c Counter) CheckReserved(r Reserver) error {
 }
 
 // Add adds delta, which may be negative (B2). If the result would leave the
-// range of int64, the value stops at the limit and Add returns ErrOverflow
-// (B43); storing the clamped value is up to the caller.
+// range of int64, Add returns ErrOverflow and the value stays as it was
+// (B43).
 func (c *Counter) Add(delta int64) error {
-	switch {
-	case delta > 0 && c.Value > math.MaxInt64-delta:
-		c.Value = math.MaxInt64
-		return fmt.Errorf("counter %q: %w", c.Name, ErrOverflow)
-	case delta < 0 && c.Value < math.MinInt64-delta:
-		c.Value = math.MinInt64
-		return fmt.Errorf("counter %q: %w", c.Name, ErrOverflow)
+	if delta > 0 && c.Value > math.MaxInt64-delta || delta < 0 && c.Value < math.MinInt64-delta {
+		return fmt.Errorf("counter %q: %d %+d: %w", c.Name, c.Value, delta, ErrOverflow)
 	}
 	c.Value += delta
 	return nil
+}
+
+// Increment adds the step (B2, B8). Like Add, it returns ErrOverflow and
+// keeps the value if the result would leave the range of int64 (B43).
+func (c *Counter) Increment() error {
+	return c.Add(c.Step)
+}
+
+// Decrement subtracts the step (B2, B8), like Increment.
+func (c *Counter) Decrement() error {
+	return c.Add(-c.Step)
 }
 
 // Set sets the value (B2).
@@ -117,10 +147,9 @@ type Repository interface {
 	// is replaced with a new one.
 	CreateCounter(ctx context.Context, c Counter) (Counter, error)
 	// UpdateCounter changes a counter in one transaction: fn gets the stored
-	// counter and changes it with Add, Set or Reset; an error from fn
-	// discards the change. To store the value an overflow stopped at (B43),
-	// fn must not return the ErrOverflow of Add but report it by other means,
-	// as TestCounterOverflowStopsAtLimit in internal/store shows.
+	// counter and changes it, e.g. with Add, Increment, Set or Reset; an
+	// error from fn, such as the ErrOverflow of Add, discards the change
+	// (B43).
 	UpdateCounter(ctx context.Context, name string, fn func(*Counter) error) (Counter, error)
 	DeleteCounter(ctx context.Context, name string) error
 	// ResetCountersOnStart sets the counters with ResetOnStart to 0 (B3) and

@@ -67,6 +67,9 @@ const (
 	// PatternID is the canonical text form of an ID: a UUID in lowercase
 	// (Code-ADR-0009).
 	PatternID = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+	// PatternCounterName is the form of counter names: 1 to 64 ASCII
+	// letters and digits (spec counters-and-quotes.md, B7).
+	PatternCounterName = "^[A-Za-z0-9]{1,64}$"
 )
 
 // KeyKind is the member that picks the kind of an action document (Kinds).
@@ -315,6 +318,11 @@ func List(items *Schema, minItems int) *Schema {
 // (UICommand) or a group (UIGroup) (actions.md B31).
 func Reference(ui UI) *Schema {
 	return &Schema{Type: "string", Pattern: PatternID, UI: ui}
+}
+
+// CounterName returns the field of the name of a counter (actions.md B41).
+func CounterName() *Schema {
+	return &Schema{Type: "string", Pattern: PatternCounterName, UI: UICounter}
 }
 
 // ResultName returns the field of the name of a result value

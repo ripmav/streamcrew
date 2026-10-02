@@ -4,6 +4,7 @@ package store_test
 
 import (
 	"math"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,12 +20,12 @@ func TestCounterNamesUnique(t *testing.T) {
 	ctx := t.Context()
 	s := openStore(t)
 
-	c, err := s.CreateCounter(ctx, counter.Counter{Name: "deaths", Value: 3})
+	c, err := s.CreateCounter(ctx, counter.Counter{Name: "deaths", Value: 3, Step: counter.DefaultStep})
 	require.NoError(t, err)
 	assert.False(t, c.ID.IsZero())
-	_, err = s.CreateCounter(ctx, counter.Counter{Name: "Deaths"})
+	_, err = s.CreateCounter(ctx, counter.New("Deaths"))
 	require.ErrorIs(t, err, store.ErrConflict)
-	_, err = s.CreateCounter(ctx, counter.Counter{Name: "two words"})
+	_, err = s.CreateCounter(ctx, counter.New("two words"))
 	require.ErrorIs(t, err, counter.ErrInvalid)
 
 	got, err := s.Counter(ctx, "DEATHS")
@@ -39,7 +40,7 @@ func TestCounterOperations(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	s := openStore(t)
-	_, err := s.CreateCounter(ctx, counter.Counter{Name: "deaths"})
+	_, err := s.CreateCounter(ctx, counter.New("deaths"))
 	require.NoError(t, err)
 
 	value := func() int64 {
@@ -72,23 +73,74 @@ func TestCounterOperations(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
-// TestCounterOverflowStopsAtLimit covers B43: the caller stores the clamped
-// value and reports the overflow.
-func TestCounterOverflowStopsAtLimit(t *testing.T) {
+// TestCounterStep covers B8: the step is stored, Increment and Decrement
+// use the stored step, and a step below 1 is rejected.
+func TestCounterStep(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	s := openStore(t)
-	_, err := s.CreateCounter(ctx, counter.Counter{Name: "big", Value: math.MaxInt64 - 1})
+	points := counter.New("points")
+	points.Step = 10
+	_, err := s.CreateCounter(ctx, points)
+	require.NoError(t, err)
+	_, err = s.CreateCounter(ctx, counter.Counter{Name: "nostep"})
+	require.ErrorIs(t, err, counter.ErrInvalid)
+
+	c, err := s.UpdateCounter(ctx, "points", func(c *counter.Counter) error { return c.Increment() })
+	require.NoError(t, err)
+	assert.Equal(t, int64(10), c.Value)
+	_, err = s.UpdateCounter(ctx, "points", func(c *counter.Counter) error { c.Step = 3; return nil })
+	require.NoError(t, err)
+	c, err = s.UpdateCounter(ctx, "points", func(c *counter.Counter) error { return c.Decrement() })
+	require.NoError(t, err)
+	assert.Equal(t, int64(7), c.Value)
+
+	_, err = s.UpdateCounter(ctx, "points", func(c *counter.Counter) error { c.Step = 0; return nil })
+	require.ErrorIs(t, err, counter.ErrInvalid)
+	c, err = s.Counter(ctx, "points")
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), c.Step, "an invalid step is not stored")
+	assert.Equal(t, int64(7), c.Value)
+}
+
+// TestCounterOverflowKeepsValue covers B43: an overflow fails the update,
+// and the stored value stays as it was.
+func TestCounterOverflowKeepsValue(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+	_, err := s.CreateCounter(ctx, counter.Counter{Name: "big", Value: math.MaxInt64 - 1, Step: counter.DefaultStep})
 	require.NoError(t, err)
 
-	var overflow error
-	c, err := s.UpdateCounter(ctx, "big", func(c *counter.Counter) error {
-		overflow = c.Add(10)
-		return nil
-	})
+	_, err = s.UpdateCounter(ctx, "big", func(c *counter.Counter) error { return c.Add(10) })
+	require.ErrorIs(t, err, counter.ErrOverflow)
+	c, err := s.Counter(ctx, "big")
 	require.NoError(t, err)
-	require.ErrorIs(t, overflow, counter.ErrOverflow)
-	assert.Equal(t, int64(math.MaxInt64), c.Value)
+	assert.Equal(t, int64(math.MaxInt64-1), c.Value)
+}
+
+// TestCounterConcurrentUpdates covers actions.md B42: additions at the
+// same time all count.
+func TestCounterConcurrentUpdates(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+	_, err := s.CreateCounter(ctx, counter.New("hugs"))
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			for range 25 {
+				_, err := s.UpdateCounter(ctx, "HUGS", func(c *counter.Counter) error { return c.Add(1) })
+				assert.NoError(t, err)
+			}
+		})
+	}
+	wg.Wait()
+	c, err := s.Counter(ctx, "hugs")
+	require.NoError(t, err)
+	assert.Equal(t, int64(100), c.Value)
 }
 
 // TestResetCountersOnStart covers B3.
@@ -96,9 +148,9 @@ func TestResetCountersOnStart(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	s := openStore(t)
-	_, err := s.CreateCounter(ctx, counter.Counter{Name: "session", Value: 7, ResetOnStart: true})
+	_, err := s.CreateCounter(ctx, counter.Counter{Name: "session", Value: 7, Step: counter.DefaultStep, ResetOnStart: true})
 	require.NoError(t, err)
-	_, err = s.CreateCounter(ctx, counter.Counter{Name: "total", Value: 7})
+	_, err = s.CreateCounter(ctx, counter.Counter{Name: "total", Value: 7, Step: counter.DefaultStep})
 	require.NoError(t, err)
 
 	n, err := s.ResetCountersOnStart(ctx)
@@ -116,9 +168,9 @@ func TestRenameAndDeleteCounter(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	s := openStore(t)
-	_, err := s.CreateCounter(ctx, counter.Counter{Name: "deaths"})
+	_, err := s.CreateCounter(ctx, counter.New("deaths"))
 	require.NoError(t, err)
-	_, err = s.CreateCounter(ctx, counter.Counter{Name: "wins"})
+	_, err = s.CreateCounter(ctx, counter.New("wins"))
 	require.NoError(t, err)
 
 	_, err = s.UpdateCounter(ctx, "deaths", func(c *counter.Counter) error { c.Name = "Wins"; return nil })
