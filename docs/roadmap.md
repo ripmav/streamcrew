@@ -92,7 +92,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
-| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); 3.2 Command-Engine abgeschlossen (Settings-Sektion „commands“, Warteschlange, Ausführung, Auslösen, Aufrufe); als Nächstes 3.3 Action-Framework und P0-Actions |
+| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); 3.2 Command-Engine abgeschlossen (Settings-Sektion „commands“, Warteschlange, Ausführung, Auslösen, Aufrufe); 3.3 begonnen, die Spezifikation `actions.md` ist geprüft |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
@@ -391,7 +391,7 @@ Reihenfolge: erst die Bereinigung nach Code-ADR-0017, dann die Doku als unterste
 - [x] Vorab: bestehenden Code nach [Code-ADR-0017](adr/code/0017-klare-signale-statt-magischer-werte.md) bereinigen (S), erledigt 2026-09-30:
   - `template.Scope` ohne Sonderwerte: kein leeres Trennzeichen für `|`, keine fehlende Zeitzone für UTC, kein fehlendes Ziel für den auslösenden Nutzer, kein leerer Text nach dem Trigger für „Argumente mit Leerzeichen“; erledigt 2026-09-30
   - Settings-Sektion „time“: `system` statt leerer Zeitzone, als neue Version der Sektion mit Migration (Entscheidung des Projektinhabers vom 2026-09-30); erledigt 2026-09-30, Version 2
-- [ ] Spezifikation [`docs/spec/actions.md`](spec/README.md): Verhalten der P0-Actions aus der offiziellen Doku, ohne Code des Originals (M):
+- [x] Spezifikation [`docs/spec/actions.md`](spec/actions.md): Verhalten der P0-Actions aus der offiziellen Doku, ohne Code des Originals (M), vom Projektinhaber geprüft und akzeptiert 2026-10-01:
   - je Action Konfiguration, Ablauf, gesetzte Identifier, Fehlerfälle
   - die Grenze für Wiederholungen ([`command-engine.md`](spec/command-engine.md), B74)
   - was mit den Ausgängen eines Aufrufs geschieht (`engine.Run.Call`: abgeschlossen, eingereiht, inaktiv, abgelehnt, wartend)
@@ -410,7 +410,7 @@ Reihenfolge: erst die Bereinigung nach Code-ADR-0017, dann die Doku als unterste
 - [ ] `specialidentifier`: lokale und globale Werte setzen, Ausdrücke; globale Werte als Quelle der Template-Engine (S)
 - [ ] `chat`: senden, antworten, flüstern; als Bot oder Streamer, über den Chat-Port (S)
 - [ ] `webrequest`: Methode, Header, Body; JSON-Pfade in Identifier; SSRF-Schutz im Server-Modus (M)
-- [ ] `moderation`: Timeout, Bann, Entbannen, Mod/VIP, Nachricht löschen, Chat leeren (S)
+- [ ] `moderation`: Timeout, Nachrichten eines Nutzers entfernen, Chat leeren, Bann, Entbannen, Mod, Strikes, Chat stumm schalten ([`actions.md`](spec/actions.md), B80–B86); VIP kommt mit der Twitch-Action (Phase 4), das Löschen der auslösenden Nachricht mit den Anforderungen (3.4) (S)
 - [ ] `platformmessage`, `userlookup` (S)
 - [ ] `file`: lesen, schreiben, anhängen, Zeile lesen; nur unter freigegebenen Wurzeln via `os.Root` (S)
 - [ ] `externalprogram`: nur mit `host:process`; Timeout; Ausgabe in Identifier (S)
@@ -1230,3 +1230,5 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | 3.3 und 3.4 startklar gemacht: Reihenfolge (Bereinigung nach Code-ADR-0017, dann Doku, dann Umsetzung), neue Aufgaben für die Spezifikationen `actions.md` und `requirements.md` und für die Plattform-Ports nach Plan §6.11; ADR-0022 aus 3.6 nach 3.4 vorgezogen, weil die Fehlermeldungen der Anforderungen übersetzt werden. Die Zeitzone heißt künftig `system` statt leer (Entscheidung des Projektinhabers). |
 | 2026-09-30 | Template-Scope nach Code-ADR-0017 bereinigt: `Render` und `RenderEach` lehnen einen Scope ohne Zeitzone, ohne Trennzeichen oder mit Argumenten ohne Text ab (`template.ErrInvalidScope`); ohne Ziel hat `$targetuser…` keinen Wert, weil die Engine das Ziel setzt. |
 | 2026-09-30 | Settings-Sektion „time“ in Version 2: Die Systemzone heißt `system` statt leer, die Migration setzt den Wert in gespeicherten Profilen (Entscheidung des Projektinhabers, Code-ADR-0017). Die Bereinigung vor 3.3 ist damit erledigt. |
+| 2026-09-30 | Phase 3.3 begonnen: Entwurf der Spezifikation `actions.md` für die 15 plattformneutralen P0-Actions aus der offiziellen Doku und dem Plan, ohne Code des Originals; Lücken der Doku als Festlegungen mit offenen Fragen. Aufgabe `moderation` an die Arten der Doku angepasst. |
+| 2026-10-01 | Spezifikation `actions.md` vom Projektinhaber geprüft und akzeptiert. |
