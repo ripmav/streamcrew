@@ -94,8 +94,12 @@
      - `action.Amount`: eine Mengenangabe, in JSON eine Zahl (fester Wert) oder ein Text (Ausdruck nach `template.md`, B50–B52). Zu jedem Feld gehört ein `action.Range` aus Minimum, Maximum und der Angabe, ob nur ganze Zahlen gelten. Derselbe Wert geht ins Schema und gilt beim Ausführen (B4); feste Werte prüft schon das Speichern.
      - `action.ResultName`: der Name eines Ergebniswerts nach B5.
      - Verweise auf Commands und Gruppen als `id.ID`, auf Counter als Name (B31, B41).
+
+       *Umgesetzt am 2026-10-01 mit `schema.Reference` und dem Muster der kanonischen Textform (`schema.PatternID`).*
      - Kind-Actions als `[]command.Action` (Punkt 5).
    - Arten sind ein Enum mit `Valid` (Code-ADR-0017, Punkt 5). Felder, die nur für einige Arten gelten, sind bei den übrigen nicht erlaubt; das prüfen das Schema (`oneOf` je Art) und `Validate`.
+
+     *Umgesetzt am 2026-10-01 mit `Descriptor.WithKinds`: Das Dekodieren liest zuerst `kind` und beginnt mit den Voreinstellungen dieser Art, damit keine Voreinstellung einer anderen Art in die Action gerät, etwa „warten“ von `run` in ein `enable`. Die Pflichtfelder kommen aus der Variante der Art im Schema. Optionen, die nur eine Art hat, stehen in einem eingebetteten Zeiger (`json:",embed"`), der bei den übrigen Arten `nil` ist.*
    - **Voreinstellungen und Pflichtfelder:** `New` setzt die Werte „beim Anlegen“ aus `actions.md`, etwa „warten“ bei der Command-Action und 30 s Zeitlimit beim externen Programm, und `enabled` auf an. Gespeicherte Dokumente enthalten immer alle Felder. Fehlen in handgeschriebenen Dokumenten (Commands als Code, Import) Felder, beginnt das Dekodieren mit den Werten aus `New`. Felder ohne Voreinstellung, etwa die Dauer beim Warten, stehen im Schema unter `required`; fehlen sie, lehnt das Dekodieren das Dokument ab. Das ist die eine Stelle, die fehlende Eingaben auflöst (Code-ADR-0017, Punkt 6).
 
 5. **Kind-Actions im Dokument:**
@@ -141,6 +145,8 @@
       *Umgesetzt am 2026-10-01 als Pflichtparameter von `engine.New` statt als Option: Ohne die Registry weiß die Engine nicht, welche Capabilities ein Typ braucht, und kann deshalb keinen Standard anbieten, der „keine vorhanden“ bedeutet.*
    7. `Run.Path()` nennt den Pfad der laufenden Action. Typen mit Zustand über Ausführungen hinweg, etwa der Zufall mit Gedächtnis (B13), bilden ihren Schlüssel aus Command-ID, Änderungszeitpunkt des Commands und Pfad.
    8. Unverändert bleiben `engine.ErrStop` für `exit`, `engine.Container.Children()` für die Sperren und `engine.Run.Call` für die Command-Action.
+
+      *Ergänzt am 2026-10-01 für die übrigen Arten der Command-Action: `engine.Run.CancelAll`, `Pause`, `Resume` und `StartCooldown`. So braucht kein Action-Typ die Engine als Port, die ihrerseits die Registry braucht. `StartCooldown` geht an die neue Methode `engine.Requirements.StartCooldown`.*
 
 9. **Tests:**
    - Der Konformitätstest aus `internal/action/actiontest` läuft für jeden Descriptor:
