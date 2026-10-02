@@ -108,8 +108,10 @@ func (p Params) clone() Params {
 
 // ActionError is an action of an instance that failed (B60).
 type ActionError struct {
-	// Position is the place of the action in the command, from 1.
-	Position int `json:"position"`
+	// Path is the place of the action in the command: the position from 1
+	// at each level, e.g. [3, 2] for the second child action of the third
+	// action (actions.md B9).
+	Path []int `json:"path"`
 	// Type is the action type.
 	Type string `json:"type"`
 	// Message says what went wrong.

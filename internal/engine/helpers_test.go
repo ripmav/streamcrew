@@ -12,11 +12,11 @@ import (
 	"sync"
 	"testing"
 	"testing/synctest"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ripmav/streamcrew/internal/capability"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/engine"
@@ -29,10 +29,12 @@ type action struct {
 	typ      string
 	fn       func(ctx context.Context, run *engine.Run) error
 	children []command.Action
+	disabled bool
 }
 
 func (a action) DocType() string            { return a.typ }
 func (a action) Children() []command.Action { return a.children }
+func (a action) Enabled() bool              { return !a.disabled }
 func (a action) Perform(ctx context.Context, run *engine.Run) error {
 	if a.fn == nil {
 		return nil
@@ -40,13 +42,24 @@ func (a action) Perform(ctx context.Context, run *engine.Run) error {
 	return a.fn(ctx, run)
 }
 
-// limited is an action with its own time limit.
-type limited struct {
-	action
-	limit time.Duration
+// actionTypes is a fake of engine.ActionTypes.
+type actionTypes struct {
+	visual  []string
+	missing map[string][]capability.Capability
 }
 
-func (l limited) TimeLimit() time.Duration { return l.limit }
+// visual returns action types in which the given types are visual or audio.
+func visual(types ...string) *actionTypes {
+	return &actionTypes{visual: types}
+}
+
+func (t *actionTypes) VisualAudio(actionType string) bool {
+	return slices.Contains(t.visual, actionType)
+}
+
+func (t *actionTypes) Missing(actionType string) []capability.Capability {
+	return append([]capability.Capability{}, t.missing[actionType]...)
+}
 
 // unknown is an action the engine cannot run.
 type unknown struct{ typ string }
@@ -163,6 +176,13 @@ type fixture struct {
 
 func newFixture(t *testing.T, mode settings.LockMode, opts ...engine.Option) *fixture {
 	t.Helper()
+	return newFixtureWithTypes(t, mode, &actionTypes{}, opts...)
+}
+
+// newFixtureWithTypes returns a fixture whose engine knows the action types
+// from types.
+func newFixtureWithTypes(t *testing.T, mode settings.LockMode, types engine.ActionTypes, opts ...engine.Option) *fixture {
+	t.Helper()
 	catalog := event.NewCatalog()
 	require.NoError(t, engine.RegisterEvents(catalog))
 	bus := event.NewBus(nil, event.WithCatalog(catalog))
@@ -177,7 +197,7 @@ func newFixture(t *testing.T, mode settings.LockMode, opts ...engine.Option) *fi
 	}
 	opts = append([]engine.Option{engine.WithPublisher(bus), engine.WithConfig(f.configs.get)}, opts...)
 	var err error
-	f.engine, err = engine.New(f.commands, opts...)
+	f.engine, err = engine.New(f.commands, types, opts...)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())

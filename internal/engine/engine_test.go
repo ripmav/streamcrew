@@ -88,7 +88,7 @@ func TestErrorPolicy(t *testing.T) {
 				assert.Equal(t, []string{"queued x", "started x", tc.event}, f.events())
 				in, _ := f.engine.Instance(instanceID)
 				assert.Equal(t, tc.state, in.State)
-				assert.Equal(t, []engine.ActionError{{Position: 1, Type: "fail", Message: "boom"}}, in.Errors)
+				assert.Equal(t, []engine.ActionError{{Path: []int{1}, Type: "fail", Message: "boom"}}, in.Errors)
 			})
 		})
 	}
@@ -147,7 +147,7 @@ func TestPanickingAction(t *testing.T) {
 		assert.Equal(t, []string{"after"}, f.journal.get())
 		in, _ := f.engine.Instance(instanceID)
 		assert.Equal(t, engine.StateCompleted, in.State)
-		assert.Equal(t, []engine.ActionError{{Position: 1, Type: "bad", Message: "action panicked: oops"}}, in.Errors)
+		assert.Equal(t, []engine.ActionError{{Path: []int{1}, Type: "bad", Message: "action panicked: oops"}}, in.Errors)
 	})
 }
 
@@ -237,8 +237,7 @@ func TestLockModes(t *testing.T) {
 		t.Run(string(tc.mode), func(t *testing.T) {
 			t.Parallel()
 			synctest.Test(t, func(t *testing.T) {
-				visualAudio := engine.WithVisualAudio(func(typ string) bool { return typ == "sound" || typ == "overlay" })
-				f := newFixture(t, tc.mode, visualAudio)
+				f := newFixtureWithTypes(t, tc.mode, visual("sound", "overlay"))
 				defer f.stop()
 
 				release := make(chan struct{})
@@ -311,7 +310,7 @@ func TestNestedActionLocks(t *testing.T) {
 		t.Run(string(mode), func(t *testing.T) {
 			t.Parallel()
 			synctest.Test(t, func(t *testing.T) {
-				f := newFixture(t, mode, engine.WithVisualAudio(func(typ string) bool { return typ == "sound" }))
+				f := newFixtureWithTypes(t, mode, visual("sound"))
 				defer f.stop()
 
 				release := make(chan struct{})
@@ -492,13 +491,19 @@ func TestTimeLimit(t *testing.T) {
 		<-ctx.Done()
 		return ctx.Err()
 	}}
+	own := action{typ: "hang", fn: func(ctx context.Context, run *engine.Run) error {
+		if err := run.LimitTo(5 * time.Minute); err != nil {
+			return err
+		}
+		return hang.fn(ctx, run)
+	}}
 	for _, tc := range []struct {
 		name string
 		hang command.Action
 		want time.Duration
 	}{
 		{"default", hang, engine.DefaultTimeLimit},
-		{"own", limited{action: hang, limit: 5 * time.Minute}, 5 * time.Minute},
+		{"own", own, 5 * time.Minute},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -522,8 +527,8 @@ func TestTimeLimit(t *testing.T) {
 	}
 }
 
-// TestInvalidTimeLimit: an action whose own time limit is not positive
-// fails without running.
+// TestInvalidTimeLimit: Run.LimitTo rejects a time limit that is not
+// positive and keeps the one the action has.
 func TestInvalidTimeLimit(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
@@ -531,12 +536,14 @@ func TestInvalidTimeLimit(t *testing.T) {
 		defer f.stop()
 
 		for _, limit := range []time.Duration{0, -time.Second} {
-			instanceID := f.start(f.command("x", command.KindChat, limited{action: f.journal.note("ran"), limit: limit}), engine.Params{})
+			set := action{typ: "set", fn: func(_ context.Context, run *engine.Run) error {
+				return run.LimitTo(limit)
+			}}
+			instanceID := f.start(f.command("x", command.KindChat, set), engine.Params{})
 			in, _ := f.engine.Instance(instanceID)
 			require.Len(t, in.Errors, 1)
 			assert.Contains(t, in.Errors[0].Message, engine.ErrInvalidTimeLimit.Error())
 		}
-		assert.Empty(t, f.journal.get())
 	})
 }
 
@@ -718,7 +725,7 @@ func TestShutdown(t *testing.T) {
 func TestNotRunning(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		e, err := engine.New(&commandStore{})
+		e, err := engine.New(&commandStore{}, &actionTypes{})
 		require.NoError(t, err)
 		cmd := command.Command{Name: "x", Kind: command.KindChat, ErrorPolicy: command.ErrorContinue}
 		_, err = e.Start(t.Context(), cmd, engine.Params{})
@@ -801,17 +808,18 @@ func TestInvalidRun(t *testing.T) {
 func TestOptions(t *testing.T) {
 	t.Parallel()
 	for name, opt := range map[string]engine.Option{
-		"logger":           engine.WithLogger(nil),
-		"publisher":        engine.WithPublisher(nil),
-		"settings":         engine.WithConfig(nil),
-		"visual and audio": engine.WithVisualAudio(nil),
-		"no timeout":       engine.WithShutdownTimeout(0),
+		"logger":     engine.WithLogger(nil),
+		"publisher":  engine.WithPublisher(nil),
+		"settings":   engine.WithConfig(nil),
+		"no timeout": engine.WithShutdownTimeout(0),
 	} {
-		_, err := engine.New(&commandStore{}, opt)
+		_, err := engine.New(&commandStore{}, &actionTypes{}, opt)
 		require.ErrorIs(t, err, engine.ErrInvalidOption, name)
 	}
-	_, err := engine.New(nil)
+	_, err := engine.New(nil, &actionTypes{})
 	require.ErrorIs(t, err, engine.ErrInvalidOption, "commands")
+	_, err = engine.New(&commandStore{}, nil)
+	require.ErrorIs(t, err, engine.ErrInvalidOption, "action types")
 }
 
 // TestLogs: skipped actions, dropped commands and failed events are logged.
@@ -902,7 +910,7 @@ func TestCancelRightAfterStart(t *testing.T) {
 func TestDefaults(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		e, err := engine.New(&commandStore{})
+		e, err := engine.New(&commandStore{}, &actionTypes{})
 		require.NoError(t, err)
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan struct{})
