@@ -170,12 +170,13 @@ func TestDoctor(t *testing.T) {
 	assert.NotEmpty(t, results)
 	assert.False(t, doctor.Failed(results))
 
+	gone := filepath.Join(t.TempDir(), "gone") // absolute on every system, and missing
 	res = runCLI(t.Context(), t, "--data-dir", t.TempDir(), "--listen", "127.0.0.1:0", "--mode", "server",
-		"--grant", "host:process", "--file-root", "gone=/does/not/exist", "doctor", "-o", "json")
+		"--grant", "host:process", "--file-root", "gone="+gone, "doctor", "-o", "json")
 	require.Equal(t, cli.ExitOK, res.code, res.stderr)
 	require.NoError(t, json.Unmarshal([]byte(res.stdout), &results))
 	assert.Contains(t, results, doctor.Result{Check: "capabilities", Status: doctor.StatusOK, Detail: "host:process, net:outbound, script"})
-	assert.Contains(t, results, doctor.Result{Check: "file roots", Status: doctor.StatusOK, Detail: "gone=/does/not/exist"})
+	assert.Contains(t, results, doctor.Result{Check: "file roots", Status: doctor.StatusOK, Detail: "gone=" + gone})
 	assert.Contains(t, results, doctor.Result{Check: "rights", Status: doctor.StatusWarn, Detail: "host:process is on in server mode"})
 	assert.Contains(t, results, doctor.Result{Check: "rights", Status: doctor.StatusWarn, Detail: "the file roots have no effect without host:fs"})
 
