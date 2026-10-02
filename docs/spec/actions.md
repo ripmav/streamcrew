@@ -4,18 +4,18 @@
 |---|---|
 | **Status** | Geprüft |
 | **Stand** | 2026-10-01 |
-| **Bezug** | Roadmap Phase 3.3; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [ADR-0013](../adr/0013-sicherheitsmodell.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0012](../adr/code/0012-template-engine.md), Code-ADR-0013 (geplant), [Code-ADR-0017](../adr/code/0017-klare-signale-statt-magischer-werte.md); Plan §5.3, §6.9, §6.10, §6.11; [`command-engine.md`](command-engine.md), [`template.md`](template.md), [`commands.md`](commands.md), [`counters-and-quotes.md`](counters-and-quotes.md), [`users-and-roles.md`](users-and-roles.md) |
-| **Umsetzung** | noch offen (Roadmap 3.3). Voraussetzungen: Typ-Registry nach Code-ADR-0013 und die Plattform-Ports nach Plan §6.11. Der Anschluss an die Engine braucht zwei Ergänzungen, die Code-ADR-0013 festlegt: inaktive Actions (B1) und Kind-Actions mit eigenem Zeitlimit (B8). |
+| **Bezug** | Roadmap Phase 3.3; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [ADR-0013](../adr/0013-sicherheitsmodell.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0012](../adr/code/0012-template-engine.md), [Code-ADR-0013](../adr/code/0013-typ-registry.md), [Code-ADR-0017](../adr/code/0017-klare-signale-statt-magischer-werte.md); Plan §5.3, §6.9, §6.10, §6.11; [`command-engine.md`](command-engine.md), [`template.md`](template.md), [`commands.md`](commands.md), [`counters-and-quotes.md`](counters-and-quotes.md), [`users-and-roles.md`](users-and-roles.md) |
+| **Umsetzung** | noch offen (Roadmap 3.3). Voraussetzungen: Typ-Registry nach [Code-ADR-0013](../adr/code/0013-typ-registry.md) und die Plattform-Ports nach Plan §6.11. Der Anschluss an die Engine braucht zwei Ergänzungen, die [Code-ADR-0013](../adr/code/0013-typ-registry.md) festlegt: inaktive Actions (B1) und Kind-Actions mit eigenem Zeitlimit (B8). |
 
 ## Zweck und Umfang
 
 Beschreibt das Verhalten der 15 plattformneutralen P0-Actions (Plan §5.3): Warten, Zufall, Gruppe, Wiederholen, Bedingung, Command, Counter, Special Identifier, Chat, Plattformnachricht, Web-Request, Moderation, Nutzersuche, Datei und externes Programm. Je Action stehen hier Konfiguration, Ablauf, gesetzte Identifier und Fehlerfälle. Dazu kommen die Regeln, die für alle Actions gelten: Templates, Mengenangaben, Werte des Durchlaufs, Scheitern, Capabilities und Zeitlimits.
 
-Die Namen der Actions und ihrer Arten in `code`-Schrift sind Arbeitsnamen; die endgültigen Typ-IDs legt Code-ADR-0013 fest.
+Die Namen der Actions und ihrer Arten in `code`-Schrift sind ihre Typ-IDs und Arten nach [Code-ADR-0013](../adr/code/0013-typ-registry.md).
 
 Nicht Teil dieser Spezifikation:
 
-- die Typ-Registry mit Descriptor, JSON-Schema und UI-Hinweisen (Code-ADR-0013)
+- die Typ-Registry mit Descriptor, JSON-Schema und UI-Hinweisen ([Code-ADR-0013](../adr/code/0013-typ-registry.md))
 - Warteschlange, Sperren, Aufrufe, Fehlerpolitik und Verlauf ([`command-engine.md`](command-engine.md))
 - die Prüfung der Anforderungen ([`requirements.md`](requirements.md))
 - die Twitch-Action mit Clips, Markern, Umfragen und Werbung (Roadmap Phase 4)
@@ -103,7 +103,7 @@ Nicht Teil dieser Spezifikation:
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B50 | **Special Identifier** (`specialidentifier`): Name, Wert (Template), Option „Rechnen“ und Option „global“. Der Name folgt B5; ein `$` darin ist nicht erlaubt, weil es andere Identifier stören würde. | Q9 |
+| B50 | **Special Identifier** (`special_identifier`): Name, Wert (Template), Option „Rechnen“ und Option „global“. Der Name folgt B5; ein `$` darin ist nicht erlaubt, weil es andere Identifier stören würde. | Q9 |
 | B51 | Mit „Rechnen“ ist der Wert ein Ausdruck ([`template.md`](template.md), B50–B52). Das Ergebnis wird als Zahl geschrieben: ganze Zahlen ohne Nachkommastellen, sonst mit Punkt und so wenigen Stellen wie nötig. | Q9, [`template.md`](template.md) A3 |
 | B52 | Ohne „Rechnen“ kann der Wert Textfunktionen enthalten. Eine Funktion ist ein Name, direkt gefolgt von Klammern mit Parametern, getrennt durch Kommas, etwa `tolower(…)` oder `replace(…,…,…)`; Funktionen lassen sich verschachteln, die Namen sind unabhängig von der Schreibweise. **[Interop]** `tolower`, `toupper`, `removespaces`, `removecommas`, `length`, `count`, `replace`, `urlencode`, `uriescape`, `datefrom`, `dateto` | Q9 |
 | B53 | Die Struktur der Funktionen wird aus dem Wert gelesen, bevor Identifier eingesetzt werden; danach wird jeder Parameter für sich gerendert. Eingesetzte Werte werden so nie zu Funktionen oder Trennzeichen, auch wenn sie Klammern oder Kommas enthalten ([`template.md`](template.md), B5). Ein Parameter in doppelten Anführungszeichen ist wörtlicher Text samt Kommas und Klammern. Ein Funktionsname ohne schließende Klammer bleibt Text. | A8 |
@@ -123,13 +123,13 @@ Nicht Teil dieser Spezifikation:
 | B64 | Als Antwort bezieht sich die Nachricht auf der Plattform des Durchlaufs auf die auslösende Nachricht, wenn es eine gibt und die Plattform Antworten kennt; sonst und auf den anderen Plattformen ist sie eine gewöhnliche Nachricht. | QP (§6.11), A9 |
 | B65 | Ist die Nachricht nach dem Rendern leer oder nur Leerraum, wird nichts gesendet; das ist kein Scheitern. Länge, Zeilenumbrüche und Rate-Limits übernimmt der Plattform-Adapter: Er teilt zu lange Nachrichten auf ([`template.md`](template.md), B32). | QP (§6.11) |
 | B66 | Scheitert das Senden auf mindestens einer Plattform, scheitert die Action; die Meldung nennt die Plattformen. Auf den anderen bleibt die Nachricht gesendet. | Code-ADR-0017 |
-| B67 | **Plattformnachricht** (`platformmessage`): wie Chat, aber an genau eine gewählte Plattform und ohne Flüstern. Ist die Plattform nicht verbunden, geschieht nichts; der Core loggt das, und es ist kein Scheitern. | Q13 |
+| B67 | **Plattformnachricht** (`platform_message`): wie Chat, aber an genau eine gewählte Plattform und ohne Flüstern. Ist die Plattform nicht verbunden, geschieht nichts; der Core loggt das, und es ist kein Scheitern. | Q13 |
 
 ### Web-Request
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B70 | **Web-Request** (`webrequest`): Methode (`GET`, `POST`, `PUT`, `DELETE`), Adresse (Template), Header (fester Name, Wert als Template), Body (Template, nur bei `POST` und `PUT`) und Ergebnis (`none`, `text` oder `json`). | Q11 |
+| B70 | **Web-Request** (`web_request`): Methode (`GET`, `POST`, `PUT`, `DELETE`), Adresse (Template), Header (fester Name, Wert als Template), Body (Template, nur bei `POST` und `PUT`) und Ergebnis (`none`, `text` oder `json`). | Q11 |
 | B71 | Kodierung ([`template.md`](template.md), B30): In der Adresse werden eingesetzte Werte mit URL kodiert, in Headern mit Text. Der Body richtet sich nach dem Header `Content-Type`: JSON bei `application/json`, URL bei `application/x-www-form-urlencoded`, sonst Text. | QP (§6.10), A10 |
 | B72 | Nur `http` und `https` sind erlaubt; eine Adresse, die nach dem Rendern nicht absolut ist oder ein anderes Schema hat, lässt die Action scheitern. | ADR-0013 |
 | B73 | Die Anfrage hat 10 s Zeit, samt Weiterleitungen (höchstens 10) und Lesen der Antwort. Die Antwort darf höchstens 1 MiB groß sein; eine größere lässt die Action scheitern. | Q11, A10 |
@@ -154,7 +154,7 @@ Nicht Teil dieser Spezifikation:
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B90 | **Nutzersuche** (`userlookup`): Plattform (fest gewählt) und Name oder ID (Template). | Q14 |
+| B90 | **Nutzersuche** (`user_lookup`): Plattform (fest gewählt) und Name oder ID (Template). | Q14 |
 | B91 | Der Core sucht erst in der eigenen Datenbank nach einer Identität der Plattform mit diesem Namen (ohne Beachtung der Schreibweise, mit oder ohne `@`) oder dieser Plattform-ID, dann über die Plattform. Ein über die Plattform gefundener Nutzer wird wie ein neu gesehener gespeichert ([`users-and-roles.md`](users-and-roles.md)). | Q14 |
 | B92 | Über die Plattform sucht der Core höchstens einmal je Minute, über alle Nutzersuchen hinweg. Ist die Suche gerade gesperrt oder die Plattform nicht verbunden, gilt sie als erfolglos, und das Log nennt den Grund. | Q14 |
 | B93 | Ergebniswerte für den Rest der Instanz: **[Interop]** `$lookupusername`, `$lookupdisplayname`, `$lookupid` (ID auf der Plattform), `$lookupavatarurl` und `$lookupsuccess` mit `True` oder `False`. Ohne Treffer sind die ersten vier leer und `$lookupsuccess` ist `False`; das ist kein Scheitern. | Q14 |
@@ -178,7 +178,7 @@ Nicht Teil dieser Spezifikation:
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B110 | **Externes Programm** (`externalprogram`): Programm (Pfad, Template), Argumente (Template), Option „warten“, Option „Ausgabe speichern“ (nur mit Warten), Zeitlimit in Sekunden (von 1 bis 3 600, beim Anlegen 30), Option „Fenster anzeigen“ und Option „über das System öffnen“. | Q16 |
+| B110 | **Externes Programm** (`external_program`): Programm (Pfad, Template), Argumente (Template), Option „warten“, Option „Ausgabe speichern“ (nur mit Warten), Zeitlimit in Sekunden (von 1 bis 3 600, beim Anlegen 30), Option „Fenster anzeigen“ und Option „über das System öffnen“. | Q16 |
 | B111 | Die Argumente werden vor dem Rendern in Wörter zerlegt: Leerraum trennt, doppelte Anführungszeichen fassen zusammen. Jedes Wort wird für sich gerendert und als ein Argument übergeben, ohne Shell. Eingesetzter Text erzeugt so weder zusätzliche Argumente noch Befehle. | A13 |
 | B112 | Ohne „warten“ startet das Programm, und die Action ist fertig; das Programm läuft unabhängig vom Core weiter, auch über dessen Ende hinaus. | Q16 |
 | B113 | Mit „warten“ ist die Action fertig, wenn das Programm endet. Endet es mit einem Exit-Code ungleich 0, scheitert die Action; die Ausgabe wird vorher gespeichert. | Q16, A13 |
@@ -293,3 +293,4 @@ Nicht Teil dieser Spezifikation:
 |---|---|
 | 2026-09-30 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
 | 2026-10-01 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
+| 2026-10-01 | Typ-IDs nach Code-ADR-0013 eingetragen: `special_identifier`, `platform_message`, `web_request`, `user_lookup`, `external_program` statt der Arbeitsnamen. Das Verhalten ist unverändert. |
