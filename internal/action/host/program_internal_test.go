@@ -49,7 +49,7 @@ func program(t *testing.T, saveOutput bool) ExternalProgram {
 		Kind:   ProgramRun,
 		Launch: &LaunchOptions{},
 		Wait:   &WaitOptions{SaveOutput: saveOutput},
-		ports:  &ports{Ports{Env: []string{}, Logger: slog.New(slog.DiscardHandler)}},
+		ports:  &ports{Env: []string{}, Logger: slog.New(slog.DiscardHandler)},
 	}
 }
 
