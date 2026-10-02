@@ -13,9 +13,11 @@ import (
 )
 
 // Container is an action that holds other actions, such as a condition or
-// a repetition. Their action types count for the locks as well (B22, B23).
+// a repetition. Their action types count for the locks as well (B22, B23),
+// and it runs them with Run.PerformChild (Code-ADR-0013).
 type Container interface {
-	// Children returns the actions it holds.
+	// Children returns the actions it holds, always in the same order; the
+	// index is the position of a child action in its path (actions.md B9).
 	Children() []command.Action
 }
 
@@ -39,7 +41,7 @@ func (e *Engine) locks(cmd command.Command, mode settings.LockMode) ([]string, e
 		return slices.Sorted(maps.Keys(types)), nil
 	case settings.LockVisualAudio:
 		for a := range allActions(cmd.Actions) {
-			if e.visualAudio(a.DocType()) {
+			if e.types.VisualAudio(a.DocType()) {
 				return []string{"visual_audio"}, nil
 			}
 		}
@@ -54,7 +56,8 @@ func (e *Engine) locks(cmd command.Command, mode settings.LockMode) ([]string, e
 }
 
 // allActions yields the actions of list and, depth first, the actions they
-// hold.
+// hold. Inactive actions and the actions they hold are left out: they do
+// not run, so they need no lock (actions.md B1).
 func allActions(list []command.Action) iter.Seq[command.Action] {
 	return func(yield func(command.Action) bool) {
 		walkActions(list, yield)
@@ -63,6 +66,9 @@ func allActions(list []command.Action) iter.Seq[command.Action] {
 
 func walkActions(list []command.Action, yield func(command.Action) bool) bool {
 	for _, a := range list {
+		if p, ok := a.(Performer); ok && !p.Enabled() {
+			continue
+		}
 		if !yield(a) {
 			return false
 		}
