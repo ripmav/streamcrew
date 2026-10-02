@@ -190,6 +190,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `internal/action/values` | Actions für Werte: Counter mit Schritten, Betrag, Setzen und Zurücksetzen; Special Identifier mit Textfunktionen, Rechnen und globalen Werten ([Spezifikation](docs/spec/actions.md), B40–B57) |
 | `internal/action/chat` | Chat-Action: Nachrichten und Antworten an alle verbundenen Plattformen, Flüstern, als Bot oder Streamer; Plattformnachricht an eine Plattform ([Spezifikation](docs/spec/actions.md), B60–B67) |
 | `internal/action/moderation` | Moderation-Action: Timeout, Bann, Nachrichten entfernen, Chat leeren, Mod, Strikes, stummer Chat ([Spezifikation](docs/spec/actions.md), B80–B86) |
+| `internal/action/host` | Externes Programm: starten, warten mit Zeitlimit und Ausgabe, über das System öffnen; Argumente ohne Shell ([Spezifikation](docs/spec/actions.md), B110–B117) |
 | `internal/action/users` | Nutzersuche nach Name oder Plattform-ID, mit Ergebniswerten ([Spezifikation](docs/spec/actions.md), B90–B93) |
 | `internal/connector` | Ports der Streaming-Plattformen: Chat mit Antworten und Flüstern, Moderation, Nutzersuche, Kanalinformation; die Plattformen eines Profils und die Suche von Konten; Fakes in `internal/connector/connectortest` ([Plan §6.11](docs/plan.md)) |
 | `internal/capability` | Capabilities nach dem Sicherheitsmodell ([ADR-0013](docs/adr/0013-sicherheitsmodell.md)) |
