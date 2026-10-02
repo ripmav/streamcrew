@@ -48,6 +48,7 @@ type options struct {
 	console io.Writer
 	keyring vault.Keyring
 	envKey  string
+	file    *config.FileResolver
 }
 
 // WithConsole sets the destination of the console log; the default is
@@ -60,6 +61,14 @@ func WithConsole(w io.Writer) Option {
 // keyring. The default is vault.SystemKeyring.
 func WithKeyring(k vault.Keyring) Option {
 	return func(o *options) { o.keyring = k }
+}
+
+// WithConfigFile passes the resolver of the configuration file, so that
+// changes of the rights in the file apply without a restart
+// (Code-ADR-0019, point 5). Without it, the rights stay as they were at
+// start.
+func WithConfigFile(f *config.FileResolver) Option {
+	return func(o *options) { o.file = f }
 }
 
 // WithSecretKey passes the value of STREAMCREW_SECRET_KEY (ADR-0012).
@@ -82,6 +91,7 @@ type App struct {
 	sup      *supervisor.Supervisor
 	http     *httpserver.Server
 	ready    *readiness
+	rights   *config.Live
 }
 
 // New builds the core from a resolved configuration (config.Config.Resolve).
@@ -135,6 +145,12 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	}
 	a.vault = vault.New(a.store, ks)
 
+	rights, err := cfg.Rights()
+	if err != nil {
+		return a, err
+	}
+	a.rights = config.NewLive(rights)
+
 	catalog, err := newCatalog()
 	if err != nil {
 		return a, err
@@ -157,6 +173,10 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		a.sup.Add("backup", scheduler),
 		a.sup.Add("http", a.http, supervisor.WithCritical()),
 	)
+	if o.file != nil {
+		err = errors.Join(err, a.sup.Add("config",
+			config.NewWatcher(o.file, cfg, a.rights, component(logger, "config"))))
+	}
 	return a, err
 }
 
@@ -173,6 +193,14 @@ func (a *App) HTTPServer() *httpserver.Server {
 // Bus returns the event bus.
 func (a *App) Bus() *event.Bus {
 	return a.bus
+}
+
+// Rights returns the rights that apply now: the capabilities, the released
+// roots and the allowlist of network targets (Code-ADR-0019). The action
+// type registry, the file action and the web requests read them at every
+// check.
+func (a *App) Rights() *config.Live {
+	return a.rights
 }
 
 // Profile returns the running profile.
@@ -204,6 +232,7 @@ func (a *App) Run(ctx context.Context) (err error) {
 	if a.cfg.Dev {
 		a.logger.WarnContext(ctx, "developer mode is on: pprof is served under /debug/pprof/")
 	}
+	config.LogRights(ctx, a.logger, a.rights.Rights())
 	a.publish(ctx, eventtype.AppStarted, Started{Version: a.version, Mode: string(a.cfg.Mode), Profile: a.profile.ID})
 
 	if err := a.sup.Run(ctx); err != nil {

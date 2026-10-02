@@ -19,6 +19,7 @@ import (
 
 	"github.com/ripmav/streamcrew/internal/app"
 	"github.com/ripmav/streamcrew/internal/backup"
+	"github.com/ripmav/streamcrew/internal/capability"
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/domain/counter"
 	"github.com/ripmav/streamcrew/internal/event"
@@ -77,6 +78,7 @@ func TestRunStartsReportsReadyAndStops(t *testing.T) {
 	assert.False(t, a.Ready(), "not ready after shutdown")
 
 	assert.Contains(t, console.String(), `"msg":"streamcrew starting"`)
+	assert.Contains(t, console.String(), `"msg":"rights","capabilities":"host:fs, host:process, host:audio, net:outbound, script"`)
 	assert.Contains(t, console.String(), `"msg":"streamcrew stopped"`)
 	logFile, err := os.ReadFile(filepath.Join(cfg.LogDir(), "streamcrew.log"))
 	require.NoError(t, err)
@@ -86,6 +88,22 @@ func TestRunStartsReportsReadyAndStops(t *testing.T) {
 	info, err := os.Stat(cfg.DataDir)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
+}
+
+// TestRights covers Code-ADR-0019: the core has the rights of its mode and
+// the configuration, and gives them to their users through App.Rights.
+func TestRights(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	cfg.Mode, cfg.Grant, cfg.OutboundAllow = config.ModeServer, []string{"host:fs"}, []string{"nas"}
+	require.NoError(t, cfg.Resolve())
+	a, err := app.New(t.Context(), cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil),
+		app.WithConfigFile(config.NewFileResolver("")))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, a.Close()) }()
+	var src capability.Source = a.Rights()
+	assert.Equal(t, []capability.Capability{capability.HostFS, capability.NetOutbound, capability.Script}, src.Current().List())
+	assert.True(t, a.Rights().Outbound().HasHost("nas"))
 }
 
 func TestRunFailsWhenPortIsInUse(t *testing.T) {
