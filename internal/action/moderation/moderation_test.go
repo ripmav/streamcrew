@@ -190,7 +190,9 @@ func newFixture(t *testing.T) *fixture {
 		mute:    &mute{},
 		logs:    &logs{},
 	}
-	set, err := connector.NewSet(f.twitch, f.youtube, f.kick)
+	// Twitch comes last, so that the tests see the default platform searched
+	// first (B82).
+	set, err := connector.NewSet(f.kick, f.youtube, f.twitch)
 	require.NoError(t, err)
 	f.reg = registry(t, moderation.Ports{Platforms: set, Users: f.store, Strikes: f.store, Mute: f.mute},
 		slog.New(slog.NewTextHandler(f.logs, nil)))
@@ -519,11 +521,13 @@ func TestStrikeLookup(t *testing.T) {
 		t.Parallel()
 		synctest.Test(t, func(t *testing.T) {
 			f := newFixture(t)
-			f.store.add(0, f.twitch.Account("bob"), f.kick.Account("bob"))
+			f.store.add(0, f.twitch.Account("bob"))
+			f.store.add(0, f.kick.Account("bob"))
 			f.store.add(0, f.youtube.Account("bob"))
 			in := f.start(timer(), f.on(moderation.KindAddStrike, "bob"))
 			assert.Empty(t, in.Errors)
-			assert.Equal(t, int64(1), f.store.strikes(platform.Twitch, "bob"), "the first match")
+			assert.Equal(t, int64(1), f.store.strikes(platform.Twitch, "bob"), "the first match, on the default platform")
+			assert.Equal(t, int64(0), f.store.strikes(platform.Kick, "bob"), "another user of that name")
 			assert.Equal(t, int64(0), f.store.strikes(platform.YouTube, "bob"), "another user of that name")
 		})
 	})

@@ -3,8 +3,10 @@
 package connector
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 )
@@ -56,4 +58,22 @@ func (s *Set) Connected() []Platform {
 		}
 	}
 	return out
+}
+
+// DefaultFirst returns ps with the default platform first and the others
+// in their order (platform.Default, actions.md B82); ps stays as it is.
+func DefaultFirst(ps []Platform) []Platform {
+	out := slices.Clone(ps)
+	slices.SortStableFunc(out, func(a, b Platform) int {
+		return cmp.Compare(rank(a), rank(b))
+	})
+	return out
+}
+
+// rank orders the default platform before the others.
+func rank(p Platform) int {
+	if p.Name() == platform.Default {
+		return 0
+	}
+	return 1
 }

@@ -348,10 +348,10 @@ func (m Moderation) render(ctx context.Context, s *template.Scope) (inputs, erro
 
 // targets returns the platforms the action acts on (B82): the platform of
 // the run, which must be connected, or without one every connected
-// platform.
+// platform, the default platform first.
 func (m Moderation) targets(p engine.Params) ([]connector.Platform, error) {
 	if p.Platform == "" {
-		return m.ports.Platforms.Connected(), nil
+		return connector.DefaultFirst(m.ports.Platforms.Connected()), nil
 	}
 	target, ok := m.ports.Platforms.Platform(p.Platform)
 	if !ok || !target.Status().Connected() {
@@ -423,7 +423,7 @@ func (m Moderation) strike(ctx context.Context, p engine.Params, login string) e
 	if p.Platform != "" {
 		names = []platform.Name{p.Platform}
 	} else {
-		for _, target := range m.ports.Platforms.Connected() {
+		for _, target := range connector.DefaultFirst(m.ports.Platforms.Connected()) {
 			names = append(names, target.Name())
 		}
 	}
