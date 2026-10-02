@@ -160,14 +160,14 @@ Nicht Teil dieser Spezifikation:
 | ID | Original | streamcrew | Begründung |
 |---|---|---|---|
 | A1 | nicht dokumentiert, welche Fassung eines geänderten Commands eine wartende Instanz ausführt | die Fassung beim Einreihen (B3, B28) | vorhersehbar; keine halb geänderten Abläufe |
-| A2 | „Play“ zum Testen; nicht dokumentiert, ob Anforderungen gelten | Start von Hand ohne Anforderungen, Kosten und Cooldowns (B14) | Testen soll keine Währung kosten und keinen Cooldown auslösen; zu prüfen (offene Frage) |
+| A2 | „Play“ fragt nach Nutzer, Plattform und Argumenten und wendet Anforderungen, Kosten und Cooldowns nur mit einer Option an; ohne sie leert es danach alle Cooldowns des Commands, auch die anderer Nutzer (Q7) | Start von Hand ohne Anforderungen, Kosten und Cooldowns; laufende Cooldowns bleiben (B14) | Testen soll keine Währung kosten und die Cooldowns der Zuschauer nicht ändern; mit Prüfung lässt sich ein Command über einen Aufruf mit Prüfung starten (B33); Entscheidung des Projektinhabers (2026-10-02) |
 | A3 | keine dokumentierte Grenze der Warteschlange | höchstens 1 000 wartende Instanzen (B15) | Schutz vor Überlast, etwa bei einer Flut von Ereignissen |
 | A4 | Reihenfolge beim Warten auf mehrere Sperren nicht dokumentiert | Einreihungsreihenfolge, kein Überholen (B26) | kein Verhungern einzelner Instanzen, nachvollziehbare Reihenfolge |
 | A5 | nicht dokumentiert, ob freigegebene Commands in der Pause laufen | Pause hält auch freigegebene Commands an (B27, B40) | Pause soll alles anhalten, was noch nicht läuft; zu prüfen |
 | A6 | nicht dokumentiert, ob aufgerufene Commands Werte mit dem Aufrufer teilen | Teilen bei Warten, Kopie ohne Warten (B35) | Action-Gruppen sollen Werte liefern können; ohne Warten gäbe es Wettläufe |
 | A7 | Begrüßungen werden in ihrer Pause gesammelt und laufen nach dem Fortsetzen in Ankunftsreihenfolge; „nur wenn live“ ist eine Option; kein Abstand zwischen Medien (Q6) | ebenso eingereiht (B41); immer nur live, beim Stream-Ende abgebrochen (B41); Mindestabstand für Bild und Ton (B43) | Entscheidung des Projektinhabers (2026-10-02): Begrüßungen sollen laufen, solange der Stream live ist; eine Flut von Chat-Nachrichten ist hinnehmbar, eine Flut von Sounds und Videos nicht |
 | A8 | nicht dokumentiert, ob eine Pause einen Neustart übersteht | nein (B42) | eine vergessene Pause soll den Core nicht dauerhaft stummschalten |
-| A9 | nicht dokumentiert, ob Kosten beim Abbrechen erstattet werden | keine Erstattung (B53) | Abbrechen ist eine Entscheidung des Streamers; Erstattung ließe sich ausnutzen; zu prüfen |
+| A9 | nicht dokumentiert, ob Kosten beim Abbrechen erstattet werden | keine Erstattung (B53) | Abbrechen ist eine Entscheidung des Streamers; Erstattung ließe sich ausnutzen |
 | A10 | Wiederholen dokumentiert, Anforderungen dabei nicht | ohne Anforderungen, Kosten und Cooldowns, mit der aktuellen Fassung (B54) | Wiederholen ist eine Handlung des Streamers wie der Start von Hand |
 | A11 | Verlauf dokumentiert, Umfang und Speicherung nicht | 200 Instanzen im Speicher (B60) | genügt für den laufenden Stream; dauerhafte Auswertung liefert das Ereignisprotokoll (Plan §6.13) |
 | A12 | keine Ereignisse für Command-Instanzen dokumentiert | Ereignisse für Frontends, nicht für Ereignis-Commands (B61, B62) | Frontends zeigen Warteschlange und Verlauf live; keine Schleifen |
@@ -192,9 +192,7 @@ Nicht Teil dieser Spezifikation:
 ## Offene Fragen
 
 - B12, B90: Welche Dauer hat der Fehler-Cooldown im Original als Standard? streamcrew nimmt 10 s an.
-- B14/A2: Prüft der Start von Hand („Play“) im Original die Anforderungen?
 - B27/A5: Laufen freigegebene Commands im Original auch während der Pause?
-- B53/A9: Erstattet das Original Kosten beim Abbrechen?
 - B71/A13: Läuft ein Command im Original nach einer gescheiterten Action weiter?
 - B22: Zählen im Original bei `per_action_type` auch die Actions in verschachtelten Actions?
 - B4: Mit welchem Zustand endet eine Instanz im Original nach „aktuellen Command beenden“?
@@ -209,6 +207,7 @@ Nicht Teil dieser Spezifikation:
 | Q4 | Doku | <https://mixitup.bot/docs/reference/special-identifiers> | Parameter eines Durchlaufs als Identifier, Zielnutzer; abgerufen 2026-09-29 |
 | Q5 | Doku | <https://mixitup.bot/docs/actions/repeat-action> | Wiederholen mit Anzahl aus Identifiern; keine Grenze dokumentiert; abgerufen 2026-09-30 |
 | Q6 | Original (Hilfestellung) | `MixItUp.Base/Services/CommandService.cs @ v1.8.200`, `MixItUp.Base/Services/ChatService.cs @ v1.8.200`, `MixItUp.Base/Services/EventService.cs @ v1.8.200`, `MixItUp.Base/Model/Actions/CommandActionModel.cs @ v1.8.200` | Beide Pausen sammeln ausgelöste Commands und führen sie nach dem Fortsetzen in Ankunftsreihenfolge aus; das gilt für den Entrance-Command des Nutzers und die allgemeine Begrüßung. Die erste Nachricht zählt sofort, auch in der Pause; mit der Option „nur wenn live“ zählt eine Nachricht offline nicht. Anforderungen gelten beim Auslösen. Gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
+| Q7 | Original (Hilfestellung) | `MixItUp.Base/ViewModel/Commands/CommandEditorWindowViewModelBase.cs @ v1.8.200`, `MixItUp.WPF/Controls/Dialogs/EditTestCommandParametersDialogControl.xaml.cs @ v1.8.200` | Start von Hand mit optionaler Prüfung, ohne sie werden danach die Cooldowns des Commands geleert (A2); gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
 | QP | Projekt | [Plan](../plan.md) §5, §6.6, §6.8, §6.9, §6.13 | Command-Engine: Begriffe, Zustände, Sperrmodi, Steuerung, Schutzmechanismen, Fehler; Verlauf als P0 |
 
 ## Änderungshistorie
@@ -225,3 +224,4 @@ Nicht Teil dieser Spezifikation:
 | 2026-10-01 | B74 umgesetzt: `repeat` und `random` lehnen eine Anzahl über 1 000 ab, bevor sie eine Kind-Action ausführen; die Grenze gilt je Action, verschachtelte Wiederholungen dürfen sich vervielfachen ([`actions.md`](actions.md), B15, B202). |
 | 2026-10-01 | Die auslösende Nachricht unter den Parametern (B80) hat ihre ID auf der Plattform (`engine.Params.MessageID`), für Antworten der Chat-Action ([`actions.md`](actions.md), B64) und das Löschen der Auslösenachricht ([`requirements.md`](requirements.md)). Eine ID ohne Nachricht oder ohne Plattform lehnt die Engine ab (`engine.ErrInvalidParams`); aufgerufene Commands bekommen sie mit der Nachricht (B34). |
 | 2026-10-02 | B41 geändert, B43 und die Randfälle B110–B113 neu (Entscheidung des Projektinhabers): Begrüßungen, also der Entrance-Command eines Nutzers und die Ereignis-Commands auf `chat.user.entrance`, werden in ihrer Pause eingereiht statt verworfen und laufen nach dem Fortsetzen, wie im Original (Q6). Sie lösen nur aus, solange der Stream live ist, und werden beim Stream-Ende abgebrochen. Zwischen Bild- und Ton-Actions von Begrüßungen liegt ein Mindestabstand ab dem Ende der Wiedergabe, Standard 5 s, einstellbar von 1 s bis 60 s in der Settings-Sektion `commands` (B90). Die offenen Fragen zu B40 und B41 sind am Original geklärt: Es sammelt in beiden Pausen. Die Engine meldet keinen eigenen Ausgang „Begrüßungen pausiert“ mehr; Actions melden das Ende ihrer Wiedergabe mit `engine.Run.PlaybackEnds`, und `engine.Engine.CancelEntrance` bricht die Begrüßungen beim Stream-Ende ab. Welche Nachricht als erste zählt und wann der Stream endet, erkennt der Event-Service (Roadmap 3.6). |
+| 2026-10-02 | Offene Fragen zu B14 und B53 geklärt (Entscheidungen des Projektinhabers): Der Start von Hand bleibt ohne Anforderungen und lässt laufende Cooldowns stehen, abweichend vom Original (A2, Q7); beim Abbrechen gibt es weiter keine Erstattung, wie im Original. Die offene Frage zum Fehler-Cooldown (B12) klärt der PR mit der neuen Art „keine Meldungen“. |
