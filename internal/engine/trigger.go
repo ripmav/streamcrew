@@ -175,7 +175,8 @@ type Request struct {
 	// Event is the event type of an event command; empty for the other
 	// sources.
 	Event event.Type
-	// Entrance marks the entrance command of a user (B41).
+	// Entrance marks the entrance command of a user, a greeting (B41).
+	// Event commands of "chat.user.entrance" are greetings without it.
 	Entrance bool
 }
 
@@ -198,9 +199,6 @@ const (
 	OutcomeRejected Outcome = "rejected"
 	// OutcomeDisabled means the command is disabled (B14).
 	OutcomeDisabled Outcome = "disabled"
-	// OutcomeEntrancePaused means entrance commands are paused (B41).
-	// Only Trigger has it.
-	OutcomeEntrancePaused Outcome = "entrance_paused"
 )
 
 // Result is what became of a triggered or called command. The outcomes are
@@ -220,7 +218,8 @@ type Result struct {
 }
 
 // Trigger runs req.Command automatically if it is enabled and its
-// requirements are met (B10 to B15, B41, B82). The result says what became
+// requirements are met (B10 to B15, B82). A greeting is queued also while
+// greetings are paused, and starts when they are resumed (B41). The result says what became
 // of it. Trigger returns an error only if it could not handle the request:
 // ErrInvalidSource, an invalid command or parameters, ErrQueueFull,
 // ErrClosed while the core stops (except for event commands of
@@ -239,13 +238,12 @@ func (e *Engine) Trigger(ctx context.Context, req Request) (Result, error) {
 	if !cmd.Enabled {
 		return Result{Outcome: OutcomeDisabled}, nil
 	}
-	adm := admission{whileStopping: req.Source == SourceEvent && req.Event == eventtype.AppStopping}
+	adm := admission{
+		whileStopping: req.Source == SourceEvent && req.Event == eventtype.AppStopping,
+		greeting:      req.Entrance || req.Source == SourceEvent && req.Event == eventtype.ChatUserEntrance,
+	}
 
 	e.mu.Lock()
-	if req.Entrance && e.entrancePaused {
-		e.mu.Unlock()
-		return Result{Outcome: OutcomeEntrancePaused}, nil
-	}
 	err := e.reserveLocked(ctx, cmd, req.Source, adm)
 	e.mu.Unlock()
 	if err != nil {
