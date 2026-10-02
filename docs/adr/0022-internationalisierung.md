@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-10-02 |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Plan §6.22, §7.1; Roadmap Phase 3.4 (aus 3.6 vorgezogen), 3.6, Phase 6; [ADR-0001](0001-neuimplementierung-und-nutzung-des-originals.md), [ADR-0010](0010-api-protokoll.md); [Code-ADR-0013](code/0013-typ-registry.md), [Code-ADR-0017](code/0017-klare-signale-statt-magischer-werte.md), [Code-ADR-0018](code/0018-json-v2.md); Spezifikationen [`requirements.md`](../spec/requirements.md) (B70–B72), [`template.md`](../spec/template.md) (B41) |

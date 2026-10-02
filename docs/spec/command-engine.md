@@ -17,7 +17,7 @@ Nicht Teil dieser Spezifikation:
 - die Prüfung der einzelnen Anforderungsarten und ihre Fehlermeldungen (Roadmap 3.4)
 - die Erkennung von Triggern im Chat und die Zuordnung von Ereignissen zu Ereignis-Commands (Roadmap 3.6)
 - wann Timer-Commands laufen (Roadmap 5.4)
-- die Settings-Sektion `locale`; sie hängt an der Entscheidung zur Internationalisierung (ADR-0022, Roadmap 3.6)
+- die Settings-Sektion `locale` nach [ADR-0022](../adr/0022-internationalisierung.md) (Sprache in Roadmap 3.4, Formate in 3.6)
 
 ## Begriffe
 

@@ -46,6 +46,6 @@ Ergänzend:
 | [0011](0011-keine-telemetrie.md) | Keine Telemetrie | Akzeptiert | 2026-09-28 |
 | [0012](0012-persistenz.md) | Persistenz: SQLite je Profil, Backups und Secrets | Akzeptiert | 2026-09-29 |
 | [0013](0013-sicherheitsmodell.md) | Sicherheitsmodell (Entwurf) | Akzeptiert | 2026-09-29 |
-| [0022](0022-internationalisierung.md) | Internationalisierung | Vorgeschlagen | 2026-10-02 |
+| [0022](0022-internationalisierung.md) | Internationalisierung | Akzeptiert | 2026-10-02 |
 
 Die geplanten ADRs stehen im ADR-Backlog von [`plan.md`](../plan.md) (§12).
