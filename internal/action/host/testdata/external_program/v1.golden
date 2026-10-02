@@ -1,0 +1,11 @@
+{
+  "type": "external_program",
+  "schemaVersion": 1,
+  "enabled": true,
+  "kind": "run",
+  "program": "/usr/bin/obs-cli",
+  "args": "scene \"Main Scene\" $arg1text",
+  "showWindow": false,
+  "timeout": "$arg2text * 2",
+  "saveOutput": true
+}
