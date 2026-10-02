@@ -793,6 +793,12 @@ func TestInvalidRun(t *testing.T) {
 			{"empty action", func(cmd *command.Command, _ *engine.Params) { cmd.Actions = []command.Action{nil} }, engine.ErrInvalidCommand},
 			{"arguments without text", func(_ *command.Command, p *engine.Params) { p.Args = []string{"a"} }, engine.ErrInvalidParams},
 			{"emotes without message", func(_ *command.Command, p *engine.Params) { p.Emotes = []string{"Kappa"} }, engine.ErrInvalidParams},
+			{"message ID without message", func(_ *command.Command, p *engine.Params) {
+				p.Platform, p.MessageID = platform.Twitch, "m1"
+			}, engine.ErrInvalidParams},
+			{"message ID without platform", func(_ *command.Command, p *engine.Params) {
+				p.Message, p.MessageID = "!x", "m1"
+			}, engine.ErrInvalidParams},
 		} {
 			cmd := f.command("x", command.KindChat)
 			var p engine.Params
