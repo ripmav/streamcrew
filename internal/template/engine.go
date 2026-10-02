@@ -78,13 +78,15 @@ func (e *Engine) Render(ctx context.Context, t Template, s *Scope, enc Encoding)
 	if err := s.check(); err != nil {
 		return "", fmt.Errorf("render template: %w", err)
 	}
-	return e.render(ctx, t, s.forRender(), enc)
+	r, err := e.render(ctx, t, s.forRender(), enc)
+	return r.Text, err
 }
 
 // render renders t with s, which holds the state of the current render.
-func (e *Engine) render(ctx context.Context, t Template, s *Scope, enc Encoding) (string, error) {
+func (e *Engine) render(ctx context.Context, t Template, s *Scope, enc Encoding) (Rendered, error) {
 	var b strings.Builder
 	b.Grow(len(t.src))
+	replaced := true
 	for _, p := range t.pieces {
 		if p.name == "" {
 			b.WriteString(p.text)
@@ -92,17 +94,18 @@ func (e *Engine) render(ctx context.Context, t Template, s *Scope, enc Encoding)
 		}
 		n, v, ok, err := e.resolve(ctx, s, p.name)
 		if err != nil {
-			return "", err
+			return Rendered{}, err
 		}
 		if !ok {
 			b.WriteByte('$')
 			b.WriteString(p.text)
+			replaced = false
 			continue
 		}
 		enc.write(&b, v.Text)
 		b.WriteString(p.text[n:])
 	}
-	return b.String(), nil
+	return Rendered{Text: b.String(), Replaced: replaced}, nil
 }
 
 // resolve returns the length of the identifier that token starts with and

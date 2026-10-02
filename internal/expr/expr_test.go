@@ -226,3 +226,70 @@ func TestResult(t *testing.T) {
 	assert.Equal(t, "1000000000000000000000", expr.Result{Kind: expr.Number, Number: 1e21}.String())
 	assert.Equal(t, "0.1", expr.Result{Kind: expr.Number, Number: 0.1}.String())
 }
+
+// TestEvalWithTexts evaluates with texts that the caller rendered, as the
+// conditional action does (actions.md B27).
+func TestEvalWithTexts(t *testing.T) {
+	t.Parallel()
+	x, err := expr.Compile(`$arg1text * 2 > $arg2text and "Hi $user" == 'Hi Bob'`)
+	require.NoError(t, err)
+	var tokens []string
+	for _, tmpl := range x.Templates() {
+		tokens = append(tokens, tmpl.String())
+	}
+	assert.Equal(t, []string{"$arg1text", "$arg2text", "Hi $user"}, tokens)
+
+	r, err := x.EvalWithTexts([]string{"3", "5", "Hi Bob"})
+	require.NoError(t, err)
+	assert.Equal(t, expr.Result{Kind: expr.Bool, Bool: true}, r)
+	_, err = x.EvalWithTexts([]string{"3"})
+	require.ErrorIs(t, err, expr.ErrEvaluation, "a text for each identifier")
+
+	none, err := expr.Compile("1 + 2")
+	require.NoError(t, err)
+	assert.Empty(t, none.Templates())
+	r, err = none.EvalWithTexts(nil)
+	require.NoError(t, err)
+	assert.Equal(t, expr.Result{Kind: expr.Number, Number: 3}, r)
+}
+
+// TestParseNumber covers the rule of B51 for what counts as a number.
+func TestParseNumber(t *testing.T) {
+	t.Parallel()
+	for text, want := range map[string]any{
+		"42":     42.0,
+		"-1.5":   -1.5,
+		"+2e1":   20.0,
+		".5":     0.5,
+		"007":    7.0,
+		"":       nil,
+		" 1":     nil,
+		"1 ":     nil,
+		"0x10":   nil,
+		"Inf":    nil,
+		"NaN":    nil,
+		"1e999":  nil,
+		"1.2.3":  nil,
+		"e5":     nil,
+		"1_000":  nil,
+		"9a":     nil,
+		"−1":     nil, // a minus sign, not a hyphen-minus
+		"1,5":    nil,
+		"١٢":     nil, // Arabic-Indic digits
+		"--1":    nil,
+		"1e":     nil,
+		"-":      nil,
+		"0":      0.0,
+		"-0":     0.0,
+		"1E+3":   1000.0,
+		"0.1e-1": 0.01,
+	} {
+		f, ok := expr.ParseNumber(text)
+		if want == nil {
+			assert.False(t, ok, "%q is text", text)
+			continue
+		}
+		assert.True(t, ok, "%q is a number", text)
+		assert.InDelta(t, want, f, 0, text)
+	}
+}
