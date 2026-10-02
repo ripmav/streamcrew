@@ -70,7 +70,7 @@
 **Folgearbeiten:**
 
 - [x] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) anpassen und die Backlog-Nummern in Plan und Roadmap nachziehen, erledigt 2026-09-29
-- [ ] Capabilities in Descriptors und Engine-Prüfung (Roadmap Phase 3)
-- [ ] Startkonfiguration für abweichende Capabilities und die SSRF-Allowlist (Roadmap Phase 3 bzw. mit der WebRequest-Action); Format in [Code-ADR-0019](code/0019-host-rechte-in-der-startkonfiguration.md) (akzeptiert 2026-10-01)
+- [x] Capabilities in Descriptors und Engine-Prüfung (Roadmap Phase 3), erledigt 2026-10-01: Typ-Registry und Engine nach Code-ADR-0013, Menge je Betriebsmodus nach Code-ADR-0019
+- [ ] Startkonfiguration für abweichende Capabilities und die SSRF-Allowlist (Roadmap Phase 3 bzw. mit der WebRequest-Action); Format in [Code-ADR-0019](code/0019-host-rechte-in-der-startkonfiguration.md) (akzeptiert 2026-10-01); Konfiguration mit Nachladen erledigt 2026-10-01 (`internal/config`), es fehlt der SSRF-Dialer mit der WebRequest-Action
 - [ ] API-Tokens mit Scopes, lokaler Admin-Token, Bremse für Fehlversuche (Roadmap Phase 6.2)
 - [ ] Bedrohungsanalyse und endgültiges Sicherheitsmodell (Roadmap Phase 11)

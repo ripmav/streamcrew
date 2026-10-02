@@ -3,8 +3,9 @@
 // Package capability names what a function of the core may do beyond the
 // core (ADR-0013): files, programs, input, sound on the host, requests to
 // other hosts and scripts. Action types name the capabilities they need in
-// their descriptor (Code-ADR-0013); the operating mode and the start
-// configuration decide which ones the core has.
+// their descriptor (Code-ADR-0013); the operating mode and the
+// configuration decide which ones the core has, and the configuration file
+// can change them while the core runs (Code-ADR-0019).
 package capability
 
 import (
@@ -80,6 +81,19 @@ func (s Set) Missing(need []Capability) []Capability {
 		}
 	}
 	return missing
+}
+
+// Source gives the capabilities the core has now. They change when the
+// configuration file changes (Code-ADR-0019, point 5), so users ask for
+// them at every check instead of keeping a copy.
+type Source interface {
+	Current() Set
+}
+
+// Current implements Source: a set is a source that never changes, e.g. in
+// tests or for a core without a configuration file.
+func (s Set) Current() Set {
+	return s
 }
 
 // List returns the capabilities in s in the order of All.

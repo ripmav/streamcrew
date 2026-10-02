@@ -55,6 +55,16 @@ type FileResolver struct {
 	path   string
 	values map[string]any
 	err    error
+	// watch is the file that Watcher compares: the one named with
+	// --config, else the default file, also if it does not exist yet.
+	watch string
+	// data is the content read at start; nil if no file was read.
+	data []byte
+	// allowed are the keys allowed in the file.
+	allowed map[string]bool
+	// fromFile are the flags whose value the file decides, because
+	// neither the command line nor the environment sets them.
+	fromFile map[string]bool
 }
 
 var _ kong.Resolver = (*FileResolver)(nil)
@@ -89,14 +99,19 @@ func (r *FileResolver) Resolve(kctx *kong.Context, _ *kong.Path, flag *kong.Flag
 		// After an error, values stays nil and the file supplies nothing.
 		r.err = r.load(kctx)
 	}
-	value, ok := r.values[fileKey(flag.Name)]
-	if !ok || value == nil {
-		return nil, nil
-	}
+	// kong asks resolvers only for flags the command line does not set.
 	for _, env := range flag.Tag.Envs {
 		if _, set := os.LookupEnv(env); set {
 			return nil, nil
 		}
+	}
+	if r.fromFile == nil {
+		r.fromFile = make(map[string]bool)
+	}
+	r.fromFile[flag.Name] = true
+	value, ok := r.values[fileKey(flag.Name)]
+	if !ok || value == nil {
+		return nil, nil
 	}
 	return value, nil
 }
@@ -109,6 +124,8 @@ func (r *FileResolver) load(kctx *kong.Context) error {
 	if path == "" {
 		return nil
 	}
+	r.watch = path
+	r.allowed = fileKeys(kctx.Model.Node)
 
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
@@ -119,22 +136,31 @@ func (r *FileResolver) load(kctx *kong.Context) error {
 	}
 	r.path = path
 
+	values, err := parseFile(path, data, r.allowed)
+	if err != nil {
+		return err
+	}
+	r.values, r.data = values, data
+	return nil
+}
+
+// parseFile reads the YAML data of the file at path; a key that allowed
+// does not contain is an error.
+func parseFile(path string, data []byte, allowed map[string]bool) (map[string]any, error) {
 	var values map[string]any
 	if err := yaml.Unmarshal(data, &values); err != nil {
-		return fmt.Errorf("config file %s: %w", path, err)
+		return nil, fmt.Errorf("config file %s: %w", path, err)
 	}
-	allowed := fileKeys(kctx.Model.Node)
 	var errs []error
 	for _, key := range slices.Sorted(maps.Keys(values)) {
 		if !allowed[key] {
 			errs = append(errs, fmt.Errorf("config file %s: unknown key %q", path, key))
 		}
 	}
-	if len(errs) > 0 {
-		return errors.Join(errs...)
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
 	}
-	r.values = values
-	return nil
+	return values, nil
 }
 
 // explicitConfigFile returns the file named with --config or
