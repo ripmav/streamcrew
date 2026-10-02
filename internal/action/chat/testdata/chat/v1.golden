@@ -1,0 +1,9 @@
+{
+  "type": "chat",
+  "schemaVersion": 1,
+  "enabled": true,
+  "kind": "message",
+  "message": "Hello $username!",
+  "asStreamer": false,
+  "reply": true
+}

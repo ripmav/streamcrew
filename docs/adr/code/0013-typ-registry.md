@@ -91,6 +91,8 @@
      *Korrigiert am 2026-10-01: In `encoding/json/v2` von Go 1.27 heißt die Option `embed`; `inline` stammt aus einer früheren Fassung des Pakets, wird heute stillschweigend ignoriert und wirkte nur, weil eingebettete Go-Felder ohne Namen ohnehin eingebettet werden. Action-Typen nutzen `json:",embed"`.*
    - Gemeinsame Feldtypen setzen die Regeln aus `actions.md` an einer Stelle um:
      - `action.Template`: Text mit `$`-Identifiern, gerendert erst beim Ausführen (B3). Die Kodierung wählt die Action je Ausgabeort (Code-ADR-0012).
+
+       *Ergänzt am 2026-10-01: Texte, die nicht leer sein dürfen, etwa die Nachricht der Chat-Action und der Empfänger beim Flüstern, mit dem Baustein `schema.NonEmpty`.*
      - `action.Amount`: eine Mengenangabe, in JSON eine Zahl (fester Wert) oder ein Text (Ausdruck nach `template.md`, B50–B52). Zu jedem Feld gehört ein `action.Range` aus Minimum, Maximum und der Angabe, ob nur ganze Zahlen gelten. Derselbe Wert geht ins Schema und gilt beim Ausführen (B4); feste Werte prüft schon das Speichern.
      - `action.ResultName`: der Name eines Ergebniswerts nach B5.
      - Verweise auf Commands und Gruppen als `id.ID`, auf Counter als Name (B31, B41).

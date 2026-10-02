@@ -548,6 +548,9 @@ func checkParams(p Params) error {
 	if len(p.Emotes) > 0 && p.Message == "" {
 		return fmt.Errorf("%w: emotes without a message", ErrInvalidParams)
 	}
+	if p.MessageID != "" && (p.Message == "" || p.Platform == "") {
+		return fmt.Errorf("%w: a message ID without a message and its platform", ErrInvalidParams)
+	}
 	return nil
 }
 
