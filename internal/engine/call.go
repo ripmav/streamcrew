@@ -156,6 +156,8 @@ func (r *Run) Call(ctx context.Context, commandID id.ID, opts CallOptions) (Resu
 // of its instance.
 func (e *Engine) runCall(ctx context.Context, caller *Run, cmd command.Command, p Params, org origin) (id.ID, error) {
 	in := newInstance(cmd, SourceCall, withTarget(p), Config{}, []string{}, org)
+	// It belongs to a greeting that calls it (B43).
+	in.greeting, in.mediaGap = caller.in.greeting, caller.in.mediaGap
 	in.scope = caller.in.scope.Share()
 	in.scope.CommandName = cmd.Name
 	in.scope.Args, in.scope.ArgsText = p.Args, p.ArgsText

@@ -31,7 +31,8 @@ type PauseScope string
 const (
 	// PauseAll holds back all queued instances (B40).
 	PauseAll PauseScope = "all"
-	// PauseEntrance drops the entrance commands of users (B41).
+	// PauseEntrance holds back greetings: entrance commands of users and
+	// event commands of "chat.user.entrance" (B41).
 	PauseEntrance PauseScope = "entrance"
 )
 
