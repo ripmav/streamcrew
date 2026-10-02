@@ -5,8 +5,6 @@ package values_test
 import (
 	"context"
 	json "encoding/json/v2"
-	"errors"
-	"fmt"
 	"math"
 	"os"
 	"slices"
@@ -40,21 +38,23 @@ type counters struct {
 	list []counter.Counter
 }
 
-var errNotFound = errors.New("not found")
-
-func (s *counters) UpdateCounter(_ context.Context, name string, fn func(*counter.Counter) error) (counter.Counter, error) {
+func (s *counters) UpdateOrCreateCounter(_ context.Context, name string, fn func(*counter.Counter) error) (counter.Counter, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	i := slices.IndexFunc(s.list, func(c counter.Counter) bool { return strings.EqualFold(c.Name, name) })
-	if i < 0 {
-		return counter.Counter{}, fmt.Errorf("counter %q: %w", name, errNotFound)
+	c, created := counter.New(name), i < 0
+	if !created {
+		c = s.list[i]
 	}
-	c := s.list[i]
 	if err := fn(&c); err != nil {
-		return counter.Counter{}, err
+		return counter.Counter{}, false, err
 	}
-	s.list[i] = c
-	return c, nil
+	if created {
+		s.list = append(s.list, c)
+	} else {
+		s.list[i] = c
+	}
+	return c, created, nil
 }
 
 // Counters implements template.Counters.
@@ -235,7 +235,7 @@ func TestCounter(t *testing.T) {
 	})
 }
 
-// TestCounterFails covers actions.md B4, B41, B42 and B220: the action
+// TestCounterFails covers actions.md B4, B42 and B220: the action
 // fails, and the values stay as they were.
 func TestCounterFails(t *testing.T) {
 	t.Parallel()
@@ -249,7 +249,6 @@ func TestCounterFails(t *testing.T) {
 	}{
 		{"B220 fraction", values.CounterAdd, "deaths", action.Expression("$arg1text"), []string{"1.5"}, "amount: invalid action: 1.5 is not a whole number"},
 		{"not a number", values.CounterSet, "deaths", action.Expression("$arg1text"), []string{"abc"}, `value: invalid action: "abc" is not a number`},
-		{"B41 missing counter", values.CounterReset, "lives", action.Amount{}, nil, `counter: counter "lives": not found`},
 		{"B42 beyond 64 bits", values.CounterAdd, "big", action.Fixed(10), nil, "counter value out of range"},
 		{"B42 below 64 bits", values.CounterAdd, "small", action.Fixed(-2), nil, "counter value out of range"},
 		{"B42 a step beyond 64 bits", values.CounterIncrement, "big", action.Amount{}, nil, "counter value out of range"},
@@ -272,6 +271,30 @@ func TestCounterFails(t *testing.T) {
 			})
 		})
 	}
+}
+
+// TestCounterCreated covers actions.md B41: a counter that is missing when
+// the action runs is created with the value 0 and the default step and then
+// changed; an action that fails before the change creates nothing.
+func TestCounterCreated(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		in := f.start([]command.Action{
+			f.counter(values.CounterAdd, "Lives", action.Fixed(3)), f.show("$lives"),
+			f.counter(values.CounterIncrement, "steps", action.Amount{}), f.show("$steps"),
+			f.counter(values.CounterReset, "zero", action.Amount{}), f.show("$zero"),
+			f.counter(values.CounterAdd, "broken", action.Expression("$arg1text")),
+		}, "1.5")
+		require.Len(t, in.Errors, 1)
+		assert.Contains(t, in.Errors[0].Message, "is not a whole number")
+		assert.Equal(t, []string{"3", "1", "0"}, f.lines.get())
+		assert.Equal(t, []counter.Counter{
+			{Name: "Lives", Value: 3, Step: counter.DefaultStep},
+			{Name: "steps", Value: 1, Step: counter.DefaultStep},
+			{Name: "zero", Step: counter.DefaultStep},
+		}, f.counters.all(), "nothing for the failed action")
+	})
 }
 
 // TestCounterConcurrent covers actions.md B42: when two instances add at
