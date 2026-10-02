@@ -451,6 +451,7 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
   - generische plattformneutrale Events
   - Einmal-Events pro Nutzer
   - Deduplizierung
+  - Begrüßungen ([`command-engine.md`](spec/command-engine.md), B41): erste Nachricht in der Sitzung nur, solange der Stream live ist; Entrance-Command des Nutzers mit `engine.Request.Entrance`, Ereignis-Commands auf `chat.user.entrance` erkennt die Engine selbst; beim Stream-Ende `engine.Engine.CancelEntrance`
 - [ ] Trigger-Erkennung: `!`-Präfix, Wildcards, längster Treffer, Argumente inkl. Anführungszeichen (M)
 - [ ] Command-Engine und Template-Engine in der Composition Root verdrahten: Engine als Runnable beim Supervisor, ihre Ereignistypen im Katalog, Settings, Ports; die Typ-Registry mit `App.Rights` als Quelle der Capabilities, die Wurzeln für `command.Roots` und die Datei-Action, die Umgebung aus `config.ProgramEnv` für externe Programme, `netguard.Dialer` mit `Protect` im Server-Modus und `App.Rights().Outbound` als Allowlist für den Web-Request (Code-ADR-0019) (S)
 - [ ] Settings-Sektion „locale“ (Sprache und Formate des Profils), aus 3.2 verschoben; danach Datums-, Zeit- und Zahlenformate der Templates nach der Locale ([`template.md`](spec/template.md), B41) (S)
@@ -693,7 +694,7 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
 
 ### 7.2 Items und Widgets (P1)
 
-- [ ] Items: Text, Bild, Video, Ton, HTML, YouTube, Twitch-Clip (M)
+- [ ] Items: Text, Bild, Video, Ton, HTML, YouTube, Twitch-Clip; Items mit Wiedergabe melden ihr Ende mit `engine.Run.PlaybackEnds` für den Mindestabstand bei Begrüßungen ([`command-engine.md`](spec/command-engine.md), B43) (M)
 - [ ] Widgets: Label, Ziel/Fortschritt, Timer, Event-Liste, Chat (L)
 - [ ] Overlay-Action (Item zeigen; Widget aktualisieren, zeigen oder verbergen) mit Positions- und Animationsschema für Editoren (M)
 
@@ -701,7 +702,7 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
 
 - [ ] ADR-0020 Audio-Ausgabe (S)
 - [ ] Audio-Sinks: Overlay als Standard; lokale Ausgabe mit Geräteauswahl per Build-Tag, P1 wegen des Streaming-PCs als Hauptbetriebsort (ADR-0003); Agent-Schnittstelle vorbereitet (M)
-- [ ] Sound-Action mit Lautstärke und Ausgabe (S)
+- [ ] Sound-Action mit Lautstärke und Ausgabe; meldet das Ende der Wiedergabe mit `engine.Run.PlaybackEnds` ([`command-engine.md`](spec/command-engine.md), B43) (S)
 - [ ] Desktop-Variante des Core-Binaries (Build-Tag für lokale Audioausgabe) als Release-Artefakt für die Desktop-Pakete ([ADR-0005](adr/0005-core-in-desktop-builds.md)) (S)
 - [ ] TTS-Schnittstelle und Anbieter: Browser-TTS im Overlay, Google Cloud TTS, Azure Speech, lokal Piper (M)
 - [ ] TextToSpeech-Action (S)
@@ -1266,3 +1267,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-02 | Action-Typ `file` in `internal/action/host` ([`actions.md`](spec/actions.md), B100–B109, B217, B218): zwölf Arten vom Schreiben bis zum Einfügen an zufälliger Stelle, `each_line` mit Kind-Actions bis 1 000 Zeilen; nur unter den Wurzeln der Konfiguration über `os.Root`, Dateien bis 1 MiB, atomares Ersetzen per Umbenennen und Sperre je Datei, damit gleichzeitige Instanzen keine Änderung verlieren. Neuer Schema-Baustein `schema.FileRoot`. |
 | 2026-10-02 | Action-Typ `web_request` in `internal/action/network` ([`actions.md`](spec/actions.md), B70–B77, B213, B214): Methoden als Arten, Header, Body nach `Content-Type` kodiert, Antwort ignorieren, als Text oder über JSON-Pfade; 10 s, 1 MiB, 10 Weiterleitungen. SSRF-Schutz `netguard.Dialer`: Im Server-Modus prüft er die tatsächlich verbundene Adresse jeder Verbindung, auch nach Weiterleitungen, gegen die internen Netze und die aktuelle Allowlist. `template.Engine.RenderParts` rendert Templates mit verschiedenen Kodierungen in einem Vorgang. Damit sind alle 15 P0-Actions umgesetzt. |
 | 2026-10-02 | Phase 3.3 abgeschlossen: alle Aufgaben erledigt, alle Akzeptanzkriterien von [`actions.md`](spec/actions.md) erfüllt (zuletzt B1–B9, die gemeinsamen Regeln). Die Actions laufen gegen Fakes der Ports; Verdrahtung in der Composition Root und echte Plattformen folgen mit 3.6 und Phase 4. |
+| 2026-10-02 | Offene Fragen von [`actions.md`](spec/actions.md) begonnen; das Verhalten des Originals liest ein eigener Recherche-Agent im Quellcode und gibt es nur in eigenen Worten weiter (ADR-0001, Regel 4 und 5 in [`docs/spec/README.md`](spec/README.md)). B36 entschieden: Begrüßungen werden in ihrer Pause eingereiht, laufen nur, solange der Stream live ist, und halten zwischen Bild und Ton einen Mindestabstand ([`command-engine.md`](spec/command-engine.md), B41, B43). Neue Teilaufgaben in 3.6 (Event-Service), 7.2 (Items) und 7.3 (Sound-Action). |
