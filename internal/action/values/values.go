@@ -74,7 +74,10 @@ func (k CounterKind) Valid() bool {
 // Counters change counters in one transaction (counters-and-quotes.md,
 // B6); *store.Store implements it.
 type Counters interface {
-	UpdateCounter(ctx context.Context, name string, fn func(*counter.Counter) error) (counter.Counter, error)
+	// UpdateOrCreateCounter changes the counter name with fn; a missing
+	// one is created first, as counter.New makes it, in the same
+	// transaction (actions.md B41). If fn fails, nothing is created.
+	UpdateOrCreateCounter(ctx context.Context, name string, fn func(*counter.Counter) error) (c counter.Counter, created bool, err error)
 }
 
 // Ports are what the value types need.
@@ -156,7 +159,8 @@ type Counter struct {
 	action.Common `json:",embed"`
 	Kind          CounterKind `json:"kind"`
 	// Counter is the name of the counter, regardless of case. Saving
-	// creates a counter that does not exist with the value 0 (B41).
+	// creates a counter that does not exist with the value 0, and so does
+	// the action when it runs (B41).
 	Counter string `json:"counter"`
 	// Amount is what add adds, a whole number, also negative; no amount for
 	// the other kinds.
@@ -205,8 +209,9 @@ func (c Counter) References() []command.Reference {
 
 // Perform implements engine.Performer. The change is stored at once and is
 // atomic, and increment and decrement read the step in the same
-// transaction; a missing counter and a result beyond 64 bits let the action
-// fail, and the value stays as it was (B41, B42).
+// transaction. A missing counter is created in it with the value 0 and the
+// default step (B41). A result beyond 64 bits lets the action fail, and the
+// value stays as it was, or the counter is not created (B42).
 func (c Counter) Perform(ctx context.Context, run *engine.Run) error {
 	var change func(*counter.Counter) error
 	switch c.Kind {
@@ -237,7 +242,7 @@ func (c Counter) Perform(ctx context.Context, run *engine.Run) error {
 	default:
 		return field("kind", fmt.Errorf("%w: unknown kind %q", action.ErrInvalid, c.Kind))
 	}
-	_, err := c.ports.Counters.UpdateCounter(ctx, c.Counter, change)
+	_, _, err := c.ports.Counters.UpdateOrCreateCounter(ctx, c.Counter, change)
 	return field("counter", err)
 }
 
