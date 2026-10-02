@@ -360,40 +360,34 @@ func (m Moderation) targets(p engine.Params) ([]connector.Platform, error) {
 	return []connector.Platform{target}, nil
 }
 
-// moderate acts on each target (B80 to B83). Kinds with a user find it on
-// each target first among the known users, then over the platform (B81);
-// on the platform of the run it must be found, without one on at least one
-// target, and the action acts where it is found (B82). A refusal of a
-// platform lets the action fail with the reason of the platform (B86).
+// moderate acts on the targets (B80 to B83). Kinds without a user act on
+// each target. Kinds with a user look for it on the targets in their
+// order, first among the known users, then over the platform (B81), and act
+// only where they find it first (B82); with a platform of the run that is
+// the only target. A lookup that fails for another reason than an unknown
+// user lets the action fail, because the first match may lie there. A
+// refusal of a platform lets the action fail with the reason of the
+// platform (B86).
 func (m Moderation) moderate(ctx context.Context, p engine.Params, targets []connector.Platform, in inputs) error {
-	errs := make([]error, len(targets))
-	accounts := make([]*user.Identity, len(targets))
-	if m.Kind.hasUser() {
-		found := false
+	if !m.Kind.hasUser() {
+		errs := make([]error, len(targets))
 		for i, target := range targets {
-			ident, err := connector.FindAccount(ctx, m.ports.Users, target, in.login)
-			switch {
-			case errors.Is(err, connector.ErrUnknownUser):
-			case err != nil:
-				errs[i] = err
-			default:
-				accounts[i], found = &ident, true
-			}
+			errs[i] = m.act(ctx, target.Moderation(), nil, in)
 		}
-		if err := connector.JoinErrors("failed", targets, errs); err != nil {
-			return field("user", err)
-		}
-		if !found {
-			return field("user", unknown(in.login, p.Platform))
-		}
+		return connector.JoinErrors("failed", targets, errs)
 	}
-	for i, target := range targets {
-		if m.Kind.hasUser() && accounts[i] == nil {
-			continue // the user has no account there (B82)
+	for _, target := range targets {
+		on := []connector.Platform{target}
+		ident, err := connector.FindAccount(ctx, m.ports.Users, target, in.login)
+		switch {
+		case errors.Is(err, connector.ErrUnknownUser):
+			continue
+		case err != nil:
+			return field("user", connector.JoinErrors("failed", on, []error{err}))
 		}
-		errs[i] = m.act(ctx, target.Moderation(), accounts[i], in)
+		return connector.JoinErrors("failed", on, []error{m.act(ctx, target.Moderation(), &ident, in)})
 	}
-	return connector.JoinErrors("failed", targets, errs)
+	return field("user", unknown(in.login, p.Platform))
 }
 
 // act does what the kind says on one platform; to is the user's account
@@ -420,11 +414,10 @@ func (m Moderation) act(ctx context.Context, mod connector.Moderation, to *user.
 }
 
 // strike adds a strike to the user or removes one, not below 0 (B84). The
-// user is found as for the other kinds (B81, B82), but strikes are the
-// core's own: on the platform of the run the known users count even if it
-// is not connected, and a user found only over a platform is stored like
-// a newly seen one. Each user counts once, also with accounts on several
-// platforms.
+// user is found as for the other kinds, the first match counts (B81, B82),
+// but strikes are the core's own: on the platform of the run the known
+// users count even if it is not connected, and a user found only over a
+// platform is stored like a newly seen one.
 func (m Moderation) strike(ctx context.Context, p engine.Params, login string) error {
 	var names []platform.Name
 	if p.Platform != "" {
@@ -434,33 +427,30 @@ func (m Moderation) strike(ctx context.Context, p engine.Params, login string) e
 			names = append(names, target.Name())
 		}
 	}
-	var ids []id.ID
 	for _, name := range names {
 		u, ok, err := m.find(ctx, name, login)
 		if err != nil {
 			return field("user", err)
 		}
-		if ok && !slices.Contains(ids, u.ID) {
-			ids = append(ids, u.ID)
+		if ok {
+			return field("user", m.addStrikes(ctx, u.ID))
 		}
 	}
-	if len(ids) == 0 {
-		return field("user", unknown(login, p.Platform))
-	}
+	return field("user", unknown(login, p.Platform))
+}
+
+// addStrikes adds a strike to the user or, for KindRemoveStrike, removes
+// one, not below 0 (B84).
+func (m Moderation) addStrikes(ctx context.Context, userID id.ID) error {
 	delta := int64(1)
 	if m.Kind == KindRemoveStrike {
 		delta = -1
 	}
-	for _, userID := range ids {
-		_, err := m.ports.Strikes.UpdateUser(ctx, userID, func(u *user.User) error {
-			u.Stats.Strikes = max(0, u.Stats.Strikes+delta)
-			return nil
-		})
-		if err != nil {
-			return field("user", err)
-		}
-	}
-	return nil
+	_, err := m.ports.Strikes.UpdateUser(ctx, userID, func(u *user.User) error {
+		u.Stats.Strikes = max(0, u.Stats.Strikes+delta)
+		return nil
+	})
+	return err
 }
 
 // find returns the user with the login name on platform name: a known one,
