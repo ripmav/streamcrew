@@ -100,6 +100,8 @@
        *Umgesetzt am 2026-10-01 mit `schema.Reference` und dem Muster der kanonischen Textform (`schema.PatternID`).*
 
        *Ergänzt am 2026-10-01: Counter-Namen mit `schema.CounterName` und dem Muster `schema.PatternCounterName`.*
+
+       *Ergänzt am 2026-10-01: Plattformen als Name (`platform.Name`) mit `schema.Platform` und dem Muster `schema.PatternPlatform`, das `platform.Name.Validate` entspricht.*
      - Kind-Actions als `[]command.Action` (Punkt 5).
    - Arten sind ein Enum mit `Valid` (Code-ADR-0017, Punkt 5). Felder, die nur für einige Arten gelten, sind bei den übrigen nicht erlaubt; das prüfen das Schema (`oneOf` je Art) und `Validate`.
 
