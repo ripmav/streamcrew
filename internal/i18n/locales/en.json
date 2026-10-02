@@ -3,6 +3,8 @@
   "duration.hours": "{n, plural, one {# hour} other {# hours}}",
   "duration.minutes": "{n, plural, one {# minute} other {# minutes}}",
   "duration.seconds": "{n, plural, one {# second} other {# seconds}}",
+  "requirement.cooldown.all": "This command can be used again in {remaining}.",
+  "requirement.cooldown.user": "You can use this command again in {remaining}.",
   "requirement.faulty": "This command cannot run because one of its requirements is broken.",
   "requirement.role": "This command needs the role {role, select, banned {banned} user {user} creator {creator} follower {follower} regular {regular} vip {VIP} subscriber {subscriber} platform_staff {platform staff} moderator {moderator} editor {editor} streamer {streamer} other {{role}}} or a higher one.",
   "requirement.unknown": "This command cannot run because this version does not know one of its requirements."
