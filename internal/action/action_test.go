@@ -114,6 +114,53 @@ func switcherType() action.Descriptor {
 	}.WithNew(func() switcher { return switcher{Common: action.On(), Kind: "b"} })
 }
 
+// kinded is an action type with kinds and per-kind defaults: only kind
+// "loud" has the options in Loud, and a new one is loud with Volume 7.
+type kinded struct {
+	action.Common `json:",embed"`
+	Kind          string       `json:"kind"`
+	Loud          *loudOptions `json:",embed"`
+}
+
+// loudOptions are the members of the kind "loud".
+type loudOptions struct {
+	Volume int    `json:"volume"`
+	Text   string `json:"text"`
+}
+
+func (kinded) DocType() string { return "kinded" }
+
+func (k kinded) Validate() error {
+	if (k.Kind == "loud") != (k.Loud != nil) {
+		return fmt.Errorf("%w: only kind loud has its options", action.ErrInvalid)
+	}
+	return nil
+}
+
+func kindedType() action.Descriptor {
+	return action.Descriptor{
+		Type:     "kinded",
+		Version:  1,
+		Category: action.CategoryChat,
+		Schema: schema.Kinds(nil,
+			schema.Variant{Kind: "loud", Props: []schema.Property{
+				{Name: "volume", Schema: &schema.Schema{Type: "integer"}},
+				{Name: "text", Schema: schema.Template(), Required: true},
+			}},
+			schema.Variant{Kind: "quiet"},
+		),
+	}.WithKinds("loud", func(kind string) (kinded, bool) {
+		switch kind {
+		case "loud":
+			return kinded{Common: action.On(), Kind: kind, Loud: &loudOptions{Volume: 7}}, true
+		case "quiet":
+			return kinded{Common: action.On(), Kind: kind}, true
+		default:
+			return kinded{}, false
+		}
+	})
+}
+
 // renamed is at version 2: version 1 called "message" "text".
 type renamed struct {
 	action.Common `json:",embed"`
@@ -178,6 +225,19 @@ func TestConformance(t *testing.T) {
 			{Name: "b with n", Doc: `{"type":"switcher","kind":"b","n":3}`},
 			{Name: "unknown kind", Doc: `{"type":"switcher","kind":"c"}`},
 			{Name: "kind missing", Doc: `{"type":"switcher"}`},
+		}}.Run(t)
+	})
+	t.Run("kinded", func(t *testing.T) {
+		t.Parallel()
+		actiontest.Suite{Descriptor: kindedType(), Update: update(), Examples: []actiontest.Example{
+			{Name: "loud", Doc: `{"type":"kinded","kind":"loud","volume":3,"text":"hi"}`, Valid: true},
+			{Name: "loud with defaults", Doc: `{"type":"kinded","kind":"loud","text":"hi"}`, Valid: true},
+			{Name: "quiet", Doc: `{"type":"kinded","kind":"quiet"}`, Valid: true},
+			{Name: "quiet with a member of loud", Doc: `{"type":"kinded","kind":"quiet","volume":3}`},
+			{Name: "loud without text", Doc: `{"type":"kinded","kind":"loud"}`},
+			{Name: "unknown kind", Doc: `{"type":"kinded","kind":"silent"}`},
+			{Name: "kind missing", Doc: `{"type":"kinded","text":"hi"}`},
+			{Name: "unknown member", Doc: `{"type":"kinded","kind":"quiet","pitch":"high"}`},
 		}}.Run(t)
 	})
 	t.Run("renamed", func(t *testing.T) {
@@ -304,6 +364,31 @@ func TestDecodeStartsFromNew(t *testing.T) {
 
 	_, err = d.Decode([]byte(`{"message":"x"}`), json.DefaultOptionsV2())
 	require.ErrorIs(t, err, action.ErrInvalid, "a required member is missing")
+}
+
+// TestDecodeKinds covers Code-ADR-0013, point 4, for types with kinds:
+// decoding starts from the defaults of the kind in the document.
+func TestDecodeKinds(t *testing.T) {
+	t.Parallel()
+	d := kindedType()
+	assert.Equal(t, kinded{Common: action.On(), Kind: "loud", Loud: &loudOptions{Volume: 7}}, d.New(), "a new one is of the first kind")
+
+	a, err := d.Decode([]byte(`{"kind":"quiet"}`), json.DefaultOptionsV2())
+	require.NoError(t, err)
+	assert.Equal(t, kinded{Common: action.On(), Kind: "quiet"}, a, "no default of the kind loud slips in")
+
+	a, err = d.Decode([]byte(`{"kind":"loud","text":"hi"}`), json.DefaultOptionsV2())
+	require.NoError(t, err)
+	assert.Equal(t, kinded{Common: action.On(), Kind: "loud", Loud: &loudOptions{Volume: 7, Text: "hi"}}, a)
+
+	_, err = d.Decode([]byte(`{"kind":"loud"}`), json.DefaultOptionsV2())
+	require.ErrorContains(t, err, `member "text" is missing`, "the kind requires it")
+	_, err = d.Decode([]byte(`{"text":"hi"}`), json.DefaultOptionsV2())
+	require.ErrorContains(t, err, `member "kind" is missing`)
+	_, err = d.Decode([]byte(`{"kind":"silent"}`), json.DefaultOptionsV2())
+	require.ErrorContains(t, err, `unknown kind "silent"`)
+	_, err = d.Decode([]byte(`{"kind":7}`), json.DefaultOptionsV2())
+	require.Error(t, err)
 }
 
 func TestAmountJSON(t *testing.T) {

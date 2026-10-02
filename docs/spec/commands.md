@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-09-29 |
 | **Bezug** | Roadmap Phase 2.2 (Commands), 3.2–3.5, 5.4; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md); Plan §5.2, §5.4, §6.8, §6.9; [`users-and-roles.md`](users-and-roles.md), [`events.md`](events.md) |
-| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/command`, Repository in `internal/store`. Ausführung, Sperren, Prüfung der Anforderungen und fehlerhafte Verweise (B3, B5, B15, B21, B63) folgen mit `command-engine.md` (Phase 3), B6 mit den vorgefertigten Commands (Phase 5.6) |
+| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/command`, Repository in `internal/store`; den Schalter „aktiv“ ändern `command.Service.SwitchCommand` und `SwitchGroup` für die Command-Action ([`actions.md`](actions.md), B34), mit B14 für die Trigger. Ausführung, Sperren, Prüfung der Anforderungen und fehlerhafte Verweise (B3, B5, B15, B21, B63) folgen mit `command-engine.md` (Phase 3), B6 mit den vorgefertigten Commands (Phase 5.6) |
 
 ## Zweck und Umfang
 
