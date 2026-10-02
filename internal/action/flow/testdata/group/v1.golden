@@ -1,0 +1,17 @@
+{
+  "type": "group",
+  "schemaVersion": 1,
+  "enabled": true,
+  "actions": [
+    {
+      "type": "group",
+      "schemaVersion": 1,
+      "enabled": true,
+      "actions": []
+    },
+    {
+      "type": "wait",
+      "seconds": 2
+    }
+  ]
+}
