@@ -165,9 +165,11 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `internal/domain/counter`, `internal/domain/quote` | Counter und Quotes ([Spezifikation](docs/spec/counters-and-quotes.md)) |
 | `internal/expr` | Ausdrücke mit `$`-Identifiern für Rechnungen und Bedingungen, mit `expr-lang/expr` ([Spezifikation](docs/spec/template.md), [Code-ADR-0012](docs/adr/code/0012-template-engine.md)) |
 | `internal/template` | Templates mit `$`-Identifiern: Tokenizer, Präfixbaum, Quellen, Cache je Rendervorgang, Kodierung und die Identifier-Familien ([Spezifikation](docs/spec/template.md), [Code-ADR-0012](docs/adr/code/0012-template-engine.md)) |
-| `internal/engine` | Command-Engine: Instanzen, Auslösen mit Anforderungen, Warteschlange mit Sperrmodi, Pause, Aufrufe, Abbrechen, Wiederholen, Verlauf und Ereignisse ([Spezifikation](docs/spec/command-engine.md)) |
+| `internal/engine` | Command-Engine: Instanzen, Auslösen mit Anforderungen, Warteschlange mit Sperrmodi, Pause, Aufrufe, Abbrechen, Wiederholen, Verlauf und Ereignisse; Kind-Actions, Schalter „aktiv“, Zeitlimits und Capabilities der Actions ([Spezifikation](docs/spec/command-engine.md), [Code-ADR-0013](docs/adr/code/0013-typ-registry.md)) |
+| `internal/action` | Typ-Registry der Actions: Descriptors, Kategorien, JSON-Schemas mit UI-Hinweisen (`internal/action/schema`), gemeinsame Feldtypen wie Templates und Mengenangaben, Konformitätstest (`internal/action/actiontest`) ([Spezifikation](docs/spec/actions.md), [Code-ADR-0013](docs/adr/code/0013-typ-registry.md)) |
+| `internal/capability` | Capabilities nach dem Sicherheitsmodell ([ADR-0013](docs/adr/0013-sicherheitsmodell.md)) |
 | `internal/event` | Ereignisse, Katalog und nicht blockierender Event-Bus ([Code-ADR-0011](docs/adr/code/0011-event-bus.md)) |
-| `internal/polydoc` | polymorphe JSON-Dokumente mit Typ, Version und Migrationen, auf `encoding/json/v2` ([Code-ADR-0010](docs/adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0018](docs/adr/code/0018-json-v2.md)) |
+| `internal/polydoc` | polymorphe JSON-Dokumente mit Typ, Version und Migrationen, auch verschachtelt, auf `encoding/json/v2` ([Code-ADR-0010](docs/adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0018](docs/adr/code/0018-json-v2.md), [Code-ADR-0013](docs/adr/code/0013-typ-registry.md)) |
 | `internal/store` | SQLite je Profil, goose-Migrationen, sqlc-Abfragen und die Repositories der Domänenpakete ([Code-ADR-0008](docs/adr/code/0008-datenbankzugriff.md)) |
 | `internal/profile`, `internal/lockfile` | Profile und die Sperre des Datenverzeichnisses ([ADR-0012](docs/adr/0012-persistenz.md)) |
 | `internal/settings` | typisierte Einstellungen je Profil |
