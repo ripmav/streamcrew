@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Status** | Geprüft |
-| **Stand** | 2026-09-29 |
+| **Stand** | 2026-10-02 |
 | **Bezug** | Roadmap Phase 2.2 (Commands), 3.2–3.5, 5.4; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md); Plan §5.2, §5.4, §6.8, §6.9; [`users-and-roles.md`](users-and-roles.md), [`events.md`](events.md) |
-| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/command`, Repository in `internal/store`; den Schalter „aktiv“ ändern `command.Service.SwitchCommand` und `SwitchGroup` für die Command-Action ([`actions.md`](actions.md), B34), mit B14 für die Trigger. Ausführung, Sperren, Prüfung der Anforderungen und fehlerhafte Verweise (B3, B5, B15, B21, B63) folgen mit `command-engine.md` (Phase 3), B6 mit den vorgefertigten Commands (Phase 5.6) |
+| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/command`, Repository in `internal/store`; Cooldown-Gruppen als `command.CooldownGroup` (B33, Migration 0007); den Schalter „aktiv“ ändern `command.Service.SwitchCommand` und `SwitchGroup` für die Command-Action ([`actions.md`](actions.md), B34), mit B14 für die Trigger. Ausführung, Sperren, Prüfung der Anforderungen und fehlerhafte Verweise (B3, B5, B15, B21, B63) folgen mit `command-engine.md` (Phase 3), B6 mit den vorgefertigten Commands (Phase 5.6) |
 
 ## Zweck und Umfang
 
@@ -67,7 +67,8 @@ Nicht Teil dieser Spezifikation, sondern von `command-engine.md` (Phase 3):
 |---|---|---|
 | B30 | Eine Gruppe hat eine ID und einen eindeutigen Namen. Ein Command gehört zu höchstens einer Gruppe. | Q3, Q5 |
 | B31 | Eine Gruppe kann ein eigenes Timer-Intervall haben. Timer-Commands in einer Gruppe mit Intervall laufen unabhängig von den globalen Timer-Einstellungen (Intervall und Mindestzahl an Nachrichten) nach dem Intervall der Gruppe. Ohne Intervall dient die Gruppe nur der Ordnung. | Q5 |
-| B32 | Gruppen dienen außerdem gemeinsamen Cooldowns (B43). | Q3 |
+| B32 | Für gemeinsame Cooldowns gibt es eigene Cooldown-Gruppen (B33); die Gruppe eines Commands spielt dafür keine Rolle. | Q3, Q9 |
+| B33 | Eine Cooldown-Gruppe hat eine ID, einen Namen, der ohne Rücksicht auf die Schreibweise eindeutig ist, und eine positive Dauer. Cooldowns der Arten `group` und `per_user_group` nennen sie und teilen sich mit allen Commands, die dieselbe Cooldown-Gruppe nennen, gleich welcher Gruppe und Art. Eine neue Dauer gilt für Cooldowns, die danach beginnen. Ein Cooldown, der eine Cooldown-Gruppe nennt, die es nicht gibt, ist beim Speichern ungültig. | Q9, A4 |
 
 ### Anforderungen
 
@@ -76,7 +77,7 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | ID | Regel | Quellen |
 |---|---|---|
 | B40 | **Rolle:** eine Mindestrolle nach [`users-and-roles.md`](users-and-roles.md), B23. Ohne Angabe gilt `user`. | Q3, Q4 |
-| B41 | **Cooldown:** Dauer in Sekunden und eine von vier Arten: für alle (`standard`), für alle Commands der Gruppe (`group`), je Nutzer (`per_user`), je Nutzer über die Gruppe (`per_user_group`). | Q3 |
+| B41 | **Cooldown:** eine von vier Arten: für alle (`standard`) und je Nutzer (`per_user`), jeweils mit eigener Dauer; für alle Commands einer Cooldown-Gruppe (`group`) und je Nutzer über die Cooldown-Gruppe (`per_user_group`), jeweils mit der Dauer der Gruppe (B33). | Q3, Q9 |
 | B42 | **Währung:** Währung, Modus und Betrag: fester Betrag, der abgebucht wird (`required`); Mindestbetrag, den der Nutzer angibt (`minimum`); Betrag zwischen Minimum und Maximum (`range`). | Q3 |
 | B43 | **Rang:** Rang und Vergleich: dieser oder höher, genau dieser, dieser oder niedriger. | Q3 |
 | B44 | **Inventar:** Gegenstand und Mindestmenge, die bei der Ausführung abgebucht wird. | Q3 |
@@ -92,6 +93,7 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | B61 | Leere Trigger-Liste bei einem Chat-Command | beim Speichern abgelehnt | B10 |
 | B62 | Gruppe wird gelöscht | ihre Commands verlieren die Gruppenzugehörigkeit und bleiben erhalten | B30 |
 | B63 | Anforderung verweist auf eine gelöschte Währung, einen Rang oder Gegenstand | Command bleibt gespeichert, gilt aber als fehlerhaft und wird nicht ausgeführt, bis der Verweis repariert ist | B42–B44 |
+| B64 | Eine Cooldown-Gruppe wird gelöscht | Commands, deren Cooldown sie nennt, bleiben gespeichert, gelten aber als fehlerhaft und werden nicht ausgeführt, bis eine andere gewählt ist ([`requirements.md`](requirements.md), B7) | B33 |
 
 ## Abweichungen vom Original
 
@@ -100,6 +102,7 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | A1 | nicht belegt, ob doppelte Trigger erlaubt sind | Trigger eindeutig über aktive Chat-Commands | vorhersehbares Verhalten, klare Fehlermeldung beim Speichern; zu prüfen (offene Frage) |
 | A2 | nicht belegt, ob mehrere Ereignis-Commands je Ereignis möglich sind | höchstens einer je Ereignistyp | entspricht der Oberfläche mit einem Schalter je Ereignis (Q8); zu prüfen |
 | A3 | Commands in einer internen Einstellungsdatei | Commands als versionierte Dokumente in der Profildatenbank, als YAML exportierbar | Plan §6.9, ADR-0012 |
+| A4 | Cooldown-Gruppen über ihren Namen; die Dauer stellt das Cooldown-Feld eines Commands ein und gilt danach für alle Commands mit diesem Namen (Q9) | Dauer an der Cooldown-Gruppe selbst, Verweis über die ID (B33) | eine Stelle für die Dauer; Umbenennen bricht keine Verweise; Entscheidung des Projektinhabers (2026-10-02) |
 
 ## Akzeptanzkriterien
 
@@ -117,7 +120,6 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 - B13: Braucht ein Platzhalter-Trigger im Original trotzdem das `!`?
 - B14/A1: Wie verhält sich das Original bei zwei Commands mit gleichem Trigger?
 - B20/A2: Lassen sich im Original mehrere Commands für dasselbe Ereignis anlegen?
-- B41: Gilt der Gruppen-Cooldown im Original auch für Commands anderer Arten in derselben Gruppe?
 - B45: Welche Argumenttypen gibt es im Original (Text, Zahl, Nutzer …)?
 
 ## Quellen
@@ -128,6 +130,7 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | Q4 | Doku | <https://mixitup.bot/docs/chat/chat-commands> | Trigger, Trennzeichen, Platzhalter, `$message`; abgerufen 2026-09-29 |
 | Q5 | Doku | <https://mixitup.bot/docs/timers> | Timer, Gruppen mit eigenem Intervall; abgerufen 2026-09-29 |
 | Q8 | Doku | <https://mixitup.bot/docs/events> | Ereignis-Commands, Schalter je Ereignis; abgerufen 2026-09-29 |
+| Q9 | Original (Hilfestellung) | `MixItUp.Base/Model/Requirements/CooldownRequirementModel.cs @ v1.8.200`, `MixItUp.Base/ViewModel/Requirements/CooldownRequirementViewModel.cs @ v1.8.200`, `MixItUp.Base/Model/Settings/SettingsV3Model.cs @ v1.8.200` | Cooldown-Gruppen mit eigenem Namen und einer Dauer je Name, unabhängig von der Ordnergruppe, auch für Shop-Artikel (B32, B33, A4); gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
 | QP | Projekt | [Plan](../plan.md) §5.2, §6.8, §6.9 | Command-Arten und Prioritäten, Commands als Code |
 
 ## Änderungshistorie
@@ -138,3 +141,4 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
 | 2026-09-29 | Datenmodell umgesetzt. Festlegungen dabei: Der Platzhalter gilt je Command für alle seine Trigger (B13); eine Wortgrenze liegt überall, wo nicht Buchstabe oder Ziffer auf Buchstabe oder Ziffer folgt. Ohne Platzhalter folgt auf `!` und Trigger das Ende der Nachricht oder ein Leerraum (B11). Trigger mit und ohne Platzhalter teilen sich die Eindeutigkeit (B14). Argumenttypen vorerst `text`, `number` und `user` (B45, offene Frage). Dauern in Anforderungen stehen als Go-Dauer, etwa `30s` (B41, B46; Code-ADR-0009). Gruppennamen sind unabhängig von Groß- und Kleinschreibung eindeutig (B30). |
 | 2026-09-30 | B1 um die Fehlerpolitik ergänzt, die die akzeptierte Spezifikation [`command-engine.md`](command-engine.md) (B71) für jeden Command vorsieht: `continue` oder `abort`, ein Pflichtfeld ohne leeren Wert (Vorgabe des Projektinhabers: keine magischen Werte, Code-ADR-0017 vorgeschlagen); gespeichert in der Spalte `error_policy` (Migration 0005), bestehende Commands bekommen mit der Migration `continue`. |
+| 2026-10-02 | Benannte Cooldown-Gruppen wie im Original (Entscheidung des Projektinhabers, Q9): Gemeinsame Cooldowns hängen nicht mehr an der Gruppe des Commands, sondern an eigenen Cooldown-Gruppen mit einer Dauer je Gruppe (B32, B33, B41, Randfall B64). Die Dauer steht an der Gruppe, der Verweis geht über die ID (A4). Die Cooldown-Anforderung ist jetzt in Version 2: `standard` und `per_user` haben eine Dauer, die Gruppen-Arten nennen eine Cooldown-Gruppe; gespeicherte Gruppen-Cooldowns der Version 1 verlieren ihre Dauer und nennen keine Gruppe, bis der Streamer eine wählt. Die offene Frage zu B41 ist geklärt. |

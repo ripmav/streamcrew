@@ -63,3 +63,21 @@ ON CONFLICT (id) DO UPDATE SET
 DELETE FROM command_groups WHERE id = ?;
 
 -- SPDX-License-Identifier: Apache-2.0
+
+-- name: GetCooldownGroup :one
+SELECT * FROM cooldown_groups WHERE id = ?;
+
+-- name: ListCooldownGroups :many
+SELECT * FROM cooldown_groups ORDER BY name_key, id;
+
+-- name: PutCooldownGroup :exec
+INSERT INTO cooldown_groups (id, name, name_key, duration, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (id) DO UPDATE SET
+    name = excluded.name,
+    name_key = excluded.name_key,
+    duration = excluded.duration,
+    updated_at = excluded.updated_at;
+
+-- name: DeleteCooldownGroup :execrows
+DELETE FROM cooldown_groups WHERE id = ?;
