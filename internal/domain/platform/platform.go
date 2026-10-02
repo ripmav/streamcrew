@@ -20,6 +20,12 @@ const (
 	Kick    Name = "kick"
 )
 
+// Default is the default platform (ADR-0004). Where the order of the
+// platforms matters, it comes first, e.g. when moderation without a
+// platform of the run looks for a user (actions.md B82). A setting takes
+// its place with the multi-platform work (roadmap backlog).
+const Default = Twitch
+
 // DisplayName returns the name of the platform as the platform writes it,
 // e.g. "YouTube"; the ID for a platform without an adapter; empty for the
 // empty name.
