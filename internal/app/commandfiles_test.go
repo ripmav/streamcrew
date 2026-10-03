@@ -340,3 +340,59 @@ func TestImportCommandFilesStoreError(t *testing.T) {
 	require.Error(t, err, "%+v", report)
 	assert.False(t, report.Imported)
 }
+
+// TestExportCommands covers B35 and B36 of commands-as-code.md: exporting
+// and importing again changes nothing but the time of the change.
+func TestExportCommands(t *testing.T) {
+	t.Parallel()
+	profilePath := commandProfile(t)
+	dir := t.TempDir()
+	file := writeFile(t, dir, "hug.yaml", fileHead+`kind: ChatCommand
+metadata: {name: Hug, group: Fun}
+spec:
+  triggers: [hug]
+  requirements: {cooldown: {scope: group, group: Hugs}, role: {role: follower}}
+  actions:
+    - {type: command, kind: run, command: A}
+    - {type: counter, kind: add, counter: hugs, amount: 1.5}
+---
+`+fileHead+`kind: CommandGroup
+metadata: {name: Fun}
+spec: {timerInterval: 10m}
+---
+`+fileHead+`kind: CooldownGroup
+metadata: {name: Hugs}
+spec: {duration: 30s}
+`)
+	_, err := app.ImportCommandFiles(t.Context(), profilePath, nil, config.Rights{}, []string{file})
+	require.NoError(t, err)
+	before := commandsByName(t, profilePath)
+
+	docs, err := app.ExportCommands(t.Context(), profilePath, nil)
+	require.NoError(t, err)
+	assert.Len(t, docs, 8, "all commands, groups and cooldown groups, also those of the profile before")
+	out, err := commandfile.EncodeYAML(docs)
+	require.NoError(t, err)
+	exported := writeFile(t, dir, "export.yaml", string(out))
+	report, err := app.ImportCommandFiles(t.Context(), profilePath, nil, config.Rights{}, []string{exported})
+	require.NoError(t, err)
+	assert.Empty(t, problemTexts(report.CommandFileReport))
+	assert.Equal(t, 0, report.Created)
+	assert.Equal(t, 8, report.Replaced)
+
+	after := commandsByName(t, profilePath)
+	require.Len(t, after, len(before))
+	for name, h := range before {
+		got := after[name]
+		got.UpdatedAt = h.UpdatedAt
+		assert.Equal(t, h, got, "B36: only the time of the change differs for %s", name)
+	}
+
+	docs, err = app.ExportCommands(t.Context(), profilePath, []string{"hug"})
+	require.NoError(t, err)
+	assert.Len(t, docs, 3, "the command with its group and cooldown group")
+	_, err = app.ExportCommands(t.Context(), profilePath, []string{"nope"})
+	require.ErrorContains(t, err, `no command is named "nope"`)
+	_, err = app.ExportCommands(t.Context(), filepath.Join(dir, "none.db"), nil)
+	require.Error(t, err)
+}

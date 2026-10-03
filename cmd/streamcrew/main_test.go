@@ -386,6 +386,8 @@ func TestCommandsRefuseWhileCoreRuns(t *testing.T) {
 	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "import", file)
 	assert.Equal(t, cli.ExitFailure, res.code, "commands-as-code.md, B33: importing needs a stopped core")
 	assert.Contains(t, res.stderr, "in use by another streamcrew process")
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "export")
+	assert.Equal(t, cli.ExitOK, res.code, "commands-as-code.md, B35: exporting works while the core runs: %s", res.stderr)
 
 	cancel()
 	require.Equal(t, cli.ExitOK, (<-done).code)
@@ -529,4 +531,53 @@ func TestCommandImport(t *testing.T) {
 	assert.Equal(t, cli.ExitFailure, res.code)
 	assert.Equal(t, bad+":4:19: spec.triggers[0]: the trigger \"!hug\" is used by the active chat command \"Hug\"\n"+
 		"1 document in 1 file: 1 error, 0 warnings; nothing imported\n", res.stdout)
+}
+
+// TestCommandExport covers B35, B37 and B38 of commands-as-code.md: YAML on
+// the standard output, JSON, into a file and one file per document.
+func TestCommandExport(t *testing.T) {
+	isolate(t)
+	dataDir := t.TempDir()
+	require.Equal(t, cli.ExitOK, runCLI(t.Context(), t, "--data-dir", dataDir, "profile", "create", "Main").code)
+	require.Equal(t, cli.ExitOK, runCLI(t.Context(), t, "--data-dir", dataDir, "profile", "use", "main").code)
+	dir := t.TempDir()
+	hug := filepath.Join(dir, "hug.yaml")
+	require.NoError(t, os.WriteFile(hug, []byte(
+		"apiVersion: streamcrew/v1alpha1\nkind: ChatCommand\nmetadata: {name: Hug}\nspec: {triggers: [hug]}\n---\n"+
+			"apiVersion: streamcrew/v1alpha1\nkind: CooldownGroup\nmetadata: {name: Hugs}\nspec: {duration: 5s}\n"), 0o600))
+	require.Equal(t, cli.ExitOK, runCLI(t.Context(), t, "--data-dir", dataDir, "command", "import", hug).code)
+
+	res := runCLI(t.Context(), t, "--data-dir", dataDir, "command", "export", "hug")
+	require.Equal(t, cli.ExitOK, res.code, res.stderr)
+	assert.Equal(t, "apiVersion: streamcrew/v1alpha1\nkind: ChatCommand\nmetadata:\n  name: Hug\nspec:\n  triggers:\n    - hug\n"+
+		"  triggerMode: exclamation\n  enabled: true\n  unlocked: false\n  errorPolicy: continue\n  requirements: {}\n  actions: []\n", res.stdout)
+
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "export", "--format", "json")
+	require.Equal(t, cli.ExitOK, res.code, res.stderr)
+	var list []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(res.stdout), &list))
+	require.Len(t, list, 2, "all objects")
+	assert.Equal(t, "CooldownGroup", list[0]["kind"])
+
+	file := filepath.Join(dir, "all.yaml")
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "export", "--file", file)
+	require.Equal(t, cli.ExitOK, res.code, res.stderr)
+	assert.Equal(t, "wrote "+file+"\n", res.stdout)
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "validate", file)
+	require.Equal(t, cli.ExitOK, res.code, "the export reads back: %s", res.stdout)
+
+	out := filepath.Join(dir, "out")
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "export", "--dir", out, "--format", "json")
+	require.Equal(t, cli.ExitOK, res.code, res.stderr)
+	assert.FileExists(t, filepath.Join(out, "chat-command-hug.v1alpha1.json"))
+	assert.FileExists(t, filepath.Join(out, "cooldown-group-hugs.v1alpha1.json"))
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "import", out)
+	require.Equal(t, cli.ExitOK, res.code, res.stdout)
+	assert.Contains(t, res.stdout, "imported: 0 new, 2 replaced")
+
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "export", "--file", file, "--dir", out)
+	assert.Equal(t, cli.ExitUsage, res.code)
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "export", "nope")
+	assert.Equal(t, cli.ExitFailure, res.code)
+	assert.Contains(t, res.stderr, `no command is named "nope"`)
 }
