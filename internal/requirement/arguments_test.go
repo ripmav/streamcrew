@@ -3,8 +3,10 @@
 package requirement_test
 
 import (
+	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -190,7 +192,7 @@ func TestArguments(t *testing.T) {
 			rej: wrongType("n", command.ArgumentInteger),
 		},
 	} {
-		got, err := f.service.Apply(t.Context(), tc.cmd, tc.p)
+		got, err := apply(t.Context(), f.service, tc.cmd, tc.p)
 		require.NoError(t, err, name)
 		if tc.values == nil {
 			assert.Equal(t, engine.Rejected(tc.rej), got, name)
@@ -213,30 +215,30 @@ func TestArgumentValues(t *testing.T) {
 	p := said("!hug someone")
 	p.Values = map[string]template.Value{"event": template.TextValue("follow")}
 
-	got, err := f.service.Apply(t.Context(), hug(unnamed, arg("why", command.ArgumentText)), p)
+	got, err := apply(t.Context(), f.service, hug(unnamed, arg("why", command.ArgumentText)), p)
 	require.NoError(t, err)
 	require.Equal(t, engine.VerdictMet, got.Verdict)
 	assert.Equal(t, p.Values, got.Runs[0].Values, "nothing to add")
 
-	got, err = f.service.Apply(t.Context(), hug(arg("!who", command.ArgumentText)), p)
+	got, err = apply(t.Context(), f.service, hug(arg("!who", command.ArgumentText)), p)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]template.Value{"event": template.TextValue("follow"), "who": template.TextValue("someone")}, got.Runs[0].Values)
 	assert.Equal(t, map[string]template.Value{"event": template.TextValue("follow")}, p.Values, "the given values stay as they were")
 
 	empty := said("!hug")
 	empty.Args, empty.ArgsText = []string{""}, `""`
-	got, err = f.service.Apply(t.Context(), hug(arg("!who", command.ArgumentText)), empty)
+	got, err = apply(t.Context(), f.service, hug(arg("!who", command.ArgumentText)), empty)
 	require.NoError(t, err)
 	assert.Equal(t, engine.Rejected(usage("!hug <who>", true)), got)
 
 	wildcard := hug(arg("!who", command.ArgumentText))
 	wildcard.Wildcard = true
-	got, err = f.service.Apply(t.Context(), wildcard, engine.Params{Platform: platform.Twitch, Message: "a hug"})
+	got, err = apply(t.Context(), f.service, wildcard, engine.Params{Platform: platform.Twitch, Message: "a hug"})
 	require.NoError(t, err)
 	assert.Equal(t, engine.Rejected(usage("hug <who>", true)), got, "a wildcard trigger without !")
 
 	nameless := cmd(command.ArgumentsRequirement{Arguments: []command.Argument{arg("!who", command.ArgumentText)}})
-	got, err = f.service.Apply(t.Context(), nameless, engine.Params{})
+	got, err = apply(t.Context(), f.service, nameless, engine.Params{})
 	require.NoError(t, err)
 	assert.Equal(t, engine.Rejected(usage("hug <who>", false)), got, "a command without triggers by its name")
 }
@@ -247,13 +249,13 @@ func TestArgumentUsers(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, language{lang: i18n.English})
 	c := hug(arg("!target", command.ArgumentUser))
-	got, err := f.service.Apply(t.Context(), c, engine.Params{Args: []string{"bob"}, ArgsText: "bob"})
+	got, err := apply(t.Context(), f.service, c, engine.Params{Args: []string{"bob"}, ArgsText: "bob"})
 	require.NoError(t, err)
 	require.Equal(t, engine.VerdictMet, got.Verdict, "bob is on Twitch")
 	assert.Equal(t, template.TextValue("bob"), got.Runs[0].Values["target"])
 
 	f.users.err = errors.New("store gone")
-	_, err = f.service.Apply(t.Context(), c, said("!hug bob"))
+	_, err = apply(t.Context(), f.service, c, said("!hug bob"))
 	require.ErrorContains(t, err, "store gone")
 }
 
@@ -266,15 +268,15 @@ func TestArgumentsOrder(t *testing.T) {
 		c := hug(arg("!n", command.ArgumentInteger))
 		c.Requirements = append(c.Requirements, command.CooldownRequirement{Scope: command.CooldownStandard, Duration: polydoc.Duration(time.Minute)})
 
-		got, err := f.service.Apply(t.Context(), c, said("!hug x"))
+		got, err := apply(t.Context(), f.service, c, said("!hug x"))
 		require.NoError(t, err)
 		assert.Equal(t, engine.Rejected(wrongType("n", command.ArgumentInteger)), got)
 		assert.Empty(t, f.cooldowns.running(), "no cooldown for a rejection")
 
-		got, err = f.service.Apply(t.Context(), c, said("!hug 1"))
+		got, err = apply(t.Context(), f.service, c, said("!hug 1"))
 		require.NoError(t, err)
 		require.Equal(t, engine.VerdictMet, got.Verdict)
-		got, err = f.service.Apply(t.Context(), c, said("!hug x"))
+		got, err = apply(t.Context(), f.service, c, said("!hug x"))
 		require.NoError(t, err)
 		assert.Equal(t, command.TypeCooldown, got.Rejection.Requirement)
 	})
@@ -329,4 +331,52 @@ func TestArgumentsWithEngine(t *testing.T) {
 		require.Len(t, f.twitch.Calls(), 1)
 		assert.Equal(t, "Verwendung: !hug <target>", f.twitch.Calls()[0].Text)
 	})
+}
+
+// TestPrepareWithoutLock covers command-engine.md, B16: preparing, e.g.
+// looking up the users of arguments, does not wait for a decision that
+// holds the lock of the decisions.
+func TestPrepareWithoutLock(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, language{lang: i18n.English})
+	blocking := &blockingCooldowns{cooldowns: f.cooldowns, entered: make(chan struct{}), block: make(chan struct{})}
+	svc := f.withCooldowns(t, blocking)
+	decide, err := svc.Prepare(t.Context(), cmd(command.CooldownRequirement{Scope: command.CooldownStandard, Duration: polydoc.Duration(time.Minute)}), said("!hug"))
+	require.NoError(t, err)
+	decided := make(chan error, 1)
+	go func() {
+		_, err := decide(t.Context())
+		decided <- err
+	}()
+	<-blocking.entered
+
+	prepared := make(chan error, 1)
+	go func() {
+		_, err := svc.Prepare(t.Context(), hug(arg("!target", command.ArgumentUser)), said("!hug bob"))
+		prepared <- err
+	}()
+	select {
+	case err := <-prepared:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Prepare waited for the lock of the decisions")
+	}
+	close(blocking.block)
+	require.NoError(t, <-decided)
+}
+
+// blockingCooldowns is a cooldown store whose first read of an end waits
+// until block is closed; entered is closed when it starts waiting.
+type blockingCooldowns struct {
+	*cooldowns
+	entered, block chan struct{}
+	once           sync.Once
+}
+
+func (b *blockingCooldowns) CooldownEnd(ctx context.Context, key command.CooldownKey) (time.Time, bool, error) {
+	b.once.Do(func() {
+		close(b.entered)
+		<-b.block
+	})
+	return b.cooldowns.CooldownEnd(ctx, key)
 }
