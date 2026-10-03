@@ -41,6 +41,15 @@ type CommandTrigger struct {
 	Active      int64
 }
 
+type CooldownGroup struct {
+	ID        string
+	Name      string
+	NameKey   string
+	Duration  int64
+	CreatedAt int64
+	UpdatedAt int64
+}
+
 type Counter struct {
 	ID           string
 	Name         string

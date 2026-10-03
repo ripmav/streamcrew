@@ -177,7 +177,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `internal/domain/id` | IDs als UUIDv7 aus der Standardbibliothek ([Code-ADR-0009](docs/adr/code/0009-ids-und-zeit.md)) |
 | `internal/domain/eventtype`, `internal/domain/platform` | Katalog der fachlichen Ereignistypen, Namen der Plattformen ([Spezifikation](docs/spec/events.md)) |
 | `internal/domain/role` | Rollen mit Rangordnung und „erfüllt Mindestrolle“ ([Spezifikation](docs/spec/users-and-roles.md)) |
-| `internal/domain/command` | Commands: Arten, Trigger, Gruppen, Anforderungen, Actions als polymorphe Dokumente ([Spezifikation](docs/spec/commands.md)) |
+| `internal/domain/command` | Commands: Arten, Trigger, Gruppen, Cooldown-Gruppen, Anforderungen, Actions als polymorphe Dokumente ([Spezifikation](docs/spec/commands.md)) |
 | `internal/domain/user` | Nutzer mit Plattform-Identitäten und Statistiken ([Spezifikation](docs/spec/users-and-roles.md)) |
 | `internal/domain/counter`, `internal/domain/quote` | Counter und Quotes ([Spezifikation](docs/spec/counters-and-quotes.md)) |
 | `internal/expr` | Ausdrücke mit `$`-Identifiern für Rechnungen und Bedingungen, mit `expr-lang/expr` ([Spezifikation](docs/spec/template.md), [Code-ADR-0012](docs/adr/code/0012-template-engine.md)) |
