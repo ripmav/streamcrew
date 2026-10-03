@@ -44,12 +44,18 @@ func doc(kind, metadata, spec string) string {
 	return `{"apiVersion":"streamcrew/v1alpha1","kind":"` + kind + `","metadata":{` + metadata + `},"spec":{` + spec + `}}`
 }
 
-// TestSchemaExamples covers B1 to B4, B10 to B14, B20, B21, B23 and B37 for
-// the schema: it accepts the documents of each kind in the form of files
-// and rejects what the format forbids.
-func TestSchemaExamples(t *testing.T) {
-	t.Parallel()
-	validator := compile(t)
+// schemaExample is a file of the examples and whether the schema accepts
+// it.
+type schemaExample struct {
+	name  string
+	file  string
+	valid bool
+}
+
+// schemaExamples are JSON files with documents of each kind in the form of
+// files, and with what the format forbids (B1 to B4, B10 to B14, B20, B21,
+// B23, B37).
+func schemaExamples() []schemaExample {
 	hug := doc("ChatCommand", `"name":"Hug","group":"Spaß"`,
 		`"triggers":["hug","umarmen"],"triggerMode":"exclamation","enabled":true,"unlocked":false,"errorPolicy":"abort",`+
 			`"requirements":{"role":{"role":"follower"},"cooldown":{"scope":"group","group":"Hugs"},`+
@@ -59,11 +65,7 @@ func TestSchemaExamples(t *testing.T) {
 			`"actions":[{"type":"command","kind":"run","command":"Wave"}],"else":[{"type":"wait","seconds":1}]}]`)
 	chat := func(spec string) string { return doc("ChatCommand", `"name":"hug"`, `"triggers":["hug"]`+spec) }
 	withAction := func(action string) string { return doc("ActionGroup", `"name":"a"`, `"actions":[`+action+`]`) }
-	tests := []struct {
-		name  string
-		file  string
-		valid bool
-	}{
+	return []schemaExample{
 		{"chat command with everything", hug, true},
 		{"chat command with the defaults", chat(""), true},
 		{"event command", doc("EventCommand", `"name":"Follow"`, `"event":"channel.follow"`), true},
@@ -110,7 +112,14 @@ func TestSchemaExamples(t *testing.T) {
 		{"list with an invalid document", `[` + hug + `,{}]`, false},
 		{"text", `"hug"`, false},
 	}
-	for _, tc := range tests {
+}
+
+// TestSchemaExamples checks that the schema accepts the documents of each
+// kind and rejects what the format forbids.
+func TestSchemaExamples(t *testing.T) {
+	t.Parallel()
+	validator := compile(t)
+	for _, tc := range schemaExamples() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			err := validate(validator, tc.file)

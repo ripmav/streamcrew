@@ -38,6 +38,7 @@
      - *Nur reine YAML-Syntaxfehler nennen mit v3 allein die Zeile. `go.yaml.in/yaml/v4` nennt auch die Spalte, ist aber noch ein Release Candidate (v4.0.0-rc.6 vom 2026-06-17); der Wechsel steht im Backlog der Roadmap, sobald v4 stabil ist.*
      - *Die Typerkennung folgt YAML 1.2: `no`, `yes`, `on` und `off` bleiben Text. Zahlen stehen als ihr Text im Knoten und lassen sich exakt als Dezimalzahl lesen (Code-ADR-0020).*
      - *Doppelte Schlüssel meldet v3 beim Lesen in Go-Werte, über `yaml.Node` aber nicht; der Weg über die Knoten prüft sie selbst.*
+     - *Ergänzt am 2026-10-03 bei der Umsetzung: v3 kennt das JSON-Escape `\/` nicht. JSON-Dateien von Commands als Code liest deshalb `encoding/json/jsontext` (Code-ADR-0018), ebenfalls mit Zeile und Spalte; YAML-Dateien liest v3 über `yaml.Node`.*
 4. **Pfade:**
    - Datenverzeichnis: `--data-dir` bzw. `STREAMCREW_DATA_DIR`. Standard ist `os.UserConfigDir()/streamcrew`, also z. B. `~/.config/streamcrew`, `%AppData%\streamcrew` oder `~/Library/Application Support/streamcrew`.
    - **Portabler Modus:** Liegt neben dem Binary eine Datei `streamcrew.portable`, ist das Standard-Datenverzeichnis `<Verzeichnis des Binarys>/streamcrew-data`. Eine ausdrückliche Angabe mit `--data-dir` gilt weiterhin.
