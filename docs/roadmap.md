@@ -472,7 +472,7 @@ Zuerst die Änderungen an Datenmodell und Engine aus den geklärten Fragen vom 2
   - [x] `command validate`, erledigt 2026-10-03:
     - [x] Dokumente in Go umwandeln und prüfen, je Dokument der erste Fehler mit Zeile und Spalte, Namen in IDs auflösen (B1–B5, B10–B14, B20–B24), erledigt 2026-10-03 mit `commandfile.Convert`
     - [x] CLI mit denselben Prüfungen wie beim Speichern gegen eine Kopie des Profils, Konflikten der Trigger und Ereignistypen und Ausgabe als Text und JSON, erledigt 2026-10-03 (`app.CheckCommandFiles`, `commandfile.Apply`)
-  - [ ] `command import`: eine Transaktion, Ersetzen nach Namen, gestoppter Core
+  - [x] `command import`: eine Transaktion, Ersetzen nach Namen, gestoppter Core, erledigt 2026-10-03 (`app.ImportCommandFiles`, `Store.Atomically`)
   - [ ] `command export`: YAML und JSON, `--file`, `--dir` mit der Version im Dateinamen, Rundlauf
 
 ### 3.6 Mock-Plattform und Event-Grundlagen
@@ -1349,3 +1349,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-03 | Commands als Code: Dateien lesen (`commandfile.Read`). Die Aufgabe „YAML/JSON-Format“ ist in vier Teilschritte aufgeteilt. Entscheidungen des Projektinhabers: Der Export mit `--dir` hängt die Version des Formats an den Dateinamen (`commands-as-code.md`, B38); Dateien prüft allein der Go-Code, ohne eigenen Prüfer gegen das Schema (B31, B32). |
 | 2026-10-03 | Commands als Code: Dokumente in Commands, Gruppen und Cooldown-Gruppen umwandeln (`commandfile.Convert`), Namen in IDs auflösen, je Dokument der erste Fehler mit seiner Stelle. |
 | 2026-10-03 | `streamcrew command validate`: prüft Dateien gegen eine Kopie des Profils mit den Prüfungen beim Speichern, auch während der Core läuft; Fehler und Warnungen mit Datei, Zeile, Spalte und Pfad, als Text oder JSON. Fehler über Actions und Anforderungen tragen jetzt ihren Typ (`command.ActionError`, `command.RequirementError`). |
+| 2026-10-03 | `streamcrew command import`: übernimmt alle Dokumente in einer Transaktion oder, bei einem Fehler, keines; ersetzt nach Art und Name mit gleicher ID und Erstellungszeit. Neu im Store: `Store.Atomically` für mehrere Speichervorgänge in einer Transaktion (Nachtrag zu Code-ADR-0008, Entscheidung des Projektinhabers). |
