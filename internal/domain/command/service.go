@@ -62,11 +62,14 @@ func (s *Service) Commands(ctx context.Context) ([]Command, error) {
 // Save validates and stores a command and returns it as stored, with the
 // warnings about it. A command without an ID is new and gets one.
 //
-// Besides the command itself, Save checks its actions (Code-ADR-0013,
-// point 7): commands and groups they refer to must exist, the names of
-// their result values must not hide built-in identifiers, and counters they
-// name are created if missing. Missing capabilities and unknown roots for
-// files do not stop the save; they come back as warnings.
+// Besides the command itself, Save checks its requirements (requirements.md,
+// B80, B81) and its actions (Code-ADR-0013, point 7): cooldown groups,
+// commands and groups they refer to must exist, the identifiers of
+// arguments and the names of result values must not hide built-in
+// identifiers, and counters the actions name are created if missing.
+// Currencies, ranks and items that do not exist, missing capabilities and
+// unknown roots for files do not stop the save; they come back as warnings,
+// those of the requirements first.
 func (s *Service) Save(ctx context.Context, cmd Command) (Saved, error) {
 	if err := cmd.Validate(); err != nil {
 		return Saved{}, err
@@ -74,13 +77,15 @@ func (s *Service) Save(ctx context.Context, cmd Command) (Saved, error) {
 	if cmd.ID.IsZero() {
 		cmd.ID = id.New()
 	}
-	if err := s.checkCooldownGroup(ctx, cmd); err != nil {
-		return Saved{}, err
-	}
-	warnings, err := s.checkActions(ctx, cmd)
+	warnings, err := s.checkRequirements(ctx, cmd)
 	if err != nil {
 		return Saved{}, err
 	}
+	actionWarnings, err := s.checkActions(ctx, cmd)
+	if err != nil {
+		return Saved{}, err
+	}
+	warnings = append(warnings, actionWarnings...)
 	cmd.CreatedAt, cmd.UpdatedAt = stamps(cmd.CreatedAt)
 	rec, err := s.codec.Record(cmd)
 	if err != nil {
