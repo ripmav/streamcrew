@@ -6,9 +6,10 @@
 // that is not met (B2), and it tells the user why a command did not run,
 // in the language of the profile (B70 to B72, ADR-0022).
 //
-// So far it checks the role, the cooldown and the arguments and finds
-// faulty requirements; settings and thresholds follow (roadmap 3.4). A
-// command with a threshold is not decided yet: its decision returns
+// So far it checks the role, the cooldown and the arguments, finds faulty
+// requirements and deletes the triggering message after the decision if
+// the settings say so (B61); thresholds follow (roadmap 3.4). A command
+// with a threshold is not decided yet: its decision returns
 // ErrNotSupported.
 package requirement
 

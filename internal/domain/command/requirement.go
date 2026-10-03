@@ -410,7 +410,8 @@ func (r ThresholdRequirement) Validate() error {
 // page (B47).
 type SettingsRequirement struct {
 	// DeleteTriggerMessage deletes the chat message that triggered the
-	// command after it ran.
+	// command once its requirements decided, also if they rejected it
+	// (spec requirements.md, B61).
 	DeleteTriggerMessage bool `json:"deleteTriggerMessage"`
 	// ShowInChatMenu offers the command in the context menu of the chat.
 	ShowInChatMenu bool `json:"showInChatMenu"`
