@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-10-02 |
 | **Bezug** | Roadmap Phase 2.2 (Nutzer, Rollenmodell), 5.2; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0009](../adr/code/0009-ids-und-zeit.md); Plan §5.5, §6.13, Anhang A.6, A.7 |
-| **Umsetzung** | Datenmodell und Rollen umgesetzt: `internal/domain/role`, `internal/domain/user`, `internal/domain/platform`, Repository in `internal/store`. Offen: Standardtitel (B5) und Vergabe der Regular-Rolle (B26) mit Phase 5.2, nutzerspezifische Chat-Commands (B8, P1), Import (B11, P2) |
+| **Umsetzung** | Datenmodell und Rollen umgesetzt: `internal/domain/role`, `internal/domain/user`, `internal/domain/platform`, Repository in `internal/store`. Offen: die feinen Stufen der Rangordnung (B20, Stand 2026-10-02, Roadmap 3.4), Titelregeln (B5) und Vergabe der Regular-Rolle (B26) mit Phase 5.2, nutzerspezifische Chat-Commands (B8, P1), Import (B11, P2) |
 
 ## Zweck und Umfang
 
@@ -39,7 +39,7 @@ Nicht Teil dieser Spezifikation:
 | B2 | Ein Nutzer hat eine oder mehrere Plattform-Identitäten. Eine Identität besteht aus Plattform, ID auf der Plattform, Login-Name und Anzeigename; dazu optional Chatfarbe und Profilbild-URL. | Q1, Q2 |
 | B3 | Plattform und ID auf der Plattform sind zusammen eindeutig: Dasselbe Plattformkonto gehört nie zu zwei Nutzern. Gesucht wird ein Nutzer über diese Kombination, nicht über den Namen, weil sich Namen ändern können. | Q1, Q2 |
 | B4 | Ändert sich Login- oder Anzeigename auf der Plattform, übernimmt streamcrew den neuen Namen beim nächsten Kontakt; die ID bleibt. | Q2 (Nutzer-Identifier nennen Name und Anzeigename getrennt von der ID) |
-| B5 | Ein Nutzer kann einen eigenen Titel haben, den der Streamer vergibt. Ohne eigenen Titel gilt ein Standardtitel, abgeleitet aus Rolle bzw. Rang. | Q1, Q2 (`$usertitle`) |
+| B5 | Ein Nutzer kann einen eigenen Titel haben, den der Streamer vergibt. Ohne eigenen Titel gilt der erste passende Titel aus den Titelregeln des Streamers: Jede Regel hat einen Namen, eine Mindestrolle und Mindestmonate, die bei Follower-Titeln ab dem Follow und bei Abonnenten-Titeln ab dem Abo-Beginn zählen; geprüft wird nach der höchsten Rolle, dann nach den meisten Monaten. Ab Werk gibt es keine Regel. Passt keine, lautet der Titel „Kein Titel“ in der Sprache des Profils. | Q1, Q2 (`$usertitle`), Q11 |
 | B6 | Ein Nutzer kann Notizen haben (freier Text des Streamers). | Q2 (`$usernotes`) |
 | B7 | Ein Nutzer kann von bestimmten Funktionen ausgenommen werden: Zuwachs und Anforderungen von Währung und Rang, zufällige Auswahl in Spielen, Ranglisten. Diese Ausnahme ist ein einzelnes Merkmal des Nutzers. | Q1, Q2 (`$userisspecialtyexcluded`) |
 | B8 | Ein Nutzer kann auf einen Entrance-Command verweisen, der bei seiner ersten Nachricht in einer Sitzung läuft, solange der Stream live ist ([`command-engine.md`](command-engine.md), B41); dazu kommen später nutzerspezifische Chat-Commands (P1). Das Datenmodell hält nur den Verweis auf die Commands. | Q1, Q9 |
@@ -51,13 +51,13 @@ Nicht Teil dieser Spezifikation:
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B20 | Rollen haben eine feste Rangordnung, aufsteigend: `banned`, `user`, `creator` (Twitch Affiliate oder Partner), `follower` (auf YouTube: Abonnent), `regular`, `vip` (auf Kick zusätzlich OG, auf VPZone Plus, Founder, Ambassador), `subscriber` (auf YouTube: Mitglied), `platform_staff` (Twitch Global Mod oder Staff), `moderator`, `editor` (Channel Editor), `streamer`. **[Interop]** für den Import: die Bedeutung dieser Stufen | QP (Plan Anhang A.7), Q3 |
+| B20 | Rollen haben eine feste Rangordnung mit einer Stufe je Rolle, aufsteigend: `banned`, `user`, `twitch_affiliate`, `twitch_partner`, `follower`, `youtube_subscriber` (Abonnent auf YouTube), `regular`, `twitch_vip`, `kick_vip`, `kick_og`, `velora_vip`, `vpzone_plus`, `vpzone_founder`, `vpzone_ambassador`, `subscriber`, `youtube_member` (Mitglied auf YouTube), `twitch_global_mod`, `twitch_staff`, `moderator`, `editor` (Channel Editor), `streamer`. Auch die Stufen einer Plattform werden streng verglichen: Ein Kick-VIP erfüllt `kick_og` nicht, ein Affiliate nicht `twitch_partner`. **[Interop]** für den Import: die Bedeutung dieser Stufen | QP (Plan Anhang A.7), Q3, Q11 |
 | B21 | Ein Nutzer kann mehrere Rollen zugleich haben, etwa Follower, Subscriber und Moderator. Jeder Nutzer hat mindestens `user`. | Q2 (`$userroles`) |
 | B22 | Die Hauptrolle ist die höchste Rolle des Nutzers. | Q2 (`$userprimaryrole`) |
 | B23 | Eine Mindestrolle ist erfüllt, wenn die Hauptrolle des Nutzers mindestens so hoch ist wie die verlangte Rolle. | Q3 („alle höheren Rollen dürfen ebenfalls“) |
 | B24 | Rollen hängen an der Plattform-Identität, weil sie je Kanal und Plattform gelten. Die Rollen eines Nutzers sind die Vereinigung der Rollen seiner Identitäten auf den Plattformen, auf denen er gerade handelt; bei einer Chatnachricht zählt die Identität, von der die Nachricht kommt. | Q2, QP |
 | B25 | `streamer` hat das Konto, mit dem der Kanal verbunden ist. Das Bot-Konto hat keine erhöhte Rolle, nur weil es der Bot ist. | Q10 |
-| B26 | `regular` vergibt streamcrew selbst nach einer Regel in den Nutzer-Einstellungen, standardmäßig über eine Mindest-Watchtime. Die Rolle wird bei Änderung der Watchtime oder der Regel neu bewertet. | Q2 („Regular-Rolle, festgelegt unter Settings → Users“) |
+| B26 | `regular` vergibt streamcrew selbst: Regular ist, wessen Watchtime (B9, über alle Plattformen) die in den Nutzer-Einstellungen festgelegte Zahl ganzer Stunden erreicht; Standard 0, und 0 heißt, dass niemand Regular ist. Die Rolle gehört zum Nutzer und gilt auf allen Plattformen. Sie wird neu bewertet, sobald sich die Watchtime oder die Schwelle ändert. | Q2 („Regular-Rolle, festgelegt unter Settings → Users“), Q11, A4 |
 | B27 | `banned` hat ein Nutzer, der auf der Plattform gebannt ist. Ein gebannter Nutzer erfüllt keine Mindestrolle, auch nicht `user`. | QP (Rangordnung), A1 |
 
 ## Randfälle
@@ -73,9 +73,10 @@ Nicht Teil dieser Spezifikation:
 
 | ID | Original | streamcrew | Begründung |
 |---|---|---|---|
-| A1 | nicht belegt, ob ein gebannter Nutzer die Mindestrolle `user` erfüllt | ausdrücklich nicht | Sicherheit; zu prüfen gegen das beobachtete Verhalten (offene Frage) |
+| A1 | Die Rolle „gebannt“ ist veraltet und wird nie vergeben; ein Bann ändert keine Rollen. Gebannte Nutzer können auf Twitch nicht schreiben; kommt doch eine Nachricht an, erfüllen sie `user` (Q11). | `banned` aus dem Bann auf der Plattform; ein gebannter Nutzer erfüllt keine Mindestrolle (B27) | Sicherheit: Nachrichten, die kurz vor oder trotz des Banns ankommen, lösen nichts aus; Entscheidung des Projektinhabers (2026-10-02) |
 | A2 | Rollennamen als Anzeigetexte | stabile Kennungen in Kleinbuchstaben (`follower`, `vip` …), Anzeige über i18n | Commands als Code und API brauchen stabile Werte (Plan §6.9, §6.22) |
 | A3 | IDs je Plattform | zusätzlich eine plattformunabhängige ID je Nutzer | Mehrplattform-Betrieb und Verknüpfung (Plan §5.2) |
+| A4 | Regular hängt am Plattformkonto, mit dem der Nutzer gerade aktiv ist; bewertet wird einmal pro Minute für Nutzer, die im Chat eines Live-Streams aktiv sind (Q11) | Regular gehört zum Nutzer und wird sofort neu bewertet (B26) | Die Watchtime zählt ohnehin am Nutzer; eine neue Schwelle soll sofort gelten; Entscheidung des Projektinhabers (2026-10-02) |
 
 ## Akzeptanzkriterien
 
@@ -84,15 +85,14 @@ Nicht Teil dieser Spezifikation:
 - [x] B20, B23: Tabellengetriebener Test über alle Paare aus Nutzerrolle und Mindestrolle.
 - [x] B22: Hauptrolle eines Nutzers mit mehreren Rollen ist die höchste.
 - [x] B27: Ein gebannter Nutzer erfüllt keine Mindestrolle.
+- [ ] B20: Die feinen Stufen über alle Paare aus Nutzerrolle und Mindestrolle; gespeicherte Rollen und Anforderungen mit den bisherigen Kennungen werden übernommen.
+- [ ] B5: Titelregeln nach Rolle und Monaten, „Kein Titel“ in beiden Sprachen.
+- [ ] B26: Regular ab der Schwelle, Schwelle 0, Neubewertung bei neuer Watchtime und neuer Schwelle.
 - [x] B9: Statistiken werden gespeichert und gelesen (Integrationstest gegen SQLite).
 
 ## Offene Fragen
 
-- B20: Stimmt die Rangordnung aus dem Audit (Plan Anhang A.7) mit dem beobachteten Verhalten überein, insbesondere Affiliate/Partner unter Follower und Global Mod/Staff unter Moderator?
-- B26: Nach welcher Regel wird jemand im Original Regular (nur Watchtime, Schwelle, weitere Kriterien)? Wie heißt die Einstellung?
-- B27/A1: Wie verhält sich das Original, wenn ein gebannter Nutzer einen Command mit Mindestrolle `user` auslöst?
-- B24: Gelten auf einer Plattform verliehene Rollen (z. B. Twitch-Subscriber) auch bei Nachrichten desselben Nutzers auf einer anderen Plattform, wenn die Konten verknüpft sind?
-- B5: Wie lautet der Standardtitel ohne eigenen Titel?
+Keine.
 
 ## Quellen
 
@@ -103,6 +103,7 @@ Nicht Teil dieser Spezifikation:
 | Q3 | Doku | <https://mixitup.bot/docs/commands> | Mindestrolle „und höher“; abgerufen 2026-09-29 |
 | Q9 | Doku | <https://mixitup.bot/docs/chat> | Entrance-Command, Chat-Ereignisse; abgerufen 2026-09-29 |
 | Q10 | Doku | <https://mixitup.bot/docs/platforms/twitch> | Twitch-Rollen (VIP, Moderator, Subscriber, Channel Editor); abgerufen 2026-09-29 |
+| Q11 | Original (Hilfestellung) | `MixItUp.Base/Model/User/UserRoles.cs @ v1.8.200`, `MixItUp.Base/ViewModel/User/UserV2ViewModel.cs @ v1.8.200`, `MixItUp.Base/Model/User/UserTitleModel.cs @ v1.8.200`, `MixItUp.Base/Model/Settings/SettingsV3Model.cs @ v1.8.200`, `MixItUp.Base/Services/ChatService.cs @ v1.8.200` | feine Stufen der Rangordnung (B20), Titelregeln (B5), Regular über ganze Stunden Watchtime (B26, A4), gebannte Nutzer (A1); gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
 | QP | Projekt | [Plan](../plan.md) §5.5, Anhang A.6, A.7 | Inventar aus dem Audit von Mix It Up v1.8.200 |
 
 ## Änderungshistorie
@@ -115,3 +116,4 @@ Nicht Teil dieser Spezifikation:
 | 2026-09-29 | Nutzer umgesetzt (`internal/domain/user`). Festlegungen dabei: `regular` gehört zum Nutzer, nicht zu einer Plattform-Identität (B26). Beim erneuten Kontakt übernimmt streamcrew Login, Anzeigename, Chatfarbe und Profilbild (B4); Rollen und Plattformdaten kommen über einen eigenen Abgleich (B10, B42). Spenden werden in Hundertsteln der Hauptwährungseinheit summiert (B9). |
 | 2026-09-30 | Identifier der Nutzer umgesetzt (`internal/template`, Spezifikation Templates, B60). Festlegung dabei: Bis zu den Standardtiteln (B5, Phase 5.2) gilt die Hauptrolle als Titel. |
 | 2026-10-02 | B8: Der Entrance-Command läuft nur, solange der Stream live ist (Entscheidung des Projektinhabers, [`command-engine.md`](command-engine.md), B41). |
+| 2026-10-02 | Offene Fragen am Original geklärt (Q11) und entschieden (Entscheidungen des Projektinhabers). Übernommen: die feinen Stufen der Rangordnung mit eigener Kennung je Stufe (B20; die Festlegung vom 2026-09-29, plattformspezifische Rollen zählten auf einer gemeinsamen Stufe, entfällt), Titelregeln mit „Kein Titel“ (B5) und Regular über ganze Stunden Watchtime mit Standard 0 (B26). Geblieben, mit dem Verhalten des Originals unter „Abweichungen“: gebannte Nutzer erfüllen keine Mindestrolle (A1), Regular gehört zum Nutzer (A4). Übereinstimmend: Rollen gelten je Plattform-Identität, nicht über verknüpfte Konten (B24). Die Einstellung für exakte Rollen und die Stufen bei Abonnenten bleiben im Backlog ([`requirements.md`](requirements.md), A12). |
