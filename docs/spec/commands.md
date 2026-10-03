@@ -81,7 +81,7 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | B42 | **Währung:** Währung, Modus und Betrag: fester Betrag, der abgebucht wird (`required`); Mindestbetrag, den der Nutzer angibt (`minimum`); Betrag zwischen Minimum und Maximum (`range`). | Q3 |
 | B43 | **Rang:** Rang und Vergleich: dieser oder höher, genau dieser, dieser oder niedriger. | Q3 |
 | B44 | **Inventar:** Gegenstand und Mindestmenge, die bei der Ausführung abgebucht wird. | Q3 |
-| B45 | **Argumente:** geordnete Liste mit Name, Typ, Pflicht oder optional und optional dem Namen eines Identifiers, unter dem der Wert verfügbar ist. | Q3 |
+| B45 | **Argumente:** geordnete Liste mit Name, Typ (`text`, `number`, `integer` oder `user`, [`requirements.md`](requirements.md), B33), Pflicht oder optional und optional dem Namen eines Identifiers, unter dem der Wert verfügbar ist. | Q3, Q9 |
 | B46 | **Schwelle:** Mindestzahl verschiedener Nutzer innerhalb eines Zeitfensters, bevor der Command läuft; optional läuft er dann für jeden dieser Nutzer einzeln. | Q3 |
 | B47 | **Einstellungen:** die auslösende Chatnachricht nach der Ausführung löschen; den Command im Kontextmenü des Chats anbieten. | Q3 |
 
@@ -120,7 +120,6 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 - B13: Braucht ein Platzhalter-Trigger im Original trotzdem das `!`?
 - B14/A1: Wie verhält sich das Original bei zwei Commands mit gleichem Trigger?
 - B20/A2: Lassen sich im Original mehrere Commands für dasselbe Ereignis anlegen?
-- B45: Welche Argumenttypen gibt es im Original (Text, Zahl, Nutzer …)?
 
 ## Quellen
 
@@ -130,7 +129,7 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | Q4 | Doku | <https://mixitup.bot/docs/chat/chat-commands> | Trigger, Trennzeichen, Platzhalter, `$message`; abgerufen 2026-09-29 |
 | Q5 | Doku | <https://mixitup.bot/docs/timers> | Timer, Gruppen mit eigenem Intervall; abgerufen 2026-09-29 |
 | Q8 | Doku | <https://mixitup.bot/docs/events> | Ereignis-Commands, Schalter je Ereignis; abgerufen 2026-09-29 |
-| Q9 | Original (Hilfestellung) | `MixItUp.Base/Model/Requirements/CooldownRequirementModel.cs @ v1.8.200`, `MixItUp.Base/ViewModel/Requirements/CooldownRequirementViewModel.cs @ v1.8.200`, `MixItUp.Base/Model/Settings/SettingsV3Model.cs @ v1.8.200` | Cooldown-Gruppen mit eigenem Namen und einer Dauer je Name, unabhängig von der Ordnergruppe, auch für Shop-Artikel (B32, B33, A4); gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
+| Q9 | Original (Hilfestellung) | `MixItUp.Base/Model/Requirements/CooldownRequirementModel.cs @ v1.8.200`, `MixItUp.Base/Model/Requirements/ArgumentsRequirementModel.cs @ v1.8.200`, `MixItUp.Base/ViewModel/Requirements/CooldownRequirementViewModel.cs @ v1.8.200`, `MixItUp.Base/Model/Settings/SettingsV3Model.cs @ v1.8.200` | Cooldown-Gruppen mit eigenem Namen und einer Dauer je Name, unabhängig von der Ordnergruppe, auch für Shop-Artikel (B32, B33, A4); Argumenttypen Nutzer, Ganzzahl, Dezimalzahl und Text (B45); gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
 | QP | Projekt | [Plan](../plan.md) §5.2, §6.8, §6.9 | Command-Arten und Prioritäten, Commands als Code |
 
 ## Änderungshistorie
@@ -142,3 +141,4 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | 2026-09-29 | Datenmodell umgesetzt. Festlegungen dabei: Der Platzhalter gilt je Command für alle seine Trigger (B13); eine Wortgrenze liegt überall, wo nicht Buchstabe oder Ziffer auf Buchstabe oder Ziffer folgt. Ohne Platzhalter folgt auf `!` und Trigger das Ende der Nachricht oder ein Leerraum (B11). Trigger mit und ohne Platzhalter teilen sich die Eindeutigkeit (B14). Argumenttypen vorerst `text`, `number` und `user` (B45, offene Frage). Dauern in Anforderungen stehen als Go-Dauer, etwa `30s` (B41, B46; Code-ADR-0009). Gruppennamen sind unabhängig von Groß- und Kleinschreibung eindeutig (B30). |
 | 2026-09-30 | B1 um die Fehlerpolitik ergänzt, die die akzeptierte Spezifikation [`command-engine.md`](command-engine.md) (B71) für jeden Command vorsieht: `continue` oder `abort`, ein Pflichtfeld ohne leeren Wert (Vorgabe des Projektinhabers: keine magischen Werte, Code-ADR-0017 vorgeschlagen); gespeichert in der Spalte `error_policy` (Migration 0005), bestehende Commands bekommen mit der Migration `continue`. |
 | 2026-10-02 | Benannte Cooldown-Gruppen wie im Original (Entscheidung des Projektinhabers, Q9): Gemeinsame Cooldowns hängen nicht mehr an der Gruppe des Commands, sondern an eigenen Cooldown-Gruppen mit einer Dauer je Gruppe (B32, B33, B41, Randfall B64). Die Dauer steht an der Gruppe, der Verweis geht über die ID (A4). Die Cooldown-Anforderung ist jetzt in Version 2: `standard` und `per_user` haben eine Dauer, die Gruppen-Arten nennen eine Cooldown-Gruppe; gespeicherte Gruppen-Cooldowns der Version 1 verlieren ihre Dauer und nennen keine Gruppe, bis der Streamer eine wählt. Die offene Frage zu B41 ist geklärt. |
+| 2026-10-02 | B45: neuer Argumenttyp `integer` neben `text`, `number` und `user` (Entscheidung des Projektinhabers; Einzelheiten in [`requirements.md`](requirements.md), B33). Die offene Frage zu B45 ist geklärt. |

@@ -44,6 +44,7 @@ func requirementExamples() map[string]Requirement {
 		"arguments.v1": ArgumentsRequirement{Arguments: []Argument{
 			{Name: "target", Type: ArgumentUser, Required: true, Identifier: "target"},
 			{Name: "amount", Type: ArgumentNumber},
+			{Name: "times", Type: ArgumentInteger, Identifier: "times"},
 		}},
 		"threshold.v1": ThresholdRequirement{Users: 3, Within: polydoc.Duration(time.Minute), RunForEachUser: true},
 		"settings.v1":  SettingsRequirement{DeleteTriggerMessage: true, ShowInChatMenu: true},
