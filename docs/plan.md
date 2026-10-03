@@ -792,7 +792,7 @@ Läuft der Core auf einem Server, fehlen ihm Fähigkeiten des Streaming-PCs: Tas
 
 ### 6.22 Internationalisierung und Zeit
 
-- **Texte:** Alle Texte werden neu geschrieben, Englisch als Quellsprache plus Deutsch. Bibliothek per ADR-0022, Kandidaten sind `nicksnyder/go-i18n/v2` und `golang.org/x/text`.
+- **Texte:** Alle Texte werden neu geschrieben, Englisch als Quellsprache plus Deutsch. Kataloge in ICU MessageFormat v1 (Teilumfang), gelesen von einem eigenen Parser und Renderer auf `golang.org/x/text` ([ADR-0022](adr/0022-internationalisierung.md)).
 - **Aufteilung:** Der Core liefert Schlüssel mit Parametern, die Frontends lokalisieren selbst. Chat-Ausgaben des Bots, etwa Requirement-Meldungen, erscheinen in der Profilsprache und sind anpassbar.
 - **Zeit:** Jedes Profil hat eine IANA-Zeitzone. `time/tzdata` wird eingebettet, damit Zeitzonen auch in minimalen Containern funktionieren.
 
@@ -927,7 +927,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | Seriell | `go.bug.st/serial` | Kandidat | P2 |
 | Audio | `ebitengine/oto/v3` + Decoder | Kandidat | lokale Ausgabe (P1), per Build-Tag, nicht in Server-Builds |
 | Tabellenimport | `encoding/csv`, `xuri/excelize/v2` | Kandidat | Nutzerimport (P2) |
-| i18n | `nicksnyder/go-i18n/v2` oder `golang.org/x/text` | Kandidat | ADR-0022 |
+| i18n | `golang.org/x/text` mit eigenem ICU-Parser (`internal/i18n`) | entschieden | ADR-0022 |
 | Overlay-Bundling | `github.com/evanw/esbuild/pkg/api` | Kandidat | kein Node.js im Build |
 | Tests | `testing` mit `github.com/stretchr/testify` (`assert`, `require`), `testing/synctest`, `testing/fstest`, `net/http/httptest`, Fuzzing, Twitch CLI, Playwright (Web) | gesetzt (Go), Kandidat (Web) | Code-ADR-0006 |
 | Release | `goreleaser`, Docker, `fyne-cross` | Kandidat | ADR-0023 |
@@ -1174,7 +1174,7 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0019 | `0019-overlay-architektur.md` | Server, Runtime, Protokoll | 7 | eigene Runtime, JSON über WebSocket |
 | 0020 | `0020-audio-ausgabe.md` | Audio-Sinks | 7 | Overlay als Standard, lokale Ausgabe P1 |
 | 0021 | `0021-import-von-mixitup-daten.md` | Interop-Import, `$`-Namen | 0 (Recht), 10 (Umsetzung) | nach rechtlicher Prüfung |
-| 0022 | `0022-internationalisierung.md` | i18n-Bibliothek, Sprachen | 3 | EN + DE |
+| 0022 | `0022-internationalisierung.md` | i18n-Bibliothek, Sprachen | 3 | **akzeptiert**: EN + DE, ICU MessageFormat v1 im Teilumfang, eigener Parser und Renderer auf `golang.org/x/text` |
 | 0023 | `0023-release-und-distribution.md` | goreleaser, Docker, Updates | 6 | GitHub-Releases, kein eigener Update-Server; Artefakte nach ADR-0007; Desktop-Pakete nach ADR-0005/0006 |
 | 0024 | `0024-endgueltiger-name-und-branding.md` | endgültiger Name nach Marken- und Domainprüfung | Gate O | `streamcrew` bestätigen oder umbenennen |
 
