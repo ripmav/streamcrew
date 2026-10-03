@@ -45,6 +45,7 @@ Die Regeln setzen [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-orig
 | [`command-engine.md`](command-engine.md) | Command-Instanzen, Warteschlange, Sperrmodi, Aufrufe, Pause, Verlauf, Settings-Sektion `commands` | Phase 3.2 | Geprüft, umgesetzt (B74 mit Roadmap 3.3) |
 | [`actions.md`](actions.md) | Verhalten der P0-Actions: Konfiguration, Ablauf, Identifier, Fehlerfälle | Phase 3.3 | Geprüft, umgesetzt |
 | [`requirements.md`](requirements.md) | Prüfung der Anforderungsarten, Fehlermeldungen, Kosten und Cooldowns | Phase 3.4 | Geprüft |
+| [`commands-as-code.md`](commands-as-code.md) | Commands als Code: Format in YAML und JSON, Prüfen, Import, Export, JSON-Schemas | Phase 3.5 | Geprüft |
 | `twitch-events.md` | Zuordnung der Twitch-Events und ihrer Identifier | Phase 4 | geplant |
 | `moderation.md` | Filter, Strikes, Teilnahmeregeln | Phase 5 | geplant |
 | `overlays.md` | Overlay-Items, Widgets, Protokoll | Phase 7 | geplant |
