@@ -15,13 +15,13 @@ type Command struct {
 	Enabled      int64
 	Unlocked     int64
 	GroupID      sql.NullString
-	Wildcard     int64
 	EventType    sql.NullString
 	Requirements string
 	Actions      string
 	CreatedAt    int64
 	UpdatedAt    int64
 	ErrorPolicy  string
+	TriggerMode  sql.NullString
 }
 
 type CommandGroup struct {
@@ -39,6 +39,7 @@ type CommandTrigger struct {
 	TriggerText string
 	TriggerKey  string
 	Active      int64
+	Wildcard    int64
 }
 
 type Cooldown struct {

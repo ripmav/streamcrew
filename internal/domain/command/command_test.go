@@ -16,72 +16,127 @@ import (
 	"github.com/ripmav/streamcrew/internal/polydoc"
 )
 
-// TestParseTriggers covers B11 and B12.
+// TestParseTriggers covers B11, B12 and B14: only the mode exclamation
+// drops a leading "!", and only wildcard triggers are the same in another
+// spelling.
 func TestParseTriggers(t *testing.T) {
 	t.Parallel()
-	tests := map[string][]string{
-		"hug umarmen":                    {"hug", "umarmen"},
-		"!hug !Umarmen":                  {"hug", "Umarmen"},
-		"good night;gn; !gute   nacht ;": {"good night", "gn", "gute nacht"},
-		"hug HUG Hug":                    {"hug"},
-		"  ":                             {},
-		";;":                             {},
-		"!!hug":                          {"hug"},
+	tests := []struct {
+		input string
+		mode  command.TriggerMode
+		want  []string
+	}{
+		{"hug umarmen", command.TriggerExclamation, []string{"hug", "umarmen"}},
+		{"!hug !Umarmen", command.TriggerExclamation, []string{"hug", "Umarmen"}},
+		{"good night;gn; !gute   nacht ;", command.TriggerExclamation, []string{"good night", "gn", "gute nacht"}},
+		{"hug HUG Hug hug", command.TriggerExclamation, []string{"hug", "HUG", "Hug"}},
+		{"  ", command.TriggerExclamation, []string{}},
+		{";;", command.TriggerExclamation, []string{}},
+		{"!!hug", command.TriggerExclamation, []string{"hug"}},
+		{"!", command.TriggerExclamation, []string{}},
+		{"?hallo !hallo hallo ?hallo", command.TriggerLiteral, []string{"?hallo", "!hallo", "hallo"}},
+		{"what WHAT !what; good   night", command.TriggerWildcard, []string{"what WHAT !what", "good night"}},
+		{"what WHAT !what", command.TriggerWildcard, []string{"what", "!what"}},
 	}
-	for input, want := range tests {
-		assert.Equal(t, want, command.ParseTriggers(input), input)
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, command.ParseTriggers(tt.input, tt.mode), "%q with %s", tt.input, tt.mode)
 	}
 }
 
-// TestMatches covers B11 and B13, including the word boundaries of
-// wildcard triggers.
-func TestMatches(t *testing.T) {
+// TestTriggerKey covers B14: triggers are unique as a user writes them, in
+// exactly this spelling; wildcard triggers regardless of case.
+func TestTriggerKey(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		message  string
-		trigger  string
-		wildcard bool
-		want     bool
-	}{
-		{"!hug", "hug", false, true},
-		{"!HUG @ada", "hug", false, true},
-		{"  !hug", "hug", false, true},
-		{"!hugs", "hug", false, false},
-		{"hug", "hug", false, false},
-		{"say !hug", "hug", false, false},
-		{"!good night all", "good night", false, true},
-		{"!", "hug", false, false},
+	assert.Equal(t, "!Hallo", command.TriggerKey(command.TriggerExclamation, "Hallo"))
+	assert.Equal(t, "!hallo", command.TriggerKey(command.TriggerLiteral, "!hallo"), "the same as hallo with the mode exclamation")
+	assert.Equal(t, "?Hallo", command.TriggerKey(command.TriggerLiteral, "?Hallo"))
+	assert.Equal(t, "grüß dich", command.TriggerKey(command.TriggerWildcard, "GRÜß Dich"))
+	assert.Equal(t, "!hug", command.TriggerExclamation.Typed("hug"))
+	assert.Equal(t, "?hug", command.TriggerLiteral.Typed("?hug"))
+	assert.Equal(t, "hug", command.TriggerWildcard.Typed("hug"))
+	for _, m := range []command.TriggerMode{command.TriggerExclamation, command.TriggerLiteral, command.TriggerWildcard} {
+		assert.True(t, m.Valid(), m)
+	}
+	assert.False(t, command.TriggerMode("").Valid())
+	assert.False(t, command.TriggerMode("prefix").Valid())
+}
 
-		{"what is going on?", "what", true, true},
-		{"WHAT?", "what", true, true},
-		{"so, what.", "what", true, true},
-		{"what", "what", true, true},
-		{"!what", "what", true, true},
-		{"what's up", "what", true, true},
-		{"somewhat", "what", true, false},
-		{"whatever", "what", true, false},
-		{"somewhat, but what", "what", true, true},
-		{"good night everyone", "good night", true, true},
-		{"goodnight", "good night", true, false},
-		{"i love c++!", "c++", true, true},
-		{"abc++", "c++", true, false},
-		{"Grüß dich", "grüß", true, true},
-		{"grüßen", "grüß", true, false},
-		{"42 is it", "42", true, true},
-		{"1420", "42", true, false},
-		{"", "what", true, false},
-		{"anything", "", true, false},
+// TestMatchTrigger covers B11, B13, B14 and B66, including the word
+// boundaries of wildcard triggers.
+func TestMatchTrigger(t *testing.T) {
+	t.Parallel()
+	const (
+		ex   = command.TriggerExclamation
+		lit  = command.TriggerLiteral
+		wild = command.TriggerWildcard
+	)
+	tests := []struct {
+		message string
+		trigger string
+		mode    command.TriggerMode
+		want    command.TriggerMatch
+	}{
+		{"!hug", "hug", ex, command.MatchExact},
+		{"!HUG @ada", "hug", ex, command.MatchIgnoringCase},
+		{"!Hug", "Hug", ex, command.MatchExact},
+		{"!hug", "Hug", ex, command.MatchIgnoringCase},
+		{"  !hug", "hug", ex, command.MatchExact},
+		{"!hug\tnow", "hug", ex, command.MatchExact},
+		{"!hugs", "hug", ex, command.NoMatch},
+		{"!HUGS", "hug", ex, command.NoMatch},
+		{"hug", "hug", ex, command.NoMatch},
+		{"say !hug", "hug", ex, command.NoMatch},
+		{"!good night all", "good night", ex, command.MatchExact},
+		{"!Good Night all", "good night", ex, command.MatchIgnoringCase},
+		{"!", "hug", ex, command.NoMatch},
+		{"!ǅemal", "ǆemal", ex, command.MatchIgnoringCase},
+		{"!straße", "STRASSE", ex, command.NoMatch},
+		{"!hug", "", ex, command.NoMatch},
+
+		{"?hallo welt", "?hallo", lit, command.MatchExact},
+		{"!?hallo", "?hallo", lit, command.NoMatch},
+		{"?HALLO", "?hallo", lit, command.MatchIgnoringCase},
+		{"hallo", "hallo", lit, command.MatchExact},
+		{"!hallo", "hallo", lit, command.NoMatch},
+		{"!hallo", "!hallo", lit, command.MatchExact},
+		{"hallowelt", "hallo", lit, command.NoMatch},
+
+		{"what is going on?", "what", wild, command.MatchIgnoringCase},
+		{"WHAT?", "what", wild, command.MatchIgnoringCase},
+		{"so, what.", "what", wild, command.MatchIgnoringCase},
+		{"what", "what", wild, command.MatchIgnoringCase},
+		{"!what", "what", wild, command.MatchIgnoringCase},
+		{"what's up", "what", wild, command.MatchIgnoringCase},
+		{"somewhat", "what", wild, command.NoMatch},
+		{"whatever", "what", wild, command.NoMatch},
+		{"somewhat, but what", "what", wild, command.MatchIgnoringCase},
+		{"good night everyone", "good night", wild, command.MatchIgnoringCase},
+		{"goodnight", "good night", wild, command.NoMatch},
+		{"i love c++!", "c++", wild, command.MatchIgnoringCase},
+		{"abc++", "c++", wild, command.NoMatch},
+		{"Grüß dich", "grüß", wild, command.MatchIgnoringCase},
+		{"grüßen", "grüß", wild, command.NoMatch},
+		{"42 is it", "42", wild, command.MatchIgnoringCase},
+		{"1420", "42", wild, command.NoMatch},
+		{"say !what now", "!what", wild, command.MatchIgnoringCase},
+		{"say what now", "!what", wild, command.NoMatch},
+		{"", "what", wild, command.NoMatch},
+		{"anything", "", wild, command.NoMatch},
+
+		{"!hug", "hug", "", command.NoMatch},
 	}
 	for _, tt := range tests {
-		assert.Equal(t, tt.want, command.Matches(tt.message, tt.trigger, tt.wildcard),
-			"message %q, trigger %q, wildcard %v", tt.message, tt.trigger, tt.wildcard)
+		assert.Equal(t, tt.want, command.MatchTrigger(tt.message, tt.trigger, tt.mode),
+			"message %q, trigger %q, mode %q", tt.message, tt.trigger, tt.mode)
 	}
+	assert.Greater(t, command.MatchExact, command.MatchIgnoringCase, "B16: an exact match is better")
+	assert.Greater(t, command.MatchIgnoringCase, command.NoMatch)
 }
 
 func validChat() command.Command {
 	return command.Command{
 		Name: "hug", Kind: command.KindChat, Enabled: true, Triggers: []string{"hug", "umarmen"},
-		ErrorPolicy: command.ErrorContinue,
+		TriggerMode: command.TriggerExclamation, ErrorPolicy: command.ErrorContinue,
 		Requirements: []command.Requirement{
 			command.RoleRequirement{Role: role.Follower},
 			command.CooldownRequirement{Scope: command.CooldownPerUser, Duration: polydoc.Duration(30 * time.Second)},
@@ -101,6 +156,12 @@ func TestValidate(t *testing.T) {
 		c.ErrorPolicy = p
 		require.NoError(t, c.Validate(), p)
 	}
+	spellings := validChat()
+	spellings.Triggers = []string{"Hug", "hug"}
+	require.NoError(t, spellings.Validate(), "B14: triggers in other spellings")
+	literal := validChat()
+	literal.TriggerMode, literal.Triggers = command.TriggerLiteral, []string{"!hug", "?hug", "hug"}
+	require.NoError(t, literal.Validate(), "B11: literal triggers keep their prefix")
 	menu := validChat()
 	menu.Requirements = []command.Requirement{command.SettingsRequirement{ShowInChatMenu: true}}
 	require.NoError(t, menu.Validate(), "requirements.md B62: a chat command in the context menu")
@@ -109,19 +170,30 @@ func TestValidate(t *testing.T) {
 	require.NoError(t, deleting.Validate(), "other settings fit every kind")
 
 	tests := map[string]func(*command.Command){
-		"empty name":          func(c *command.Command) { c.Name = " " },
-		"padded name":         func(c *command.Command) { c.Name = "hug " },
-		"unknown kind":        func(c *command.Command) { c.Kind = "webhook" },
-		"B61: no triggers":    func(c *command.Command) { c.Triggers = nil },
-		"trigger with !":      func(c *command.Command) { c.Triggers = []string{"!hug"} },
-		"duplicate triggers":  func(c *command.Command) { c.Triggers = []string{"hug", "HUG"} },
-		"control character":   func(c *command.Command) { c.Triggers = []string{"hu\x00g"} },
-		"chat with event":     func(c *command.Command) { c.Event = eventtype.ChannelFollow },
-		"B20: unknown event":  func(c *command.Command) { c.Kind, c.Triggers, c.Event = command.KindEvent, nil, "channel.nope" },
-		"event with triggers": func(c *command.Command) { c.Kind, c.Event = command.KindEvent, eventtype.ChannelFollow },
-		"timer with wildcard": func(c *command.Command) { c.Kind, c.Triggers, c.Wildcard = command.KindTimer, nil, true },
+		"empty name":         func(c *command.Command) { c.Name = " " },
+		"padded name":        func(c *command.Command) { c.Name = "hug " },
+		"unknown kind":       func(c *command.Command) { c.Kind = "webhook" },
+		"B61: no triggers":   func(c *command.Command) { c.Triggers = nil },
+		"trigger with !":     func(c *command.Command) { c.Triggers = []string{"!hug"} },
+		"duplicate triggers": func(c *command.Command) { c.Triggers = []string{"hug", "hug"} },
+		"B14: wildcard triggers regardless of case": func(c *command.Command) {
+			c.TriggerMode, c.Triggers = command.TriggerWildcard, []string{"hug", "HUG"}
+		},
+		"no trigger mode":      func(c *command.Command) { c.TriggerMode = "" },
+		"unknown trigger mode": func(c *command.Command) { c.TriggerMode = "prefix" },
+		"control character":    func(c *command.Command) { c.Triggers = []string{"hu\x00g"} },
+		"chat with event":      func(c *command.Command) { c.Event = eventtype.ChannelFollow },
+		"B20: unknown event": func(c *command.Command) {
+			c.Kind, c.Triggers, c.TriggerMode, c.Event = command.KindEvent, nil, "", "channel.nope"
+		},
+		"event with triggers": func(c *command.Command) {
+			c.Kind, c.Event, c.TriggerMode = command.KindEvent, eventtype.ChannelFollow, ""
+		},
+		"timer with trigger mode": func(c *command.Command) {
+			c.Kind, c.Triggers, c.TriggerMode = command.KindTimer, nil, command.TriggerWildcard
+		},
 		"timer with event": func(c *command.Command) {
-			c.Kind, c.Triggers, c.Event = command.KindTimer, nil, eventtype.ChannelFollow
+			c.Kind, c.Triggers, c.TriggerMode, c.Event = command.KindTimer, nil, "", eventtype.ChannelFollow
 		},
 		"requirement twice": func(c *command.Command) {
 			c.Requirements = append(c.Requirements, command.RoleRequirement{Role: role.VIP})
