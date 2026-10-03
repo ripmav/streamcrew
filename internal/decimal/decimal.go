@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"strings"
 
 	"github.com/cockroachdb/apd/v3"
@@ -182,17 +183,27 @@ func Max() Decimal {
 	return d
 }
 
-// Parse reads a decimal number: an optional sign, digits with an optional
-// decimal point, and an optional exponent, as numbers in expressions
-// (template.md, B51), e.g. "2.5", "-.5", "1e3". Text with more digits than
-// a Decimal has is rounded like the result of a calculation; an absolute
-// value of 10^34 or more is an error wrapping ErrRange.
+// Parse reads a number: an optional sign, then decimal digits with an
+// optional decimal point and exponent, as numbers in expressions
+// (template.md, B51), e.g. "2.5", "-.5" or "1e3", or a whole hexadecimal
+// number after 0x or 0X, e.g. "0xFF". An underscore may stand between two
+// digits and right after 0x, as in Go: "1_000", "0x_FF". Text with more
+// digits than a Decimal has is rounded like the result of a calculation; an
+// absolute value of 10^34 or more is an error wrapping ErrRange.
 func Parse(s string) (Decimal, error) {
-	if !syntax(s) {
+	body := s
+	negative := false
+	if strings.HasPrefix(body, "+") || strings.HasPrefix(body, "-") {
+		negative, body = body[0] == '-', body[1:]
+	}
+	if digits, ok := cutHexPrefix(body); ok {
+		return parseHex(s, negative, digits)
+	}
+	if !decimalSyntax(body) {
 		return Decimal{}, fmt.Errorf("%w: %q", ErrSyntax, s)
 	}
 	var x apd.Decimal
-	if _, _, err := x.SetString(s); err != nil {
+	if _, _, err := x.SetString(strings.ReplaceAll(s, "_", "")); err != nil {
 		// The syntax is valid, so only the exponent can be too far from 0
 		// for apd: a negative one makes the number round to 0, a positive
 		// one leaves the range.
@@ -208,30 +219,82 @@ func Parse(s string) (Decimal, error) {
 	return d, nil
 }
 
-// syntax reports whether s is a decimal number by the rules of Parse.
-func syntax(s string) bool {
-	s = strings.ToLower(s)
-	if strings.HasPrefix(s, "+") || strings.HasPrefix(s, "-") {
-		s = s[1:]
+// cutHexPrefix returns the digits of s after 0x or 0X; ok is false if s
+// does not start with it.
+func cutHexPrefix(s string) (string, bool) {
+	if len(s) < 2 || s[0] != '0' || s[1] != 'x' && s[1] != 'X' {
+		return "", false
 	}
-	mantissa, exponent, hasExponent := strings.Cut(s, "e")
+	return s[2:], true
+}
+
+// parseHex reads the hexadecimal digits of s, which is negative if
+// negative is set.
+func parseHex(s string, negative bool, digits string) (Decimal, error) {
+	if !grouped(digits, isHexDigit, true) {
+		return Decimal{}, fmt.Errorf("%w: %q", ErrSyntax, s)
+	}
+	n, ok := new(big.Int).SetString(strings.ReplaceAll(digits, "_", ""), 16)
+	if !ok {
+		return Decimal{}, fmt.Errorf("%w: %q", ErrSyntax, s)
+	}
+	var x apd.Decimal
+	x.Coeff.SetMathBigInt(n)
+	x.Negative = negative && n.Sign() != 0
+	d, err := finish(&x)
+	if err != nil {
+		return Decimal{}, fmt.Errorf("read %q: %w", s, err)
+	}
+	return d, nil
+}
+
+// decimalSyntax reports whether s, without its sign, is a decimal number by
+// the rules of Parse.
+func decimalSyntax(s string) bool {
+	mantissa, exponent, hasExponent := strings.Cut(strings.ToLower(s), "e")
 	whole, fraction, _ := strings.Cut(mantissa, ".")
-	if whole+fraction == "" || !digits(whole) || !digits(fraction) {
+	switch {
+	case whole == "" && fraction == "":
 		return false
-	}
-	if !hasExponent {
+	case whole != "" && !grouped(whole, isDigit, false):
+		return false
+	case fraction != "" && !grouped(fraction, isDigit, false):
+		return false
+	case !hasExponent:
 		return true
 	}
 	if strings.HasPrefix(exponent, "+") || strings.HasPrefix(exponent, "-") {
 		exponent = exponent[1:]
 	}
-	return exponent != "" && digits(exponent)
+	return grouped(exponent, isDigit, false)
 }
 
-// digits reports whether s consists of ASCII digits only; the empty text
-// does.
-func digits(s string) bool {
-	return !strings.ContainsFunc(s, func(r rune) bool { return r < '0' || r > '9' })
+// grouped reports whether s consists of digits with single underscores
+// between them, as in Go; with leading, s may also start with one, as right
+// after 0x. The empty text does not.
+func grouped(s string, digit func(byte) bool, leading bool) bool {
+	last := byte(0)
+	for i := range len(s) {
+		c := s[i]
+		switch {
+		case digit(c):
+		case c == '_' && (i == 0 && leading || i > 0 && digit(last)):
+		default:
+			return false
+		}
+		last = c
+	}
+	return s != "" && last != '_'
+}
+
+// isDigit reports whether c is an ASCII digit.
+func isDigit(c byte) bool {
+	return c >= '0' && c <= '9'
+}
+
+// isHexDigit reports whether c is a hexadecimal digit.
+func isHexDigit(c byte) bool {
+	return isDigit(c) || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
 }
 
 // String returns the canonical form (Code-ADR-0020, point 7): no exponent,
