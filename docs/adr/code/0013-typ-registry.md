@@ -145,6 +145,8 @@
      - `pattern` kommt nur aus Konstanten in `internal/action/schema` und nutzt nur, was Go-RE2 und ECMA-262 gleich verstehen: Zeichenklassen, Quantoren, Gruppen ohne Namen und Anker, aber keine Rückverweise, kein Lookaround und keine Unicode-Klassen wie `\p{…}`.
    - Der Core prüft Dokumente mit Go-Code (Punkt 7), nicht gegen das Schema. Das Schema beschreibt sie für Editoren, die API und Commands als Code; die Tests halten beides gleich (Punkt 9).
 
+     *Bestätigt am 2026-10-03 für Commands als Code (Entscheidung des Projektinhabers, [`commands-as-code.md`](../../spec/commands-as-code.md), B31, B32): Auch Dateien prüft allein der Go-Code, damit die Regeln an einer Stelle liegen. Ein eigener Prüfer gegen das Schema im Programm, der alle Fehler eines Dokuments auf einmal melden könnte, entfällt; die Prüfung meldet je Dokument den ersten Fehler.*
+
 7. **Prüfen beim Speichern:**
    - `Validate() error` jeder Action prüft ihre Konfiguration für sich: Arten, Pflichtfelder je Art, feste Mengenangaben im Bereich, Namen nach B5, Ausschlüsse wie „über das System öffnen“ zusammen mit „warten“ (B116), reguläre Ausdrücke ohne Identifier. Kind-Actions prüft `command.Command.Validate` mit.
    - Was nur mit gespeicherten Daten geht, prüft der Command-Service. Actions nennen über die Schnittstelle `action.Referrer` die Commands, Gruppen, Counter und freigegebenen Wurzeln, auf die sie verweisen, und über `action.ResultSetter` die Namen ihrer Ergebniswerte. Unbekannte Commands und Gruppen lehnt das Speichern ab (B31), fehlende Counter legt es an (B41), und Namen, die eingebaute Identifier verdecken, lehnt es ab (B5).
