@@ -35,6 +35,39 @@ func TestCounterNamesUnique(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
+// TestCounterUnicodeNames covers B1 and B7: names with letters of any
+// script are unique and found regardless of case, also where SQLite's
+// NOCASE knows no case.
+func TestCounterUnicodeNames(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+
+	zähler, err := s.CreateCounter(ctx, counter.New("Zähler"))
+	require.NoError(t, err)
+	_, err = s.CreateCounter(ctx, counter.New("ZÄHLER"))
+	require.ErrorIs(t, err, store.ErrConflict, "the same name in other case")
+	_, err = s.CreateCounter(ctx, counter.New("नमस्ते"))
+	require.NoError(t, err)
+	got, err := s.Counter(ctx, "zähler")
+	require.NoError(t, err)
+	assert.Equal(t, zähler.ID, got.ID)
+	assert.Equal(t, "Zähler", got.Name, "as entered")
+
+	_, err = s.UpdateCounter(ctx, "ZÄHLER", func(c *counter.Counter) error { return c.Add(decimal.New(2)) })
+	require.NoError(t, err)
+	renamed, err := s.UpdateCounter(ctx, "zähler", func(c *counter.Counter) error { c.Name = "Счётчик"; return nil })
+	require.NoError(t, err)
+	assert.Equal(t, "2", renamed.Value.String())
+	_, err = s.Counter(ctx, "СЧЁТЧИК")
+	require.NoError(t, err, "found by its new name regardless of case")
+	_, err = s.Counter(ctx, "zähler")
+	require.ErrorIs(t, err, store.ErrNotFound, "the old name is gone")
+	require.NoError(t, s.DeleteCounter(ctx, "СЧЁТЧИК"))
+	_, err = s.Counter(ctx, "Счётчик")
+	require.ErrorIs(t, err, store.ErrNotFound)
+}
+
 // TestCounterOperations covers B2 and B6: every change is stored.
 func TestCounterOperations(t *testing.T) {
 	t.Parallel()
