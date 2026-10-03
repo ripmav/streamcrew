@@ -22,6 +22,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/engine"
+	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/polydoc"
 	"github.com/ripmav/streamcrew/internal/settings"
 )
@@ -126,9 +127,14 @@ func newRequirements() *requirements {
 	return &requirements{decisions: make(map[string]engine.Decision)}
 }
 
+// reason returns a message for rejections in tests.
+func reason(key string) i18n.Message {
+	return i18n.Message{Key: i18n.Key("test." + key)}
+}
+
 // rejected returns a rejection of requirement that tells the user.
 func rejected(requirement string) engine.Decision {
-	return engine.Rejected(engine.Rejection{Requirement: requirement, Reason: "not now", Tell: true})
+	return engine.Rejected(engine.Rejection{Requirement: requirement, Reason: reason("not_now"), Tell: true})
 }
 
 // trigger triggers cmd from the chat and waits until the engine has nothing
@@ -200,14 +206,14 @@ func TestRequirementNotMet(t *testing.T) {
 		f := newFixture(t, settings.LockPerCommandType, engine.WithRequirements(reqs))
 		defer f.stop()
 
-		told := engine.Rejection{Requirement: "cooldown", Reason: "wait 5 s", Tell: true}
+		told := engine.Rejection{Requirement: "cooldown", Reason: reason("wait"), Tell: true}
 		reqs.decide("hug", engine.Rejected(told), false)
 		res, err := f.trigger(f.command("hug", command.KindChat, f.journal.note("hug")), engine.Params{})
 		require.NoError(t, err)
 		assert.Equal(t, engine.Result{Outcome: engine.OutcomeRejected, Rejection: told}, res)
 		assert.Equal(t, []string{"hug cooldown"}, reqs.messages())
 
-		silent := engine.Rejection{Requirement: "role", Reason: "mods only"}
+		silent := engine.Rejection{Requirement: "role", Reason: reason("mods_only")}
 		reqs.decide("silent", engine.Rejected(silent), false)
 		res, err = f.trigger(f.command("silent", command.KindTimer), engine.Params{})
 		require.NoError(t, err)
@@ -238,7 +244,7 @@ func TestInvalidDecision(t *testing.T) {
 		f := newFixture(t, settings.LockPerCommandType, engine.WithRequirements(reqs))
 		defer f.stop()
 
-		rejection := engine.Rejection{Requirement: "role", Reason: "no", Tell: true}
+		rejection := engine.Rejection{Requirement: "role", Reason: reason("no"), Tell: true}
 		for name, d := range map[string]engine.Decision{
 			"met without a run":      engine.Met(),
 			"met with a rejection":   {Verdict: engine.VerdictMet, Runs: []engine.Params{{}}, Rejection: rejection},
@@ -247,6 +253,10 @@ func TestInvalidDecision(t *testing.T) {
 			"waiting with rejection": {Verdict: engine.VerdictWaiting, Rejection: rejection},
 			"rejected without one":   {Verdict: engine.VerdictRejected},
 			"rejected without text":  engine.Rejected(engine.Rejection{Requirement: "role", Tell: true}),
+			"rejected without type":  engine.Rejected(engine.Rejection{Reason: reason("no"), Tell: true}),
+			"rejected with values":   engine.Rejected(engine.Rejection{Requirement: "role", Reason: i18n.Message{Args: map[string]i18n.Value{}}}),
+			"met with values only":   {Verdict: engine.VerdictMet, Runs: []engine.Params{{}}, Rejection: engine.Rejection{Reason: i18n.Message{Args: map[string]i18n.Value{}}}},
+			"met with tell only":     {Verdict: engine.VerdictMet, Runs: []engine.Params{{}}, Rejection: engine.Rejection{Tell: true}},
 			"rejected with runs":     {Verdict: engine.VerdictRejected, Runs: []engine.Params{{}}, Rejection: rejection},
 			"no verdict":             {},
 			"unknown verdict":        {Verdict: "maybe"},

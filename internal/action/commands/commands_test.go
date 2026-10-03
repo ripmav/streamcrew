@@ -26,6 +26,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/engine"
+	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/template"
 )
 
@@ -198,7 +199,7 @@ func (r *requirements) Apply(_ context.Context, _ command.Command, p engine.Para
 	defer r.mu.Unlock()
 	switch {
 	case r.reject:
-		return engine.Rejected(engine.Rejection{Requirement: "role", Reason: "not now"}), nil
+		return engine.Rejected(engine.Rejection{Requirement: "role", Reason: i18n.Message{Key: "test.not_now"}}), nil
 	case r.wait:
 		return engine.Waiting(), nil
 	default:
