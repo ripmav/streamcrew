@@ -4,7 +4,8 @@ package template
 
 import (
 	"context"
-	"strconv"
+
+	"github.com/ripmav/streamcrew/internal/decimal"
 )
 
 // Value is the value of an identifier: the text that is inserted and, for
@@ -12,8 +13,8 @@ import (
 type Value struct {
 	// Text is inserted into the rendered text, encoded for its place (B30).
 	Text string
-	// Number is the numeric value if IsNumber is set.
-	Number   float64
+	// Number is the numeric value if IsNumber is set (Code-ADR-0020).
+	Number   decimal.Decimal
 	IsNumber bool
 }
 
@@ -22,14 +23,15 @@ func TextValue(s string) Value {
 	return Value{Text: s}
 }
 
-// IntValue returns a whole number, e.g. a counter.
+// IntValue returns a whole number, e.g. a count.
 func IntValue(n int64) Value {
-	return Value{Text: strconv.FormatInt(n, 10), Number: float64(n), IsNumber: true}
+	return NumberValue(decimal.New(n))
 }
 
-// FloatValue returns a number with the shortest text that reads back as f.
-func FloatValue(f float64) Value {
-	return Value{Text: strconv.FormatFloat(f, 'f', -1, 64), Number: f, IsNumber: true}
+// NumberValue returns a number with its canonical text, e.g. "2.5"
+// (Code-ADR-0020, point 7).
+func NumberValue(d decimal.Decimal) Value {
+	return Value{Text: d.String(), Number: d, IsNumber: true}
 }
 
 // Resolver determines the value of an identifier for a render.

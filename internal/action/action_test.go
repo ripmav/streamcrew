@@ -19,6 +19,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/actiontest"
 	"github.com/ripmav/streamcrew/internal/action/schema"
 	"github.com/ripmav/streamcrew/internal/capability"
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/polydoc"
 	"github.com/ripmav/streamcrew/internal/template"
@@ -445,8 +446,8 @@ func TestDecodeKinds(t *testing.T) {
 func TestAmountJSON(t *testing.T) {
 	t.Parallel()
 	for in, want := range map[string]action.Amount{
-		`1.50`:         action.Fixed(1.5),
-		`-3`:           action.Fixed(-3),
+		`1.50`:         action.Fixed(oneAndAHalf(t)),
+		`-3`:           action.Fixed(decimal.New(-3)),
 		`"$arg1text"`:  action.Expression("$arg1text"),
 		`"2 * $count"`: action.Expression("2 * $count"),
 	} {
@@ -455,7 +456,7 @@ func TestAmountJSON(t *testing.T) {
 		if _, fixed := want.Fixed(); fixed {
 			got, _ := a.Fixed()
 			wantV, _ := want.Fixed()
-			assert.InDelta(t, wantV, got, 0, in)
+			assert.True(t, wantV.Equal(got), "%s: %s", in, got)
 			out, err := json.Marshal(a)
 			require.NoError(t, err)
 			assert.Equal(t, in, string(out), "a number is written as it was read")
@@ -476,9 +477,9 @@ func TestAmountJSON(t *testing.T) {
 func TestAmount(t *testing.T) {
 	t.Parallel()
 	whole := action.Range{Min: 0, Max: 1000, Integer: true}
-	require.NoError(t, action.Fixed(1000).Validate(whole))
-	require.ErrorIs(t, action.Fixed(1001).Validate(whole), action.ErrInvalid)
-	require.ErrorIs(t, action.Fixed(1.5).Validate(whole), action.ErrInvalid, "fractions are not rounded")
+	require.NoError(t, action.Fixed(decimal.New(1000)).Validate(whole))
+	require.ErrorIs(t, action.Fixed(decimal.New(1001)).Validate(whole), action.ErrInvalid)
+	require.ErrorIs(t, action.Fixed(oneAndAHalf(t)).Validate(whole), action.ErrInvalid, "fractions are not rounded")
 	require.NoError(t, action.Expression("$n * 2").Validate(whole))
 	require.ErrorIs(t, action.Expression("2 *").Validate(whole), action.ErrInvalid, "the expression must compile")
 	require.ErrorIs(t, action.Amount{}.Validate(whole), action.ErrInvalid)
@@ -491,16 +492,16 @@ func TestAmount(t *testing.T) {
 
 	v, err := action.Expression("$n * 2").Eval(ctx, engine, scope, whole)
 	require.NoError(t, err)
-	assert.InDelta(t, 42.0, v, 0)
+	assert.Equal(t, "42", v.String())
 	_, err = action.Expression("$n * 100").Eval(ctx, engine, scope, whole)
 	require.ErrorIs(t, err, action.ErrInvalid, "2100 is out of range")
 	_, err = action.Expression("$n / 2").Eval(ctx, engine, scope, whole)
 	require.ErrorIs(t, err, action.ErrInvalid, "10.5 is not whole")
 	_, err = action.Expression(`"$word"`).Eval(ctx, engine, scope, whole)
 	require.ErrorIs(t, err, action.ErrInvalid, "text is not a number")
-	v, err = action.Fixed(7).Eval(ctx, engine, scope, whole)
+	v, err = action.Fixed(decimal.New(7)).Eval(ctx, engine, scope, whole)
 	require.NoError(t, err)
-	assert.InDelta(t, 7.0, v, 0)
+	assert.Equal(t, "7", v.String())
 }
 
 // TestAmountWithTexts covers actions.md B3: an action renders the
@@ -526,19 +527,19 @@ func TestAmountWithTexts(t *testing.T) {
 	}
 	v, err := a.EvalWithTexts(texts, whole)
 	require.NoError(t, err)
-	assert.InDelta(t, 45.0, v, 0)
+	assert.Equal(t, "45", v.String())
 	_, err = a.EvalWithTexts(texts, action.Range{Min: 0, Max: 10, Integer: true})
 	require.ErrorIs(t, err, action.ErrInvalid, "45 is out of range")
 	_, err = a.EvalWithTexts(texts[:1], whole)
 	require.Error(t, err, "a text is missing")
 
-	ts, err = action.Fixed(7).Templates()
+	ts, err = action.Fixed(decimal.New(7)).Templates()
 	require.NoError(t, err)
 	assert.Empty(t, ts, "a fixed number has no templates")
-	v, err = action.Fixed(7).EvalWithTexts(nil, whole)
+	v, err = action.Fixed(decimal.New(7)).EvalWithTexts(nil, whole)
 	require.NoError(t, err)
-	assert.InDelta(t, 7.0, v, 0)
-	_, err = action.Fixed(1.5).EvalWithTexts(nil, whole)
+	assert.Equal(t, "7", v.String())
+	_, err = action.Fixed(oneAndAHalf(t)).EvalWithTexts(nil, whole)
 	require.ErrorIs(t, err, action.ErrInvalid)
 
 	_, err = action.Expression(`"$word"`).EvalWithTexts([]string{"abc"}, whole)
@@ -548,6 +549,61 @@ func TestAmountWithTexts(t *testing.T) {
 	_, err = action.Amount{}.Templates()
 	require.ErrorIs(t, err, action.ErrInvalid)
 	_, err = action.Amount{}.EvalWithTexts(nil, whole)
+	require.ErrorIs(t, err, action.ErrInvalid)
+}
+
+// TestAmountDecimals covers actions.md B4 with Code-ADR-0020: amounts are
+// exact decimals, a fixed number is read from its text, and a range can
+// allow fractions.
+func TestAmountDecimals(t *testing.T) {
+	t.Parallel()
+	engine := template.New(nil)
+	scope := &template.Scope{ArgDelimiter: "|", Location: time.UTC}
+	wide := action.Range{Min: -10, Max: 10}
+	v, err := action.Expression("0.1 + 0.2").Eval(t.Context(), engine, scope, wide)
+	require.NoError(t, err)
+	assert.Equal(t, "0.3", v.String(), "exact, not 0.30000000000000004")
+	var a action.Amount
+	require.NoError(t, json.Unmarshal([]byte(`0.1234567890123456789012345678901234`), &a))
+	v, err = a.Eval(t.Context(), engine, scope, wide)
+	require.NoError(t, err)
+	assert.Equal(t, "0.1234567890123456789012345678901234", v.String(), "a JSON number is read from its text")
+	require.NoError(t, json.Unmarshal([]byte(`1e400`), &a))
+	require.ErrorIs(t, a.Validate(wide), action.ErrInvalid, "beyond the range of decimals")
+	_, err = a.Eval(t.Context(), engine, scope, wide)
+	require.ErrorIs(t, err, action.ErrInvalid)
+	require.ErrorIs(t, action.Fixed(decimal.New(-11)).Validate(wide), action.ErrInvalid, "below the range")
+	require.NoError(t, action.Fixed(oneAndAHalf(t)).Validate(wide), "fractions where the range allows them")
+	out, err := json.Marshal(action.Fixed(oneAndAHalf(t)))
+	require.NoError(t, err)
+	assert.Equal(t, "1.5", string(out))
+}
+
+// TestSeconds covers Code-ADR-0020, point 3: seconds become a duration,
+// rounded to whole nanoseconds, half to even.
+func TestSeconds(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]time.Duration{
+		"1.5":          1500 * time.Millisecond,
+		"0":            0,
+		"0.000000001":  time.Nanosecond,
+		"0.0000000005": 0,
+		"0.0000000015": 2 * time.Nanosecond,
+		"-2":           -2 * time.Second,
+		"3600":         time.Hour,
+	} {
+		d, err := decimal.Parse(in)
+		require.NoError(t, err)
+		got, err := action.Seconds(d)
+		require.NoError(t, err, in)
+		assert.Equal(t, want, got, in)
+	}
+	_, err := action.Seconds(decimal.New(10_000_000_000))
+	require.ErrorIs(t, err, action.ErrInvalid, "beyond time.Duration")
+	n, err := action.Whole(decimal.New(-7))
+	require.NoError(t, err)
+	assert.Equal(t, int64(-7), n)
+	_, err = action.Whole(oneAndAHalf(t))
 	require.ErrorIs(t, err, action.ErrInvalid)
 }
 
@@ -590,4 +646,12 @@ func TestCategories(t *testing.T) {
 		assert.True(t, c.Valid(), c)
 	}
 	assert.False(t, action.Category("misc").Valid())
+}
+
+// oneAndAHalf returns the decimal 1.5.
+func oneAndAHalf(t testing.TB) decimal.Decimal {
+	t.Helper()
+	d, err := decimal.Parse("1.5")
+	require.NoError(t, err)
+	return d
 }

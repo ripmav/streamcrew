@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/engine"
@@ -76,7 +77,7 @@ func argumentValue(ctx context.Context, a command.Argument, word string, p engin
 		if !ok {
 			return template.Value{}, typeRejection(a, p), false, nil
 		}
-		return template.Value{Text: word, Number: float64(n), IsNumber: true}, engine.Rejection{}, true, nil
+		return template.Value{Text: word, Number: decimal.New(n), IsNumber: true}, engine.Rejection{}, true, nil
 	case command.ArgumentUser:
 		return userValue(ctx, a, word, p, users)
 	default:
