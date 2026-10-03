@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/template"
 )
 
@@ -272,8 +273,15 @@ func TestScope_Share(t *testing.T) {
 func TestValues(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, template.Value{Text: "x"}, template.TextValue("x"))
-	assert.Equal(t, template.Value{Text: "-12", Number: -12, IsNumber: true}, template.IntValue(-12))
-	assert.Equal(t, template.Value{Text: "0.1", Number: 0.1, IsNumber: true}, template.FloatValue(0.1))
+	v := template.IntValue(-12)
+	assert.Equal(t, "-12", v.Text)
+	assert.True(t, v.IsNumber)
+	assert.Equal(t, "-12", v.Number.String())
+	tenth, err := decimal.Parse("0.10")
+	require.NoError(t, err)
+	v = template.NumberValue(tenth)
+	assert.Equal(t, "0.1", v.Text, "the canonical form")
+	assert.True(t, v.Number.Equal(tenth))
 }
 
 func BenchmarkRender(b *testing.B) {

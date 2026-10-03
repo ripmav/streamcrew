@@ -5,34 +5,34 @@ package expr
 import (
 	"strconv"
 
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/template"
 )
 
 // Kind is the kind of a result.
 type Kind int
 
-// The kinds of results (Code-ADR-0012, point 8).
+// The kinds of results (B50).
 const (
 	Number Kind = iota
 	Bool
 	Text
 )
 
-// Result is the value of an expression: a finite number, a truth value or
-// text.
+// Result is the value of an expression: a number, a truth value or text.
 type Result struct {
 	Kind   Kind
-	Number float64
+	Number decimal.Decimal
 	Bool   bool
 	Text   string
 }
 
-// String returns the result as text: a number with the shortest digits that
-// read back as the same number, "true" or "false", or the text.
+// String returns the result as text: a number in the canonical form of
+// internal/decimal, e.g. "2.5", "true" or "false", or the text.
 func (r Result) String() string {
 	switch r.Kind {
 	case Number:
-		return strconv.FormatFloat(r.Number, 'f', -1, 64)
+		return r.Number.String()
 	case Bool:
 		return strconv.FormatBool(r.Bool)
 	default:
@@ -44,7 +44,7 @@ func (r Result) String() string {
 // that the special identifier action sets.
 func (r Result) Value() template.Value {
 	if r.Kind == Number {
-		return template.FloatValue(r.Number)
+		return template.NumberValue(r.Number)
 	}
 	return template.TextValue(r.String())
 }

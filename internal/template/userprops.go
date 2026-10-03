@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/role"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 )
@@ -271,7 +272,8 @@ func centsValue(cents int64) Value {
 	if negative {
 		text = "-" + text
 	}
-	return Value{Text: text, Number: float64(cents) / 100, IsNumber: true}
+	number, _ := decimal.Parse(text) // the hundredths of an int64 always fit (Code-ADR-0020)
+	return Value{Text: text, Number: number, IsNumber: true}
 }
 
 // boolValue returns "true" or "false".

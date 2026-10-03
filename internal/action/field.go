@@ -6,12 +6,12 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"fmt"
-	"math"
 	"regexp"
 	"slices"
-	"strconv"
+	"time"
 
 	"github.com/ripmav/streamcrew/internal/action/schema"
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/expr"
 	"github.com/ripmav/streamcrew/internal/template"
 )
@@ -26,30 +26,30 @@ func (t Template) Parse() template.Template {
 }
 
 // Range is the allowed range of an amount, both ends included
-// (actions.md B4).
+// (actions.md B4). The ends are whole numbers; the amounts are decimals
+// (Code-ADR-0020).
 type Range struct {
-	Min, Max float64
+	Min, Max int64
 	// Integer allows whole numbers only: a fraction fails, it is not
 	// rounded.
 	Integer bool
 }
 
 // Check returns an error wrapping ErrInvalid if v is not in r.
-func (r Range) Check(v float64) error {
+func (r Range) Check(v decimal.Decimal) error {
 	switch {
-	case math.IsNaN(v) || math.IsInf(v, 0):
-		return fmt.Errorf("%w: %v is not a number", ErrInvalid, v)
-	case r.Integer && v != math.Trunc(v):
-		return fmt.Errorf("%w: %v is not a whole number", ErrInvalid, v)
-	case v < r.Min || v > r.Max:
-		return fmt.Errorf("%w: %v is not between %v and %v", ErrInvalid, v, r.Min, r.Max)
+	case r.Integer && !v.IsWhole():
+		return fmt.Errorf("%w: %s is not a whole number", ErrInvalid, v)
+	case v.Cmp(decimal.New(r.Min)) < 0 || v.Cmp(decimal.New(r.Max)) > 0:
+		return fmt.Errorf("%w: %s is not between %d and %d", ErrInvalid, v, r.Min, r.Max)
 	}
 	return nil
 }
 
-// Schema returns the schema of an amount in r.
+// Schema returns the schema of an amount in r. JSON Schema has numbers
+// only, so the ends become float64 there, exact up to 2^53.
 func (r Range) Schema() *schema.Schema {
-	return schema.Amount(r.Min, r.Max, r.Integer)
+	return schema.Amount(float64(r.Min), float64(r.Max), r.Integer)
 }
 
 // Amount is a quantity of an action, such as seconds or a count
@@ -63,9 +63,10 @@ type Amount struct {
 	expression string
 }
 
-// Fixed returns the fixed amount v.
-func Fixed(v float64) Amount {
-	return Amount{number: jsontext.Value(strconv.FormatFloat(v, 'g', -1, 64))}
+// Fixed returns the fixed amount v, written as a JSON number in its
+// canonical form.
+func Fixed(v decimal.Decimal) Amount {
+	return Amount{number: jsontext.Value(v.String())}
 }
 
 // Expression returns the amount the expression text yields.
@@ -78,13 +79,14 @@ func (a Amount) IsZero() bool {
 	return a.number == nil && a.expression == ""
 }
 
-// Fixed returns the fixed number of a; ok is false for an expression or no
-// amount.
-func (a Amount) Fixed() (v float64, ok bool) {
+// Fixed returns the fixed number of a, read exactly from its text
+// (Code-ADR-0020, point 9); ok is false for an expression, no amount or a
+// number beyond the range of decimals.
+func (a Amount) Fixed() (v decimal.Decimal, ok bool) {
 	if a.number == nil {
-		return 0, false
+		return decimal.Decimal{}, false
 	}
-	v, err := strconv.ParseFloat(string(a.number), 64)
+	v, err := decimal.Parse(string(a.number))
 	return v, err == nil
 }
 
@@ -137,8 +139,9 @@ func (a *Amount) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 // must compile (actions.md B4). Expressions are checked against r when they
 // are evaluated.
 func (a Amount) Validate(r Range) error {
-	if v, ok := a.Fixed(); ok {
-		return r.Check(v)
+	if a.number != nil {
+		_, err := a.fixed(r)
+		return err
 	}
 	if a.expression == "" {
 		return fmt.Errorf("%w: no amount", ErrInvalid)
@@ -153,19 +156,28 @@ func (a Amount) Validate(r Range) error {
 // expression rendered with e and s and evaluated (actions.md B4). The value
 // must be a number in r; otherwise Eval returns an error wrapping
 // ErrInvalid that names the value.
-func (a Amount) Eval(ctx context.Context, e *template.Engine, s *template.Scope, r Range) (float64, error) {
-	if v, ok := a.Fixed(); ok {
-		return v, r.Check(v)
+func (a Amount) Eval(ctx context.Context, e *template.Engine, s *template.Scope, r Range) (decimal.Decimal, error) {
+	if a.number != nil {
+		return a.fixed(r)
 	}
 	x, err := a.compile()
 	if err != nil {
-		return 0, err
+		return decimal.Decimal{}, err
 	}
 	res, err := x.Eval(ctx, e, s)
 	if err != nil {
-		return 0, err
+		return decimal.Decimal{}, err
 	}
 	return number(res, r)
+}
+
+// fixed returns the fixed number of a if it is in r.
+func (a Amount) fixed(r Range) (decimal.Decimal, error) {
+	v, err := decimal.Parse(string(a.number))
+	if err != nil {
+		return decimal.Decimal{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+	return v, r.Check(v)
 }
 
 // Templates returns the templates of the identifiers in a, so that an
@@ -185,17 +197,17 @@ func (a Amount) Templates() ([]template.Template, error) {
 
 // EvalWithTexts returns the value of a as Eval does, from texts, the
 // rendered templates of Templates.
-func (a Amount) EvalWithTexts(texts []string, r Range) (float64, error) {
-	if v, ok := a.Fixed(); ok {
-		return v, r.Check(v)
+func (a Amount) EvalWithTexts(texts []string, r Range) (decimal.Decimal, error) {
+	if a.number != nil {
+		return a.fixed(r)
 	}
 	x, err := a.compile()
 	if err != nil {
-		return 0, err
+		return decimal.Decimal{}, err
 	}
 	res, err := x.EvalWithTexts(texts)
 	if err != nil {
-		return 0, err
+		return decimal.Decimal{}, err
 	}
 	return number(res, r)
 }
@@ -214,11 +226,39 @@ func (a Amount) compile() (*expr.Expression, error) {
 
 // number returns the result of an amount's expression; it must be a
 // number in r.
-func number(res expr.Result, r Range) (float64, error) {
+func number(res expr.Result, r Range) (decimal.Decimal, error) {
 	if res.Kind != expr.Number {
-		return 0, fmt.Errorf("%w: %q is not a number", ErrInvalid, res.String())
+		return decimal.Decimal{}, fmt.Errorf("%w: %q is not a number", ErrInvalid, res.String())
 	}
 	return res.Number, r.Check(res.Number)
+}
+
+// Seconds returns an amount of seconds as a duration, rounded to whole
+// nanoseconds, half to even (Code-ADR-0020, point 3). A number beyond the
+// range of time.Duration is an error wrapping ErrInvalid.
+func Seconds(v decimal.Decimal) (time.Duration, error) {
+	ns, err := v.Mul(decimal.New(int64(time.Second)))
+	if err == nil {
+		ns, err = ns.Round(0, decimal.RoundHalfEven)
+	}
+	var n int64
+	if err == nil {
+		n, err = ns.Int64()
+	}
+	if err != nil {
+		return 0, fmt.Errorf("%w: %s seconds: %w", ErrInvalid, v, err)
+	}
+	return time.Duration(n), nil
+}
+
+// Whole returns a whole number of r, an amount that r checked with Integer
+// set, as an int64.
+func Whole(v decimal.Decimal) (int64, error) {
+	n, err := v.Int64()
+	if err != nil {
+		return 0, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+	return n, nil
 }
 
 // namePattern is the form of the names of result values (actions.md B5).
