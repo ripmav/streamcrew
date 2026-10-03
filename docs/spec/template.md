@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Status** | Geprüft |
-| **Stand** | 2026-10-01 |
+| **Stand** | 2026-10-02 |
 | **Bezug** | Roadmap Phase 3.1; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0009](../adr/code/0009-ids-und-zeit.md), [Code-ADR-0012](../adr/code/0012-template-engine.md); Plan §3, §6.10, Anhang A.6; [`commands.md`](commands.md), [`counters-and-quotes.md`](counters-and-quotes.md), [`events.md`](events.md), [`users-and-roles.md`](users-and-roles.md) |
-| **Umsetzung** | `internal/template`: Kern mit Syntax, Quellen, Auswertung, Kodierung, `$linebreak` und `$unicode<n>` (B1–B7, B10–B12, B20, B21, B23, B24, B30–B33); alle Identifier-Familien des MVP (B22, B40–B43, B60); `internal/expr`: Ausdrücke (B50–B52); globale Werte der Special-Identifier-Action als Quelle `template.Globals` (B10) |
+| **Umsetzung** | `internal/template`: Kern mit Syntax, Quellen, Auswertung, Kodierung, `$linebreak` und `$unicode<n>` (B1–B7, B10–B12, B20, B21, B23, B24, B30–B33); alle Identifier-Familien des MVP (B22, B40–B43, B60); `internal/expr`: Ausdrücke (B50–B52); globale Werte der Special-Identifier-Action als Quelle `template.Globals` (B10). Offen seit 2026-10-02: Tokens mit Buchstaben über a–z hinaus (B1), Formate nach der Locale (B41) und die Rechenfunktionen (B53), Roadmap 3.6 |
 
 ## Zweck und Umfang
 
@@ -38,10 +38,10 @@ Nicht Teil dieser Spezifikation:
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B1 | Ein Token beginnt mit `$`, gefolgt von so vielen Buchstaben (a–z), Ziffern und Doppelpunkten wie möglich. Groß- und Kleinschreibung spielt keine Rolle: `$UserName` ist `$username`. | QP (§3, §6.10) |
+| B1 | Ein Token beginnt mit `$`, gefolgt von so vielen Buchstaben, Ziffern und Doppelpunkten wie möglich; Buchstaben und Ziffern im Sinne von Unicode, also auch Umlaute und andere Schriften, etwa für einen Counter `$zähler` ([`counters-and-quotes.md`](counters-and-quotes.md), B7). Groß- und Kleinschreibung spielt keine Rolle: `$UserName` ist `$username`, `$ZÄHLER` ist `$zähler`. | QP (§3, §6.10), Q9 |
 | B2 | Innerhalb eines Tokens gilt der **längste bekannte Präfix**: Er wird ersetzt, der Rest des Tokens bleibt als Text stehen. `$usernames` ergibt den Nutzernamen und ein „s“. | QP (§6.10) |
 | B3 | Ein Token ohne bekannten Präfix bleibt unverändert stehen, samt `$`. Ein einzelnes `$` ohne folgende Zeichen ist gewöhnlicher Text. | Q1, Q3 |
-| B4 | Ein bekannter Identifier, der im Kontext keinen Wert hat, bleibt ebenfalls unverändert stehen, etwa `$arg3text` bei zwei Argumenten oder `$targetusername` ohne Zielnutzer. So lässt sich „nicht ersetzt“ erkennen. | Q3 |
+| B4 | Ein bekannter Identifier, der im Kontext keinen Wert hat, bleibt ebenfalls unverändert stehen, etwa `$arg3text` bei zwei Argumenten oder `$targetusername` in einem Durchlauf ohne Nutzer, etwa eines Timers; hat der Durchlauf einen Nutzer, setzt die Engine den Zielnutzer, notfalls auf ihn ([`command-engine.md`](command-engine.md), B81). So lässt sich „nicht ersetzt“ erkennen. | Q3 |
 | B5 | Eingesetzte Werte werden nie erneut ausgewertet. Schreibt ein Zuschauer `$streamerusername` in ein Argument, erscheint genau dieser Text. | QP (§6.10), A1 |
 | B6 | Ein Muster enthält Zahlen im Namen. Es gilt nur, wenn die Zahlen gültig sind; sonst behandelt die Regel des längsten Präfixes das Token wie jedes andere. | Q1 |
 | B7 | Es gibt keine Maskierung: Ein `$` vor einem Identifier-Namen leitet immer ein Token ein, auch `$$` maskiert nicht (B71). Ein wörtliches `$` vor einem Identifier-Namen entsteht mit `$unicode36` (B78). | Entscheidung des Projektinhabers |
@@ -60,7 +60,7 @@ Nicht Teil dieser Spezifikation:
 |---|---|---|
 | B20 | Ein Identifier wird nur ausgewertet, wenn er im Template vorkommt. Teure Werte, etwa das Follow-Alter über die Plattform-API, entstehen so nur bei Bedarf. | QP (§6.10) |
 | B21 | Innerhalb eines Rendervorgangs hat derselbe Identifier überall denselben Wert; er wird einmal bestimmt. Ausnahme: `$randomnumber…` zieht bei jedem Vorkommen eine neue Zahl. | Q1 |
-| B22 | Ein zufällig gewählter Nutzer (`$randomuser…` und Verwandte) wird je Rendervorgang einmal gewählt, sodass Name, Anzeigename und andere Eigenschaften zum selben Nutzer gehören. Ausgeschlossen sind Nutzer mit Ausnahme (Spezifikation Nutzer, B7); Streamer und Bot sind wählbar. | Q1, A5 |
+| B22 | Ein zufällig gewählter Nutzer (`$randomuser…` und Verwandte) wird je Rendervorgang einmal gewählt, sodass Name, Anzeigename und andere Eigenschaften zum selben Nutzer gehören. Ausgeschlossen sind Nutzer mit Ausnahme (Spezifikation Nutzer, B7); Streamer und Bot sind wählbar. | Q1 |
 | B23 | Kann ein Wert nicht bestimmt werden, etwa weil eine Plattform-API nicht antwortet, bleibt der Identifier wie in B4 stehen, und der Core schreibt eine Warnung ins Log. Das Rendern bricht nicht ab. | A6 |
 | B24 | Das Rendern respektiert Abbruch und Zeitlimit des auslösenden Durchlaufs; bei Abbruch endet es mit Fehler. | Code-ADR-0004 |
 
@@ -78,7 +78,7 @@ Nicht Teil dieser Spezifikation:
 | ID | Regel | Quellen |
 |---|---|---|
 | B40 | Datum und Uhrzeit gelten in der Zeitzone des Profils (Settings-Sektion „Zeit“), nicht in der des Hosts. | Code-ADR-0009, QP (§6.10), A4 |
-| B41 | Die Formate folgen der Locale des Profils. Bis es die Locale-Einstellung gibt (Roadmap 3.6), gelten die Formate des Originals (Englisch, USA): Datum wie `6/15/2009`, Uhrzeit wie `1:45 PM`. | Q1 |
+| B41 | Die Formate für Datum, Uhrzeit und Zahlen folgen der Locale des Profils. Standard ist das Format der Umgebung, in der der Core läuft, also der Regionseinstellung des Systems (Wert `system`); der Streamer kann es in der Settings-Sektion „locale“ ändern (Roadmap 3.6). Bis es diese Einstellung gibt, gelten feste Formate wie in Englisch (USA): Datum wie `6/15/2009`, Uhrzeit wie `1:45 PM`. | Q1, Q9, A7 |
 | B42 | Zeitspannen wie Follow- oder Abo-Alter werden als Jahre, Monate und Tage ausgegeben; Einheiten ohne Wert entfallen. | Q1 |
 | B43 | Die Uptime-Teile `…hours`, `…minutes`, `…seconds` sind die Stellen einer Uhr: Minuten und Sekunden laufen nach 59 wieder bei 0 an. **[Interop]** `$streamuptimetotal`, `$streamuptimehours`, `$streamuptimeminutes`, `$streamuptimeseconds` | Q1 |
 
@@ -89,6 +89,7 @@ Nicht Teil dieser Spezifikation:
 | B50 | Wo eine Funktion Rechnen oder Bedingungen vorsieht (Special-Identifier-Action mit Rechenoption, Mengenangaben, Conditional-Action), wird der Text als Ausdruck ausgewertet: Zahlen, Grundrechenarten, Potenz, Klammern, Vergleiche und logische Verknüpfungen. | Q2, QP (§6.10) |
 | B51 | Identifier in einem Ausdruck liefern Werte, keinen Ausdruckstext: Ein Wert, der wie eine Zahl aussieht, zählt als Zahl, sonst als Text. Ein Argument wie `1)+(2` wird dadurch nicht zu Code. | A3 |
 | B52 | Ein Ausdruck, der sich nicht auswerten lässt, liefert einen Fehler der auslösenden Action; er wird nicht als Text ausgegeben. Größe und Laufzeit eines Ausdrucks sind begrenzt. | A3 |
+| B53 | Ausdrücke kennen die Funktionen der Rechenbibliothek des Originals unter denselben Namen und mit derselben Bedeutung: `sin`, `cos`, `tan`, `csc`, `sec`, `cot`, `asin`, `acos`, `atan`, `acot`, `loge` (natürlicher Logarithmus), `log10`, `logn` (Logarithmus zu einer Basis), `sqrt`, `abs`, `ceiling`, `floor`, `truncate`, `round`, `if(bedingung, dann, sonst)`, `ifless`, `ifmore`, `ifequal` (vergleichen die ersten beiden Werte und liefern den dritten oder vierten), `max`, `min`, `avg`, `median` (beliebig viele Werte) und die Konstanten `e` und `pi`. Dazu kommen `random(n)` und `randomrange(a, b)`; beide schließen die Obergrenze ein, `random(6)` liefert 1 bis 6. Dezimal- und Argumenttrennzeichen sind immer `.` und `,`, unabhängig von der Sprache. **[Interop]** die Namen der Funktionen | Q9, A3 |
 
 ### Identifier-Familien im MVP
 
@@ -145,10 +146,10 @@ Die Tabellen nennen die Namen, die das MVP (Roadmap 3.1) auflöst. Alle Namen si
 |---|---|---|---|
 | A1 | Identifier werden per Textersetzung nacheinander ersetzt; eingesetzte Werte, auch Zuschauertext, können von späteren Ersetzungen erneut erfasst werden. | Tokenizer mit einmaliger Auswertung; eingesetzte Werte bleiben unverändert (B5). | Template-Injection durch Zuschauertext (Plan §6.10) |
 | A2 | Keine dokumentierte Maskierung je Ausgabeort | Kodierung für Text, URL, HTML und JSON (B30) | Sicherheit in Overlays und Web-Requests |
-| A3 | Rechnen über die Bibliothek Jace; Identifier werden vorher als Text eingesetzt. | Ausdrücke mit `expr-lang/expr`; Identifier liefern Werte, keinen Ausdruckstext (B51); Größe und Laufzeit begrenzt (B52) | Sicherheit; Jace gibt es für Go nicht. Funktionsnamen, die Jace anders nennt, bildet der Import ab (Roadmap 10.2). |
+| A3 | Rechnen über die Bibliothek Jace; Identifier werden vorher als Text eingesetzt. Dezimal- und Argumenttrennzeichen folgen der Sprache der App (deutsch `1,5` und `max(1;2)`); `random(n)` und `randomrange(a, b)` schließen die Obergrenze aus; ein Rechenfehler ergibt still 0 (Q9). | Ausdrücke mit `expr-lang/expr`; Identifier liefern Werte, keinen Ausdruckstext (B51); Größe und Laufzeit begrenzt, Fehler sind Fehler (B52); die Funktionen von Jace unter ihren Namen, Trennzeichen fest, Zufall mit Obergrenze (B53) | Sicherheit; Jace gibt es für Go nicht. Formeln aus dem Original und aus Anleitungen sollen passen; der Import passt die Trennzeichen und die Obergrenzen der Zufallsfunktionen an (Roadmap 10.2); Entscheidung des Projektinhabers (2026-10-02). |
 | A4 | Datum und Uhrzeit in der Zeitzone des Rechners | Zeitzone des Profils (B40) | Server-Modus (ADR-0003); der Host kann in einer anderen Zone stehen als der Streamer |
-| A5 | Zufallsnutzer: nicht dokumentiert, ob mehrere Eigenschaften zum selben Nutzer gehören | einmal je Rendervorgang (B22) | Name und Anzeigename müssen zusammenpassen; zu prüfen (offene Frage) |
 | A6 | Fehler einer Datenquelle: nicht dokumentiert | Identifier bleibt stehen, Warnung im Log (B23) | Ein Ausfall soll keinen Command abbrechen; wie B4 erkennbar |
+| A7 | Datum und Uhrzeit im kurzen Format der Regionseinstellung von Windows, unabhängig von der Sprache der App (Q9) | Formate der Locale des Profils, Standard aus der Umgebung des Cores, änderbar (B41) | Wer nichts einstellt, bekommt die gewohnten Formate seines Systems; im Server-Modus lässt sich das Format des Streamers einstellen; Entscheidung des Projektinhabers (2026-10-02) |
 
 ## Akzeptanzkriterien
 
@@ -163,14 +164,13 @@ Die Tabellen nennen die Namen, die das MVP (Roadmap 3.1) auflöst. Alle Namen si
 - [x] B40–B43: Datum, Uhrzeit, Zeitspannen und Uptime in einer festen Zeitzone (`testing/synctest`).
 - [x] B50–B52, B76: Ausdrücke mit Zahlen, Text, Fehlern und Grenzen.
 - [x] Fuzz-Test: Rendern bricht bei keiner Eingabe ab; ohne bekannte Identifier ist die Ausgabe gleich der Eingabe.
+- [ ] B1: Tokens mit Umlauten und anderen Schriften, Groß- und Kleinschreibung nach Unicode.
+- [ ] B41: Standardformat aus der Umgebung, geändertes Format aus der Settings-Sektion „locale“.
+- [ ] B53: jede Funktion mit Beispielen aus Jace, Zufall mit eingeschlossener Obergrenze, falsche Zahl von Werten als Fehler.
 
 ## Offene Fragen
 
-- B1: Unterscheidet das Original Groß- und Kleinschreibung von Identifiern tatsächlich nicht (so im Audit, Plan §3)?
-- B4: Bleiben im Original Identifier ohne Wert, etwa `$arg3text` bei zwei Argumenten, als Text stehen, oder werden sie leer?
-- B22/A5: Gehören im Original mehrere Eigenschaften von `$randomuser…` in einem Text zum selben Nutzer?
-- B41: Welche Formate für Datum und Zeitspannen nutzt das Original bei anderen Sprachen als Englisch?
-- A3: Welche Jace-Funktionen nutzen bestehende Commands, und wie heißen ihre Entsprechungen in `expr`?
+Keine.
 
 ## Quellen
 
@@ -184,6 +184,7 @@ Die Tabellen nennen die Namen, die das MVP (Roadmap 3.1) auflöst. Alle Namen si
 | Q6 | Doku | <https://mixitup.bot/docs/consumables/currency> | Namensschema dynamischer Identifier für Währungen (Phase 8); abgerufen 2026-09-29 |
 | Q7 | Doku | <https://mixitup.bot/docs/actions/web-request-action> | Ergebnis als Identifier, JSON-Pfade; Maskierung nicht dokumentiert; abgerufen 2026-09-29 |
 | Q8 | Projekt | [`events.md`](events.md), B7 | Ereigniswerte als Identifier |
+| Q9 | Original (Hilfestellung) | `MixItUp.Base/Util/SpecialIdentifierStringBuilder.cs @ v1.8.200`, `MixItUp.Base/Util/MathHelper.cs @ v1.8.200`, `MixItUp.Base/Util/DateTimeOffsetExtensions.cs @ v1.8.200`, `MixItUp.Base/ViewModel/Settings/CountersSettingsControlViewModel.cs @ v1.8.200` | Counter-Namen mit Unicode-Buchstaben (B1), Formate aus der Regionseinstellung (B41, A7), Funktionen und Eigenheiten der Rechnung mit Jace, dazu die Funktionsliste aus der öffentlichen Quelle von Jace v1.0 (B53, A3); gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
 | QP | Projekt | [Plan](../plan.md) §3, §6.10, Anhang A.6 | Audit der Ersetzung im Original, Zielbild der Engine, Identifier-Familien |
 
 ## Änderungshistorie
@@ -201,3 +202,4 @@ Die Tabellen nennen die Namen, die das MVP (Roadmap 3.1) auflöst. Alle Namen si
 | 2026-09-30 | Nach Code-ADR-0017 bereinigt, ohne Änderung des Verhaltens in einem Durchlauf der Engine: Ein Rendervorgang braucht die Zeitzone und das Trennzeichen des Profils; ein Scope ohne sie oder mit Argumenten ohne den Text, aus dem sie stammen, wird abgelehnt (`template.ErrInvalidScope`), statt auf UTC, `|` oder die Argumente mit Leerzeichen zu fallen. Den Zielnutzer setzt die Command-Engine, ohne anderes Ziel den auslösenden Nutzer ([`command-engine.md`](command-engine.md), B81); ein Scope ohne Ziel hat für `$targetuser…` keinen Wert. |
 | 2026-10-01 | Globale Werte als Quelle umgesetzt (`template.Globals`, B10): Die Special-Identifier-Action setzt sie ([`actions.md`](actions.md), B56, B57); sie ranken nach den Werten des Durchlaufs und vor den Countern, ihre Namen gelten unabhängig von der Schreibweise. `template.FormatSpan` gibt Zeitspannen nach B42 auch für die Textfunktionen `datefrom` und `dateto` aus. |
 | 2026-10-02 | `template.Engine.RenderParts`: Templates mit je eigener Kodierung (B30, B31) in einem Rendervorgang (B21), für den Web-Request ([`actions.md`](actions.md), B71). |
+| 2026-10-02 | Offene Fragen am Original geklärt (Q9) und entschieden (Entscheidungen des Projektinhabers). Geändert: Tokens lesen Buchstaben und Ziffern nach Unicode, damit Counter mit Umlauten ansprechbar sind (B1); die Formate haben als Standard die der Umgebung und lassen sich ändern (B41, A7); neue Regel B53 mit den Funktionen von Jace in Ausdrücken, die Zufallsfunktionen mit eingeschlossener Obergrenze (A3). Das Beispiel `$targetusername` in B4 gilt nur noch für Durchläufe ohne Nutzer, weil die Engine den Zielnutzer sonst setzt. Übereinstimmend: Groß- und Kleinschreibung (B1; das Original ersetzt nummerierte Identifier nur kleingeschrieben), Identifier ohne Quelle bleiben stehen (B4), ein Zufallsnutzer je Text (B22, die Zeile A5 entfällt). |

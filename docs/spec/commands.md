@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-10-02 |
 | **Bezug** | Roadmap Phase 2.2 (Commands), 3.2–3.5, 5.4; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md); Plan §5.2, §5.4, §6.8, §6.9; [`users-and-roles.md`](users-and-roles.md), [`events.md`](events.md) |
-| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/command`, Repository in `internal/store`; Cooldown-Gruppen als `command.CooldownGroup` (B33, Migration 0007); den Schalter „aktiv“ ändern `command.Service.SwitchCommand` und `SwitchGroup` für die Command-Action ([`actions.md`](actions.md), B34), mit B14 für die Trigger. Ausführung, Sperren, Prüfung der Anforderungen und fehlerhafte Verweise (B3, B5, B15, B21, B63) folgen mit `command-engine.md` (Phase 3), B6 mit den vorgefertigten Commands (Phase 5.6) |
+| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/command`, Repository in `internal/store`; Cooldown-Gruppen als `command.CooldownGroup` (B33, Migration 0007); den Schalter „aktiv“ ändern `command.Service.SwitchCommand` und `SwitchGroup` für die Command-Action ([`actions.md`](actions.md), B34), mit B14 für die Trigger. Ausführung, Sperren, Prüfung der Anforderungen und fehlerhafte Verweise (B3, B5, B15, B21, B63) folgen mit `command-engine.md` (Phase 3), B6 mit den vorgefertigten Commands (Phase 5.6). Der Schalter „`!` voranstellen“ und Trigger mit Schreibweise (B11, B14, Stand 2026-10-02) folgen im Datenmodell (Roadmap 3.5), die Erkennung (B16) mit der Trigger-Erkennung (Roadmap 3.6) |
 
 ## Zweck und Umfang
 
@@ -47,17 +47,18 @@ Nicht Teil dieser Spezifikation, sondern von `command-engine.md` (Phase 3):
 | ID | Regel | Quellen |
 |---|---|---|
 | B10 | Ein Chat-Command hat einen oder mehrere Trigger. | Q4 |
-| B11 | Standardmäßig ist ein Trigger ein einzelnes Wort, beginnt im Chat mit `!` und wird ohne Beachtung der Groß- und Kleinschreibung erkannt. Gespeichert wird der Trigger ohne `!`. | Q4 |
+| B11 | Ein Chat-Command hat den Schalter „`!` voranstellen“, Standard an. Ist er an, beginnt ein Trigger im Chat mit `!`; gespeichert wird er ohne `!`. Ist er aus, gilt der Trigger wörtlich, ohne Präfix (`hallo`) oder mit einem eigenen (`?hallo`). Standardmäßig ist ein Trigger ein einzelnes Wort. | Q4, Q10 |
 | B12 | Mehrere Trigger werden bei der Eingabe durch Leerzeichen getrennt; Trigger aus mehreren Wörtern durch Semikolon. Gespeichert wird eine Liste einzelner Trigger. | Q4 |
-| B13 | Mit der Option „Platzhalter“ (Wildcard) wird ein Trigger überall in der Nachricht als ganzes Wort erkannt: Der Trigger `what` passt auf „what is going on?“, aber nicht auf ein Wort, das `what` nur enthält. | Q4 |
-| B14 | Ein Trigger ist innerhalb aller aktiven Chat-Commands eindeutig, ohne Beachtung der Groß- und Kleinschreibung. | QP, A1 |
+| B13 | Mit der Option „Platzhalter“ (Wildcard) wird ein Trigger überall in der Nachricht als ganzes Wort erkannt, ohne `!` und ohne Beachtung der Groß- und Kleinschreibung: Der Trigger `what` passt auf „what is going on?“ und auf „What?“, aber nicht auf ein Wort, das `what` nur enthält. Wortgrenzen sind Anfang und Ende der Nachricht und jedes Zeichen, das kein Buchstabe und keine Ziffer ist. Ein `!` gehört nur dazu, wenn es im Trigger steht. Die Argumente sind der Text nach dem Treffer. | Q4, Q10, A5 |
+| B14 | Trigger beachten die Groß- und Kleinschreibung: `!Hallo` und `!hallo` sind verschiedene Trigger und können verschiedene Commands auslösen. Innerhalb aller aktiven Chat-Commands ist ein Trigger in genau dieser Schreibweise eindeutig; Platzhalter-Trigger, die die Schreibweise nie beachten (B13), sind unter den Platzhalter-Triggern ohne Beachtung der Schreibweise eindeutig. | QP, A1 |
 | B15 | Die auslösende Nachricht ist während der Ausführung als ganze verfügbar, samt Trigger. **[Interop]** `$message` | Q4 |
+| B16 | Erkennung einer Chatnachricht: Ein Trigger passt, wenn die Nachricht mit ihm beginnt, samt `!` bei eingeschaltetem Schalter (B11), und danach endet oder Leerraum folgt. Zuerst zählen Treffer in exakter Schreibweise; von ihnen gewinnt der längste, sodass bei `!a` und `!a b` die Nachricht „!a b c“ den Trigger `!a b` mit dem Argument „c“ auslöst. Gibt es keinen exakten Treffer, zählen Treffer ohne Beachtung der Schreibweise: Der längste gewinnt, wenn er eindeutig ist; sonst löst die Nachricht nichts aus, mit einem Eintrag im Log. Erst wenn kein solcher Trigger passt, werden die Platzhalter-Trigger geprüft (B13); von ihnen gewinnt der, der am weitesten vorn in der Nachricht steht, bei gleicher Stelle der längere. Je Nachricht läuft höchstens ein Command. | Q10, A1 |
 
 ### Ereignis-, Timer- und Action-Gruppen-Commands
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B20 | Ein Ereignis-Command ist genau einem Ereignistyp aus dem Katalog zugeordnet ([`events.md`](events.md)); je Ereignistyp gibt es höchstens einen Ereignis-Command. | Q8, A2 |
+| B20 | Ein Ereignis-Command ist genau einem Ereignistyp aus dem Katalog zugeordnet ([`events.md`](events.md)); je Ereignistyp gibt es höchstens einen Ereignis-Command. | Q8 |
 | B21 | Ein Timer-Command hat keinen eigenen Auslöser; wann er läuft, bestimmen die Timer-Einstellungen bzw. das Intervall seiner Gruppe (B31). | Q5 |
 | B22 | Ein Action-Gruppen-Command wird nur von anderen Commands, über die API oder von Hand gestartet. | QP (Plan §5.2) |
 
@@ -89,37 +90,39 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 
 | ID | Situation | Erwartetes Verhalten | Quellen |
 |---|---|---|---|
-| B60 | Trigger mit Großbuchstaben gespeichert | Erkennung unabhängig von der Schreibweise; angezeigt wie eingegeben | B11 |
+| B60 | Trigger `Hug` gespeichert, Nachricht „!hug“ | löst aus, solange es keinen Trigger `hug` gibt; angezeigt wie eingegeben | B14, B16 |
 | B61 | Leere Trigger-Liste bei einem Chat-Command | beim Speichern abgelehnt | B10 |
 | B62 | Gruppe wird gelöscht | ihre Commands verlieren die Gruppenzugehörigkeit und bleiben erhalten | B30 |
 | B63 | Anforderung verweist auf eine gelöschte Währung, einen Rang oder Gegenstand | Command bleibt gespeichert, gilt aber als fehlerhaft und wird nicht ausgeführt, bis der Verweis repariert ist | B42–B44 |
 | B64 | Eine Cooldown-Gruppe wird gelöscht | Commands, deren Cooldown sie nennt, bleiben gespeichert, gelten aber als fehlerhaft und werden nicht ausgeführt, bis eine andere gewählt ist ([`requirements.md`](requirements.md), B7) | B33 |
+| B65 | Trigger `Hallo` und `hallo` an zwei Commands, Nachricht „!HALLO“ | löst nichts aus, weil beide ohne Schreibweise passen; Eintrag im Log | B16 |
+| B66 | Schalter „`!` voranstellen“ aus, Trigger `?hallo`, Nachrichten „?hallo welt“ und „!?hallo“ | die erste löst mit dem Argument „welt“ aus, die zweite nicht | B11, B16 |
+| B67 | Ein Platzhalter-Trigger `hallo` und ein normaler Trigger `hallo`, Nachricht „!hallo“ | der normale Trigger gewinnt | B16 |
 
 ## Abweichungen vom Original
 
 | ID | Original | streamcrew | Begründung |
 |---|---|---|---|
-| A1 | nicht belegt, ob doppelte Trigger erlaubt sind | Trigger eindeutig über aktive Chat-Commands | vorhersehbares Verhalten, klare Fehlermeldung beim Speichern; zu prüfen (offene Frage) |
-| A2 | nicht belegt, ob mehrere Ereignis-Commands je Ereignis möglich sind | höchstens einer je Ereignistyp | entspricht der Oberfläche mit einem Schalter je Ereignis (Q8); zu prüfen |
+| A1 | Erkennung ohne Beachtung der Schreibweise; beim Speichern sind nur exakt gleiche Trigger aktiver Commands verboten, sodass bei `!Hallo` und `!hallo` still der zuletzt gespeicherte gewinnt; bei Mehrwort-Triggern gewinnt der kürzeste Treffer, `!a b` neben `!a` ist unerreichbar (Q10) | Schreibweise unterscheidet Trigger, exakte Treffer vor eindeutigen ohne Schreibweise, mehrdeutige lösen nichts aus; der längste Treffer gewinnt (B14, B16) | Verschieden geschriebene Trigger können verschiedene Commands auslösen, und kein Command ist still unerreichbar; eine automatische Großschreibung am Handy trifft trotzdem; Entscheidung des Projektinhabers (2026-10-02) |
 | A3 | Commands in einer internen Einstellungsdatei | Commands als versionierte Dokumente in der Profildatenbank, als YAML exportierbar | Plan §6.9, ADR-0012 |
 | A4 | Cooldown-Gruppen über ihren Namen; die Dauer stellt das Cooldown-Feld eines Commands ein und gilt danach für alle Commands mit diesem Namen (Q9) | Dauer an der Cooldown-Gruppe selbst, Verweis über die ID (B33) | eine Stelle für die Dauer; Umbenennen bricht keine Verweise; Entscheidung des Projektinhabers (2026-10-02) |
+| A5 | Platzhalter-Trigger nur zwischen Leerraum: „what?“ und „(what)“ passen nicht (Q10) | Wortgrenzen auch an Satz- und Sonderzeichen (B13) | Fragen und Klammern sind im Chat üblich; Entscheidung des Projektinhabers (2026-10-02) |
 
 ## Akzeptanzkriterien
 
 - [x] B1, B4: Ein Command mit Actions unbekannten Typs wird gespeichert, geladen und unverändert zurückgeschrieben.
 - [x] B11, B12: Trigger werden ohne `!` und als Liste gespeichert; Eingaben mit Leerzeichen und Semikolon werden richtig zerlegt.
 - [x] B13: Tabellengetriebener Test der Wortgrenzen für Platzhalter-Trigger.
-- [x] B14: Ein zweiter aktiver Chat-Command mit gleichem Trigger wird abgelehnt.
+- [x] B14: Ein zweiter aktiver Chat-Command mit gleichem Trigger wird abgelehnt (bis 2026-10-02 ohne Beachtung der Schreibweise).
+- [ ] B11, B14: Schalter „`!` voranstellen“; Trigger, die sich nur in der Schreibweise unterscheiden, an verschiedenen Commands; Platzhalter-Trigger eindeutig ohne Schreibweise.
+- [ ] B16, B60, B65–B67: Erkennung mit exakten und eindeutigen Treffern, längstem Treffer, eigenem Präfix und Platzhaltern zuletzt, als Tabellentest mit Fuzzing.
 - [x] B20: Ein zweiter Ereignis-Command für denselben Typ wird abgelehnt.
 - [x] B30, B62: Gruppennamen sind eindeutig; Löschen einer Gruppe lässt ihre Commands bestehen.
 - [x] B40–B47: Jede Anforderungsart lässt sich speichern und laden (Golden Files, Code-ADR-0010).
 
 ## Offene Fragen
 
-- B11: Gibt es im Original die Möglichkeit, einen Chat-Command ohne `!` auszulösen, außer über den Platzhalter?
-- B13: Braucht ein Platzhalter-Trigger im Original trotzdem das `!`?
-- B14/A1: Wie verhält sich das Original bei zwei Commands mit gleichem Trigger?
-- B20/A2: Lassen sich im Original mehrere Commands für dasselbe Ereignis anlegen?
+Keine.
 
 ## Quellen
 
@@ -130,6 +133,7 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | Q5 | Doku | <https://mixitup.bot/docs/timers> | Timer, Gruppen mit eigenem Intervall; abgerufen 2026-09-29 |
 | Q8 | Doku | <https://mixitup.bot/docs/events> | Ereignis-Commands, Schalter je Ereignis; abgerufen 2026-09-29 |
 | Q9 | Original (Hilfestellung) | `MixItUp.Base/Model/Requirements/CooldownRequirementModel.cs @ v1.8.200`, `MixItUp.Base/Model/Requirements/ArgumentsRequirementModel.cs @ v1.8.200`, `MixItUp.Base/ViewModel/Requirements/CooldownRequirementViewModel.cs @ v1.8.200`, `MixItUp.Base/Model/Settings/SettingsV3Model.cs @ v1.8.200` | Cooldown-Gruppen mit eigenem Namen und einer Dauer je Name, unabhängig von der Ordnergruppe, auch für Shop-Artikel (B32, B33, A4); Argumenttypen Nutzer, Ganzzahl, Dezimalzahl und Text (B45); gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
+| Q10 | Original (Hilfestellung) | `MixItUp.Base/Model/Commands/ChatCommandModel.cs @ v1.8.200`, `MixItUp.Base/ViewModel/Commands/ChatCommandEditorWindowViewModel.cs @ v1.8.200`, `MixItUp.Base/Services/ChatService.cs @ v1.8.200` | Schalter für das `!` je Command, Platzhalter-Trigger ohne `!` und ohne Schreibweise (B11, B13); doppelte Trigger, kürzester Mehrwort-Treffer, Grenzen nur an Leerraum (A1, A5); gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
 | QP | Projekt | [Plan](../plan.md) §5.2, §6.8, §6.9 | Command-Arten und Prioritäten, Commands als Code |
 
 ## Änderungshistorie
@@ -142,3 +146,4 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | 2026-09-30 | B1 um die Fehlerpolitik ergänzt, die die akzeptierte Spezifikation [`command-engine.md`](command-engine.md) (B71) für jeden Command vorsieht: `continue` oder `abort`, ein Pflichtfeld ohne leeren Wert (Vorgabe des Projektinhabers: keine magischen Werte, Code-ADR-0017 vorgeschlagen); gespeichert in der Spalte `error_policy` (Migration 0005), bestehende Commands bekommen mit der Migration `continue`. |
 | 2026-10-02 | Benannte Cooldown-Gruppen wie im Original (Entscheidung des Projektinhabers, Q9): Gemeinsame Cooldowns hängen nicht mehr an der Gruppe des Commands, sondern an eigenen Cooldown-Gruppen mit einer Dauer je Gruppe (B32, B33, B41, Randfall B64). Die Dauer steht an der Gruppe, der Verweis geht über die ID (A4). Die Cooldown-Anforderung ist jetzt in Version 2: `standard` und `per_user` haben eine Dauer, die Gruppen-Arten nennen eine Cooldown-Gruppe; gespeicherte Gruppen-Cooldowns der Version 1 verlieren ihre Dauer und nennen keine Gruppe, bis der Streamer eine wählt. Die offene Frage zu B41 ist geklärt. |
 | 2026-10-02 | B45: neuer Argumenttyp `integer` neben `text`, `number` und `user` (Entscheidung des Projektinhabers; Einzelheiten in [`requirements.md`](requirements.md), B33). Die offene Frage zu B45 ist geklärt. |
+| 2026-10-02 | Offene Fragen am Original geklärt (Q10) und entschieden (Entscheidungen des Projektinhabers). Übernommen: der Schalter „`!` voranstellen“ je Chat-Command (B11) und Platzhalter-Trigger ohne `!` und ohne Schreibweise (B13). Geändert: Trigger beachten die Schreibweise, mit exakten Treffern vor eindeutigen ohne Schreibweise (B14, A1); neue Regel B16 für die Erkennung mit dem längsten Treffer; Randfälle B60 und B65–B67. Geblieben, mit dem Verhalten des Originals unter „Abweichungen“: Wortgrenzen der Platzhalter an Satzzeichen (A5). Übereinstimmend: höchstens ein Ereignis-Command je Ereignistyp (B20, die Zeile A2 entfällt). |
