@@ -42,6 +42,14 @@ type Users interface {
 	Chatters(ctx context.Context, p platform.Name) ([]user.User, error)
 }
 
+// Finder finds users by login name; the command engine gives each run one
+// (spec command-engine.md, B17).
+type Finder interface {
+	// UserByName finds the user with the login name on platform p,
+	// regardless of case; ok is false if there is none.
+	UserByName(ctx context.Context, p platform.Name, name string) (u user.User, ok bool, err error)
+}
+
 // subject finds the user an identifier is about.
 type subject func(ctx context.Context, s *Scope) (user.User, bool, error)
 
@@ -172,14 +180,18 @@ func account(users Users, a Account) subject {
 // argUser returns the subject of the user the n-th argument names.
 func argUser(users Users, n int) subject {
 	return func(ctx context.Context, s *Scope) (user.User, bool, error) {
-		if users == nil || n > len(s.Args) {
+		var finder Finder = users
+		if s.Finder != nil {
+			finder = s.Finder
+		}
+		if finder == nil || n > len(s.Args) {
 			return user.User{}, false, nil
 		}
 		name := strings.TrimPrefix(s.Args[n-1], "@")
 		if name == "" {
 			return user.User{}, false, nil
 		}
-		return users.UserByName(ctx, s.Platform, name)
+		return finder.UserByName(ctx, s.Platform, name)
 	}
 }
 
