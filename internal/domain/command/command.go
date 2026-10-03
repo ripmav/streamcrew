@@ -199,6 +199,9 @@ func (c Command) Validate() error {
 		if err := r.Validate(); err != nil {
 			return fmt.Errorf("%w: requirement %q: %w", ErrInvalid, typ, err)
 		}
+		if s, ok := r.(SettingsRequirement); ok && s.ShowInChatMenu && c.Kind != KindChat {
+			return invalid("requirement %q: only chat commands are offered in the context menu of the chat", typ)
+		}
 	}
 	return ValidateActions(c.Actions)
 }
