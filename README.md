@@ -44,11 +44,13 @@ streamcrew backup restore <datei.zip> --yes    # zurückspielen; vorher wird der
 streamcrew secret rotate                       # neuen Schlüssel erzeugen, Tokens aller Profile neu verschlüsseln
 
 streamcrew schema export [--dir schemas]       # JSON-Schema der Dateien von Commands als Code schreiben
+streamcrew command validate <pfade> [-o json]  # Dateien von Commands als Code gegen das Profil prüfen
 ```
 
 - `profile …` (außer `list`), `backup restore` und `secret rotate` brauchen einen gestoppten Core. Sie nehmen dieselbe Sperre wie `serve` und brechen sonst mit einem Hinweis ab ([ADR-0012](docs/adr/0012-persistenz.md)).
 - `backup …` wirkt auf das aktive Profil oder auf `--profile <id>`.
-- `schema export` schreibt `streamcrew-v1alpha1.schema.json` für Editoren, etwa für die YAML-Erweiterung von VS Code; die aktuelle Fassung liegt in [`schemas/`](schemas/). Format und Regeln stehen in [`commands-as-code.md`](docs/spec/commands-as-code.md); Prüfen, Import und Export der Dateien folgen (Roadmap 3.5).
+- `command validate` prüft YAML- und JSON-Dateien, auch ganze Verzeichnisse, gegen eine Kopie des aktiven Profils oder von `--profile <id>`, mit denselben Prüfungen wie beim Speichern. Es ändert nichts und darf laufen, während der Core läuft. Fehler und Warnungen nennen Datei, Zeile, Spalte und Pfad; mit Fehlern endet es mit Status 1.
+- `schema export` schreibt `streamcrew-v1alpha1.schema.json` für Editoren, etwa für die YAML-Erweiterung von VS Code; die aktuelle Fassung liegt in [`schemas/`](schemas/). Format und Regeln stehen in [`commands-as-code.md`](docs/spec/commands-as-code.md); Import und Export der Dateien folgen (Roadmap 3.5).
 
 Exit-Codes: `0` Erfolg, `1` Fehler, `2` ungültige Kommandozeile oder Konfiguration.
 
@@ -186,7 +188,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `internal/decimal` | exakte Dezimalzahlen auf `cockroachdb/apd/v3`: Grenzen, Rundung, Text mit hexadezimalen Zahlen und `_`, Grundrechenarten und Funktionen ([Code-ADR-0020](docs/adr/code/0020-dezimalzahlen.md)) |
 | `internal/expr` | Ausdrücke mit `$`-Identifiern für Rechnungen und Bedingungen, eigener Auswerter mit exakten Dezimalzahlen aus `internal/decimal` ([Spezifikation](docs/spec/template.md), [Code-ADR-0012](docs/adr/code/0012-template-engine.md), [Code-ADR-0020](docs/adr/code/0020-dezimalzahlen.md)) |
 | `internal/textfunc` | Textfunktionen der Special-Identifier-Action wie `tolower(…)` und `replace(…,…,…)`, Struktur vor dem Einsetzen der Identifier gelesen ([Spezifikation](docs/spec/actions.md), B52–B55) |
-| `internal/commandfile` | Commands als Code: Arten der Dokumente, das JSON-Schema der Dateien aus den Schemas der Action- und Anforderungsarten, Lesen von YAML und JSON mit Zeile und Spalte, Umwandeln der Dokumente in Commands und Gruppen mit den IDs ihrer Namen ([Spezifikation](docs/spec/commands-as-code.md)) |
+| `internal/commandfile` | Commands als Code: Arten der Dokumente, das JSON-Schema der Dateien aus den Schemas der Action- und Anforderungsarten, Lesen von YAML und JSON mit Zeile und Spalte, Umwandeln der Dokumente in Commands und Gruppen mit den IDs ihrer Namen, Speichern in der Reihenfolge des Imports mit den Fehlern an ihrer Stelle ([Spezifikation](docs/spec/commands-as-code.md)) |
 | `internal/requirement` | Requirement-Service: prüft die Anforderungen eines ausgelösten Commands und meldet Ablehnungen in der Sprache des Profils ([Spezifikation](docs/spec/requirements.md)) |
 | `internal/i18n` | Texte des Cores in der Sprache des Profils: Kataloge EN und DE in ICU MessageFormat (Teilumfang) mit eigenem Parser und Renderer auf `golang.org/x/text`, Dauern in Worten ([ADR-0022](docs/adr/0022-internationalisierung.md)) |
 | `internal/template` | Templates mit `$`-Identifiern: Tokenizer, Präfixbaum, Quellen, Cache je Rendervorgang, Kodierung und die Identifier-Familien ([Spezifikation](docs/spec/template.md), [Code-ADR-0012](docs/adr/code/0012-template-engine.md)) |
