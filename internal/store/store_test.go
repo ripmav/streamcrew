@@ -4,6 +4,7 @@ package store_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ripmav/streamcrew/internal/domain/command"
+	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/store"
 	"github.com/ripmav/streamcrew/internal/store/sqlcgen"
 )
@@ -190,4 +193,46 @@ func TestReadOnlyVacuumIntoReportsStatErrors(t *testing.T) {
 	err = ro.VacuumInto(ctx, filepath.Join(file, "copy.db"))
 	require.Error(t, err, "the parent is a file")
 	assert.NotContains(t, err.Error(), "target exists")
+}
+
+// TestAtomically covers the addendum of 2026-10-03 to Code-ADR-0008:
+// several writes succeed or fail together, and reads in the transaction
+// see the writes before them.
+func TestAtomically(t *testing.T) {
+	t.Parallel()
+	s := openStore(t)
+	ctx := t.Context()
+	fun := command.Group{ID: id.New(), Name: "Fun"}
+	slow := command.CooldownGroup{ID: id.New(), Name: "Slow", Duration: time.Minute}
+
+	err := s.Atomically(ctx, func(tx *store.Store) error {
+		require.NoError(t, tx.PutGroup(ctx, fun))
+		groups, err := tx.Groups(ctx)
+		require.NoError(t, err)
+		assert.Len(t, groups, 1, "the transaction sees its own write")
+		return tx.Atomically(ctx, func(inner *store.Store) error {
+			return inner.PutCooldownGroup(ctx, slow)
+		})
+	})
+	require.NoError(t, err)
+	groups, err := s.Groups(ctx)
+	require.NoError(t, err)
+	assert.Len(t, groups, 1, "committed")
+	cooldowns, err := s.CooldownGroups(ctx)
+	require.NoError(t, err)
+	assert.Len(t, cooldowns, 1, "the nested call is part of it")
+
+	stop := errors.New("stop")
+	err = s.Atomically(ctx, func(tx *store.Store) error {
+		require.NoError(t, tx.PutGroup(ctx, command.Group{ID: id.New(), Name: "Other"}))
+		err := tx.PutCooldownGroup(ctx, command.CooldownGroup{ID: id.New(), Name: "slow", Duration: time.Second})
+		require.ErrorIs(t, err, store.ErrConflict, "a conflict inside the transaction")
+		require.Error(t, tx.Close())
+		require.Error(t, tx.VacuumInto(ctx, filepath.Join(t.TempDir(), "copy.db")))
+		return stop
+	})
+	require.ErrorIs(t, err, stop)
+	groups, err = s.Groups(ctx)
+	require.NoError(t, err)
+	assert.Len(t, groups, 1, "rolled back: Other is gone")
 }

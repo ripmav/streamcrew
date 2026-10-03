@@ -3,6 +3,7 @@
 package app_test
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -201,4 +202,141 @@ func TestCheckCommandFilesFailures(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, report.Errors, "a syntax error is a problem of the file")
 	assert.Equal(t, 0, report.Documents)
+}
+
+// TestImportCommandFiles covers B33, B34, B61 and B63 of
+// commands-as-code.md: an import creates new objects and replaces those of
+// the same kind and name, which keep their ID and creation time; objects
+// without a document stay.
+func TestImportCommandFiles(t *testing.T) {
+	t.Parallel()
+	profilePath := commandProfile(t)
+	before := commandsByName(t, profilePath)
+	dir := t.TempDir()
+	file := writeFile(t, dir, "hug.yaml", fileHead+`kind: ChatCommand
+metadata: {name: a, group: Fun}
+spec:
+  triggers: [b]
+  actions: [{type: command, kind: run, command: Hug}]
+---
+`+fileHead+`kind: ChatCommand
+metadata: {name: B}
+spec: {triggers: [a]}
+---
+`+fileHead+`kind: ActionGroup
+metadata: {name: Hug}
+spec:
+  actions:
+    - {type: command, kind: run, command: A}
+    - {type: counter, kind: add, counter: hugs, amount: 1}
+---
+`+fileHead+`kind: CommandGroup
+metadata: {name: Fun}
+spec: {}
+---
+`+fileHead+`kind: CooldownGroup
+metadata: {name: Hugs}
+spec: {duration: 10s}
+`)
+	report, err := app.ImportCommandFiles(t.Context(), profilePath, nil, config.Rights{}, []string{file})
+	require.NoError(t, err)
+	assert.Empty(t, problemTexts(report.CommandFileReport))
+	assert.True(t, report.Imported)
+	assert.Equal(t, 3, report.Created, "Hug, Fun and Hugs")
+	assert.Equal(t, 2, report.Replaced, "A and B")
+
+	after := commandsByName(t, profilePath)
+	require.Len(t, after, 4, "Follow stays")
+	assert.Contains(t, after, "Follow")
+	a := after["a"]
+	assert.Equal(t, before["A"].ID, a.ID, "B33: the ID stays")
+	assert.Equal(t, before["A"].CreatedAt, a.CreatedAt, "B33: the creation time stays")
+	assert.Equal(t, []string{"b"}, a.Triggers, "the triggers moved")
+	assert.Equal(t, []string{"a"}, after["B"].Triggers)
+	assert.False(t, a.GroupID.IsZero())
+
+	st, err := store.Open(t.Context(), profilePath)
+	require.NoError(t, err)
+	defer st.Close()
+	counters, err := st.Counters(t.Context())
+	require.NoError(t, err)
+	assert.Len(t, counters, 1, "saving created the counter")
+}
+
+// TestImportCommandFilesRejects covers B62 of commands-as-code.md: one
+// document with an error stops the import of all, and all errors are
+// reported.
+func TestImportCommandFilesRejects(t *testing.T) {
+	t.Parallel()
+	profilePath := commandProfile(t)
+	dir := t.TempDir()
+	good := writeFile(t, dir, "good.yaml", fileHead+`kind: CommandGroup
+metadata: {name: Fun}
+spec: {}
+---
+`+fileHead+`kind: ChatCommand
+metadata: {name: New}
+spec: {triggers: [new]}
+`)
+	bad := writeFile(t, dir, "bad.yaml", fileHead+`kind: ChatCommand
+metadata: {name: Other}
+spec: {triggers: [a]}
+---
+`+fileHead+`kind: TimerCommand
+metadata: {name: Tip}
+spec: {enabled: maybe}
+`)
+	report, err := app.ImportCommandFiles(t.Context(), profilePath, nil, config.Rights{}, []string{good, bad})
+	require.NoError(t, err)
+	assert.False(t, report.Imported)
+	assert.Zero(t, report.Created)
+	assert.Zero(t, report.Replaced)
+	assert.Equal(t, []string{
+		`bad.yaml:4:19: spec.triggers[0]: the trigger "!a" is used by the active chat command "A"`,
+		`bad.yaml:9:17: spec.enabled: must be true or false, not the text "maybe"`,
+	}, problemTexts(report.CommandFileReport))
+	assert.Len(t, commandsByName(t, profilePath), 3, "nothing imported")
+
+	syntax := writeFile(t, dir, "syntax.yaml", "a: [\n")
+	report, err = app.ImportCommandFiles(t.Context(), profilePath, nil, config.Rights{}, []string{good, syntax})
+	require.NoError(t, err)
+	assert.False(t, report.Imported, "a file that cannot be read stops the import too")
+	assert.Len(t, commandsByName(t, profilePath), 3)
+
+	missing := filepath.Join(dir, "none", "x.db")
+	_, err = app.ImportCommandFiles(t.Context(), missing, nil, config.Rights{}, []string{good})
+	require.ErrorIs(t, err, os.ErrNotExist)
+	assert.NoFileExists(t, missing, "an import creates no profile")
+}
+
+// commandsByName returns the commands of the profile at path by name.
+func commandsByName(t *testing.T, path string) map[string]command.Header {
+	t.Helper()
+	st, err := store.Open(t.Context(), path)
+	require.NoError(t, err)
+	defer st.Close()
+	recs, err := st.Commands(t.Context())
+	require.NoError(t, err)
+	out := map[string]command.Header{}
+	for _, r := range recs {
+		out[r.Name] = r.Header
+	}
+	return out
+}
+
+// TestImportCommandFilesStoreError checks that an error of the database in
+// the transaction of an import is an error, not a report: here a group the
+// profile cannot read.
+func TestImportCommandFilesStoreError(t *testing.T) {
+	t.Parallel()
+	profilePath := commandProfile(t)
+	db, err := sql.Open("sqlite", profilePath)
+	require.NoError(t, err)
+	_, err = db.ExecContext(t.Context(), `INSERT INTO command_groups (id, name, name_key, timer_interval, created_at, updated_at) VALUES ('no id', 'Broken', 'broken', 0, 0, 0)`)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+	file := writeFile(t, t.TempDir(), "a.yaml", fileHead+"kind: TimerCommand\nmetadata: {name: a}\nspec: {}\n")
+	report, err := app.ImportCommandFiles(t.Context(), profilePath, nil, config.Rights{}, []string{file})
+	require.Error(t, err, "%+v", report)
+	assert.False(t, report.Imported)
 }
