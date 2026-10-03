@@ -52,7 +52,7 @@ Nicht Teil dieser Spezifikation:
 |---|---|---|
 | B10 | Wird ein Command ausgelöst, prüft die Engine zuerst die Anforderungen ([`commands.md`](commands.md), B40–B47). Erst wenn alle erfüllt sind, bucht sie Kosten ab (Währung, Inventar), startet die Cooldowns und reiht die Instanz ein. Der Cooldown läuft also ab dem Einreihen, nicht ab dem Start. | Q1 |
 | B11 | Ist eine Anforderung nicht erfüllt, entsteht keine Instanz. Der Nutzer bekommt eine Fehlermeldung mit dem Grund; Text und Reihenfolge der Prüfungen legt Roadmap 3.4 fest. | Q1 |
-| B12 | Fehlermeldungen haben einen eigenen Cooldown, damit der Chat nicht vollläuft. Die Settings-Sektion `commands` (B90) wählt die Art: `per_command` (je Anforderung und Command, Standard), `global` (eine gemeinsame Sperrzeit für alle Fehlermeldungen) oder `off` (jede Ablehnung meldet sich). Während der Sperrzeit wird die Ablehnung nur geloggt. | Q1, QP (§6.8) |
+| B12 | Fehlermeldungen haben einen eigenen Cooldown, damit der Chat nicht vollläuft. Die Settings-Sektion `commands` (B90) wählt die Art: `per_command` (je Anforderung und Command, Standard), `global` (eine gemeinsame Sperrzeit für alle Fehlermeldungen), `off` (jede Ablehnung meldet sich) oder `silent` (keine Fehlermeldungen). Während der Sperrzeit und bei `silent` wird die Ablehnung nur geloggt. | Q1, QP (§6.8), A16 |
 | B13 | Sind alle Anforderungen eines Commands erfüllt und wird er eingereiht, beginnen die Fehler-Cooldowns seiner Anforderungen von vorn. | Q1 |
 | B14 | Ein inaktiver Command wird nie automatisch ausgelöst ([`commands.md`](commands.md), B3). Ein Start von Hand (Oberfläche, API) ist bei jedem Command möglich, auch einem inaktiven, und läuft ohne Prüfung der Anforderungen, ohne Kosten und ohne Cooldown. | Q1 („Play“ zum Testen), A2 |
 | B15 | Es warten höchstens 1 000 Instanzen gleichzeitig. Ist die Warteschlange voll, wird ein ausgelöster Command verworfen, bevor seine Anforderungen geprüft werden, und der Core schreibt eine Warnung ins Log. | A3 |
@@ -134,7 +134,7 @@ Nicht Teil dieser Spezifikation:
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B90 | Die Sektion `commands` enthält den Sperrmodus (B20, Standard `per_command_type`), die Art des Fehler-Cooldowns (B12, Standard `per_command`), seine Dauer (Standard 10 s) das Trennzeichen der getrennten Argumente (Standard `\|`, [`template.md`](template.md), `$argdelimited…`) und den Mindestabstand für Bild und Ton bei Begrüßungen (B43, Standard 5 s, von 1 s bis 60 s). Änderungen gelten ab dem nächsten Einreihen. | Q1, QP (§6.8), Code-ADR-0009 |
+| B90 | Die Sektion `commands` enthält den Sperrmodus (B20, Standard `per_command_type`), die Art des Fehler-Cooldowns (B12, Standard `per_command`, auch `silent`), seine Dauer (Standard 10 s) das Trennzeichen der getrennten Argumente (Standard `\|`, [`template.md`](template.md), `$argdelimited…`) und den Mindestabstand für Bild und Ton bei Begrüßungen (B43, Standard 5 s, von 1 s bis 60 s). Änderungen gelten ab dem nächsten Einreihen. | Q1, QP (§6.8), Code-ADR-0009 |
 
 ## Randfälle
 
@@ -174,6 +174,7 @@ Nicht Teil dieser Spezifikation:
 | A13 | Fehlerverhalten einzelner Actions nicht dokumentiert | Fehlerpolitik je Command, Standard `continue` (B71) | Plan §6.8; `continue` entspricht dem üblichen Verhalten, einzelne Fehler nicht den ganzen Command stoppen zu lassen; zu prüfen |
 | A14 | keine Zeitlimits je Action dokumentiert | Zeitlimit je Action, Standard 60 s (B72) | Eine hängende Action soll ihre Sperre nicht dauerhaft blockieren |
 | A15 | keine Grenzen für Aufrufketten und Wiederholungen dokumentiert | 10 Ebenen, keine Zyklen, 1 000 Wiederholungen (B73, B74) | Schutz vor Endlosschleifen, auch durch Fehler beim Einrichten |
+| A16 | Fehler-Cooldown je Anforderung jedes Commands (Standard, 10 s), je Command, je Anforderungsart über alle Commands, global oder aus; „aus“ heißt dort: keine Meldungen. Nach einem neu gesetzten Cooldown schweigt seine Meldung 5 s (Q8) | `per_command`, `global`, `off` (jede Ablehnung meldet sich) und `silent` (keine Meldungen) (B12) | Abschalten der Meldungen ist möglich, ohne `off` umzudeuten; die übrigen Arten des Originals braucht es nicht; Entscheidung des Projektinhabers (2026-10-02) |
 
 ## Akzeptanzkriterien
 
@@ -191,7 +192,6 @@ Nicht Teil dieser Spezifikation:
 
 ## Offene Fragen
 
-- B12, B90: Welche Dauer hat der Fehler-Cooldown im Original als Standard? streamcrew nimmt 10 s an.
 - B27/A5: Laufen freigegebene Commands im Original auch während der Pause?
 - B71/A13: Läuft ein Command im Original nach einer gescheiterten Action weiter?
 - B22: Zählen im Original bei `per_action_type` auch die Actions in verschachtelten Actions?
@@ -207,6 +207,7 @@ Nicht Teil dieser Spezifikation:
 | Q4 | Doku | <https://mixitup.bot/docs/reference/special-identifiers> | Parameter eines Durchlaufs als Identifier, Zielnutzer; abgerufen 2026-09-29 |
 | Q5 | Doku | <https://mixitup.bot/docs/actions/repeat-action> | Wiederholen mit Anzahl aus Identifiern; keine Grenze dokumentiert; abgerufen 2026-09-30 |
 | Q6 | Original (Hilfestellung) | `MixItUp.Base/Services/CommandService.cs @ v1.8.200`, `MixItUp.Base/Services/ChatService.cs @ v1.8.200`, `MixItUp.Base/Services/EventService.cs @ v1.8.200`, `MixItUp.Base/Model/Actions/CommandActionModel.cs @ v1.8.200` | Beide Pausen sammeln ausgelöste Commands und führen sie nach dem Fortsetzen in Ankunftsreihenfolge aus; das gilt für den Entrance-Command des Nutzers und die allgemeine Begrüßung. Die erste Nachricht zählt sofort, auch in der Pause; mit der Option „nur wenn live“ zählt eine Nachricht offline nicht. Anforderungen gelten beim Auslösen. Gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
+| Q8 | Original (Hilfestellung) | `MixItUp.Base/Model/Requirements/RequirementModelBase.cs @ v1.8.200`, `MixItUp.Base/Model/Settings/SettingsV3Model.cs @ v1.8.200` | Arten und Standard des Fehler-Cooldowns (A16); gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
 | Q7 | Original (Hilfestellung) | `MixItUp.Base/ViewModel/Commands/CommandEditorWindowViewModelBase.cs @ v1.8.200`, `MixItUp.WPF/Controls/Dialogs/EditTestCommandParametersDialogControl.xaml.cs @ v1.8.200` | Start von Hand mit optionaler Prüfung, ohne sie werden danach die Cooldowns des Commands geleert (A2); gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
 | QP | Projekt | [Plan](../plan.md) §5, §6.6, §6.8, §6.9, §6.13 | Command-Engine: Begriffe, Zustände, Sperrmodi, Steuerung, Schutzmechanismen, Fehler; Verlauf als P0 |
 
@@ -225,3 +226,4 @@ Nicht Teil dieser Spezifikation:
 | 2026-10-01 | Die auslösende Nachricht unter den Parametern (B80) hat ihre ID auf der Plattform (`engine.Params.MessageID`), für Antworten der Chat-Action ([`actions.md`](actions.md), B64) und das Löschen der Auslösenachricht ([`requirements.md`](requirements.md)). Eine ID ohne Nachricht oder ohne Plattform lehnt die Engine ab (`engine.ErrInvalidParams`); aufgerufene Commands bekommen sie mit der Nachricht (B34). |
 | 2026-10-02 | B41 geändert, B43 und die Randfälle B110–B113 neu (Entscheidung des Projektinhabers): Begrüßungen, also der Entrance-Command eines Nutzers und die Ereignis-Commands auf `chat.user.entrance`, werden in ihrer Pause eingereiht statt verworfen und laufen nach dem Fortsetzen, wie im Original (Q6). Sie lösen nur aus, solange der Stream live ist, und werden beim Stream-Ende abgebrochen. Zwischen Bild- und Ton-Actions von Begrüßungen liegt ein Mindestabstand ab dem Ende der Wiedergabe, Standard 5 s, einstellbar von 1 s bis 60 s in der Settings-Sektion `commands` (B90). Die offenen Fragen zu B40 und B41 sind am Original geklärt: Es sammelt in beiden Pausen. Die Engine meldet keinen eigenen Ausgang „Begrüßungen pausiert“ mehr; Actions melden das Ende ihrer Wiedergabe mit `engine.Run.PlaybackEnds`, und `engine.Engine.CancelEntrance` bricht die Begrüßungen beim Stream-Ende ab. Welche Nachricht als erste zählt und wann der Stream endet, erkennt der Event-Service (Roadmap 3.6). |
 | 2026-10-02 | Offene Fragen zu B14 und B53 geklärt (Entscheidungen des Projektinhabers): Der Start von Hand bleibt ohne Anforderungen und lässt laufende Cooldowns stehen, abweichend vom Original (A2, Q7); beim Abbrechen gibt es weiter keine Erstattung, wie im Original. Die offene Frage zum Fehler-Cooldown (B12) klärt der PR mit der neuen Art „keine Meldungen“. |
+| 2026-10-02 | B12 und B90: neue Art `silent` des Fehler-Cooldowns, die keine Fehlermeldungen sendet und Ablehnungen nur loggt (Entscheidung des Projektinhabers; A16, Q8). Die offene Frage zur Standarddauer ist geklärt: 10 s wie im Original. |
