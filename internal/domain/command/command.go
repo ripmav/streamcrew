@@ -280,6 +280,13 @@ func (g CooldownGroup) Validate() error {
 	return nil
 }
 
+// NameKey returns the key under which the name of a command is unique and
+// found, regardless of case (B7; commands-as-code.md, B22): the name in
+// lower case, rune by rune.
+func NameKey(name string) string {
+	return strings.ToLower(name)
+}
+
 // name checks the name of a command or group.
 func name(v string) error {
 	if strings.TrimSpace(v) == "" {
