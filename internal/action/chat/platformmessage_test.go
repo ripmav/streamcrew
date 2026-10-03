@@ -37,7 +37,7 @@ func (f *fixture) platformMessage(name platform.Name, message string) chat.Platf
 
 func TestPlatformMessageConformance(t *testing.T) {
 	t.Parallel()
-	reg := registry(t, &connector.Set{}, &connectortest.Known{}, &logs{})
+	reg := registry(t, &connector.Set{}, &logs{})
 	d, ok := reg.Descriptor(chat.TypePlatformMessage)
 	require.True(t, ok)
 	actiontest.Suite{Descriptor: d, Update: update(), Examples: []actiontest.Example{
@@ -59,7 +59,7 @@ func TestPlatformMessageConformance(t *testing.T) {
 // message, sends as the bot and does not reply (actions.md B67).
 func TestPlatformMessageNew(t *testing.T) {
 	t.Parallel()
-	reg := registry(t, &connector.Set{}, &connectortest.Known{}, &logs{})
+	reg := registry(t, &connector.Set{}, &logs{})
 	d, ok := reg.Descriptor(chat.TypePlatformMessage)
 	require.True(t, ok)
 	assert.Equal(t, chat.PlatformMessage{Common: action.On()}, withoutPorts(t, d.New()))
