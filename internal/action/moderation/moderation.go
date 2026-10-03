@@ -173,6 +173,19 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("moderation action types: no logger")
 	}
 	ports := &ports{Ports: p}
+	return descriptors(ports), nil
+}
+
+// Catalog returns the moderation types without ports, for the type catalog and
+// commands as code (Code-ADR-0013, point 3): their actions decode,
+// validate and encode, but must not run.
+func Catalog() []action.Descriptor {
+	return descriptors(nil)
+}
+
+// descriptors returns the moderation types with ports, which are nil in the
+// catalog.
+func descriptors(ports *ports) []action.Descriptor {
 	return []action.Descriptor{
 		action.Descriptor{
 			Type:     TypeModeration,
@@ -182,7 +195,7 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		}.WithKinds(KindTimeout, func(k Kind) (Moderation, bool) {
 			return Moderation{Common: action.On(), Kind: k, ports: ports}, k.Valid()
 		}),
-	}, nil
+	}
 }
 
 // moderationSchema returns the schema of the moderation action: its kind
