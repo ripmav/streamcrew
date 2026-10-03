@@ -67,6 +67,8 @@
 7. **Text:**
    - **Schreiben:** Die kanonische Form hat keinen Exponenten, einen Punkt als Dezimaltrennzeichen, keine Nullen am Ende der Nachkommastellen und kein „−0“. Beispiele: `2.5`, `-0.3`, `100`.
    - **Lesen:** Erlaubt sind Dezimalzahlen wie Zahlen in Ausdrücken (`template.md`, B51), mit Vorzeichen, Nachkommastellen und Exponent. Nullen am Ende und ein Exponent sind beim Lesen erlaubt, die kanonische Form entfernt sie.
+
+     *Ergänzt am 2026-10-03 (Entscheidung des Projektinhabers): Lesen nimmt auch ganze hexadezimale Zahlen nach `0x` oder `0X`, etwa `0xFF`, und Unterstriche zwischen Ziffern, etwa `1_000`, und rechnet sie in Dezimalzahlen um. Die Regeln folgen Go: Ein Unterstrich steht nur zwischen zwei Ziffern oder direkt nach `0x`; hexadezimale Zahlen haben weder Nachkommastellen noch Exponent. Weil Ausdrücke, Werte von Identifiern und Argumente Zahlen so lesen, gilt das dort ebenso. Die kanonische Form bleibt dezimal.*
 8. **Speicherung:** SQLite-Spalten mit Dezimalzahlen haben den Typ `TEXT` und die kanonische Form ([Code-ADR-0008](0008-datenbankzugriff.md)).
    - Gerechnet wird im Go-Code innerhalb der Schreibtransaktion, nicht in SQL. Nach Wert sortieren kann SQL diese Spalten nicht.
    - Bestehende ganze Werte bringt eine Migration in die kanonische Form.
