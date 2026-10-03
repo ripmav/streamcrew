@@ -1,0 +1,6 @@
+{
+  "duration.days": "{n, plural, one {# day} other {# days}}",
+  "duration.hours": "{n, plural, one {# hour} other {# hours}}",
+  "duration.minutes": "{n, plural, one {# minute} other {# minutes}}",
+  "duration.seconds": "{n, plural, one {# second} other {# seconds}}"
+}
