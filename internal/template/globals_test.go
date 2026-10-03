@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/counter"
 	"github.com/ripmav/streamcrew/internal/template"
 )
@@ -22,7 +23,7 @@ import (
 func TestGlobals_B10_B56(t *testing.T) {
 	t.Parallel()
 	globals := template.NewGlobals()
-	counters := fakeCounters{calls: new(atomic.Int64), list: []counter.Counter{{Name: "score", Value: 3}, {Name: "scorexy", Value: 4}}}
+	counters := fakeCounters{calls: new(atomic.Int64), list: []counter.Counter{{Name: "score", Value: decimal.New(3)}, {Name: "scorexy", Value: decimal.New(4)}}}
 	e := template.New(newRegistry(t), template.WithSources(globals, template.CounterSource(counters)))
 
 	assert.Equal(t, "$top 3", render(t, e, "$top $score", new(scope())), "no global values yet")

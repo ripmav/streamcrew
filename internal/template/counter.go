@@ -5,9 +5,9 @@ package template
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/counter"
 )
 
@@ -25,8 +25,9 @@ type Counters interface {
 }
 
 // CounterSource returns the source of the counter identifiers: $<name> is the
-// value of the counter, $<name>display the value with thousands separators
-// (spec counters-and-quotes.md, B1, B4). Names are case-insensitive. The
+// value of the counter, $<name>display the value with thousands separators,
+// and with exactly two decimal places unless it is whole (spec
+// counters-and-quotes.md, B1, B4). Names are case-insensitive. The
 // source lists the counters once per render, so a new or renamed counter
 // applies from the next render on.
 func CounterSource(counters Counters) Source {
@@ -41,7 +42,7 @@ type counterSource struct {
 // namedCounter is a counter with its name in lower case.
 type namedCounter struct {
 	name  string
-	value int64
+	value decimal.Decimal
 }
 
 // Match finds the counter with the longest name that token starts with,
@@ -71,12 +72,16 @@ func (c counterSource) Match(ctx context.Context, s *Scope, token string) (int, 
 			continue
 		}
 		if n := len(ctr.name); n > best || n == best && !exact {
-			best, exact, resolve = n, true, constant(IntValue(ctr.value))
+			best, exact, resolve = n, true, constant(NumberValue(ctr.value))
 		}
 		if strings.HasPrefix(rest, counterDisplaySuffix) {
 			if n := len(ctr.name) + len(counterDisplaySuffix); n > best {
-				v := IntValue(ctr.value)
-				v.Text = groupThousands(ctr.value)
+				v := NumberValue(ctr.value)
+				text, err := display(ctr.value)
+				if err != nil {
+					return 0, nil, err
+				}
+				v.Text = text
 				best, exact, resolve = n, false, constant(v)
 			}
 		}
@@ -84,19 +89,42 @@ func (c counterSource) Match(ctx context.Context, s *Scope, token string) (int, 
 	return best, resolve, nil
 }
 
-// groupThousands formats n with commas between groups of three digits, as in
-// English (USA) until the profile has a locale setting (B41).
-func groupThousands(n int64) string {
-	digits, negative := strings.CutPrefix(strconv.FormatInt(n, 10), "-")
+// displayPlaces are the decimal places of $<name>display for a value that
+// is not whole (counters-and-quotes.md, B4).
+const displayPlaces = 2
+
+// display formats a counter value for $<name>display (B4; Code-ADR-0020,
+// point 10): a whole value with thousands separators, any other also with
+// exactly two decimal places, rounded half away from zero.
+func display(v decimal.Decimal) (string, error) {
+	if v.IsWhole() {
+		return groupThousands(v.String()), nil
+	}
+	text, err := v.Fixed(displayPlaces)
+	if err != nil {
+		return "", fmt.Errorf("display %s: %w", v, err)
+	}
+	return groupThousands(text), nil
+}
+
+// groupThousands puts commas between groups of three digits of the whole
+// part of a number in canonical or fixed form, as in English (USA) until the
+// profile has a locale setting (B41).
+func groupThousands(number string) string {
+	digits, negative := strings.CutPrefix(number, "-")
+	whole, fraction, hasFraction := strings.Cut(digits, ".")
 	var b strings.Builder
 	if negative {
 		b.WriteByte('-')
 	}
-	for i := range len(digits) {
-		if i > 0 && (len(digits)-i)%3 == 0 {
+	for i := range len(whole) {
+		if i > 0 && (len(whole)-i)%3 == 0 {
 			b.WriteByte(',')
 		}
-		b.WriteByte(digits[i])
+		b.WriteByte(whole[i])
+	}
+	if hasFraction {
+		b.WriteString("." + fraction)
 	}
 	return b.String()
 }

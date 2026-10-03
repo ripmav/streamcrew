@@ -423,8 +423,8 @@ func TestSaveChecksActions(t *testing.T) {
 	var names []string
 	for _, c := range counters {
 		names = append(names, c.Name)
-		assert.Zero(t, c.Value)
-		assert.Equal(t, int64(counter.DefaultStep), c.Step, "counters-and-quotes.md B8")
+		assert.True(t, c.Value.IsZero())
+		assert.Equal(t, "1", c.Step.String(), "counters-and-quotes.md B8")
 	}
 	assert.ElementsMatch(t, []string{"Deaths", "wins", "losses"}, names, "B41: missing counters are created once, regardless of case")
 

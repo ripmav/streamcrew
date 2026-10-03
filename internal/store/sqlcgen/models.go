@@ -61,11 +61,11 @@ type CooldownGroup struct {
 type Counter struct {
 	ID           string
 	Name         string
-	Value        int64
+	Value        string
 	ResetOnStart int64
 	CreatedAt    int64
 	UpdatedAt    int64
-	Step         int64
+	Step         string
 }
 
 type Meta struct {

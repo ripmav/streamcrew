@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-10-02 |
 | **Bezug** | Roadmap Phase 2.2 (Counter und Quotes), 5.6, 8.3; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md); Plan §5.5, §6.13, Anhang A.3, A.6 |
-| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/counter`, `internal/domain/quote`, Repositories in `internal/store`; Rücksetzen beim Start in `internal/app`. Identifier `$<name>` und `$<name>display` (B1, B4) als Quelle `template.CounterSource`; Abgleich mit eingebauten Identifiern (B7) in `Counter.CheckReserved`, aufgerufen, wenn das Speichern eines Commands einen Counter anlegt, den eine Counter-Action nennt ([`actions.md`](actions.md), B41), später auch über die API (Phase 6). Ändern über die Counter-Action (`internal/action/values`). Schrittweite (B8) als `counter.Counter.Step`, Spalte `step` aus Migration 0006. Offen: Abruf und Format der Quotes per Identifier (B23, B24) mit Phase 3; vorgefertigte Quote-Commands (B22) mit Phase 5.6; Import (B25). Offen seit 2026-10-02: Werte mit Nachkommastellen (B4, B5, B8) und Namen mit Buchstaben über a–z hinaus (B7), Roadmap 3.6 |
+| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/counter`, `internal/domain/quote`, Repositories in `internal/store`; Rücksetzen beim Start in `internal/app`. Identifier `$<name>` und `$<name>display` (B1, B4) als Quelle `template.CounterSource`; Abgleich mit eingebauten Identifiern (B7) in `Counter.CheckReserved`, aufgerufen, wenn das Speichern eines Commands einen Counter anlegt, den eine Counter-Action nennt ([`actions.md`](actions.md), B41), später auch über die API (Phase 6). Ändern über die Counter-Action (`internal/action/values`). Schrittweite (B8) als `counter.Counter.Step`, Spalte `step` aus Migration 0006. Werte und Schrittweiten sind seit Roadmap 3.5 exakte Dezimalzahlen aus `internal/decimal` (B4, B5, B8; Code-ADR-0020), gespeichert als Text (Migration 0011). Offen: Abruf und Format der Quotes per Identifier (B23, B24) mit Phase 3; vorgefertigte Quote-Commands (B22) mit Phase 5.6; Import (B25). Offen seit 2026-10-02: Werte mit Nachkommastellen (B4, B5, B8) und Namen mit Buchstaben über a–z hinaus (B7), Roadmap 3.6 |
 
 ## Zweck und Umfang
 
@@ -29,7 +29,7 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 | B2 | Operationen: um einen Betrag oder um einen Schritt (B8) erhöhen oder verringern, auf einen Wert setzen, auf 0 zurücksetzen. | Q6, A6 |
 | B3 | Ein Counter kann beim Start des Cores auf 0 zurückgesetzt werden (Option je Counter). | Q6 |
 | B4 | Der Wert lässt sich zusätzlich formatiert ausgeben: ganze Werte mit Tausendertrennzeichen, andere zusätzlich mit genau zwei Nachkommastellen, beides nach der Locale ([`template.md`](template.md), B41). `$<name>` selbst zeigt den Wert ohne Tausendertrennzeichen, mit dem Dezimaltrennzeichen der Locale. **[Interop]** `$<name>display` | Q6, Q8 |
-| B5 | Der Wert ist eine Dezimalzahl, auch mit Nachkommastellen wie 2,5, und wird exakt gerechnet: 0,1 + 0,2 ergibt 0,3. Typ, Wertebereich und Genauigkeit legt ein Code-ADR fest (Roadmap 3.6). | Q8, A2 |
+| B5 | Der Wert ist eine Dezimalzahl, auch mit Nachkommastellen wie 2,5, und wird exakt gerechnet: 0,1 + 0,2 ergibt 0,3. Er hat höchstens 34 gültige Stellen und 34 Nachkommastellen, sein Betrag liegt unter 10^34; ein Ergebnis mit mehr Stellen wird auf diese Grenzen gerundet, die Hälfte zur geraden Ziffer (Code-ADR-0020). | Q8, A2 |
 | B6 | Jede Änderung wird sofort gespeichert. | ADR-0012, A1 |
 | B7 | Namen bestehen aus 1 bis 64 Buchstaben und Ziffern im Sinne von Unicode, also auch Umlauten und anderen Schriften ([`template.md`](template.md), B1), und dürfen nicht mit einem eingebauten Identifier kollidieren. | Q6, Q8, A3 |
 | B8 | Ein Counter hat eine Schrittweite, eine Zahl größer als 0, auch mit Nachkommastellen (B5). Ohne Angabe ist sie 1, auch für Counter, die es vor der Schrittweite gab. Ein Schritt erhöht oder verringert den Wert um die Schrittweite. | A6 |
@@ -53,7 +53,7 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 | B40 | Counter mit einem Namen, den es schon gibt | beim Anlegen abgelehnt | B1 |
 | B41 | Quote wird gelöscht | ihre Nummer wird nicht neu vergeben; die übrigen Quotes behalten ihre Nummern | A5 |
 | B42 | Import mit einer Nummer, die es schon gibt | die vorhandene Quote bleibt; der Import meldet den Konflikt | A5 |
-| B43 | Überlauf beim Erhöhen eines Counters | Der Wert bleibt unverändert, die Action scheitert. | B5 |
+| B43 | Überlauf beim Erhöhen eines Counters: ein Ergebnis, dessen Betrag 10^34 erreicht | Der Wert bleibt unverändert, die Action scheitert. | B5 |
 | B44 | Schrittweite 0 oder negativ | beim Anlegen und Ändern abgelehnt; der Counter bleibt, wie er war | B8 |
 
 ## Abweichungen vom Original
@@ -72,10 +72,10 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 - [x] B1, B40: Counter-Namen sind je Profil eindeutig.
 - [x] B2: Erhöhen, Setzen und Zurücksetzen verändern den gespeicherten Wert.
 - [x] B3: Counter mit Rücksetz-Option stehen nach dem Start auf 0, andere behalten ihren Wert.
-- [x] B8, B44: Neue Counter haben die Schrittweite 1, bestehende erhalten sie bei der Migration; ein Schritt nutzt die gespeicherte Schrittweite; eine Schrittweite unter 1 wird abgelehnt (Integrationstest gegen SQLite).
+- [x] B8, B44: Neue Counter haben die Schrittweite 1, bestehende erhalten sie bei der Migration; ein Schritt nutzt die gespeicherte Schrittweite; eine Schrittweite von 0 oder darunter wird abgelehnt (Integrationstest gegen SQLite).
 - [x] B21, B41: Nummern werden fortlaufend vergeben und nach dem Löschen nicht neu verwendet.
 - [x] B23: zufällige, neueste und Gesamtzahl lassen sich abfragen (Integrationstest gegen SQLite).
-- [ ] B4, B5, B8: Werte und Schrittweiten mit Nachkommastellen, exakt gerechnet, gespeichert und nach der Locale ausgegeben; bestehende Counter werden übernommen.
+- [x] B4, B5, B8: Werte und Schrittweiten mit Nachkommastellen, exakt gerechnet, gespeichert und nach der Locale ausgegeben; bestehende Counter werden übernommen.
 - [ ] B7: Namen mit Umlauten und anderen Schriften, auch als Identifier in Templates.
 - [ ] B24: `$quotedatetime` als kurzes Datum nach der Locale.
 
@@ -103,3 +103,4 @@ Keine.
 | 2026-10-01 | B43 geändert (Entscheidung des Projektinhabers): Bei einem Überlauf bleibt der Wert unverändert, statt am Grenzwert stehen zu bleiben, und die Action scheitert. Eine Änderung gilt damit ganz oder gar nicht, wie es [`actions.md`](actions.md), B42, für die Counter-Action festlegt; die Festlegung vom 2026-09-29 zu B43 entfällt. `counter.Counter.Add` lässt den Wert bei einem Überlauf unverändert. |
 | 2026-10-01 | B8, B44 und A6 ergänzt, B2 erweitert (Entscheidung des Projektinhabers): Jeder Counter hat eine Schrittweite, voreingestellt 1, und lässt sich um einen Schritt erhöhen oder verringern. Umgesetzt als `counter.Counter.Step` mit `Increment` und `Decrement`; `counter.New` legt Counter mit der Schrittweite 1 an. Migration 0006 gibt bestehenden Countern die Schrittweite 1. Festlegungen dabei: Die Schrittweite ist mindestens 1, damit ein Schritt immer in die genannte Richtung geht; nach oben begrenzt sie nur der Wertebereich (B5). Ein Überlauf durch einen Schritt verhält sich wie jeder andere (B43). |
 | 2026-10-02 | Offene Fragen am Original geklärt (Q8) und entschieden (Entscheidungen des Projektinhabers). Geändert: Counter-Werte sind exakte Dezimalzahlen mit Ausgabe nach der Locale (B4, B5, A2), Schrittweiten damit auch (B8); Namen dürfen Unicode-Buchstaben und -Ziffern enthalten (B7, A3). Übernommen: `$quotedatetime` ist das kurze Datum (B24). Geblieben, mit dem Verhalten des Originals unter „Abweichungen“: keine Neuvergabe von Quote-Nummern und Konflikte beim Import (A5). |
+| 2026-10-03 | Counter mit Dezimalzahlen umgesetzt (B4, B5, B8, B43; Code-ADR-0020). Festlegungen dabei: Wert und Schrittweite stehen als Text in der kanonischen Form in der Datenbank; bestehende ganze Zahlen behalten ihre Ziffern (Migration 0011), der Weg zurück schneidet Nachkommastellen ab und macht eine Schrittweite unter 1 zu 1. `$<name>` zeigt den Wert exakt, `$<name>display` einen ganzen Wert mit Tausendertrennzeichen, jeden anderen zusätzlich mit genau zwei Nachkommastellen, die Hälfte von 0 weg gerundet, etwa 1,234.50; bis zur Locale-Einstellung im Format von Englisch (USA). |
