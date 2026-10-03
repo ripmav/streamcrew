@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/ripmav/streamcrew/internal/app"
@@ -20,6 +21,77 @@ import (
 type commandCmd struct {
 	Validate commandValidateCmd `cmd:"" help:"Check files of commands as code against the profile without changing it. Works while the core runs."`
 	Import   commandImportCmd   `cmd:"" help:"Import files of commands as code into the profile: all documents or, with errors, none. Needs a stopped core."`
+	Export   commandExportCmd   `cmd:"" help:"Export commands with their groups and cooldown groups as files of commands as code. Works while the core runs."`
+}
+
+type commandExportCmd struct {
+	Names  []string `arg:"" optional:"" help:"Commands to export, regardless of case. Without names: all commands, groups and cooldown groups."`
+	File   string   `type:"path" xor:"target" env:"-" placeholder:"FILE" help:"Write into this file instead of the standard output."`
+	Dir    string   `type:"path" xor:"target" env:"-" placeholder:"DIR" help:"Write one file per document into this directory, e.g. chat-command-hug.v1alpha1.yaml."`
+	Format string   `enum:"yaml,json" default:"yaml" env:"-" help:"Format: ${enum}."`
+}
+
+// Run exports commands as files of commands as code (commands-as-code.md,
+// B35 to B38): YAML or JSON on the standard output, into a file, or one
+// file per document into a directory.
+func (c commandExportCmd) Run(ctx context.Context, e *Env) error {
+	cfg, err := e.resolve()
+	if err != nil {
+		return err
+	}
+	path, err := e.profilePath(cfg)
+	if err != nil {
+		return err
+	}
+	docs, err := app.ExportCommands(ctx, path, c.Names)
+	if err != nil {
+		return err
+	}
+	encode := func(docs []commandfile.Exported, single bool) ([]byte, error) {
+		if c.Format == "json" {
+			return commandfile.EncodeJSON(docs, single)
+		}
+		return commandfile.EncodeYAML(docs)
+	}
+	switch {
+	case c.Dir != "":
+		if err := os.MkdirAll(c.Dir, 0o750); err != nil {
+			return err
+		}
+		names := commandfile.FileNames(docs, "."+c.Format)
+		for i, d := range docs {
+			out, err := encode([]commandfile.Exported{d}, true)
+			if err != nil {
+				return err
+			}
+			if err := writeFile(e, filepath.Join(c.Dir, names[i]), out); err != nil {
+				return err
+			}
+		}
+		return nil
+	case c.File != "":
+		out, err := encode(docs, false)
+		if err != nil {
+			return err
+		}
+		return writeFile(e, c.File, out)
+	default:
+		out, err := encode(docs, false)
+		if err != nil {
+			return err
+		}
+		_, err = e.Stdout.Write(out)
+		return err
+	}
+}
+
+// writeFile writes data to path and says so.
+func writeFile(e *Env, path string, data []byte) error {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(e.Stdout, "wrote %s\n", path)
+	return err
 }
 
 type commandValidateCmd struct {
@@ -119,15 +191,22 @@ func (e *Env) commandFiles(paths []string) (commandFilesInput, error) {
 	if len(in.files) == 0 {
 		return in, &usageError{err: fmt.Errorf("no files of commands as code in %s", strings.Join(paths, ", "))}
 	}
+	in.profile, err = e.profilePath(cfg)
+	return in, err
+}
+
+// profilePath returns the database of --profile or the active profile,
+// which must exist.
+func (e *Env) profilePath(cfg *config.Config) (string, error) {
 	id, err := e.profileID(cfg)
 	if err != nil {
-		return in, err
+		return "", err
 	}
-	in.profile = e.profiles(cfg).Path(id)
-	if _, err := os.Stat(in.profile); errors.Is(err, fs.ErrNotExist) {
-		return in, fmt.Errorf("profile %q does not exist; create it with \"streamcrew profile create\" or start the core once", id)
+	path := e.profiles(cfg).Path(id)
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+		return "", fmt.Errorf("profile %q does not exist; create it with \"streamcrew profile create\" or start the core once", id)
 	}
-	return in, nil
+	return path, nil
 }
 
 // writeReport writes the problems, one per line, and a summary, ending in
