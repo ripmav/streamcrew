@@ -32,6 +32,12 @@
    - Pfad: `--config` bzw. `STREAMCREW_CONFIG`. Ist er gesetzt, muss die Datei existieren, und nur sie wird gelesen. Sonst wird `<Standard-Datenverzeichnis>/config.yaml` gelesen, falls vorhanden.
    - YAML erlaubt Kommentare und ist dasselbe Format wie später die Commands als Code.
    - **Die YAML-Bibliothek gilt damit für das ganze Projekt**, auch für Commands als Code. Der geplante Backlog-Eintrag „YAML-Bibliothek“ entfällt. Phase 3 prüft nur, ob die Bibliothek dort genügt, etwa bei Fehlermeldungen mit Zeile und Spalte; wenn nicht, löst ein neues Code-ADR diesen Punkt ab.
+
+     *Geprüft am 2026-10-03 (Roadmap 3.5), Entscheidung des Projektinhabers: `go.yaml.in/yaml/v3` (v3.0.5) genügt für Commands als Code.*
+     - *Jeder Knoten kennt Zeile und Spalte (`yaml.Node`). Inhaltliche Fehler wie ein unbekanntes Feld, ein falscher Typ oder eine ungültige Action nennen deshalb beides, wenn die Prüfung über die Knoten läuft.*
+     - *Nur reine YAML-Syntaxfehler nennen mit v3 allein die Zeile. `go.yaml.in/yaml/v4` nennt auch die Spalte, ist aber noch ein Release Candidate (v4.0.0-rc.6 vom 2026-06-17); der Wechsel steht im Backlog der Roadmap, sobald v4 stabil ist.*
+     - *Die Typerkennung folgt YAML 1.2: `no`, `yes`, `on` und `off` bleiben Text. Zahlen stehen als ihr Text im Knoten und lassen sich exakt als Dezimalzahl lesen (Code-ADR-0020).*
+     - *Doppelte Schlüssel meldet v3 beim Lesen in Go-Werte, über `yaml.Node` aber nicht; der Weg über die Knoten prüft sie selbst.*
 4. **Pfade:**
    - Datenverzeichnis: `--data-dir` bzw. `STREAMCREW_DATA_DIR`. Standard ist `os.UserConfigDir()/streamcrew`, also z. B. `~/.config/streamcrew`, `%AppData%\streamcrew` oder `~/Library/Application Support/streamcrew`.
    - **Portabler Modus:** Liegt neben dem Binary eine Datei `streamcrew.portable`, ist das Standard-Datenverzeichnis `<Verzeichnis des Binarys>/streamcrew-data`. Eine ausdrückliche Angabe mit `--data-dir` gilt weiterhin.
