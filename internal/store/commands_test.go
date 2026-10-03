@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
+	"errors"
 	"fmt"
 	"slices"
 	"testing"
@@ -246,14 +247,18 @@ func TestOneCommandPerEventType(t *testing.T) {
 	require.NoError(t, err, "the Twitch-specific type is a type of its own (B2)")
 }
 
-// TestCooldownGroups covers commands.md B33 and B64: names unique
+// TestCooldownGroups covers commands.md B8, B33 and B64: names unique
 // regardless of case, a positive duration, cooldowns that must name an
-// existing cooldown group, and commands that stay readable when it is
-// deleted.
+// existing cooldown group, a cooldown group that cannot be deleted while a
+// cooldown names it, and commands that stay readable if it is gone anyway,
+// as in data from before B8.
 func TestCooldownGroups(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	svc, _ := commandService(t)
+	codec, err := command.NewCodec()
+	require.NoError(t, err)
+	s := openStore(t)
+	svc := newCommandService(t, s, codec)
 
 	sounds, err := svc.SaveCooldownGroup(ctx, command.CooldownGroup{Name: "Sounds", Duration: 30 * time.Second})
 	require.NoError(t, err)
@@ -286,13 +291,22 @@ func TestCooldownGroups(t *testing.T) {
 	require.ErrorIs(t, err, command.ErrInvalid)
 	require.ErrorContains(t, err, "unknown cooldown group")
 
-	require.NoError(t, svc.DeleteCooldownGroup(ctx, sounds.ID))
+	err = svc.DeleteCooldownGroup(ctx, sounds.ID)
+	require.ErrorIs(t, err, command.ErrInUse, "B8, B64: the cooldown of boom names it")
+	require.EqualError(t, err, `cooldown group "Sounds" is in use by "boom" (cooldown), so it cannot be deleted`)
+
+	require.NoError(t, s.DeleteCooldownGroup(ctx, sounds.ID), "as data from before B8")
 	_, err = svc.CooldownGroup(ctx, sounds.ID)
 	require.ErrorIs(t, err, store.ErrNotFound)
 	require.ErrorIs(t, svc.DeleteCooldownGroup(ctx, sounds.ID), store.ErrNotFound)
 	kept, err := svc.Command(ctx, saved.ID)
 	require.NoError(t, err, "the command stays readable")
 	assert.Equal(t, []command.Requirement{command.CooldownRequirement{Scope: command.CooldownGrouped, Group: sounds.ID}}, kept.Requirements)
+
+	kept.Requirements = nil
+	_, err = svc.Save(ctx, kept)
+	require.NoError(t, err)
+	require.NoError(t, svc.DeleteCooldownGroup(ctx, alerts.ID), "no command names alerts")
 }
 
 // TestGroups covers B30, B31 and B62.
@@ -692,4 +706,90 @@ func TestSwitchGroup(t *testing.T) {
 	require.NoError(t, svc.SwitchGroup(ctx, empty.ID, command.SwitchOn), "a group without commands")
 	require.ErrorIs(t, svc.SwitchGroup(ctx, id.New(), command.SwitchOn), store.ErrNotFound)
 	require.ErrorIs(t, svc.SwitchGroup(ctx, fun.ID, ""), command.ErrInvalid)
+}
+
+// TestDeleteReferenced covers commands.md B8, B62 and B69: a command, a
+// command group or a cooldown group that another command refers to cannot
+// be deleted, and the error names who refers to it and where; a reference
+// to itself and the members of a group do not count.
+func TestDeleteReferenced(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	codec, err := command.NewCodec(polydoc.Entry[command.Action]{
+		Type: "ref", Version: 1,
+		Decode: func(data []byte, opts json.Options) (command.Action, error) {
+			return polydoc.Strict[refAction](data, opts)
+		},
+	})
+	require.NoError(t, err)
+	svc := newCommandService(t, openStore(t), codec)
+
+	target, err := svc.Save(ctx, chatCommand("Target", true, "target"))
+	require.NoError(t, err)
+	fun, err := svc.SaveGroup(ctx, command.Group{Name: "Fun"})
+	require.NoError(t, err)
+	slow, err := svc.SaveCooldownGroup(ctx, command.CooldownGroup{Name: "Slow", Duration: time.Minute})
+	require.NoError(t, err)
+
+	caller := chatCommand("Caller", true, "caller")
+	caller.Actions = []command.Action{refAction{}, refAction{Commands: []id.ID{target.ID}, Kids: []command.Action{
+		refAction{Commands: []id.ID{target.ID}, Groups: []id.ID{fun.ID}},
+	}}}
+	caller.Requirements = []command.Requirement{command.CooldownRequirement{Scope: command.CooldownPerUserGrouped, Group: slow.ID}}
+	caller, err = svc.Save(ctx, caller)
+	require.NoError(t, err)
+	other := chatCommand("Other", false, "other")
+	other.Actions = []command.Action{refAction{Commands: []id.ID{target.ID}}}
+	other, err = svc.Save(ctx, other)
+	require.NoError(t, err)
+	member := chatCommand("Member", true, "member")
+	member.GroupID = fun.ID
+	_, err = svc.Save(ctx, member)
+	require.NoError(t, err)
+	self, err := svc.Save(ctx, chatCommand("Self", true, "self"))
+	require.NoError(t, err)
+	self.Actions = []command.Action{refAction{Commands: []id.ID{self.ID}}}
+	self, err = svc.Save(ctx, self)
+	require.NoError(t, err)
+
+	err = svc.Delete(ctx, target.ID)
+	require.ErrorIs(t, err, command.ErrInUse)
+	require.EqualError(t, err, `command "Target" is in use by "Caller" (action 2, action 2.1), "Other" (action 1), so it cannot be deleted; switch it off instead`)
+	inUse, ok := errors.AsType[*command.InUseError](err)
+	require.True(t, ok)
+	assert.ElementsMatch(t, []id.ID{caller.ID, other.ID}, []id.ID{inUse.Users[0].CommandID, inUse.Users[1].CommandID})
+
+	err = svc.DeleteGroup(ctx, fun.ID)
+	require.ErrorIs(t, err, command.ErrInUse)
+	require.EqualError(t, err, `command group "Fun" is in use by "Caller" (action 2.1), so it cannot be deleted`, "B62: Member belongs to it, which does not count")
+	err = svc.DeleteCooldownGroup(ctx, slow.ID)
+	require.EqualError(t, err, `cooldown group "Slow" is in use by "Caller" (cooldown), so it cannot be deleted`)
+
+	require.NoError(t, svc.Delete(ctx, self.ID), "B69: a reference to itself does not count")
+	require.ErrorIs(t, svc.Delete(ctx, self.ID), store.ErrNotFound)
+	require.ErrorIs(t, svc.DeleteGroup(ctx, id.New()), store.ErrNotFound)
+	require.ErrorIs(t, svc.DeleteCooldownGroup(ctx, id.New()), store.ErrNotFound)
+
+	require.NoError(t, svc.Delete(ctx, caller.ID))
+	require.NoError(t, svc.Delete(ctx, other.ID))
+	require.NoError(t, svc.Delete(ctx, target.ID), "no command refers to it any more")
+	require.NoError(t, svc.DeleteGroup(ctx, fun.ID))
+	require.NoError(t, svc.DeleteCooldownGroup(ctx, slow.ID))
+	kept, err := svc.Command(ctx, mustFind(t, svc, "Member"))
+	require.NoError(t, err)
+	assert.True(t, kept.GroupID.IsZero(), "B62: the member stays, without its group")
+}
+
+// mustFind returns the ID of the command name.
+func mustFind(t *testing.T, svc *commandSaver, name string) id.ID {
+	t.Helper()
+	cmds, err := svc.Commands(t.Context())
+	require.NoError(t, err)
+	for _, c := range cmds {
+		if c.Name == name {
+			return c.ID
+		}
+	}
+	t.Fatalf("no command %q", name)
+	return id.ID{}
 }
