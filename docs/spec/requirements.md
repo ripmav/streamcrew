@@ -43,7 +43,7 @@ Nicht Teil dieser Spezifikation:
 | B4 | Nutzergebundene Anforderungen brauchen einen Nutzer. Hat der Durchlauf keinen, etwa bei einem Timer-Command, gilt für die Prüfung der Anforderungen der Streamer: der Nutzer des Streamer-Kontos auf der Plattform des Durchlaufs, ohne Plattform auf der Standardplattform Twitch ([ADR-0004](../adr/0004-plattformumfang-zum-start.md)). Er erfüllt jede Rolle, ein Cooldown je Nutzer gilt für ihn, und Kosten zahlt er nie (B41). Der Durchlauf selbst bleibt ohne Nutzer; Identifier wie `$username` bleiben leer ([`command-engine.md`](command-engine.md), B80). | Q4, A11 |
 | B5 | Ein Aufruf mit Prüfung prüft mit dem Nutzer, der Plattform und den Argumenten, die der aufgerufene Command bekommt ([`command-engine.md`](command-engine.md), B33, B34). | Q1 |
 | B6 | Start von Hand und Wiederholen prüfen nichts ([`command-engine.md`](command-engine.md), B14, B54). | Q1 |
-| B7 | Ein fehlerhafter Command, etwa mit einer gelöschten Währung oder einem Gruppen-Cooldown ohne Gruppe, wird abgelehnt, ohne dass der Nutzer es erfährt, mit einer Warnung im Log; die API zeigt ihn als fehlerhaft, bis der Verweis repariert ist ([`commands.md`](commands.md), B63). | Q1 |
+| B7 | Ein fehlerhafter Command, etwa mit einer gelöschten Währung oder einem Gruppen-Cooldown ohne Cooldown-Gruppe, wird abgelehnt, ohne dass der Nutzer es erfährt, mit einer Warnung im Log; die API zeigt ihn als fehlerhaft, bis der Verweis repariert ist ([`commands.md`](commands.md), B63). | Q1 |
 | B8 | Eine Anforderung unbekannten Typs, etwa aus einer neueren Version, ist nie erfüllt (Code-ADR-0010): Ablehnung ohne Meldung, Warnung im Log. | Code-ADR-0010 |
 
 ### Rolle
@@ -58,8 +58,8 @@ Nicht Teil dieser Spezifikation:
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B20 | Arten ([`commands.md`](commands.md), B41): `standard` sperrt den Command für alle; `group` sperrt alle Commands der Gruppe, die selbst einen Gruppen-Cooldown haben; `per_user` sperrt den Command für den Nutzer; `per_user_group` sperrt für den Nutzer alle Commands der Gruppe mit dieser Art. | Q1 |
-| B21 | Ein Cooldown beginnt beim Einreihen ([`command-engine.md`](command-engine.md), B10) und dauert so lange, wie die Anforderung des Commands sagt, der ihn gestartet hat. Bei den Gruppen-Arten gilt also die Dauer des Commands, der zuletzt durchkam. | Q1, A3 |
+| B20 | Arten ([`commands.md`](commands.md), B41): `standard` sperrt den Command für alle; `group` sperrt alle Commands, die dieselbe Cooldown-Gruppe nennen ([`commands.md`](commands.md), B33); `per_user` sperrt den Command für den Nutzer; `per_user_group` sperrt für den Nutzer alle Commands, die dieselbe Cooldown-Gruppe mit dieser Art nennen. | Q1, Q4 |
+| B21 | Ein Cooldown beginnt beim Einreihen ([`command-engine.md`](command-engine.md), B10) und dauert bei `standard` und `per_user` so lange, wie die Anforderung sagt, bei den Gruppen-Arten so lange, wie die Cooldown-Gruppe beim Einreihen sagt. | Q1, Q4, A3 |
 | B22 | Cooldowns je Nutzer gelten für den Nutzer, nicht für eine einzelne Plattform-Identität ([`users-and-roles.md`](users-and-roles.md)): Wer auf zwei Plattformen verknüpft ist, teilt seinen Cooldown. | QP (§6.8) |
 | B23 | Laufende Cooldowns werden gespeichert und überstehen einen Neustart. Ändert der Streamer die Dauer, behalten laufende Cooldowns ihr Ende. | A4 |
 | B24 | Die Meldung nennt die Restzeit in den zwei größten Einheiten aus Tagen, Stunden, Minuten und Sekunden; die zweite wird aufgerundet und entfällt, wenn sie 0 ist: 60 s sind „1 Minute“, 61 s „1 Minute 1 Sekunde“, 3 601 s „1 Stunde 1 Minute“. So endet der Cooldown nie später als genannt. Bei `per_user` und `per_user_group` spricht sie den Nutzer an, sonst gilt sie für alle. | A2 |
@@ -127,7 +127,7 @@ Die Meldungen je Art:
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B80 | Beim Speichern prüft der Service die Anforderungen eines Commands als Menge. Abgelehnt wird: eine Art mehr als einmal ([`commands.md`](commands.md)), ein Gruppen-Cooldown bei einem Command ohne Gruppe, ein Pflichtargument nach einem optionalen (B34), ein Identifier-Name, der B36 verletzt, und „im Kontextmenü anbieten“ bei einem Command, der kein Chat-Command ist (B62). | Q1, QP (§6.9) |
+| B80 | Beim Speichern prüft der Service die Anforderungen eines Commands als Menge. Abgelehnt wird: eine Art mehr als einmal ([`commands.md`](commands.md)), ein Gruppen-Cooldown ohne Cooldown-Gruppe oder mit einer, die es nicht gibt, ein Pflichtargument nach einem optionalen (B34), ein Identifier-Name, der B36 verletzt, und „im Kontextmenü anbieten“ bei einem Command, der kein Chat-Command ist (B62). | Q1, QP (§6.9) |
 | B81 | Eine Warnung, aber kein Verbot, gibt es für Verweise auf Währungen, Ränge oder Gegenstände, die es nicht gibt (B40). So bleiben Importe erhalten. | A7 |
 
 ## Randfälle
@@ -137,7 +137,7 @@ Die Meldungen je Art:
 | B100 | Derselbe Nutzer löst einen Command mit `per_user`-Cooldown zweimal gleichzeitig aus | genau ein Durchlauf; das zweite Auslösen wird mit der Restzeit abgelehnt | B3, B20 |
 | B101 | Ein Nutzer ohne die verlangte Rolle löst einen Command aus, dessen Cooldown läuft | Die Meldung betrifft die Rolle (B2). | B2 |
 | B102 | Die Dauer wird von 60 auf 10 s geändert, während noch 50 s übrig sind | Der Cooldown endet nach den 50 s. | B23 |
-| B103 | Die Gruppe eines Commands mit Gruppen-Cooldown wird gelöscht | Der Command ist fehlerhaft: keine Meldung, Warnung im Log. | B7, [`commands.md`](commands.md) B62 |
+| B103 | Die Cooldown-Gruppe eines Commands wird gelöscht | Der Command ist fehlerhaft: keine Meldung, Warnung im Log. | B7, [`commands.md`](commands.md) B64 |
 | B104 | Ein Timer-Command ruft mit Prüfung einen Command mit Rollen-Anforderung auf | Der Command läuft: Für die Anforderungen gilt der Streamer (B4). | B4 |
 | B105 | Ein Argument vom Typ `user` lautet `@Name` in anderer Schreibweise | Der Nutzer wird gefunden; der Wert ist sein Login-Name. | B33, B35 |
 | B106 | Ein Argument vom Typ `number` lautet `1,5` | nicht erfüllt; die Meldung nennt den erwarteten Typ | B33 |
@@ -153,7 +153,7 @@ Die Meldungen je Art:
 |---|---|---|---|
 | A1 | Reihenfolge der gespeicherten Liste; der Editor speichert Rolle, Cooldown, Währung, Rang, Inventar, Argumente, Schwelle, Einstellungen (Q4) | feste Reihenfolge, Argumente vor den Kosten (B2) | Wer die Rolle nicht hat, erfährt nichts über Cooldowns oder Argumente; ein gesperrter Command lädt nicht zum Korrigieren der Eingabe ein; die Argumente vor den Kosten, weil ein Betrag aus einem Argument kommen kann; die Schwelle zählt nur vollständige Auslösungen; Entscheidung des Projektinhabers (2026-10-02) |
 | A2 | Restzeit in einer Einheit, Minuten und Stunden abgeschnitten (119 s sind „1 Minute“); dieselbe Meldung für alle Arten (Q4) | zwei Einheiten, die zweite aufgerundet und bei 0 weggelassen; je Nutzer an den Nutzer gerichtet (B24) | genau genug, ohne die Wartezeit zu übertreiben oder zu kurz anzugeben; Entscheidung des Projektinhabers (2026-10-02) |
-| A3 | nicht dokumentiert, ob die Dauer eines Gruppen-Cooldowns an der Gruppe oder am Command hängt | Dauer des Commands, der ihn startet (B21) | folgt dem Datenmodell, in dem die Dauer an der Anforderung des Commands steht; zu prüfen |
+| A3 | Cooldown-Gruppen mit eigenem Namen und einer Dauer je Name, die das Cooldown-Feld des zuletzt gespeicherten Commands einstellt (Q4) | Cooldown-Gruppen mit eigener Dauer ([`commands.md`](commands.md), B33) | eine Dauer je Gruppe wie im Original, an einer Stelle eingestellt; Entscheidung des Projektinhabers (2026-10-02) |
 | A4 | Kein Cooldown übersteht einen Neustart; schon das Speichern des Commands setzt seine Cooldowns zurück, außer den Gruppen-Cooldowns (Q4) | gespeichert, eine geänderte Dauer lässt laufende Cooldowns stehen (B23) | Tägliche Commands mit langen Cooldowns sollen nach einem Neustart nicht wieder frei sein, und Bearbeiten soll keine Hintertür öffnen; Entscheidung des Projektinhabers (2026-10-02) |
 | A5 | Jedes Argument bekommt genau ein Wort; Anführungszeichen wirken nicht, überzählige Wörter werden ignoriert (Q4) | Zuordnung nach Position, Rest im letzten Text-Argument, Meldung mit Verwendung (B30–B34) | Befehle wie das Hinzufügen einer Quote brauchen den ganzen Text; die Verwendung zeigt, wie es richtig geht; Entscheidung des Projektinhabers (2026-10-02) |
 | A6 | ein Schalter für alle Argumente; der Identifier heißt wie das Argument, klein und ohne Leerzeichen | Identifier-Name je Argument ausdrücklich, der Import leitet ihn ab (B35, B36) | keine abgeleiteten Namen zur Laufzeit (Code-ADR-0017); der Name lässt sich beim Speichern prüfen |
@@ -179,7 +179,6 @@ Die Meldungen je Art:
 
 ## Offene Fragen
 
-- B21/A3: Wo stellt das Original die Dauer eines Gruppen-Cooldowns ein? Gilt er auch für Commands der Gruppe ohne Gruppen-Cooldown ([`commands.md`](commands.md), offene Frage zu B41)?
 - B33: Welche Argumenttypen gibt es im Original ([`commands.md`](commands.md), offene Frage zu B45)?
 
 ## Quellen
@@ -199,3 +198,4 @@ Die Meldungen je Art:
 | 2026-09-30 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
 | 2026-10-01 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
 | 2026-10-02 | Offene Fragen am Original geklärt (Q4) und entschieden (Entscheidungen des Projektinhabers). Übereinstimmend und ohne Verweis: keine Erstattung, Cooldown ab dem Einreihen, Cooldown je Nutzer über verknüpfte Identitäten. Geblieben, mit dem Verhalten des Originals unter „Abweichungen“: Reihenfolge der Prüfungen (A1), gespeicherte Cooldowns (A4), Rest im letzten Text-Argument (A5), fehlerhafte Verweise ohne Meldung (A7), Kosten bei einer Schwelle (A8), wer Meldungen bekommt (A10), nur eine Mindestrolle (A12, das Übrige im Backlog). Geändert: Ohne Nutzer gilt für die Anforderungen der Streamer, der nie zahlt (B4, B41, A11); B81 warnt deshalb nicht mehr bei Timer-Commands, und B104 läuft. Die Cooldown-Meldung nennt zwei Einheiten, die zweite aufgerundet und bei 0 weggelassen (B24, A2). Eine wartende Schwelle meldet, wie viele Nutzer fehlen (B51). Die auslösende Nachricht wird auch bei einer Ablehnung gelöscht (B61). Offen bleiben B21 und B33; benannte Cooldown-Gruppen und der Typ `integer` ändern das Datenmodell und kommen mit eigenen PRs. |
+| 2026-10-02 | B20, B21, B80 und B103 an die benannten Cooldown-Gruppen angepasst ([`commands.md`](commands.md), B33; Entscheidung des Projektinhabers): Die Gruppen-Arten teilen den Cooldown über eine Cooldown-Gruppe mit eigener Dauer statt über die Gruppe des Commands (A3). Die offene Frage zu B21 ist geklärt. |

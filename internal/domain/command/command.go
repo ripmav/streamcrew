@@ -131,6 +131,20 @@ type Group struct {
 	UpdatedAt time.Time
 }
 
+// CooldownGroup is a named cooldown that commands share (B33): the
+// cooldown requirements of the grouped scopes name it and take its
+// duration. It is independent of the command groups (B30).
+type CooldownGroup struct {
+	ID id.ID
+	// Name is unique, regardless of case.
+	Name string
+	// Duration is the duration of the cooldown; it is positive.
+	Duration time.Duration
+	// CreatedAt and UpdatedAt are maintained by the service.
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 // ErrInvalid is wrapped by validation errors.
 var ErrInvalid = errors.New("invalid command")
 
@@ -247,6 +261,17 @@ func (g Group) Validate() error {
 	return nil
 }
 
+// Validate checks a cooldown group before it is saved.
+func (g CooldownGroup) Validate() error {
+	if err := name(g.Name); err != nil {
+		return err
+	}
+	if g.Duration <= 0 {
+		return invalid("the duration of cooldown group %q must be positive", g.Name)
+	}
+	return nil
+}
+
 // name checks the name of a command or group.
 func name(v string) error {
 	if strings.TrimSpace(v) == "" {
@@ -265,7 +290,8 @@ func name(v string) error {
 // return an error wrapping store.ErrNotFound for a missing command or group
 // and store.ErrConflict for a trigger that an enabled chat command already
 // uses (B14), a second command for an event type (B20), a group name in use
-// (B30) or a group that does not exist.
+// (B30) or a cooldown group name in use (B33), or a group that does not
+// exist.
 type Repository interface {
 	Command(ctx context.Context, commandID id.ID) (Record, error)
 	Commands(ctx context.Context) ([]Record, error)
@@ -280,6 +306,14 @@ type Repository interface {
 	PutGroup(ctx context.Context, g Group) error
 	// DeleteGroup deletes a group; its commands stay without a group (B62).
 	DeleteGroup(ctx context.Context, groupID id.ID) error
+	CooldownGroup(ctx context.Context, groupID id.ID) (CooldownGroup, error)
+	CooldownGroups(ctx context.Context) ([]CooldownGroup, error)
+	// PutCooldownGroup inserts or replaces a cooldown group; CreatedAt is
+	// kept from the first insert.
+	PutCooldownGroup(ctx context.Context, g CooldownGroup) error
+	// DeleteCooldownGroup deletes a cooldown group; commands whose
+	// cooldown names it become faulty (B64).
+	DeleteCooldownGroup(ctx context.Context, groupID id.ID) error
 	// SwitchCommands changes the switch "active" of the commands by sw, in
 	// one transaction: all or none. A command whose switch does not change
 	// keeps its UpdatedAt; the others get updatedAt.

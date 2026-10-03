@@ -183,6 +183,55 @@ func TestOneCommandPerEventType(t *testing.T) {
 	require.NoError(t, err, "the Twitch-specific type is a type of its own (B2)")
 }
 
+// TestCooldownGroups covers commands.md B33 and B64: names unique
+// regardless of case, a positive duration, cooldowns that must name an
+// existing cooldown group, and commands that stay readable when it is
+// deleted.
+func TestCooldownGroups(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc, _ := commandService(t)
+
+	sounds, err := svc.SaveCooldownGroup(ctx, command.CooldownGroup{Name: "Sounds", Duration: 30 * time.Second})
+	require.NoError(t, err)
+	assert.False(t, sounds.ID.IsZero())
+	assert.Equal(t, 30*time.Second, sounds.Duration)
+	_, err = svc.SaveCooldownGroup(ctx, command.CooldownGroup{Name: "SOUNDS", Duration: time.Second})
+	require.ErrorIs(t, err, store.ErrConflict, "names are unique regardless of case")
+	_, err = svc.SaveCooldownGroup(ctx, command.CooldownGroup{Name: "zero"})
+	require.ErrorIs(t, err, command.ErrInvalid)
+
+	sounds.Duration = time.Minute
+	updated, err := svc.SaveCooldownGroup(ctx, sounds)
+	require.NoError(t, err)
+	assert.Equal(t, time.Minute, updated.Duration)
+	assert.Equal(t, sounds.CreatedAt, updated.CreatedAt)
+	alerts, err := svc.SaveCooldownGroup(ctx, command.CooldownGroup{Name: "alerts", Duration: time.Second})
+	require.NoError(t, err)
+	all, err := svc.CooldownGroups(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []id.ID{alerts.ID, sounds.ID}, []id.ID{all[0].ID, all[1].ID}, "by name")
+
+	cmd := chatCommand("boom", true, "boom")
+	cmd.Requirements = []command.Requirement{command.CooldownRequirement{Scope: command.CooldownGrouped, Group: sounds.ID}}
+	saved, err := svc.Save(ctx, cmd)
+	require.NoError(t, err)
+
+	unknown := chatCommand("bang", true, "bang")
+	unknown.Requirements = []command.Requirement{command.CooldownRequirement{Scope: command.CooldownPerUserGrouped, Group: id.New()}}
+	_, err = svc.Save(ctx, unknown)
+	require.ErrorIs(t, err, command.ErrInvalid)
+	require.ErrorContains(t, err, "unknown cooldown group")
+
+	require.NoError(t, svc.DeleteCooldownGroup(ctx, sounds.ID))
+	_, err = svc.CooldownGroup(ctx, sounds.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.ErrorIs(t, svc.DeleteCooldownGroup(ctx, sounds.ID), store.ErrNotFound)
+	kept, err := svc.Command(ctx, saved.ID)
+	require.NoError(t, err, "the command stays readable")
+	assert.Equal(t, []command.Requirement{command.CooldownRequirement{Scope: command.CooldownGrouped, Group: sounds.ID}}, kept.Requirements)
+}
+
 // TestGroups covers B30, B31 and B62.
 func TestGroups(t *testing.T) {
 	t.Parallel()
