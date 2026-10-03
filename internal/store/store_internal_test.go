@@ -164,6 +164,66 @@ func TestTriggerModeMigration(t *testing.T) {
 	assert.Equal(t, []string{"hug", "umarmen", "what"}, oldKeys)
 }
 
+// TestFineRolesMigration covers users-and-roles.md, B20: the stored roles
+// of platform accounts move to the levels of their platform, and back.
+func TestFineRolesMigration(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, err := Open(ctx, filepath.Join(t.TempDir(), "p.db"))
+	require.NoError(t, err)
+	defer s.Close()
+	fsys, err := fs.Sub(migrations, "migrations")
+	require.NoError(t, err)
+	p, err := goose.NewProvider(goose.DialectSQLite3, s.write, fsys, goose.WithDisableGlobalRegistry(true))
+	require.NoError(t, err)
+
+	const beforeRoles = 9
+	_, err = p.DownTo(ctx, beforeRoles)
+	require.NoError(t, err)
+	ada := id.New()
+	_, err = s.write.ExecContext(ctx, `INSERT INTO users (id, title, notes, excluded, regular, created_at, updated_at)
+		VALUES (?, '', '', 0, 0, 0, 0)`, ada.String())
+	require.NoError(t, err)
+	_, err = s.write.ExecContext(ctx, `INSERT INTO user_stats (user_id, watch_minutes, messages, commands_run, mentions,
+		streams_watched, donated_cents, strikes) VALUES (?, 0, 0, 0, 0, 0, 0, 0)`, ada.String())
+	require.NoError(t, err)
+	for _, ident := range []struct{ platform, id, roles string }{
+		{"twitch", "t1", `["user","creator","follower","vip","subscriber","platform_staff","moderator"]`},
+		{"youtube", "y1", `["follower","subscriber"]`},
+		{"kick", "k1", `["vip","editor"]`},
+		{"twitch", "t2", `[]`},
+	} {
+		_, err = s.write.ExecContext(ctx, `INSERT INTO user_identities (platform, platform_user_id, user_id, login,
+			display_name, color, avatar_url, roles, sub_tier, created_at, updated_at)
+			VALUES (?, ?, ?, ?, '', '', '', ?, 0, 0, 0)`, ident.platform, ident.id, ada.String(), ident.id, ident.roles)
+		require.NoError(t, err)
+	}
+	_, err = p.Up(ctx)
+	require.NoError(t, err)
+
+	u, err := s.User(ctx, ada)
+	require.NoError(t, err)
+	got := map[string]string{}
+	for _, i := range u.Identities {
+		got[i.PlatformUserID] = i.Roles.String()
+	}
+	assert.Equal(t, map[string]string{
+		"t1": "user,twitch_affiliate,follower,twitch_vip,subscriber,twitch_global_mod,moderator",
+		"y1": "youtube_subscriber,youtube_member",
+		"k1": "kick_vip,editor",
+		"t2": "",
+	}, got)
+
+	_, err = s.write.ExecContext(ctx, `UPDATE user_identities SET roles = '["twitch_partner","follower","youtube_subscriber","kick_og","vpzone_ambassador","twitch_staff"]'
+		WHERE platform_user_id = 't2'`)
+	require.NoError(t, err)
+	_, err = p.DownTo(ctx, beforeRoles)
+	require.NoError(t, err)
+	var back string
+	require.NoError(t, s.write.QueryRowContext(ctx, "SELECT roles FROM user_identities WHERE platform_user_id = 't2'").Scan(&back))
+	assert.JSONEq(t, `["creator","follower","vip","platform_staff"]`, back, "the way down merges the levels")
+}
+
 func TestLatestVersionMatchesFiles(t *testing.T) {
 	t.Parallel()
 	versions := knownVersions()

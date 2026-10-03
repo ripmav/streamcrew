@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Status** | Geprüft |
-| **Stand** | 2026-10-02 |
+| **Stand** | 2026-10-03 |
 | **Bezug** | Roadmap Phase 2.2 (Nutzer, Rollenmodell), 5.2; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0009](../adr/code/0009-ids-und-zeit.md); Plan §5.5, §6.13, Anhang A.6, A.7 |
-| **Umsetzung** | Datenmodell und Rollen umgesetzt: `internal/domain/role`, `internal/domain/user`, `internal/domain/platform`, Repository in `internal/store`. Offen: die feinen Stufen der Rangordnung (B20, Stand 2026-10-02, Roadmap 3.4), Titelregeln (B5) und Vergabe der Regular-Rolle (B26) mit Phase 5.2, nutzerspezifische Chat-Commands (B8, P1), Import (B11, P2) |
+| **Umsetzung** | Datenmodell und Rollen umgesetzt: `internal/domain/role`, `internal/domain/user`, `internal/domain/platform`, Repository in `internal/store`; die feinen Stufen der Rangordnung (B20) seit Roadmap 3.5, mit Migration 0010 für gespeicherte Rollen und Version 2 der Rollen-Anforderung. Offen: Titelregeln (B5) und Vergabe der Regular-Rolle (B26) mit Phase 5.2, nutzerspezifische Chat-Commands (B8, P1), Import (B11, P2) |
 
 ## Zweck und Umfang
 
@@ -74,7 +74,7 @@ Nicht Teil dieser Spezifikation:
 | ID | Original | streamcrew | Begründung |
 |---|---|---|---|
 | A1 | Die Rolle „gebannt“ ist veraltet und wird nie vergeben; ein Bann ändert keine Rollen. Gebannte Nutzer können auf Twitch nicht schreiben; kommt doch eine Nachricht an, erfüllen sie `user` (Q11). | `banned` aus dem Bann auf der Plattform; ein gebannter Nutzer erfüllt keine Mindestrolle (B27) | Sicherheit: Nachrichten, die kurz vor oder trotz des Banns ankommen, lösen nichts aus; Entscheidung des Projektinhabers (2026-10-02) |
-| A2 | Rollennamen als Anzeigetexte | stabile Kennungen in Kleinbuchstaben (`follower`, `vip` …), Anzeige über i18n | Commands als Code und API brauchen stabile Werte (Plan §6.9, §6.22) |
+| A2 | Rollennamen als Anzeigetexte | stabile Kennungen in Kleinbuchstaben (`follower`, `twitch_vip` …), Anzeige über i18n | Commands als Code und API brauchen stabile Werte (Plan §6.9, §6.22) |
 | A3 | IDs je Plattform | zusätzlich eine plattformunabhängige ID je Nutzer | Mehrplattform-Betrieb und Verknüpfung (Plan §5.2) |
 | A4 | Regular hängt am Plattformkonto, mit dem der Nutzer gerade aktiv ist; bewertet wird einmal pro Minute für Nutzer, die im Chat eines Live-Streams aktiv sind (Q11) | Regular gehört zum Nutzer und wird sofort neu bewertet (B26) | Die Watchtime zählt ohnehin am Nutzer; eine neue Schwelle soll sofort gelten; Entscheidung des Projektinhabers (2026-10-02) |
 
@@ -85,7 +85,7 @@ Nicht Teil dieser Spezifikation:
 - [x] B20, B23: Tabellengetriebener Test über alle Paare aus Nutzerrolle und Mindestrolle.
 - [x] B22: Hauptrolle eines Nutzers mit mehreren Rollen ist die höchste.
 - [x] B27: Ein gebannter Nutzer erfüllt keine Mindestrolle.
-- [ ] B20: Die feinen Stufen über alle Paare aus Nutzerrolle und Mindestrolle; gespeicherte Rollen und Anforderungen mit den bisherigen Kennungen werden übernommen.
+- [x] B20: Die feinen Stufen über alle Paare aus Nutzerrolle und Mindestrolle; gespeicherte Rollen und Anforderungen mit den bisherigen Kennungen werden übernommen.
 - [ ] B5: Titelregeln nach Rolle und Monaten, „Kein Titel“ in beiden Sprachen.
 - [ ] B26: Regular ab der Schwelle, Schwelle 0, Neubewertung bei neuer Watchtime und neuer Schwelle.
 - [x] B9: Statistiken werden gespeichert und gelesen (Integrationstest gegen SQLite).
@@ -117,3 +117,4 @@ Keine.
 | 2026-09-30 | Identifier der Nutzer umgesetzt (`internal/template`, Spezifikation Templates, B60). Festlegung dabei: Bis zu den Standardtiteln (B5, Phase 5.2) gilt die Hauptrolle als Titel. |
 | 2026-10-02 | B8: Der Entrance-Command läuft nur, solange der Stream live ist (Entscheidung des Projektinhabers, [`command-engine.md`](command-engine.md), B41). |
 | 2026-10-02 | Offene Fragen am Original geklärt (Q11) und entschieden (Entscheidungen des Projektinhabers). Übernommen: die feinen Stufen der Rangordnung mit eigener Kennung je Stufe (B20; die Festlegung vom 2026-09-29, plattformspezifische Rollen zählten auf einer gemeinsamen Stufe, entfällt), Titelregeln mit „Kein Titel“ (B5) und Regular über ganze Stunden Watchtime mit Standard 0 (B26). Geblieben, mit dem Verhalten des Originals unter „Abweichungen“: gebannte Nutzer erfüllen keine Mindestrolle (A1), Regular gehört zum Nutzer (A4). Übereinstimmend: Rollen gelten je Plattform-Identität, nicht über verknüpfte Konten (B24). Die Einstellung für exakte Rollen und die Stufen bei Abonnenten bleiben im Backlog ([`requirements.md`](requirements.md), A12). |
+| 2026-10-03 | Feine Stufen der Rangordnung umgesetzt (B20, Roadmap 3.5). Festlegungen dabei: Die bisherigen gemeinsamen Kennungen entfallen. Gespeicherte Rollen der Plattformkonten bekommen die Stufe ihrer Plattform, wo sie eindeutig ist (`follower` und `subscriber` auf YouTube werden `youtube_subscriber` und `youtube_member`, `vip` auf Kick `kick_vip`), sonst die niedrigste Stufe der gemeinsamen Kennung (`creator` wird `twitch_affiliate`, `vip` `twitch_vip`, `platform_staff` `twitch_global_mod`); so bekommt niemand eine höhere Rolle, und die nächste Aktualisierung durch die Plattform setzt die genaue (Migration 0010). Eine Rollen-Anforderung wird ebenso zur niedrigsten Stufe, damit jeder, der sie erfüllte, sie weiter erfüllt (Version 2 der Anforderung). Die Meldung der Rollen-Anforderung nennt jede Stufe mit eigenem Namen in beiden Sprachen. Für die Templates siehe [`template.md`](template.md). |

@@ -4,9 +4,10 @@
 // B20 to B27): the roles a user has in a channel, their fixed ranking and
 // the rule "meets the minimum role".
 //
-// Platform-specific roles belong to the level they rank at: the platform
-// adapters map, for example, a Twitch partner to Creator and a Kick OG to
-// VIP (B20).
+// The ranking has a level of its own for each platform-specific role, e.g.
+// a Twitch partner or a Kick OG, and compares them strictly like all others
+// (B20): a Kick VIP does not meet kick_og. The platform adapters map the
+// roles of their platform to these levels.
 package role
 
 import (
@@ -26,19 +27,38 @@ const (
 	Banned Role = "banned"
 	// User is every user who is not banned (B21).
 	User Role = "user"
-	// Creator is a Twitch affiliate or partner.
-	Creator Role = "creator"
-	// Follower follows the channel; on YouTube: a subscriber.
+	// TwitchAffiliate is a Twitch affiliate.
+	TwitchAffiliate Role = "twitch_affiliate"
+	// TwitchPartner is a Twitch partner.
+	TwitchPartner Role = "twitch_partner"
+	// Follower follows the channel.
 	Follower Role = "follower"
+	// YouTubeSubscriber is a subscriber of the channel on YouTube.
+	YouTubeSubscriber Role = "youtube_subscriber"
 	// Regular is a regular viewer; streamcrew assigns it itself (B26).
 	Regular Role = "regular"
-	// VIP is a VIP; on Kick also an OG, on VPZone Plus, Founder and
-	// Ambassador.
-	VIP Role = "vip"
-	// Subscriber is a subscriber; on YouTube: a member.
+	// TwitchVIP is a VIP on Twitch.
+	TwitchVIP Role = "twitch_vip"
+	// KickVIP is a VIP on Kick.
+	KickVIP Role = "kick_vip"
+	// KickOG is an OG on Kick.
+	KickOG Role = "kick_og"
+	// VeloraVIP is a VIP on Velora.
+	VeloraVIP Role = "velora_vip"
+	// VPZonePlus is a Plus member on VPZone.
+	VPZonePlus Role = "vpzone_plus"
+	// VPZoneFounder is a founder on VPZone.
+	VPZoneFounder Role = "vpzone_founder"
+	// VPZoneAmbassador is an ambassador on VPZone.
+	VPZoneAmbassador Role = "vpzone_ambassador"
+	// Subscriber is a subscriber; on YouTube a member is YouTubeMember.
 	Subscriber Role = "subscriber"
-	// PlatformStaff is a Twitch global moderator or staff member.
-	PlatformStaff Role = "platform_staff"
+	// YouTubeMember is a member of the channel on YouTube.
+	YouTubeMember Role = "youtube_member"
+	// TwitchGlobalMod is a global moderator of Twitch.
+	TwitchGlobalMod Role = "twitch_global_mod"
+	// TwitchStaff is a staff member of Twitch.
+	TwitchStaff Role = "twitch_staff"
 	// Moderator is a moderator of the channel.
 	Moderator Role = "moderator"
 	// Editor is a channel editor.
@@ -49,7 +69,11 @@ const (
 
 // All returns the roles in ascending rank.
 func All() []Role {
-	return []Role{Banned, User, Creator, Follower, Regular, VIP, Subscriber, PlatformStaff, Moderator, Editor, Streamer}
+	return []Role{
+		Banned, User, TwitchAffiliate, TwitchPartner, Follower, YouTubeSubscriber, Regular,
+		TwitchVIP, KickVIP, KickOG, VeloraVIP, VPZonePlus, VPZoneFounder, VPZoneAmbassador,
+		Subscriber, YouTubeMember, TwitchGlobalMod, TwitchStaff, Moderator, Editor, Streamer,
+	}
 }
 
 // Parse reads a role ID.
@@ -61,7 +85,7 @@ func Parse(s string) (Role, error) {
 	return r, nil
 }
 
-// Rank returns the position of r in the ranking, from 1 for Banned to 11
+// Rank returns the position of r in the ranking, from 1 for Banned to 21
 // for Streamer, or 0 for an unknown role.
 func (r Role) Rank() int {
 	switch r {
@@ -69,24 +93,44 @@ func (r Role) Rank() int {
 		return 1
 	case User:
 		return 2
-	case Creator:
+	case TwitchAffiliate:
 		return 3
-	case Follower:
+	case TwitchPartner:
 		return 4
-	case Regular:
+	case Follower:
 		return 5
-	case VIP:
+	case YouTubeSubscriber:
 		return 6
-	case Subscriber:
+	case Regular:
 		return 7
-	case PlatformStaff:
+	case TwitchVIP:
 		return 8
-	case Moderator:
+	case KickVIP:
 		return 9
-	case Editor:
+	case KickOG:
 		return 10
-	case Streamer:
+	case VeloraVIP:
 		return 11
+	case VPZonePlus:
+		return 12
+	case VPZoneFounder:
+		return 13
+	case VPZoneAmbassador:
+		return 14
+	case Subscriber:
+		return 15
+	case YouTubeMember:
+		return 16
+	case TwitchGlobalMod:
+		return 17
+	case TwitchStaff:
+		return 18
+	case Moderator:
+		return 19
+	case Editor:
+		return 20
+	case Streamer:
+		return 21
 	default:
 		return 0
 	}
@@ -98,7 +142,7 @@ func (r Role) Valid() bool {
 }
 
 // Set is a set of roles. The zero value is the empty set.
-type Set uint16
+type Set uint32
 
 // NewSet returns the set of the given roles; unknown roles are left out.
 func NewSet(roles ...Role) Set {
@@ -120,6 +164,11 @@ func bit(r Role) Set {
 func (s Set) Has(r Role) bool {
 	b := bit(r)
 	return b != 0 && s&b != 0
+}
+
+// HasAny reports whether one of roles is in the set.
+func (s Set) HasAny(roles ...Role) bool {
+	return s&NewSet(roles...) != 0
 }
 
 // With returns the set with r added; an unknown role leaves it unchanged.
