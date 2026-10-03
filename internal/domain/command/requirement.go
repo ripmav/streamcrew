@@ -264,11 +264,16 @@ func (r InventoryRequirement) Validate() error {
 // ArgumentType is the type of a command argument (B45).
 type ArgumentType string
 
-// Argument types.
+// Argument types (requirements.md, B33).
 const (
-	ArgumentText   ArgumentType = "text"
+	// ArgumentText takes any word, the last argument the rest of the text.
+	ArgumentText ArgumentType = "text"
+	// ArgumentNumber takes a decimal number with a point.
 	ArgumentNumber ArgumentType = "number"
-	ArgumentUser   ArgumentType = "user"
+	// ArgumentInteger takes a whole number of 64 bits.
+	ArgumentInteger ArgumentType = "integer"
+	// ArgumentUser takes a user the platform knows, or any name with "@".
+	ArgumentUser ArgumentType = "user"
 )
 
 // Argument describes one argument of a command (B45).
@@ -305,7 +310,7 @@ func (r ArgumentsRequirement) Validate() error {
 		}
 		names[a.Name] = true
 		switch a.Type {
-		case ArgumentText, ArgumentNumber, ArgumentUser:
+		case ArgumentText, ArgumentNumber, ArgumentInteger, ArgumentUser:
 		default:
 			return fmt.Errorf("argument %q: unknown type %q", a.Name, a.Type)
 		}
