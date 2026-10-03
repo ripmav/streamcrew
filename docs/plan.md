@@ -599,7 +599,7 @@ spec:
 - **Bedarfsgesteuert:** Resolver bekommen einen `context.Context` und laufen nur, wenn ihr Token vorkommt. Ergebnisse werden pro Rendervorgang zwischengespeichert. Teure Abfragen wie Follow-Alter per API entstehen so nur, wenn sie gebraucht werden.
 - **Sicherheit:** Eingesetzte Werte werden nicht erneut ausgewertet, das verhindert Template-Injection durch Zuschauertext. Dies ist eine bewusste Abweichung vom Original. Es gibt Kodierungsmodi für Text, URL (WebRequest), HTML (Overlays) und JSON.
 - **Kompatibilität:** Die Identifier-Namen folgen dem Original, sofern ADR-0021 zustimmt, damit importierte Commands funktionieren. Abweichungen werden dokumentiert. Golden-Tests und Fuzzing sichern das ab.
-- **Ausdrücke:** `expr-lang/expr` übernimmt Rechnen und Bedingungen und ersetzt Jace.
+- **Ausdrücke:** Ein eigener Auswerter in `internal/expr` übernimmt Rechnen und Bedingungen mit exakten Dezimalzahlen und ersetzt Jace (Code-ADR-0020).
 - **Lokalisierung:** Datum und Zeit werden in der Profil-Zeitzone und -Locale formatiert, nicht in der des Hosts.
 
 ### 6.11 Plattform-Abstraktion
@@ -780,7 +780,7 @@ Läuft der Core auf einem Server, fehlen ihm Fähigkeiten des Streaming-PCs: Tas
 - **Ersatz für C#-Skripte:** eingebettetes JavaScript mit `dop251/goja` (ADR-0017). Die Sandbox hat keinen Datei- oder Netzzugriff außer über freigegebene Funktionen; ein Zeitlimit greift per Interrupt, die API umfasst Parameter, Identifier und Chat. Alternativen: Lua (`gopher-lua`), Starlark, `yaegi` (Go-Interpreter).
 - **Python und andere Sprachen** laufen über die ExternalProgram-Action und nur mit `host:process`.
 - **Import:** C#-Skripte werden markiert und deaktiviert.
-- **Ausdrücke:** `expr-lang/expr` wertet Conditional-Actions, Berechnungen und Mengenangaben aus.
+- **Ausdrücke:** Ein eigener Auswerter mit Dezimalzahlen wertet Conditional-Actions, Berechnungen und Mengenangaben aus (Code-ADR-0020).
 
 ### 6.21 Konfiguration, Logging, Beobachtbarkeit
 
@@ -917,7 +917,8 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | IDs | UUIDv7 aus dem Standardpaket `uuid` (Go 1.27) | gesetzt | keine Abhängigkeit; Code-ADR-0009 |
 | Logging | `log/slog`; eigene Rotation nach Größe (Code-ADR-0003) | gesetzt | stdlib |
 | Secrets | `crypto/aes` + `crypto/cipher`, `zalando/go-keyring` | gesetzt | stdlib-Krypto; Keyring plattformübergreifend, Fallback Umgebungsvariable oder Datei (ADR-0012) |
-| Ausdrücke | `expr-lang/expr` | gesetzt | sicher, schnell, ersetzt Jace; Werte als Variablen, Größe und Speicher begrenzt (Code-ADR-0012) |
+| Ausdrücke | eigener Auswerter in `internal/expr` | gesetzt | rechnet mit Dezimalzahlen, ersetzt Jace und `expr-lang/expr`; Werte als Variablen, Größe und Rechenschritte begrenzt (Code-ADR-0012, [Code-ADR-0020](adr/code/0020-dezimalzahlen.md)) |
+| Dezimalzahlen | `github.com/cockroachdb/apd/v3` | gesetzt | alle Zahlen in Ausdrücken, Templates, Actions und Countern; bis 34 gültige Stellen, exakt, wo es geht, sonst gerundet; gekapselt in `internal/decimal` ([Code-ADR-0020](adr/code/0020-dezimalzahlen.md)) |
 | Scripting | `dop251/goja` | Kandidat | reines Go, sandboxfähig (ADR-0017) |
 | YouTube | `google.golang.org/api/youtube/v3`, `google.golang.org/grpc` für `streamList` | Kandidat | offizielle Clients bzw. Proto |
 | OBS | `andreykaipov/goobs` | Kandidat | obs-websocket v5 |
@@ -981,7 +982,7 @@ streamcrew/
 │   ├── action/                    # Registry + Implementierungen (action/chat, action/wait, …)
 │   ├── requirement/
 │   ├── template/                  # $-Identifier-Engine
-│   ├── expr/                      # Ausdrücke (expr-lang)
+│   ├── expr/                      # Ausdrücke (eigener Auswerter, Dezimalzahlen)
 │   ├── event/                     # Katalog, Bus, Deduplizierung
 │   ├── prompt/                    # Aufforderungen an Frontends
 │   ├── chat/  user/  timer/  moderation/  counters/  quotes/
@@ -1192,7 +1193,7 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0009 | `0009-ids-und-zeit.md` | UUIDv7, Uhren, `synctest`; **akzeptiert** | 2 |
 | 0010 | `0010-polymorphe-serialisierung.md` | Diskriminator, Versionen, JSON-Bibliothek; **akzeptiert** | 2 |
 | 0011 | `0011-event-bus.md` | Typisierung, Puffer, Lag; **akzeptiert** | 2 |
-| 0012 | `0012-template-engine.md` | Tokenizer, Präfixregel, Kodierung, Ausdrücke mit `expr-lang/expr`; **akzeptiert** | 3 |
+| 0012 | `0012-template-engine.md` | Tokenizer, Präfixregel, Kodierung, Ausdrücke mit `expr-lang/expr` (Bibliothek ersetzt durch Code-ADR-0020); **akzeptiert** | 3 |
 | 0013 | `0013-typ-registry.md` | Descriptors, Schemas, Capabilities; Typ-IDs, Kind-Actions, Anschluss an die Engine; **akzeptiert** | 3 |
 | 0014 | `0014-http-client.md` | Retry, Rate-Limits, Fehlerklassen; Einbau des Circuit Breakers (Code-ADR-0007) | 4 |
 | 0015 | `0015-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |
@@ -1200,6 +1201,7 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0017 | `0017-klare-signale-statt-magischer-werte.md` | Werte ohne Doppelbedeutung, benannte Ausgänge, Fehler nur für Fehler; **vorgeschlagen** | 3 |
 | 0018 | `0018-json-v2.md` | `encoding/json/v2` für alles JSON, strenges Lesen, reproduzierbares Schreiben; ergänzt Code-ADR-0010; **akzeptiert** | 3 |
 | 0019 | `0019-host-rechte-in-der-startkonfiguration.md` | Capabilities je Betriebsmodus mit `grant` und `revoke`, freigegebene Wurzeln, Allowlist für Netzziele, alle ohne Neustart änderbar; Umgebung für Programme; ergänzt Code-ADR-0005; **akzeptiert** | 3 |
+| 0020 | `0020-dezimalzahlen.md` | exakte Dezimalzahlen mit `cockroachdb/apd/v3` in `internal/decimal` für alle Zahlen, bis 34 gültige Stellen, sonst gerundet; eigener Auswerter für Ausdrücke statt `expr-lang/expr`; als Text in Datenbank und JSON; **akzeptiert** | 3 |
 
 ---
 
