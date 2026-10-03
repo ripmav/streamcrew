@@ -194,7 +194,7 @@ type requirements struct {
 	cooldowns []string
 }
 
-func (r *requirements) Prepare(_ context.Context, _ command.Command, p engine.Params) (engine.Decide, error) {
+func (r *requirements) Prepare(_ context.Context, _ command.Command, p engine.Params, _ engine.Users) (engine.Decide, error) {
 	return func(context.Context) (engine.Decision, error) {
 		r.mu.Lock()
 		defer r.mu.Unlock()

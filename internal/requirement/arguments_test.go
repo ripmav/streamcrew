@@ -254,9 +254,15 @@ func TestArgumentUsers(t *testing.T) {
 	require.Equal(t, engine.VerdictMet, got.Verdict, "bob is on Twitch")
 	assert.Equal(t, template.TextValue("bob"), got.Runs[0].Values["target"])
 
-	f.users.err = errors.New("store gone")
-	_, err = apply(t.Context(), f.service, c, said("!hug bob"))
+	broken := newUsers()
+	broken.err = errors.New("store gone")
+	_, err = applyWith(t.Context(), f.service, c, said("!hug bob"), broken)
 	require.ErrorContains(t, err, "store gone")
+	_, err = applyWith(t.Context(), f.service, c, said("!hug bob"), nil)
+	require.ErrorContains(t, err, "no lookup of users")
+	got, err = applyWith(t.Context(), f.service, hug(arg("!n", command.ArgumentInteger)), said("!hug 5"), nil)
+	require.NoError(t, err)
+	assert.Equal(t, engine.VerdictMet, got.Verdict, "only users need the lookup")
 }
 
 // TestArgumentsOrder covers B2: the cooldown comes before the arguments;
@@ -341,7 +347,7 @@ func TestPrepareWithoutLock(t *testing.T) {
 	f := newFixture(t, language{lang: i18n.English})
 	blocking := &blockingCooldowns{cooldowns: f.cooldowns, entered: make(chan struct{}), block: make(chan struct{})}
 	svc := f.withCooldowns(t, blocking)
-	decide, err := svc.Prepare(t.Context(), cmd(command.CooldownRequirement{Scope: command.CooldownStandard, Duration: polydoc.Duration(time.Minute)}), said("!hug"))
+	decide, err := svc.Prepare(t.Context(), cmd(command.CooldownRequirement{Scope: command.CooldownStandard, Duration: polydoc.Duration(time.Minute)}), said("!hug"), newUsers())
 	require.NoError(t, err)
 	decided := make(chan error, 1)
 	go func() {
@@ -352,7 +358,7 @@ func TestPrepareWithoutLock(t *testing.T) {
 
 	prepared := make(chan error, 1)
 	go func() {
-		_, err := svc.Prepare(t.Context(), hug(arg("!target", command.ArgumentUser)), said("!hug bob"))
+		_, err := svc.Prepare(t.Context(), hug(arg("!target", command.ArgumentUser)), said("!hug bob"), newUsers(person("bob", platform.Twitch)))
 		prepared <- err
 	}()
 	select {

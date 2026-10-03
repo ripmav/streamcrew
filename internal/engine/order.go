@@ -6,16 +6,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/ripmav/streamcrew/internal/domain/command"
 )
-
-// DecisionTimeout is how long the preparation of a decision may take: the
-// lookup of the target user and Requirements.Prepare (B16). A trigger whose
-// preparation takes longer does not run, so that it does not hold up the
-// triggers after it.
-const DecisionTimeout = 5 * time.Second
 
 // Decide makes a prepared decision about the requirements of a command
 // (B10, B16): it checks what has to be checked at that moment, e.g. a
@@ -61,19 +54,17 @@ func (t *turn) done() {
 }
 
 // prepare does the work of a decision that may take long, for many
-// triggers at once and within DecisionTimeout (B16): with lookup, the
-// target user of p (B81), then Requirements.Prepare. It returns p with the
-// target and the decision to make in turn.
-func (e *Engine) prepare(ctx context.Context, cmd command.Command, p Params, lookup bool) (Params, Decide, error) {
-	pctx, cancel := context.WithTimeout(ctx, DecisionTimeout)
-	defer cancel()
-	if lookup {
-		p = e.lookupTarget(pctx, p)
+// triggers at the same time (B16): with findTarget, the target user of p
+// (B81), then Requirements.Prepare, both through lookup (B17). It returns p
+// with the target and the decision to make in turn.
+func (e *Engine) prepare(ctx context.Context, cmd command.Command, p Params, lookup *userLookup, findTarget bool) (Params, Decide, error) {
+	if findTarget {
+		p = e.lookupTarget(ctx, lookup, p)
 	}
 	if e.requirements == nil {
 		return p, func(context.Context) (Decision, error) { return Met(p), nil }, nil
 	}
-	decide, err := e.requirements.Prepare(pctx, cmd, p)
+	decide, err := e.requirements.Prepare(ctx, cmd, p, lookup)
 	if err != nil {
 		return p, nil, fmt.Errorf("check requirements: %w", err)
 	}
@@ -108,8 +99,8 @@ func (e *Engine) Submit(ctx context.Context, req Request, done func(Result, erro
 	if done == nil {
 		return fmt.Errorf("submit command %q: %w: nil callback", req.Command.Name, ErrInvalidOption)
 	}
-	// The trigger outlives the request that submitted it; its preparation
-	// has its own time limit.
+	// The trigger outlives the request that submitted it; its lookups have
+	// their own time limits (B17).
 	tctx := context.WithoutCancel(ctx)
 	t, err := e.enter(ctx, req, func(t *trigger) {
 		e.wg.Go(func() { done(t.finish(tctx)) })

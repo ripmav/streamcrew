@@ -7,6 +7,8 @@ import (
 	"fmt"
 
 	"github.com/ripmav/streamcrew/internal/domain/id"
+	"github.com/ripmav/streamcrew/internal/domain/platform"
+	"github.com/ripmav/streamcrew/internal/domain/user"
 )
 
 // CancelAll cancels all queued and running instances, this one included
@@ -45,4 +47,14 @@ func (r *Run) StartCooldown(ctx context.Context, commandID id.ID) error {
 		return fmt.Errorf("start cooldown of command %q: %w", cmd.Name, err)
 	}
 	return nil
+}
+
+// UserByName finds the user with the login name on platform p for this run
+// (B17): through the users of the engine, with the attempts and the time
+// limit of the settings. A user the run found once, e.g. as its target or
+// for an argument, is not looked up again; the commands it calls share
+// what it found. ok is false if there is none, also without users of the
+// engine.
+func (r *Run) UserByName(ctx context.Context, p platform.Name, name string) (user.User, bool, error) {
+	return r.in.lookup.UserByName(ctx, p, name)
 }

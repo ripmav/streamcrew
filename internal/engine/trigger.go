@@ -136,12 +136,12 @@ func (r Rejection) zero() bool {
 type Requirements interface {
 	// Prepare prepares the check of the requirements of cmd for the run p
 	// (B10, B16): it does the work that may take long and changes nothing,
-	// e.g. looking up the users that arguments name, and returns the
-	// decision to make. The engine prepares several runs at the same time,
-	// each within DecisionTimeout, and makes their decisions one after
-	// another in the order of the triggers (requirements.md, B3). An error
-	// means it could not prepare.
-	Prepare(ctx context.Context, cmd command.Command, p Params) (Decide, error)
+	// e.g. looking up the users that arguments name through users, the
+	// lookup of the run (B17), and returns the decision to make. The engine
+	// prepares several runs at the same time and makes their decisions one
+	// after another in the order of the triggers (requirements.md, B3). An
+	// error means it could not prepare.
+	Prepare(ctx context.Context, cmd command.Command, p Params, users Users) (Decide, error)
 	// Notify tells the user of p the reason of r (B11). The engine calls it
 	// only for a rejection with Tell, outside the error cooldown (B12).
 	Notify(ctx context.Context, cmd command.Command, p Params, r Rejection) error
@@ -248,8 +248,7 @@ type Result struct {
 // could not handle the request: ErrInvalidSource, an invalid command or
 // parameters, ErrQueueFull, ErrClosed while the core stops (except for
 // event commands of "app.stopping", B55), unreadable settings, or a
-// requirement service that failed, took longer than DecisionTimeout or
-// returned an invalid decision.
+// requirement service that failed or returned an invalid decision.
 func (e *Engine) Trigger(ctx context.Context, req Request) (Result, error) {
 	t, err := e.enter(ctx, req, nil)
 	if err != nil {
@@ -327,7 +326,8 @@ func (t *trigger) finish(ctx context.Context) (Result, error) {
 	}
 	e, cmd, cfg := t.e, t.req.Command, t.cfg
 	defer t.turn.done()
-	p, decide, err := e.prepare(ctx, cmd, t.req.Params, true)
+	lookup := e.newLookup(cfg)
+	p, decide, err := e.prepare(ctx, cmd, t.req.Params, lookup, true)
 	if err != nil {
 		t.release()
 		return Result{}, fmt.Errorf("trigger command %q: %w", cmd.Name, err)
@@ -356,7 +356,7 @@ func (t *trigger) finish(ctx context.Context) (Result, error) {
 	adm := t.adm
 	for i, run := range d.Runs {
 		adm.reserved = i == 0
-		instanceID, err := e.enqueue(ctx, cmd, t.req.Source, run, cfg, adm, origin{})
+		instanceID, err := e.enqueue(ctx, cmd, t.req.Source, run, cfg, adm, origin{lookup: lookup})
 		if err != nil {
 			dropErr = errors.Join(dropErr, err)
 			res.Dropped++
@@ -459,9 +459,10 @@ func (e *Engine) resetErrorCooldowns(commandID id.ID) {
 
 // lookupTarget returns p with the user the first argument names, with or
 // without "@", as its target if the caller set none and the platform knows
-// the user (B81). Otherwise p is unchanged; the engine then takes the
-// triggering user when it queues the run.
-func (e *Engine) lookupTarget(ctx context.Context, p Params) Params {
+// the user (B81), found through the lookup of the run (B17). Otherwise p is
+// unchanged; the engine then takes the triggering user when it queues the
+// run.
+func (e *Engine) lookupTarget(ctx context.Context, lookup *userLookup, p Params) Params {
 	if p.Target != nil || e.users == nil || p.Platform == "" || len(p.Args) == 0 {
 		return p
 	}
@@ -469,7 +470,7 @@ func (e *Engine) lookupTarget(ctx context.Context, p Params) Params {
 	if name == "" {
 		return p
 	}
-	u, ok, err := e.users.UserByName(ctx, p.Platform, name)
+	u, ok, err := lookup.UserByName(ctx, p.Platform, name)
 	if err != nil {
 		e.logger.WarnContext(ctx, "looking up the target user failed", "error", err)
 		return p
