@@ -14,6 +14,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/actiontest"
 	"github.com/ripmav/streamcrew/internal/action/schema"
 	"github.com/ripmav/streamcrew/internal/app"
+	"github.com/ripmav/streamcrew/internal/capability"
 	"github.com/ripmav/streamcrew/internal/commandfile"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 )
@@ -22,7 +23,7 @@ import (
 // type.
 func fileSchema(t *testing.T) *schema.Schema {
 	t.Helper()
-	reg, err := app.ActionCatalog()
+	reg, err := app.ActionCatalog(capability.Set{})
 	require.NoError(t, err)
 	s, err := commandfile.Schema(reg.Descriptors(), command.RequirementCatalog())
 	require.NoError(t, err)
@@ -162,7 +163,7 @@ func TestSchemaForm(t *testing.T) {
 	for _, d := range s.Defs {
 		defs[d.Name] = d.Schema
 	}
-	reg, err := app.ActionCatalog()
+	reg, err := app.ActionCatalog(capability.Set{})
 	require.NoError(t, err)
 	for _, d := range reg.Descriptors() {
 		assert.Contains(t, defs, "action."+d.Type)

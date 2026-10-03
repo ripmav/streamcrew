@@ -13,6 +13,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/flow"
 	"github.com/ripmav/streamcrew/internal/action/schema"
 	"github.com/ripmav/streamcrew/internal/app"
+	"github.com/ripmav/streamcrew/internal/capability"
 	"github.com/ripmav/streamcrew/internal/commandfile"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/id"
@@ -22,7 +23,7 @@ import (
 // fileTypes returns every action and requirement type.
 func fileTypes(t *testing.T) commandfile.Types {
 	t.Helper()
-	reg, err := app.ActionCatalog()
+	reg, err := app.ActionCatalog(capability.Set{})
 	require.NoError(t, err)
 	codec, err := command.NewCodec(reg.Entries()...)
 	require.NoError(t, err)
@@ -139,8 +140,8 @@ func TestConvertExisting(t *testing.T) {
 	t.Parallel()
 	hugID, funID, waveID := id.New(), id.New(), id.New()
 	existing := commandfile.Existing{
-		Commands: []commandfile.Named{{ID: hugID, Name: "hug"}, {ID: waveID, Name: "Wave"}},
-		Groups:   []commandfile.Named{{ID: funID, Name: "Fun"}},
+		Commands: []command.Header{{ID: hugID, Name: "hug"}, {ID: waveID, Name: "Wave"}},
+		Groups:   []command.Group{{ID: funID, Name: "Fun"}},
 	}
 	plan, problems := convert(t, existing, "hug.yaml", head+`kind: ChatCommand
 metadata: {name: Hug, group: fun}
