@@ -4,11 +4,17 @@ package requirement_test
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
+	"sync"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,6 +30,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/i18n"
+	"github.com/ripmav/streamcrew/internal/polydoc"
 	"github.com/ripmav/streamcrew/internal/requirement"
 )
 
@@ -35,13 +42,105 @@ type language struct {
 
 func (l language) Language(context.Context) (i18n.Language, error) { return l.lang, l.err }
 
+// cooldowns is a fake of requirement.Cooldowns.
+type cooldowns struct {
+	mu     sync.Mutex
+	groups []command.CooldownGroup
+	ends   map[command.CooldownKey]time.Time
+	// err fails every method, putErr only PutCooldown.
+	err    error
+	putErr error
+}
+
+func newCooldowns(groups ...command.CooldownGroup) *cooldowns {
+	return &cooldowns{groups: groups, ends: make(map[command.CooldownKey]time.Time)}
+}
+
+func (c *cooldowns) CooldownGroups(context.Context) ([]command.CooldownGroup, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.groups), c.err
+}
+
+func (c *cooldowns) CooldownEnd(_ context.Context, key command.CooldownKey) (time.Time, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.err != nil {
+		return time.Time{}, false, c.err
+	}
+	ends, ok := c.ends[key]
+	return ends, ok, nil
+}
+
+func (c *cooldowns) PutCooldown(_ context.Context, key command.CooldownKey, ends, now time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := cmp.Or(c.err, c.putErr); err != nil {
+		return err
+	}
+	maps.DeleteFunc(c.ends, func(_ command.CooldownKey, e time.Time) bool { return !e.After(now) })
+	c.ends[key] = ends
+	return nil
+}
+
+func (c *cooldowns) DeleteCooldown(_ context.Context, key command.CooldownKey, ends time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.err != nil {
+		return c.err
+	}
+	if c.ends[key].Equal(ends) {
+		delete(c.ends, key)
+	}
+	return nil
+}
+
+// running returns the running cooldowns.
+func (c *cooldowns) running() map[command.CooldownKey]time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return maps.Clone(c.ends)
+}
+
+// left returns the time left of each running cooldown at now.
+func (c *cooldowns) left(now time.Time) map[command.CooldownKey]time.Duration {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make(map[command.CooldownKey]time.Duration, len(c.ends))
+	for k, ends := range c.ends {
+		out[k] = ends.Sub(now)
+	}
+	return out
+}
+
+// fail sets the error of every method.
+func (c *cooldowns) fail(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.err = err
+}
+
+// streamer is a fake of requirement.Streamer.
+type streamer map[platform.Name]id.ID
+
+func (s streamer) StreamerUser(_ context.Context, p platform.Name) (id.ID, error) {
+	userID, ok := s[p]
+	if !ok {
+		return id.ID{}, fmt.Errorf("no streamer on %s", p)
+	}
+	return userID, nil
+}
+
 // fixture is a service with Twitch, which replies, and Kick, which does
 // not.
 type fixture struct {
-	service *requirement.Service
-	twitch  *connectortest.Platform
-	kick    *connectortest.Platform
-	logs    *bytes.Buffer
+	service   *requirement.Service
+	twitch    *connectortest.Platform
+	kick      *connectortest.Platform
+	logs      *bytes.Buffer
+	cooldowns *cooldowns
+	// streamer has the user of the streamer on Twitch and Kick.
+	streamer streamer
 }
 
 func newFixture(t *testing.T, lang language) *fixture {
@@ -49,14 +148,17 @@ func newFixture(t *testing.T, lang language) *fixture {
 	catalog, err := i18n.Load()
 	require.NoError(t, err)
 	f := &fixture{
-		twitch: connectortest.New(platform.Twitch, connectortest.Features{Replies: true}),
-		kick:   connectortest.New(platform.Kick, connectortest.Features{}),
-		logs:   &bytes.Buffer{},
+		twitch:    connectortest.New(platform.Twitch, connectortest.Features{Replies: true}),
+		kick:      connectortest.New(platform.Kick, connectortest.Features{}),
+		logs:      &bytes.Buffer{},
+		cooldowns: newCooldowns(),
+		streamer:  streamer{platform.Twitch: id.New(), platform.Kick: id.New()},
 	}
 	set, err := connector.NewSet(f.twitch, f.kick)
 	require.NoError(t, err)
 	f.service, err = requirement.New(requirement.Ports{
 		Catalog: catalog, Language: lang, Platforms: set,
+		Cooldowns: f.cooldowns, Streamer: f.streamer,
 		Logger: slog.New(slog.NewTextHandler(f.logs, nil)),
 	})
 	require.NoError(t, err)
@@ -172,22 +274,20 @@ func TestFaulty(t *testing.T) {
 	}
 }
 
-// TestNotSupported: cooldowns, arguments and thresholds cannot be decided
-// yet; the service says so instead of guessing (B1).
+// TestNotSupported: arguments and thresholds cannot be decided yet; the
+// service says so instead of guessing (B1), and starts no cooldown.
 func TestNotSupported(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, language{lang: i18n.English})
+	minute := command.CooldownRequirement{Scope: command.CooldownStandard, Duration: polydoc.Duration(time.Minute)}
 	for _, req := range []command.Requirement{
-		command.CooldownRequirement{Scope: command.CooldownStandard, Duration: 1},
 		command.ArgumentsRequirement{Arguments: []command.Argument{{Name: "a", Type: command.ArgumentText}}},
 		command.ThresholdRequirement{Users: 2, Within: 1},
 	} {
-		_, err := f.service.Apply(t.Context(), cmd(req), chat(person("ada", platform.Twitch)))
+		_, err := f.service.Apply(t.Context(), cmd(req, minute), chat(person("ada", platform.Twitch)))
 		require.ErrorIs(t, err, requirement.ErrNotSupported, req.DocType())
 	}
-	require.NoError(t, f.service.StartCooldown(t.Context(), cmd(), chat(nil)), "nothing to start")
-	err := f.service.StartCooldown(t.Context(), cmd(command.CooldownRequirement{Scope: command.CooldownStandard, Duration: 1}), chat(nil))
-	require.ErrorIs(t, err, requirement.ErrNotSupported)
+	assert.Empty(t, f.cooldowns.running())
 }
 
 // TestNotify covers requirements.md B70 to B72: the reason in the language
@@ -256,11 +356,16 @@ func TestNew(t *testing.T) {
 	require.NoError(t, err)
 	set, err := connector.NewSet()
 	require.NoError(t, err)
-	full := requirement.Ports{Catalog: catalog, Language: language{}, Platforms: set, Logger: slog.New(slog.DiscardHandler)}
+	full := requirement.Ports{
+		Catalog: catalog, Language: language{}, Platforms: set,
+		Cooldowns: newCooldowns(), Streamer: streamer{}, Logger: slog.New(slog.DiscardHandler),
+	}
 	for name, change := range map[string]func(*requirement.Ports){
 		"catalog":   func(p *requirement.Ports) { p.Catalog = nil },
 		"language":  func(p *requirement.Ports) { p.Language = nil },
 		"platforms": func(p *requirement.Ports) { p.Platforms = nil },
+		"cooldowns": func(p *requirement.Ports) { p.Cooldowns = nil },
+		"streamer":  func(p *requirement.Ports) { p.Streamer = nil },
 		"logger":    func(p *requirement.Ports) { p.Logger = nil },
 	} {
 		p := full
@@ -290,9 +395,24 @@ func TestWithEngine(t *testing.T) {
 		require.Len(t, f.twitch.Calls(), 1)
 		assert.Equal(t, "Dieser Command braucht die Rolle Moderator oder eine höhere.", f.twitch.Calls()[0].Text)
 
-		res, err = h.Engine().Trigger(t.Context(), engine.Request{Command: mods, Source: engine.SourceChat, Params: chat(person("mo", platform.Twitch, role.Moderator))})
+		mo := person("mo", platform.Twitch, role.Moderator)
+		res, err = h.Engine().Trigger(t.Context(), engine.Request{Command: mods, Source: engine.SourceChat, Params: chat(mo)})
 		require.NoError(t, err)
 		assert.Equal(t, engine.OutcomeQueued, res.Outcome)
+
+		daily := h.Command("daily")
+		daily.Requirements = []command.Requirement{command.CooldownRequirement{Scope: command.CooldownPerUser, Duration: polydoc.Duration(time.Minute)}}
+		h.Put(daily)
+		res, err = h.Engine().Trigger(t.Context(), engine.Request{Command: daily, Source: engine.SourceChat, Params: chat(mo)})
+		require.NoError(t, err)
+		assert.Equal(t, engine.OutcomeQueued, res.Outcome)
+		time.Sleep(time.Second)
+		res, err = h.Engine().Trigger(t.Context(), engine.Request{Command: daily, Source: engine.SourceChat, Params: chat(mo)})
+		require.NoError(t, err)
+		assert.Equal(t, engine.OutcomeRejected, res.Outcome)
+		synctest.Wait()
+		require.Len(t, f.twitch.Calls(), 2)
+		assert.Equal(t, "Du kannst diesen Command in 59 Sekunden wieder nutzen.", f.twitch.Calls()[1].Text)
 	})
 }
 
