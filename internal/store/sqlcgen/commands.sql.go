@@ -56,7 +56,7 @@ func (q *Queries) DeleteTriggers(ctx context.Context, commandID string) error {
 }
 
 const getCommand = `-- name: GetCommand :one
-SELECT id, name, kind, enabled, unlocked, group_id, event_type, requirements, actions, created_at, updated_at, error_policy, trigger_mode FROM commands WHERE id = ?
+SELECT id, name, kind, enabled, unlocked, group_id, event_type, requirements, actions, created_at, updated_at, error_policy, trigger_mode, name_key FROM commands WHERE id = ?
 `
 
 func (q *Queries) GetCommand(ctx context.Context, id string) (Command, error) {
@@ -76,6 +76,7 @@ func (q *Queries) GetCommand(ctx context.Context, id string) (Command, error) {
 		&i.UpdatedAt,
 		&i.ErrorPolicy,
 		&i.TriggerMode,
+		&i.NameKey,
 	)
 	return i, err
 }
@@ -211,7 +212,7 @@ func (q *Queries) ListCommandGroups(ctx context.Context) ([]CommandGroup, error)
 }
 
 const listCommands = `-- name: ListCommands :many
-SELECT id, name, kind, enabled, unlocked, group_id, event_type, requirements, actions, created_at, updated_at, error_policy, trigger_mode FROM commands ORDER BY name, id
+SELECT id, name, kind, enabled, unlocked, group_id, event_type, requirements, actions, created_at, updated_at, error_policy, trigger_mode, name_key FROM commands ORDER BY name, id
 `
 
 func (q *Queries) ListCommands(ctx context.Context) ([]Command, error) {
@@ -237,6 +238,7 @@ func (q *Queries) ListCommands(ctx context.Context) ([]Command, error) {
 			&i.UpdatedAt,
 			&i.ErrorPolicy,
 			&i.TriggerMode,
+			&i.NameKey,
 		); err != nil {
 			return nil, err
 		}
@@ -314,11 +316,12 @@ func (q *Queries) ListTriggers(ctx context.Context, commandID string) ([]string,
 
 const putCommand = `-- name: PutCommand :exec
 INSERT INTO commands (
-    id, name, kind, enabled, unlocked, group_id, trigger_mode, event_type,
+    id, name, name_key, kind, enabled, unlocked, group_id, trigger_mode, event_type,
     error_policy, requirements, actions, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE SET
     name = excluded.name,
+    name_key = excluded.name_key,
     kind = excluded.kind,
     enabled = excluded.enabled,
     unlocked = excluded.unlocked,
@@ -334,6 +337,7 @@ ON CONFLICT (id) DO UPDATE SET
 type PutCommandParams struct {
 	ID           string
 	Name         string
+	NameKey      string
 	Kind         string
 	Enabled      int64
 	Unlocked     int64
@@ -351,6 +355,7 @@ func (q *Queries) PutCommand(ctx context.Context, arg PutCommandParams) error {
 	_, err := q.db.ExecContext(ctx, putCommand,
 		arg.ID,
 		arg.Name,
+		arg.NameKey,
 		arg.Kind,
 		arg.Enabled,
 		arg.Unlocked,
