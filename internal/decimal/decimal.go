@@ -175,6 +175,13 @@ func New(n int64) Decimal {
 	return d
 }
 
+// Max returns the largest Decimal, 10^34 - 1; its negation is the
+// smallest.
+func Max() Decimal {
+	d, _ := Parse(strings.Repeat("9", Magnitude)) // within the limits
+	return d
+}
+
 // Parse reads a decimal number: an optional sign, digits with an optional
 // decimal point, and an optional exponent, as numbers in expressions
 // (template.md, B51), e.g. "2.5", "-.5", "1e3". Text with more digits than

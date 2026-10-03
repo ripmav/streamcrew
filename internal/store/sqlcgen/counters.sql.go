@@ -48,8 +48,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
 type InsertCounterParams struct {
 	ID           string
 	Name         string
-	Value        int64
-	Step         int64
+	Value        string
+	Step         string
 	ResetOnStart int64
 	CreatedAt    int64
 	UpdatedAt    int64
@@ -104,7 +104,7 @@ func (q *Queries) ListCounters(ctx context.Context) ([]Counter, error) {
 }
 
 const resetCountersOnStart = `-- name: ResetCountersOnStart :execrows
-UPDATE counters SET value = 0, updated_at = ? WHERE reset_on_start = 1
+UPDATE counters SET value = '0', updated_at = ? WHERE reset_on_start = 1
 `
 
 func (q *Queries) ResetCountersOnStart(ctx context.Context, updatedAt int64) (int64, error) {
@@ -121,8 +121,8 @@ UPDATE counters SET name = ?, value = ?, step = ?, reset_on_start = ?, updated_a
 
 type UpdateCounterParams struct {
 	Name         string
-	Value        int64
-	Step         int64
+	Value        string
+	Step         string
 	ResetOnStart int64
 	UpdatedAt    int64
 	ID           string

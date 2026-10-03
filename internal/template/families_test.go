@@ -5,7 +5,6 @@ package template_test
 import (
 	"context"
 	"errors"
-	"math"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -16,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/counter"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/template"
@@ -250,10 +250,10 @@ func TestCounterSource_Golden(t *testing.T) {
 	t.Parallel()
 	var calls atomic.Int64
 	counters := fakeCounters{calls: &calls, list: []counter.Counter{
-		{Name: "Deaths", Value: 1234567},
-		{Name: "neg", Value: -1234},
-		{Name: "xdisplay", Value: 7},
-		{Name: "x", Value: 5},
+		{Name: "Deaths", Value: decimal.New(1234567)},
+		{Name: "neg", Value: decimal.New(-1234)},
+		{Name: "xdisplay", Value: decimal.New(7)},
+		{Name: "x", Value: decimal.New(5)},
 	}}
 	e := template.New(mvpRegistry(t, nil), template.WithSources(template.CounterSource(counters)))
 	renderGolden(t, e, new(scope()), "counter")
@@ -262,19 +262,28 @@ func TestCounterSource_Golden(t *testing.T) {
 
 func TestCounterSource_Display(t *testing.T) {
 	t.Parallel()
-	for value, want := range map[int64]string{
-		0:             "0",
-		999:           "999",
-		-999:          "-999",
-		1000:          "1,000",
-		-1000:         "-1,000",
-		123456:        "123,456",
-		math.MaxInt64: "9,223,372,036,854,775,807",
-		math.MinInt64: "-9,223,372,036,854,775,808",
+	for value, want := range map[string]string{
+		"0":                    "0",
+		"999":                  "999",
+		"-999":                 "-999",
+		"1000":                 "1,000",
+		"-1000":                "-1,000",
+		"123456":               "123,456",
+		"9223372036854775807":  "9,223,372,036,854,775,807",
+		"-9223372036854775808": "-9,223,372,036,854,775,808",
+		"1234.5":               "1,234.50",
+		"-1234567.891":         "-1,234,567.89",
+		"0.005":                "0.01",
+		"-0.004":               "0.00",
+		"999.999":              "1,000.00",
+		"0.1":                  "0.10",
 	} {
-		counters := fakeCounters{calls: new(atomic.Int64), list: []counter.Counter{{Name: "c", Value: value}}}
+		v, err := decimal.Parse(value)
+		require.NoError(t, err)
+		counters := fakeCounters{calls: new(atomic.Int64), list: []counter.Counter{{Name: "c", Value: v}}}
 		e := template.New(nil, template.WithSources(template.CounterSource(counters)))
-		assert.Equal(t, want, render(t, e, "$cdisplay", new(scope())))
+		assert.Equal(t, want, render(t, e, "$cdisplay", new(scope())), value)
+		assert.Equal(t, v.String(), render(t, e, "$c", new(scope())), "%s: $c is exact", value)
 	}
 }
 
