@@ -36,7 +36,7 @@ func golden(t *testing.T, name string, got []byte) {
 func requirementExamples() map[string]Requirement {
 	ref := id.MustParse("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d")
 	return map[string]Requirement{
-		"role.v1":      RoleRequirement{Role: role.Follower},
+		"role.v2":      RoleRequirement{Role: role.KickOG},
 		"cooldown.v2":  CooldownRequirement{Scope: CooldownPerUserGrouped, Group: ref},
 		"currency.v1":  CurrencyRequirement{Currency: ref, Mode: CurrencyRange, Amount: 10, Maximum: 100},
 		"rank.v1":      RankRequirement{Rank: ref, Match: RankAtLeast},
@@ -117,13 +117,13 @@ func TestUnknownPartsSurvive(t *testing.T) {
 	require.NoError(t, err)
 	rec := Record{
 		Name: "future", Kind: KindActionGroup, ErrorPolicy: ErrorContinue,
-		Requirements: jsontext.Value(`[{"type":"role","schemaVersion":1,"role":"vip"},{"type":"streak","schemaVersion":3,"days":7}]`),
+		Requirements: jsontext.Value(`[{"type":"role","schemaVersion":2,"role":"twitch_vip"},{"type":"streak","schemaVersion":3,"days":7}]`),
 		Actions:      jsontext.Value(`[{"type":"chat.send","schemaVersion":1,"message":"hi"},{"type":"obs.scene","schemaVersion":9,"scene":"Main"}]`),
 	}
 	cmd, err := c.Command(rec)
 	require.NoError(t, err)
 	require.Len(t, cmd.Requirements, 2)
-	assert.Equal(t, RoleRequirement{Role: role.VIP}, cmd.Requirements[0])
+	assert.Equal(t, RoleRequirement{Role: role.TwitchVIP}, cmd.Requirements[0])
 	assert.IsType(t, UnknownRequirement{}, cmd.Requirements[1])
 	require.Len(t, cmd.Actions, 2)
 	assert.IsType(t, UnknownAction{}, cmd.Actions[0], "no action types before phase 3")
@@ -133,6 +133,47 @@ func TestUnknownPartsSurvive(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, string(rec.Requirements), string(back.Requirements))
 	assert.JSONEq(t, string(rec.Actions), string(back.Actions))
+}
+
+// TestRoleVersion1 covers users-and-roles.md, B20: a minimum role of
+// version 1 that held several levels becomes the lowest of them; the other
+// roles keep their IDs.
+func TestRoleVersion1(t *testing.T) {
+	t.Parallel()
+	c, err := NewCodec()
+	require.NoError(t, err)
+
+	stored, err := os.ReadFile(filepath.Join("testdata", "requirement", "role.v1.golden"))
+	require.NoError(t, err)
+	follower, err := c.requirements.Decode(stored)
+	require.NoError(t, err)
+	assert.Equal(t, RoleRequirement{Role: role.Follower}, follower)
+
+	for old, want := range map[string]role.Role{
+		"creator":        role.TwitchAffiliate,
+		"vip":            role.TwitchVIP,
+		"platform_staff": role.TwitchGlobalMod,
+		"banned":         role.Banned,
+		"user":           role.User,
+		"regular":        role.Regular,
+		"subscriber":     role.Subscriber,
+		"moderator":      role.Moderator,
+		"editor":         role.Editor,
+		"streamer":       role.Streamer,
+	} {
+		r, err := c.requirements.Decode([]byte(`{"type":"role","schemaVersion":1,"role":"` + old + `"}`))
+		require.NoError(t, err, old)
+		assert.Equal(t, RoleRequirement{Role: want}, r, old)
+		require.NoError(t, r.Validate(), old)
+	}
+
+	_, err = c.requirements.Decode([]byte(`{"type":"role","schemaVersion":1}`))
+	require.ErrorContains(t, err, "role missing")
+	_, err = c.requirements.Decode([]byte(`{"type":"role","schemaVersion":1,"role":7}`))
+	require.ErrorContains(t, err, "role")
+	unknown, err := c.requirements.Decode([]byte(`{"type":"role","schemaVersion":1,"role":"admin"}`))
+	require.NoError(t, err, "decoding does not validate")
+	require.Error(t, unknown.Validate())
 }
 
 func TestCodecEdgeCases(t *testing.T) {

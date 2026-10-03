@@ -190,13 +190,16 @@ func TestUserFamily_Error_B23(t *testing.T) {
 // 2025, 12:00 UTC.
 func TestUserFamily_Properties(t *testing.T) {
 	t.Parallel()
-	u := twitchUser("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d", "Zed", "zed", role.Banned, role.VIP)
+	u := twitchUser("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d", "Zed", "zed", role.Banned, role.TwitchVIP)
 	u.Stats = user.Stats{WatchMinutes: 61, DonatedCents: -5}
 	u.Identities[0].Data.FollowedAt = time.Date(2025, time.January, 31, 12, 0, 0, 0, time.UTC)
 	u.Identities[0].Data.SubscribedAt = time.Date(2025, time.March, 1, 11, 0, 0, 0, time.UTC)
 	u.Identities[0].Data.AccountCreatedAt = time.Date(2025, time.March, 2, 0, 0, 0, 0, time.UTC)
 	noIdentity := user.User{Title: "Guest"}
 	everything := twitchUser("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d", "all", "All", role.All()...)
+	levels := twitchUser("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d", "lev", "Lev", role.YouTubeSubscriber, role.YouTubeMember, role.KickOG)
+	others := twitchUser("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d", "oth", "Oth", role.Follower, role.VeloraVIP)
+	partner := twitchUser("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d", "par", "Par", role.TwitchPartner)
 	tests := []struct {
 		name  string
 		scope template.Scope
@@ -206,14 +209,21 @@ func TestUserFamily_Properties(t *testing.T) {
 		{"singular units", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$usertime", "1 Hour & 1 Min"},
 		{"negative amount", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$usertotalamountdonated", "-0.05"},
 		{"same name in other case", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$userfulldisplayname", "zed"},
-		{"banned is the primary role", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$userprimaryrole|$usertitle|$userroles", "Banned|Banned|VIP, Banned"},
+		{"banned is the primary role", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$userprimaryrole|$usertitle|$userroles", "Banned|Banned|Twitch VIP, Banned"},
 		{"end of a shorter month", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$userfollowage|$userfollowdays|$userfollowmonths", "1 Month, 1 Day|29|1"},
 		{"today", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$usersubage|$usersubdays", "0 Days|0"},
 		{"date in the future", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$useraccountage|$useraccountdays", "0 Days|0"},
 		{"identity of another platform", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u, Platform: platform.Kick}, "$username|$userurl", "Zed|https://www.twitch.tv/Zed"},
 		{"no identity", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &noIdentity}, "$username|$userroles|$usertitle|$userid|$usersubtier", "$username|User|Guest|$userid|$usersubtier"},
 		{"never seen", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &noIdentity}, "$userlastseendate|$userlastseenage", "$userlastseendate|$userlastseenage"},
-		{"all roles", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &everything}, "$userroles", "Streamer, Editor, Moderator, Platform Staff, Subscriber, VIP, Regular, Follower, Creator, Banned"},
+		{"all roles", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &everything}, "$userroles", "Streamer, Editor, Moderator, Twitch Staff, Twitch Global Moderator, YouTube Member, Subscriber, " +
+			"VPZone Ambassador, VPZone Founder, VPZone Plus, Velora VIP, Kick OG, Kick VIP, Twitch VIP, Regular, YouTube Subscriber, Follower, Twitch Partner, Twitch Affiliate, Banned"},
+		{"users B20: the levels of all platforms", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &levels},
+			"$userisfollower|$userissubscriber|$userisvip|$userismod|$userprimaryrole", "true|true|true|false|YouTube Member"},
+		{"users B20: other levels", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &others},
+			"$userisfollower|$userissubscriber|$userisvip|$userprimaryrole", "true|false|true|Velora VIP"},
+		{"users B20: no kind", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &partner},
+			"$userisfollower|$userissubscriber|$userisvip|$userprimaryrole", "false|false|false|Twitch Partner"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -224,6 +234,26 @@ func TestUserFamily_Properties(t *testing.T) {
 			})
 		})
 	}
+}
+
+// TestUserFamily_RoleKinds covers users B20: the identifiers of a kind of
+// role hold its levels on all platforms, also for random users.
+func TestUserFamily_RoleKinds(t *testing.T) {
+	t.Parallel()
+	e := template.New(userRegistry(t, nil))
+	for _, r := range []role.Role{
+		role.TwitchVIP, role.KickVIP, role.KickOG, role.VeloraVIP, role.VPZonePlus, role.VPZoneFounder, role.VPZoneAmbassador,
+	} {
+		u := twitchUser("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d", "vip", "Vip", r)
+		assert.Equal(t, "true|false|false", render(t, e, "$userisvip|$userisfollower|$userissubscriber", &template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}), r)
+	}
+
+	fan := twitchUser("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b71", "fan", "Fan", role.YouTubeSubscriber)
+	member := twitchUser("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b82", "member", "Member", role.YouTubeMember)
+	users := fakeUsers{chatters: []user.User{fan, member}, chatterCalls: new(atomic.Int64)}
+	e = template.New(userRegistry(t, users))
+	s := template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch}
+	assert.Equal(t, "fan|member", render(t, e, "$randomfollowerusername|$randomsubscriberusername", &s))
 }
 
 func TestUserFamily_Reserved_B12(t *testing.T) {

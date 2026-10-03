@@ -36,7 +36,7 @@ const (
 // requirementTypes lists the requirement types of this package.
 func requirementTypes() []polydoc.Entry[Requirement] {
 	return []polydoc.Entry[Requirement]{
-		{Type: TypeRole, Version: 1, Decode: decodeRequirement[RoleRequirement]},
+		{Type: TypeRole, Version: 2, Decode: decodeRequirement[RoleRequirement], Migrations: []polydoc.Migration{migrateRoleV1}},
 		{Type: TypeCooldown, Version: 2, Decode: decodeRequirement[CooldownRequirement], Migrations: []polydoc.Migration{migrateCooldownV1}},
 		{Type: TypeCurrency, Version: 1, Decode: decodeRequirement[CurrencyRequirement]},
 		{Type: TypeRank, Version: 1, Decode: decodeRequirement[RankRequirement]},
@@ -72,6 +72,38 @@ func (r RoleRequirement) Validate() error {
 	if !r.Role.Valid() {
 		return fmt.Errorf("unknown role %q", r.Role)
 	}
+	return nil
+}
+
+// migrateRoleV1 moves the minimum role of version 1 to the fine levels of
+// version 2 (users-and-roles.md, B20): a role that held several levels
+// becomes the lowest of them, so that everyone who met it still does.
+// Other roles keep their IDs.
+func migrateRoleV1(doc map[string]jsontext.Value) error {
+	raw, ok := doc["role"]
+	if !ok {
+		return errors.New("role missing")
+	}
+	var old string
+	if err := json.Unmarshal(raw, &old); err != nil {
+		return fmt.Errorf("role: %w", err)
+	}
+	var r role.Role
+	switch old {
+	case "creator":
+		r = role.TwitchAffiliate
+	case "vip":
+		r = role.TwitchVIP
+	case "platform_staff":
+		r = role.TwitchGlobalMod
+	default:
+		return nil
+	}
+	v, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+	doc["role"] = v
 	return nil
 }
 

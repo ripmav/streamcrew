@@ -53,10 +53,10 @@ func userProperties() map[string]property {
 		},
 		"notes":               func(_ *Scope, u user.User) (Value, bool) { return TextValue(u.Notes), true },
 		"isspecialtyexcluded": func(_ *Scope, u user.User) (Value, bool) { return boolValue(u.Excluded), true },
-		"isfollower":          hasRoleValue(role.Follower),
+		"isfollower":          hasRoleValue(followerRoles()...),
 		"isregular":           hasRoleValue(role.Regular),
-		"issubscriber":        hasRoleValue(role.Subscriber),
-		"isvip":               hasRoleValue(role.VIP),
+		"issubscriber":        hasRoleValue(subscriberRoles()...),
+		"isvip":               hasRoleValue(vipRoles()...),
 		"ismod":               hasRoleValue(role.Moderator),
 
 		// Statistics (users B9).
@@ -158,10 +158,32 @@ func roles(text func(role.Set) string) property {
 	}
 }
 
-// hasRoleValue returns a property that says whether the user has r.
-func hasRoleValue(r role.Role) property {
+// hasRoleValue returns a property that says whether the user has one of
+// roles.
+func hasRoleValue(roles ...role.Role) property {
 	return func(s *Scope, u user.User) (Value, bool) {
-		return boolValue(userRoles(s, u).Has(r)), true
+		return boolValue(userRoles(s, u).HasAny(roles...)), true
+	}
+}
+
+// The kinds of roles that identifiers like $userisvip ask for, each with
+// the levels of all platforms (users B20): whoever has one of them.
+
+// followerRoles are the followers, on YouTube the subscribers.
+func followerRoles() []role.Role {
+	return []role.Role{role.Follower, role.YouTubeSubscriber}
+}
+
+// subscriberRoles are the subscribers, on YouTube the members.
+func subscriberRoles() []role.Role {
+	return []role.Role{role.Subscriber, role.YouTubeMember}
+}
+
+// vipRoles are the VIPs and their counterparts on the other platforms.
+func vipRoles() []role.Role {
+	return []role.Role{
+		role.TwitchVIP, role.KickVIP, role.KickOG, role.VeloraVIP,
+		role.VPZonePlus, role.VPZoneFounder, role.VPZoneAmbassador,
 	}
 }
 
@@ -189,18 +211,38 @@ func roleName(r role.Role) string {
 		return "Banned"
 	case role.User:
 		return "User"
-	case role.Creator:
-		return "Creator"
+	case role.TwitchAffiliate:
+		return "Twitch Affiliate"
+	case role.TwitchPartner:
+		return "Twitch Partner"
 	case role.Follower:
 		return "Follower"
+	case role.YouTubeSubscriber:
+		return "YouTube Subscriber"
 	case role.Regular:
 		return "Regular"
-	case role.VIP:
-		return "VIP"
+	case role.TwitchVIP:
+		return "Twitch VIP"
+	case role.KickVIP:
+		return "Kick VIP"
+	case role.KickOG:
+		return "Kick OG"
+	case role.VeloraVIP:
+		return "Velora VIP"
+	case role.VPZonePlus:
+		return "VPZone Plus"
+	case role.VPZoneFounder:
+		return "VPZone Founder"
+	case role.VPZoneAmbassador:
+		return "VPZone Ambassador"
 	case role.Subscriber:
 		return "Subscriber"
-	case role.PlatformStaff:
-		return "Platform Staff"
+	case role.YouTubeMember:
+		return "YouTube Member"
+	case role.TwitchGlobalMod:
+		return "Twitch Global Moderator"
+	case role.TwitchStaff:
+		return "Twitch Staff"
 	case role.Moderator:
 		return "Moderator"
 	case role.Editor:
