@@ -18,6 +18,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action"
 	"github.com/ripmav/streamcrew/internal/action/actiontest"
 	"github.com/ripmav/streamcrew/internal/action/flow"
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/template"
@@ -395,7 +396,11 @@ func (count) Validate() error { return nil }
 func (count) Enabled() bool   { return true }
 func (count) Perform(_ context.Context, run *engine.Run) error {
 	n := run.Scope().Values()["n"]
-	run.Scope().SetValue("n", template.FloatValue(n.Number+1))
+	next, err := n.Number.Add(decimal.New(1))
+	if err != nil {
+		return err
+	}
+	run.Scope().SetValue("n", template.NumberValue(next))
 	return nil
 }
 

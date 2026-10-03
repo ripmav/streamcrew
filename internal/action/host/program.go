@@ -232,7 +232,10 @@ func (p ExternalProgram) Perform(ctx context.Context, run *engine.Run) error {
 	if err != nil {
 		return field("timeout", err)
 	}
-	limit := time.Duration(seconds) * time.Second
+	limit, err := action.Seconds(seconds)
+	if err != nil {
+		return field("timeout", err)
+	}
 	if err := run.LimitTo(limit + timeLimitExtra); err != nil { // B8
 		return err
 	}

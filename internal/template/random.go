@@ -14,8 +14,9 @@ import (
 // template.md, purpose and scope) and may be replaced after the legal
 // assessment (roadmap Gate O, O.1).
 
-// maxRandom is the largest bound of a random number, the largest whole number
-// a float64 holds exactly.
+// maxRandom is the largest bound of a random number, 2^53 (template.md,
+// change log of 2026-09-30); it stems from the time when expressions
+// computed with float64.
 const maxRandom = 1 << 53
 
 // RandomFamily returns the random numbers $randomnumber<max> (1 to max) and

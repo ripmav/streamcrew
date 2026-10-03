@@ -20,6 +20,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/actiontest"
 	"github.com/ripmav/streamcrew/internal/action/values"
 	"github.com/ripmav/streamcrew/internal/capability"
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/counter"
 	"github.com/ripmav/streamcrew/internal/engine"
@@ -218,9 +219,9 @@ func TestCounter(t *testing.T) {
 			counter.Counter{Name: "points", Step: 10},
 			counter.Counter{Name: "other", Value: 7, Step: counter.DefaultStep})
 		in := f.start([]command.Action{
-			f.counter(values.CounterAdd, "deaths", action.Fixed(1)), f.show("$deaths"),
+			f.counter(values.CounterAdd, "deaths", action.Fixed(decimal.New(1))), f.show("$deaths"),
 			f.counter(values.CounterAdd, "DEATHS", action.Expression("$arg1text")), f.show("$deaths"),
-			f.counter(values.CounterSet, "deaths", action.Fixed(1234567)), f.show("$deaths $deathsdisplay"),
+			f.counter(values.CounterSet, "deaths", action.Fixed(decimal.New(1234567))), f.show("$deaths $deathsdisplay"),
 			f.counter(values.CounterReset, "Deaths", action.Amount{}), f.show("$deaths"),
 			f.counter(values.CounterIncrement, "deaths", action.Amount{}), f.show("$deaths"),
 			f.counter(values.CounterIncrement, "points", action.Amount{}),
@@ -249,8 +250,8 @@ func TestCounterFails(t *testing.T) {
 	}{
 		{"B220 fraction", values.CounterAdd, "deaths", action.Expression("$arg1text"), []string{"1.5"}, "amount: invalid action: 1.5 is not a whole number"},
 		{"not a number", values.CounterSet, "deaths", action.Expression("$arg1text"), []string{"abc"}, `value: invalid action: "abc" is not a number`},
-		{"B42 beyond 64 bits", values.CounterAdd, "big", action.Fixed(10), nil, "counter value out of range"},
-		{"B42 below 64 bits", values.CounterAdd, "small", action.Fixed(-2), nil, "counter value out of range"},
+		{"B42 beyond 64 bits", values.CounterAdd, "big", action.Fixed(decimal.New(10)), nil, "counter value out of range"},
+		{"B42 below 64 bits", values.CounterAdd, "small", action.Fixed(decimal.New(-2)), nil, "counter value out of range"},
 		{"B42 a step beyond 64 bits", values.CounterIncrement, "big", action.Amount{}, nil, "counter value out of range"},
 		{"B42 a step below 64 bits", values.CounterDecrement, "small", action.Amount{}, nil, "counter value out of range"},
 	} {
@@ -281,7 +282,7 @@ func TestCounterCreated(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		f := newFixture(t)
 		in := f.start([]command.Action{
-			f.counter(values.CounterAdd, "Lives", action.Fixed(3)), f.show("$lives"),
+			f.counter(values.CounterAdd, "Lives", action.Fixed(decimal.New(3))), f.show("$lives"),
 			f.counter(values.CounterIncrement, "steps", action.Amount{}), f.show("$steps"),
 			f.counter(values.CounterReset, "zero", action.Amount{}), f.show("$zero"),
 			f.counter(values.CounterAdd, "broken", action.Expression("$arg1text")),
@@ -305,7 +306,7 @@ func TestCounterConcurrent(t *testing.T) {
 		f := newFixture(t, counter.New("hugs"))
 		add := make([]command.Action, 100)
 		for i := range add {
-			add[i] = f.counter(values.CounterAdd, "hugs", action.Fixed(1))
+			add[i] = f.counter(values.CounterAdd, "hugs", action.Fixed(decimal.New(1)))
 		}
 		var started []engine.Instance
 		for _, name := range []string{"a", "b", "c"} {
@@ -345,16 +346,16 @@ func TestValidate(t *testing.T) {
 		{"increment with an amount", func(c *values.Counter) { c.Kind = values.CounterIncrement }, "amount: invalid action: only add has an amount"},
 		{"decrement with an amount", func(c *values.Counter) { c.Kind = values.CounterDecrement }, "amount: invalid action: only add has an amount"},
 		{"add without amount", func(c *values.Counter) { c.Amount = action.Amount{} }, "amount: invalid action: no amount"},
-		{"add with a value", func(c *values.Counter) { c.Value = action.Fixed(1) }, "value: invalid action: only set has a value"},
-		{"set with an amount", func(c *values.Counter) { c.Kind, c.Value = values.CounterSet, action.Fixed(1) }, "amount: invalid action: only add has an amount"},
+		{"add with a value", func(c *values.Counter) { c.Value = action.Fixed(decimal.New(1)) }, "value: invalid action: only set has a value"},
+		{"set with an amount", func(c *values.Counter) { c.Kind, c.Value = values.CounterSet, action.Fixed(decimal.New(1)) }, "amount: invalid action: only add has an amount"},
 		{"set without value", func(c *values.Counter) { c.Kind, c.Amount = values.CounterSet, action.Amount{} }, "value: invalid action: no amount"},
 		{"reset with an amount", func(c *values.Counter) { c.Kind = values.CounterReset }, "amount: invalid action: only add has an amount"},
 		{"bad name", func(c *values.Counter) { c.Counter = "my deaths" }, "counter: invalid action: invalid counter"},
-		{"beyond exact numbers", func(c *values.Counter) { c.Amount = action.Fixed(1 << 53) }, "amount: invalid action"},
+		{"beyond exact numbers", func(c *values.Counter) { c.Amount = action.Fixed(decimal.New(1 << 53)) }, "amount: invalid action"},
 	} {
 		c, ok := d.New().(values.Counter)
 		require.True(t, ok)
-		c.Kind, c.Counter, c.Amount = values.CounterAdd, "deaths", action.Fixed(1)
+		c.Kind, c.Counter, c.Amount = values.CounterAdd, "deaths", action.Fixed(decimal.New(1))
 		require.NoError(t, c.Validate(), tc.name)
 		tc.change(&c)
 		assert.ErrorContains(t, c.Validate(), tc.want, tc.name)
@@ -372,7 +373,7 @@ func TestDecodeDefaults(t *testing.T) {
 	d, ok := reg.Descriptor(values.TypeCounter)
 	require.True(t, ok)
 	for doc, want := range map[string]values.Counter{
-		`{"kind":"add","counter":"deaths"}`:       {Common: action.On(), Kind: values.CounterAdd, Counter: "deaths", Amount: action.Fixed(1)},
+		`{"kind":"add","counter":"deaths"}`:       {Common: action.On(), Kind: values.CounterAdd, Counter: "deaths", Amount: action.Fixed(decimal.New(1))},
 		`{"kind":"increment","counter":"deaths"}`: {Common: action.On(), Kind: values.CounterIncrement, Counter: "deaths"},
 		`{"kind":"decrement","counter":"deaths"}`: {Common: action.On(), Kind: values.CounterDecrement, Counter: "deaths"},
 	} {
