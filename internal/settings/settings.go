@@ -48,7 +48,7 @@ func New(repo Repository) (*Service, error) {
 	for _, e := range []polydoc.Entry[Section]{
 		{Type: sectionBackups, Version: 1, Decode: decode[Backups]},
 		{Type: sectionTime, Version: 2, Decode: decode[Time], Migrations: []polydoc.Migration{migrateTimeV1}},
-		{Type: sectionCommands, Version: 3, Decode: decode[Commands], Migrations: []polydoc.Migration{migrateCommandsV1, migrateCommandsV2}},
+		{Type: sectionCommands, Version: 4, Decode: decode[Commands], Migrations: []polydoc.Migration{migrateCommandsV1, migrateCommandsV2, migrateCommandsV3}},
 		{Type: sectionLocale, Version: 1, Decode: decode[Locale]},
 	} {
 		if err := r.Register(e); err != nil {
@@ -320,10 +320,29 @@ const (
 	MaxQueueSize = 10_000
 )
 
+// Limits of Commands.UserLookupAttempts and UserLookupTimeout (spec
+// command-engine.md, B17, B90).
+const (
+	// DefaultUserLookupAttempts is how often a lookup of a user is tried in
+	// a profile that never set it.
+	DefaultUserLookupAttempts = 3
+	// MinUserLookupAttempts and MaxUserLookupAttempts limit the attempts.
+	MinUserLookupAttempts = 1
+	MaxUserLookupAttempts = 10
+	// DefaultUserLookupTimeout is the time limit of one attempt in a
+	// profile that never set it.
+	DefaultUserLookupTimeout = 2 * time.Second
+	// MinUserLookupTimeout and MaxUserLookupTimeout limit the time limit of
+	// one attempt.
+	MinUserLookupTimeout = 100 * time.Millisecond
+	MaxUserLookupTimeout = 30 * time.Second
+)
+
 // Commands configures the command engine (spec command-engine.md, B90).
 // Changes apply to the instances queued afterwards. Version 1 of the section
-// had no EntranceMediaGap, version 2 no QueueSize; the migrations set
-// DefaultEntranceMediaGap and DefaultQueueSize.
+// had no EntranceMediaGap, version 2 no QueueSize, version 3 no
+// UserLookupAttempts and UserLookupTimeout; the migrations set their
+// defaults.
 type Commands struct {
 	// LockMode is the lock mode of all commands (B20).
 	LockMode LockMode `json:"lockMode"`
@@ -344,6 +363,11 @@ type Commands struct {
 	// waiting instances takes no new ones until enough of them have
 	// started.
 	QueueSize int `json:"queueSize"`
+	// UserLookupAttempts is how often a lookup of a user by name is tried
+	// before it fails, and UserLookupTimeout how long one attempt may take
+	// (B17), e.g. when the platform answers slowly.
+	UserLookupAttempts int              `json:"userLookupAttempts"`
+	UserLookupTimeout  polydoc.Duration `json:"userLookupTimeout"`
 }
 
 // DefaultCommands returns the defaults of B90.
@@ -355,6 +379,8 @@ func DefaultCommands() Commands {
 		ArgDelimiter:          "|",
 		EntranceMediaGap:      polydoc.Duration(DefaultEntranceMediaGap),
 		QueueSize:             DefaultQueueSize,
+		UserLookupAttempts:    DefaultUserLookupAttempts,
+		UserLookupTimeout:     polydoc.Duration(DefaultUserLookupTimeout),
 	}
 }
 
@@ -381,6 +407,26 @@ func migrateCommandsV2(doc map[string]jsontext.Value) error {
 		return err
 	}
 	doc["queueSize"] = size
+	return nil
+}
+
+// migrateCommandsV3 adds the attempts and the time limit of user lookups
+// of version 4 with their defaults.
+func migrateCommandsV3(doc map[string]jsontext.Value) error {
+	for _, field := range []string{"userLookupAttempts", "userLookupTimeout"} {
+		if _, ok := doc[field]; ok {
+			return fmt.Errorf("%s in version 3", field)
+		}
+	}
+	attempts, err := json.Marshal(DefaultUserLookupAttempts)
+	if err != nil {
+		return err
+	}
+	timeout, err := json.Marshal(polydoc.Duration(DefaultUserLookupTimeout))
+	if err != nil {
+		return err
+	}
+	doc["userLookupAttempts"], doc["userLookupTimeout"] = attempts, timeout
 	return nil
 }
 
@@ -413,6 +459,12 @@ func (c Commands) validate() error {
 	}
 	if c.QueueSize < MinQueueSize || c.QueueSize > MaxQueueSize {
 		return fmt.Errorf("queue size %d is not between %d and %d", c.QueueSize, MinQueueSize, MaxQueueSize)
+	}
+	if c.UserLookupAttempts < MinUserLookupAttempts || c.UserLookupAttempts > MaxUserLookupAttempts {
+		return fmt.Errorf("user lookup attempts %d are not between %d and %d", c.UserLookupAttempts, MinUserLookupAttempts, MaxUserLookupAttempts)
+	}
+	if t := c.UserLookupTimeout.Std(); t < MinUserLookupTimeout || t > MaxUserLookupTimeout {
+		return fmt.Errorf("user lookup timeout %s is not between %s and %s", t, MinUserLookupTimeout, MaxUserLookupTimeout)
 	}
 	return nil
 }

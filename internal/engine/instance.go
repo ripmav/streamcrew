@@ -168,6 +168,8 @@ type instance struct {
 	// mediaGap is the gap after the pictures and sounds of a greeting
 	// (B43).
 	mediaGap time.Duration
+	// lookup finds users for the run (B17).
+	lookup *userLookup
 	// start is closed when the instance gets its locks.
 	start chan struct{}
 	// cancel cancels the context of the instance.
@@ -180,12 +182,16 @@ type instance struct {
 	errors    []ActionError
 }
 
-// origin says which instance called an instance, if any.
+// origin says where an instance comes from: which instance called it, if
+// any, and the lookup of users of its trigger, which a called command
+// shares with its caller (B17).
 type origin struct {
 	// parent is the calling instance.
 	parent id.ID
 	// chain has the commands from the first caller to the calling one.
 	chain []id.ID
+	// lookup finds users for the run; it is required.
+	lookup *userLookup
 }
 
 // newInstance returns a pending instance of cmd, the version of the command
@@ -199,20 +205,23 @@ func newInstance(cmd command.Command, src Source, p Params, cfg Config, locks []
 		cmd:      cmd,
 		source:   src,
 		params:   p,
-		scope:    newScope(cmd, p, cfg),
+		scope:    newScope(cmd, p, cfg, org.lookup),
 		locks:    locks,
 		parent:   org.parent,
 		chain:    append(slices.Clone(org.chain), cmd.ID),
 		mediaGap: cfg.Commands.EntranceMediaGap.Std(),
+		lookup:   org.lookup,
 		start:    make(chan struct{}),
 		state:    StatePending,
 		queuedAt: time.Now(),
 	}
 }
 
-// newScope returns the scope of the templates of a run (B80).
-func newScope(cmd command.Command, p Params, cfg Config) *template.Scope {
+// newScope returns the scope of the templates of a run (B80), which finds
+// users by name through the lookup of the run (B17).
+func newScope(cmd command.Command, p Params, cfg Config, lookup *userLookup) *template.Scope {
 	s := &template.Scope{
+		Finder:       lookup,
 		Platform:     p.Platform,
 		User:         p.User,
 		Target:       p.Target,
