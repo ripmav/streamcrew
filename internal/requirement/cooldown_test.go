@@ -51,7 +51,7 @@ func onCooldown(key i18n.Key, left time.Duration, tell bool) engine.Decision {
 // verdict applies the requirements of c for p and returns the verdict.
 func (f *fixture) verdict(t *testing.T, c command.Command, p engine.Params) engine.Verdict {
 	t.Helper()
-	d, err := f.service.Apply(t.Context(), c, p)
+	d, err := apply(t.Context(), f.service, c, p)
 	require.NoError(t, err)
 	return d.Verdict
 }
@@ -70,10 +70,10 @@ func TestCooldownScopes(t *testing.T) {
 		standard := cmd(cooldownFor(command.CooldownStandard, 90*time.Second, id.ID{}))
 		assert.Equal(t, engine.VerdictMet, f.verdict(t, standard, chat(ada)))
 		time.Sleep(29*time.Second + 500*time.Millisecond)
-		got, err := f.service.Apply(t.Context(), standard, chat(bob))
+		got, err := apply(t.Context(), f.service, standard, chat(bob))
 		require.NoError(t, err)
 		assert.Equal(t, onCooldown(i18n.KeyRequirementCooldownAll, 61*time.Second, true), got, "for everyone, 60.5 s rounded up")
-		got, err = f.service.Apply(t.Context(), standard, engine.Params{Platform: platform.Twitch, User: bob})
+		got, err = apply(t.Context(), f.service, standard, engine.Params{Platform: platform.Twitch, User: bob})
 		require.NoError(t, err)
 		assert.Equal(t, onCooldown(i18n.KeyRequirementCooldownAll, 61*time.Second, false), got, "not told without a chat message")
 		time.Sleep(time.Minute + 500*time.Millisecond)
@@ -81,7 +81,7 @@ func TestCooldownScopes(t *testing.T) {
 
 		perUser := cmd(cooldownFor(command.CooldownPerUser, time.Minute, id.ID{}))
 		assert.Equal(t, engine.VerdictMet, f.verdict(t, perUser, chat(ada)))
-		got, err = f.service.Apply(t.Context(), perUser, chat(ada))
+		got, err = apply(t.Context(), f.service, perUser, chat(ada))
 		require.NoError(t, err)
 		assert.Equal(t, onCooldown(i18n.KeyRequirementCooldownUser, time.Minute, true), got, "for the user")
 		assert.Equal(t, engine.VerdictMet, f.verdict(t, perUser, chat(bob)), "others are free")
@@ -89,20 +89,20 @@ func TestCooldownScopes(t *testing.T) {
 		boom := cmd(cooldownFor(command.CooldownGrouped, 0, sounds.ID))
 		bang := cmd(cooldownFor(command.CooldownGrouped, 0, sounds.ID))
 		assert.Equal(t, engine.VerdictMet, f.verdict(t, boom, chat(ada)))
-		got, err = f.service.Apply(t.Context(), bang, chat(bob))
+		got, err = apply(t.Context(), f.service, bang, chat(bob))
 		require.NoError(t, err)
 		assert.Equal(t, onCooldown(i18n.KeyRequirementCooldownAll, 2*time.Minute, true), got, "the group shares it, as long as the group says")
 
 		mine := cmd(cooldownFor(command.CooldownPerUserGrouped, 0, sounds.ID))
 		yours := cmd(cooldownFor(command.CooldownPerUserGrouped, 0, sounds.ID))
 		assert.Equal(t, engine.VerdictMet, f.verdict(t, mine, chat(ada)), "per user group is a cooldown of its own")
-		got, err = f.service.Apply(t.Context(), yours, chat(ada))
+		got, err = apply(t.Context(), f.service, yours, chat(ada))
 		require.NoError(t, err)
 		assert.Equal(t, onCooldown(i18n.KeyRequirementCooldownUser, 2*time.Minute, true), got)
 		assert.Equal(t, engine.VerdictMet, f.verdict(t, yours, chat(bob)))
 
 		mods := cmd(command.RoleRequirement{Role: role.Moderator}, cooldownFor(command.CooldownGrouped, 0, sounds.ID))
-		got, err = f.service.Apply(t.Context(), mods, chat(ada))
+		got, err = apply(t.Context(), f.service, mods, chat(ada))
 		require.NoError(t, err)
 		assert.Equal(t, rejection(role.Moderator, true), got, "B101: the role comes first")
 	})
@@ -129,7 +129,7 @@ func TestCooldownKeepsItsEnd(t *testing.T) {
 		f.cooldowns.groups[0].Duration = 10 * time.Second
 		f.cooldowns.mu.Unlock()
 		for _, x := range []command.Command{c, grouped} {
-			got, err := f.service.Apply(t.Context(), x, ada)
+			got, err := apply(t.Context(), f.service, x, ada)
 			require.NoError(t, err)
 			assert.Equal(t, onCooldown(i18n.KeyRequirementCooldownAll, 50*time.Second, true), got)
 		}
@@ -172,7 +172,7 @@ func TestCooldownStreamer(t *testing.T) {
 		forEveryone := cmd(cooldownFor(command.CooldownStandard, time.Minute, id.ID{}))
 		delete(f.streamer, platform.Twitch)
 		assert.Equal(t, engine.VerdictMet, f.verdict(t, forEveryone, timer), "only the scopes per user need the streamer")
-		_, err := f.service.Apply(t.Context(), cmd(cooldownFor(command.CooldownPerUser, time.Minute, id.ID{})), timer)
+		_, err := apply(t.Context(), f.service, cmd(cooldownFor(command.CooldownPerUser, time.Minute, id.ID{})), timer)
 		require.ErrorContains(t, err, "no streamer on twitch")
 	})
 }
@@ -195,7 +195,7 @@ func TestCooldownFaulty(t *testing.T) {
 			f := newFixture(t, language{lang: i18n.English})
 			f.cooldowns.groups = []command.CooldownGroup{sounds}
 			c := cmd(command.RoleRequirement{Role: role.Moderator}, command.CooldownRequirement{Scope: command.CooldownPerUserGrouped, Group: tc.group})
-			got, err := f.service.Apply(t.Context(), c, chat(person("ada", platform.Twitch)))
+			got, err := apply(t.Context(), f.service, c, chat(person("ada", platform.Twitch)))
 			require.NoError(t, err)
 			assert.Equal(t, engine.Rejected(engine.Rejection{Requirement: command.TypeCooldown, Reason: i18n.Message{Key: i18n.KeyRequirementFaulty}}), got)
 			assert.Contains(t, f.logs.String(), "command not run: faulty requirement")
@@ -226,7 +226,7 @@ func TestCooldownOnce(t *testing.T) {
 	svc := f.withCooldowns(t, slow)
 	c := cmd(cooldownFor(command.CooldownPerUser, time.Minute, id.ID{}))
 	ada := chat(person("ada", platform.Twitch))
-	earlier, err := svc.Apply(t.Context(), c, chat(person("carl", platform.Twitch)))
+	earlier, err := apply(t.Context(), svc, c, chat(person("carl", platform.Twitch)))
 	require.NoError(t, err)
 	require.NotNil(t, earlier.Revert)
 
@@ -237,7 +237,7 @@ func TestCooldownOnce(t *testing.T) {
 	for range runs {
 		wg.Go(func() {
 			<-start
-			d, err := svc.Apply(t.Context(), c, ada)
+			d, err := apply(t.Context(), svc, c, ada)
 			assert.NoError(t, err)
 			verdicts <- d.Verdict
 		})
@@ -372,13 +372,13 @@ func TestCooldownRevert(t *testing.T) {
 		c := cmd(cooldownFor(command.CooldownStandard, time.Minute, id.ID{}))
 		ada := chat(person("ada", platform.Twitch))
 
-		met, err := f.service.Apply(t.Context(), c, ada)
+		met, err := apply(t.Context(), f.service, c, ada)
 		require.NoError(t, err)
 		require.NotNil(t, met.Revert)
 		require.NoError(t, met.Revert(t.Context()))
 		assert.Empty(t, f.cooldowns.running())
 
-		met, err = f.service.Apply(t.Context(), c, ada)
+		met, err = apply(t.Context(), f.service, c, ada)
 		require.NoError(t, err)
 		time.Sleep(time.Second)
 		require.NoError(t, f.service.StartCooldown(t.Context(), c, ada))
@@ -386,7 +386,7 @@ func TestCooldownRevert(t *testing.T) {
 		assert.Equal(t, map[command.CooldownKey]time.Duration{{Command: c.ID}: time.Minute}, f.cooldowns.left(time.Now()),
 			"the later start stays")
 
-		free, err := f.service.Apply(t.Context(), cmd(), ada)
+		free, err := apply(t.Context(), f.service, cmd(), ada)
 		require.NoError(t, err)
 		assert.Nil(t, free.Revert, "nothing to take back")
 	})
@@ -409,7 +409,7 @@ func TestCooldownErrors(t *testing.T) {
 		f := newFixture(t, language{lang: i18n.English})
 		f.cooldowns.groups = []command.CooldownGroup{sounds}
 		tc.fail(f.cooldowns)
-		_, err := f.service.Apply(t.Context(), tc.cmd, ada)
+		_, err := apply(t.Context(), f.service, tc.cmd, ada)
 		require.ErrorContains(t, err, "store gone", name)
 	}
 
@@ -418,7 +418,7 @@ func TestCooldownErrors(t *testing.T) {
 		f := newFixture(t, language{lang: i18n.English})
 		deleting := &deletingGroups{cooldowns: f.cooldowns}
 		f.cooldowns.groups = []command.CooldownGroup{sounds}
-		_, err := f.withCooldowns(t, deleting).Apply(t.Context(), cmd(cooldownFor(command.CooldownGrouped, 0, sounds.ID)), ada)
+		_, err := apply(t.Context(), f.withCooldowns(t, deleting), cmd(cooldownFor(command.CooldownGrouped, 0, sounds.ID)), ada)
 		require.ErrorContains(t, err, "does not exist")
 		assert.Empty(t, f.cooldowns.running())
 	})
@@ -470,7 +470,7 @@ func TestCooldownOutlastsRestart(t *testing.T) {
 // verdict.
 func decide(t *testing.T, svc *requirement.Service, c command.Command, p engine.Params) engine.Verdict {
 	t.Helper()
-	d, err := svc.Apply(t.Context(), c, p)
+	d, err := apply(t.Context(), svc, c, p)
 	require.NoError(t, err)
 	return d.Verdict
 }
