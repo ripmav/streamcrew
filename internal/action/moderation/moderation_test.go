@@ -196,7 +196,9 @@ func newFixture(t *testing.T) *fixture {
 	require.NoError(t, err)
 	f.reg = registry(t, moderation.Ports{Platforms: set, Users: f.store, Strikes: f.store, Mute: f.mute},
 		slog.New(slog.NewTextHandler(f.logs, nil)))
-	f.harness = actiontest.NewHarness(t, f.reg)
+	// The run finds known users through the engine (spec command-engine.md,
+	// B17).
+	f.harness = actiontest.NewHarnessWith(t, f.reg, actiontest.NewCommands(), engine.WithUsers(f.store))
 	return f
 }
 
@@ -451,8 +453,8 @@ func TestLookupFails(t *testing.T) {
 		f.store.err = errors.New("database locked")
 		in := f.start(onTwitch(), f.on(moderation.KindBan, "bob"), f.on(moderation.KindAddStrike, "bob"))
 		require.Len(t, in.Errors, 2)
-		assert.Equal(t, `user: failed on twitch: twitch: find account "bob" on twitch: database locked`, in.Errors[0].Message)
-		assert.Equal(t, "user: database locked", in.Errors[1].Message)
+		assert.Equal(t, `user: failed on twitch: twitch: find account "bob" on twitch: look up user "bob" on twitch after 3 attempts: database locked`, in.Errors[0].Message)
+		assert.Equal(t, `user: look up user "bob" on twitch after 3 attempts: database locked`, in.Errors[1].Message)
 		assert.Empty(t, f.twitch.Calls())
 	})
 }
