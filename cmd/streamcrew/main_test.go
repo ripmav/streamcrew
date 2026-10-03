@@ -20,6 +20,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/ripmav/streamcrew/internal/cli"
+	"github.com/ripmav/streamcrew/internal/commandfile"
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/doctor"
 	"github.com/ripmav/streamcrew/internal/profile"
@@ -389,4 +390,37 @@ func TestVaultRotateWithEnvironmentKey(t *testing.T) {
 	res := runCLI(t.Context(), t, "--data-dir", dataDir, "secret", "rotate")
 	assert.Equal(t, cli.ExitFailure, res.code)
 	assert.Contains(t, res.stderr, "STREAMCREW_SECRET_KEY")
+}
+
+// TestSchemaExport covers B30 of commands-as-code.md: "schema export" writes
+// the schema of files, by default into schemas/, and schemas/ in the
+// repository holds the current one. With STREAMCREW_UPDATE_GOLDEN=1 it
+// writes that file first (Code-ADR-0006).
+func TestSchemaExport(t *testing.T) {
+	update := os.Getenv("STREAMCREW_UPDATE_GOLDEN") != "" // isolate removes it
+	isolate(t)
+	dir := filepath.Join(t.TempDir(), "out")
+	res := runCLI(t.Context(), t, "schema", "export", "--dir", dir)
+	require.Equal(t, cli.ExitOK, res.code, res.stderr)
+	path := filepath.Join(dir, commandfile.SchemaFile)
+	assert.Equal(t, "wrote "+path+"\n", res.stdout)
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	repo, err := os.OpenRoot(filepath.Join("..", "..", "schemas"))
+	require.NoError(t, err)
+	defer repo.Close()
+	if update {
+		require.NoError(t, repo.WriteFile(commandfile.SchemaFile, got, 0o600))
+	}
+	want, err := repo.ReadFile(commandfile.SchemaFile)
+	require.NoError(t, err, "create it with STREAMCREW_UPDATE_GOLDEN=1")
+	assert.Equal(t, string(want), string(got), "schemas/ is out of date; update it with STREAMCREW_UPDATE_GOLDEN=1")
+
+	t.Chdir(t.TempDir())
+	res = runCLI(t.Context(), t, "schema", "export")
+	require.Equal(t, cli.ExitOK, res.code, res.stderr)
+	again, err := os.ReadFile(filepath.Join("schemas", commandfile.SchemaFile))
+	require.NoError(t, err, "the default directory is schemas")
+	assert.Equal(t, string(got), string(again))
 }

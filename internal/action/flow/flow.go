@@ -65,6 +65,19 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("flow action types: no random numbers")
 	}
 	ports := &ports{Ports: p, memory: newMemory()}
+	return descriptors(ports), nil
+}
+
+// Catalog returns the flow types without ports, for the type catalog and
+// commands as code (Code-ADR-0013, point 3): their actions decode,
+// validate and encode, but must not run.
+func Catalog() []action.Descriptor {
+	return descriptors(nil)
+}
+
+// descriptors returns the flow types with ports, which are nil in the
+// catalog.
+func descriptors(ports *ports) []action.Descriptor {
 	return []action.Descriptor{
 		action.Descriptor{
 			Type:     TypeWait,
@@ -107,7 +120,7 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 				Common: action.On(), Combine: CombineAnd, Actions: []command.Action{}, Else: []command.Action{}, ports: ports,
 			}
 		}),
-	}, nil
+	}
 }
 
 // randomSchema returns the schema of random.
