@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Geprüft |
-| **Stand** | 2026-10-03 |
+| **Stand** | 2026-10-04 |
 | **Bezug** | Roadmap Phase 3.4; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0017](../adr/code/0017-klare-signale-statt-magischer-werte.md), ADR-0022 (geplant); Plan §5.4, §6.8, §6.9; [`commands.md`](commands.md), [`command-engine.md`](command-engine.md), [`users-and-roles.md`](users-and-roles.md), [`template.md`](template.md), [`actions.md`](actions.md) |
 | **Umsetzung** | in Arbeit (Roadmap 3.4): Requirement-Service `internal/requirement` hinter dem Port `engine.Requirements` mit der Reihenfolge der Prüfungen, fehlerhaften und unbekannten Anforderungen (B7, B8, B40), der Rolle (B10–B12) samt dem Streamer für Durchläufe ohne Nutzer (B4), den Cooldowns (B20–B25), gespeichert in der Tabelle `cooldowns` (Migration 0008), samt `StartCooldown` ([`actions.md`](actions.md), B37), den Argumenten (B30–B35), den Einstellungen mit dem Löschen der auslösenden Nachricht über `engine.Requirements.Decided` (B60–B62) und den Meldungen in der Sprache des Profils über `internal/i18n` (B70–B72). Die Prüfung beim Speichern (B34, B36, B80, B81) übernimmt `command.Service.Save` mit den Prüfungen der Actions; Warnungen kommen als `command.Warning` zurück. Die Schwelle folgt; bis dahin entscheidet der Service Commands mit Schwelle nicht. Die Namen der Argumente beim Import (B36) kommen mit dem Importer (Roadmap 10.2). Das Datenmodell gibt es seit Phase 2.2 (`internal/domain/command`), mit Cooldown-Gruppen und dem Typ `integer` seit 3.4. |
 
@@ -137,7 +137,7 @@ Die Meldungen je Art:
 | B100 | Derselbe Nutzer löst einen Command mit `per_user`-Cooldown zweimal gleichzeitig aus | genau ein Durchlauf; das zweite Auslösen wird mit der Restzeit abgelehnt | B3, B20 |
 | B101 | Ein Nutzer ohne die verlangte Rolle löst einen Command aus, dessen Cooldown läuft | Die Meldung betrifft die Rolle (B2). | B2 |
 | B102 | Die Dauer wird von 60 auf 10 s geändert, während noch 50 s übrig sind | Der Cooldown endet nach den 50 s. | B23 |
-| B103 | Die Cooldown-Gruppe eines Commands wird gelöscht | Der Command ist fehlerhaft: keine Meldung, Warnung im Log. | B7, [`commands.md`](commands.md) B64 |
+| B103 | Die Cooldown-Gruppe eines Commands soll gelöscht werden | Das Löschen scheitert ([`commands.md`](commands.md), B8). Fehlt sie trotzdem, etwa in Daten von vor dieser Regel, ist der Command fehlerhaft: keine Meldung, Warnung im Log (B7). | B7, [`commands.md`](commands.md) B8, B64 |
 | B104 | Ein Timer-Command ruft mit Prüfung einen Command mit Rollen-Anforderung auf | Der Command läuft: Für die Anforderungen gilt der Streamer (B4). | B4 |
 | B105 | Ein Argument vom Typ `user` lautet `@Name` in anderer Schreibweise | Der Nutzer wird gefunden; der Wert ist sein Login-Name. | B33, B35 |
 | B106 | Ein Argument vom Typ `number` lautet `1,5` | nicht erfüllt; die Meldung nennt den erwarteten Typ | B33 |
@@ -214,3 +214,4 @@ Keine.
 | 2026-10-03 | Prüfung beim Speichern umgesetzt (B34, B36, B62, B80, B81). Festlegungen dabei: Die Prüfung übernimmt der Command-Service beim Speichern, wie die Prüfung der Actions (Code-ADR-0013, Punkt 7), nicht der Requirement-Service. Ein Identifier-Name eines Arguments wird wie ein Ergebnisname geprüft ([`actions.md`](actions.md), B5): Er darf keinen eingebauten Identifier und keinen festen Ergebnisnamen verdecken. Jeder Verweis auf eine Währung, einen Rang oder einen Gegenstand ist eine Warnung der Art `unknown_reference`, weil es sie bis Phase 8 nicht gibt (B40). Die Warnungen nennen die Art der Anforderung und die ID, auf die sie verweist, und stehen vor denen der Actions. |
 | 2026-10-03 | Argumente vom Typ `number` und `integer` tragen ihren Wert als exakte Dezimalzahl (Code-ADR-0020). Festlegung dabei: Eine Zahl ab 10^34 passt nicht zum Typ `number`; mehr als 34 gültige Stellen werden wie in Ausdrücken gerundet ([`template.md`](template.md), B50). |
 | 2026-10-03 | Argumente vom Typ `number` und `integer` nehmen auch hexadezimale Zahlen nach `0x` und Unterstriche zwischen Ziffern (B33, Entscheidung des Projektinhabers; [`template.md`](template.md), B51). Festlegung dabei: `integer` lehnt einen Dezimalpunkt und einen Exponenten weiter ab, auch wenn der Wert ganz ist; `1e3` passt nur zu `number`. |
+| 2026-10-04 | B103: Eine Cooldown-Gruppe, die ein Cooldown nennt, lässt sich nicht löschen ([`commands.md`](commands.md), B8, Entscheidung des Projektinhabers). |
