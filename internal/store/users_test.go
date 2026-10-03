@@ -88,14 +88,14 @@ func TestRolesAcrossIdentities(t *testing.T) {
 	u, _, err := s.UpsertIdentity(ctx, twitchIdentity("1001", "ada"))
 	require.NoError(t, err)
 	require.NoError(t, s.AddIdentity(ctx, u.ID, user.Identity{Platform: platform.YouTube, PlatformUserID: "UC7", Login: "ada", DisplayName: "Ada"}))
-	require.NoError(t, s.SetRoles(ctx, platform.Twitch, "1001", role.NewSet(role.VIP, role.Subscriber)))
+	require.NoError(t, s.SetRoles(ctx, platform.Twitch, "1001", role.NewSet(role.TwitchVIP, role.Subscriber)))
 	require.NoError(t, s.SetRoles(ctx, platform.YouTube, "UC7", role.NewSet(role.Moderator)))
 	u, err = s.UpdateUser(ctx, u.ID, func(u *user.User) error {
 		u.Regular = true
 		return nil
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "user,regular,vip,subscriber", u.Roles(platform.Twitch).String())
+	assert.Equal(t, "user,regular,twitch_vip,subscriber", u.Roles(platform.Twitch).String())
 	assert.Equal(t, "user,regular,moderator", u.Roles(platform.YouTube).String())
 
 	// B42: the platform no longer reports VIP; regular stays.
@@ -105,7 +105,7 @@ func TestRolesAcrossIdentities(t *testing.T) {
 	assert.Equal(t, "user,regular,subscriber", u.Roles(platform.Twitch).String())
 
 	require.ErrorIs(t, s.SetRoles(ctx, platform.Twitch, "1001", role.NewSet(role.Regular)), user.ErrInvalid)
-	require.ErrorIs(t, s.SetRoles(ctx, platform.Twitch, "404", role.NewSet(role.VIP)), store.ErrNotFound)
+	require.ErrorIs(t, s.SetRoles(ctx, platform.Twitch, "404", role.NewSet(role.TwitchVIP)), store.ErrNotFound)
 }
 
 // TestUserDataAndStats covers B5 to B10: title, notes, exclusion, entrance
