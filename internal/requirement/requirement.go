@@ -6,9 +6,9 @@
 // that is not met (B2), and it tells the user why a command did not run,
 // in the language of the profile (B70 to B72, ADR-0022).
 //
-// So far it checks the role and the cooldown and finds faulty
-// requirements; arguments, settings and thresholds follow (roadmap 3.4). A
-// command with arguments or a threshold is not decided yet: Apply returns
+// So far it checks the role, the cooldown and the arguments and finds
+// faulty requirements; settings and thresholds follow (roadmap 3.4). A
+// command with a threshold is not decided yet: Apply returns
 // ErrNotSupported.
 package requirement
 
@@ -56,6 +56,8 @@ type Ports struct {
 	Cooldowns Cooldowns
 	// Streamer finds the streamer for runs without a user (B4).
 	Streamer Streamer
+	// Users finds the users that arguments name (B33).
+	Users engine.Users
 	// Logger records faulty requirements (B7, B8).
 	Logger *slog.Logger
 }
@@ -84,6 +86,8 @@ func New(p Ports) (*Service, error) {
 		return nil, errors.New("requirement service: no cooldowns")
 	case p.Streamer == nil:
 		return nil, errors.New("requirement service: no streamer")
+	case p.Users == nil:
+		return nil, errors.New("requirement service: no users")
 	case p.Logger == nil:
 		return nil, errors.New("requirement service: no logger")
 	}
@@ -91,9 +95,10 @@ func New(p Ports) (*Service, error) {
 }
 
 // Apply decides whether cmd runs for p (B1, B2): faulty requirements first
-// (B7, B8, B40), then the role (B10 to B12) and the cooldown (B20 to B24).
-// The first requirement that is not met is the rejection. If all are met,
-// it starts the cooldown (B3, B21), which the decision can take back.
+// (B7, B8, B40), then the role (B10 to B12), the cooldown (B20 to B24) and
+// the arguments (B30 to B35). The first requirement that is not met is the
+// rejection. If all are met, it starts the cooldown (B3, B21), which the
+// decision can take back, and the run has the values of the arguments.
 // Decisions are made one after another (B3).
 func (s *Service) Apply(ctx context.Context, cmd command.Command, p engine.Params) (engine.Decision, error) {
 	s.mu.Lock()
@@ -116,11 +121,18 @@ func (s *Service) Apply(ctx context.Context, cmd command.Command, p engine.Param
 			return rejectedOrError(cmd, r, err)
 		}
 	}
-	for _, req := range cmd.Requirements {
-		switch req.(type) {
-		case command.ArgumentsRequirement, command.ThresholdRequirement:
-			return engine.Decision{}, fmt.Errorf("decide command %q: %w: %s", cmd.Name, ErrNotSupported, req.DocType())
+	if args, ok := find[command.ArgumentsRequirement](cmd); ok {
+		var (
+			r        engine.Rejection
+			rejected bool
+			err      error
+		)
+		if p, r, rejected, err = s.checkArguments(ctx, cmd, args, p); err != nil || rejected {
+			return rejectedOrError(cmd, r, err)
 		}
+	}
+	if _, ok := find[command.ThresholdRequirement](cmd); ok {
+		return engine.Decision{}, fmt.Errorf("decide command %q: %w: %s", cmd.Name, ErrNotSupported, command.TypeThreshold)
 	}
 	d := engine.Met(p)
 	if hasCooldown {
