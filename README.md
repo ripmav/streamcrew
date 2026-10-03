@@ -45,12 +45,13 @@ streamcrew secret rotate                       # neuen Schlüssel erzeugen, Toke
 
 streamcrew schema export [--dir schemas]       # JSON-Schema der Dateien von Commands als Code schreiben
 streamcrew command validate <pfade> [-o json]  # Dateien von Commands als Code gegen das Profil prüfen
+streamcrew command import <pfade> [-o json]    # alle Dokumente übernehmen oder, bei einem Fehler, keines
 ```
 
-- `profile …` (außer `list`), `backup restore` und `secret rotate` brauchen einen gestoppten Core. Sie nehmen dieselbe Sperre wie `serve` und brechen sonst mit einem Hinweis ab ([ADR-0012](docs/adr/0012-persistenz.md)).
+- `profile …` (außer `list`), `backup restore`, `secret rotate` und `command import` brauchen einen gestoppten Core. Sie nehmen dieselbe Sperre wie `serve` und brechen sonst mit einem Hinweis ab ([ADR-0012](docs/adr/0012-persistenz.md)).
 - `backup …` wirkt auf das aktive Profil oder auf `--profile <id>`.
-- `command validate` prüft YAML- und JSON-Dateien, auch ganze Verzeichnisse, gegen eine Kopie des aktiven Profils oder von `--profile <id>`, mit denselben Prüfungen wie beim Speichern. Es ändert nichts und darf laufen, während der Core läuft. Fehler und Warnungen nennen Datei, Zeile, Spalte und Pfad; mit Fehlern endet es mit Status 1.
-- `schema export` schreibt `streamcrew-v1alpha1.schema.json` für Editoren, etwa für die YAML-Erweiterung von VS Code; die aktuelle Fassung liegt in [`schemas/`](schemas/). Format und Regeln stehen in [`commands-as-code.md`](docs/spec/commands-as-code.md); Import und Export der Dateien folgen (Roadmap 3.5).
+- `command validate` prüft YAML- und JSON-Dateien, auch ganze Verzeichnisse, gegen eine Kopie des aktiven Profils oder von `--profile <id>`, mit denselben Prüfungen wie beim Speichern. Es ändert nichts und darf laufen, während der Core läuft. Fehler und Warnungen nennen Datei, Zeile, Spalte und Pfad; mit Fehlern endet es mit Status 1. `command import` prüft genauso und übernimmt dann alle Dokumente in einer Transaktion: Ein Dokument ersetzt das gleicher Art und gleichen Namens und behält dessen ID; andere bleiben unverändert.
+- `schema export` schreibt `streamcrew-v1alpha1.schema.json` für Editoren, etwa für die YAML-Erweiterung von VS Code; die aktuelle Fassung liegt in [`schemas/`](schemas/). Format und Regeln stehen in [`commands-as-code.md`](docs/spec/commands-as-code.md); Der Export folgt (Roadmap 3.5).
 
 Exit-Codes: `0` Erfolg, `1` Fehler, `2` ungültige Kommandozeile oder Konfiguration.
 
@@ -206,7 +207,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `internal/capability` | Capabilities nach dem Sicherheitsmodell ([ADR-0013](docs/adr/0013-sicherheitsmodell.md)) |
 | `internal/event` | Ereignisse, Katalog und nicht blockierender Event-Bus ([Code-ADR-0011](docs/adr/code/0011-event-bus.md)) |
 | `internal/polydoc` | polymorphe JSON-Dokumente mit Typ, Version und Migrationen, auch verschachtelt, auf `encoding/json/v2` ([Code-ADR-0010](docs/adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0018](docs/adr/code/0018-json-v2.md), [Code-ADR-0013](docs/adr/code/0013-typ-registry.md)) |
-| `internal/store` | SQLite je Profil, goose-Migrationen, sqlc-Abfragen und die Repositories der Domänenpakete ([Code-ADR-0008](docs/adr/code/0008-datenbankzugriff.md)) |
+| `internal/store` | SQLite je Profil, goose-Migrationen, sqlc-Abfragen und die Repositories der Domänenpakete, eine Transaktion über mehrere Speichervorgänge mit `Atomically` ([Code-ADR-0008](docs/adr/code/0008-datenbankzugriff.md)) |
 | `internal/profile`, `internal/lockfile` | Profile und die Sperre des Datenverzeichnisses ([ADR-0012](docs/adr/0012-persistenz.md)) |
 | `internal/settings` | typisierte Einstellungen je Profil: Backups, Zeitzone, Command-Engine und Sprache des Profils ([ADR-0022](docs/adr/0022-internationalisierung.md)) |
 | `internal/backup` | Backups, Aufbewahrung, Zeitplan, Restore |
