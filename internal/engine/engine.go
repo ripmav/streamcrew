@@ -202,6 +202,9 @@ type Engine struct {
 	// reserved are places in the queue taken by triggers whose
 	// requirements are being checked (B15).
 	reserved int
+	// lastTurn is closed when the last trigger that took a place in the
+	// order of the decisions is done (B16); nil before the first.
+	lastTurn <-chan struct{}
 	// pending are the waiting instances in queue order.
 	pending []*instance
 	// active are the pending and running instances.

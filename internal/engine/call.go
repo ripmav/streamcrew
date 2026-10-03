@@ -99,9 +99,21 @@ func (r *Run) Call(ctx context.Context, commandID id.ID, opts CallOptions) (Resu
 		return Result{}, fmt.Errorf("call command %q: %w", cmd.Name, err)
 	}
 
+	// A call that checks requirements is decided and queued in its turn
+	// like a trigger (B16).
 	d := Met(p)
+	var tn *turn
+	defer func() { tn.done() }()
 	if opts.CheckRequirements {
-		if d, err = e.decide(ctx, cmd, p); err != nil {
+		e.mu.Lock()
+		tn = e.takeTurnLocked()
+		e.mu.Unlock()
+		_, decide, err := e.prepare(ctx, cmd, p, false)
+		if err != nil {
+			return Result{}, fmt.Errorf("call command %q: %w", cmd.Name, err)
+		}
+		tn.wait()
+		if d, err = e.decide(ctx, cmd, decide); err != nil {
 			return Result{}, fmt.Errorf("call command %q: %w", cmd.Name, err)
 		}
 	}
@@ -109,6 +121,7 @@ func (r *Run) Call(ctx context.Context, commandID id.ID, opts CallOptions) (Resu
 	case VerdictWaiting:
 		return Result{Outcome: OutcomeWaiting}, nil
 	case VerdictRejected:
+		tn.done()
 		e.reject(ctx, cmd, p, d.Rejection, cfg.Commands)
 		return Result{Outcome: OutcomeRejected, Rejection: d.Rejection}, nil
 	case VerdictMet:
@@ -119,6 +132,8 @@ func (r *Run) Call(ctx context.Context, commandID id.ID, opts CallOptions) (Resu
 
 	org := origin{parent: caller.id, chain: caller.chain}
 	if opts.Wait {
+		// A call with waiting runs as part of its caller, not in the queue.
+		tn.done()
 		// The called actions have their own time limits; the one of the
 		// calling action stands meanwhile (actions.md B8).
 		if f := r.top(); f != nil {
