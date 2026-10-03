@@ -82,21 +82,22 @@ func newFixture(t *testing.T) *fixture {
 	f.twitch.SetStatus(connector.Status{Streamer: true, Bot: true})
 	set, err := connector.NewSet(f.twitch, f.youtube, f.kick)
 	require.NoError(t, err)
-	f.reg = registry(t, set, f.known, f.logs)
-	f.harness = actiontest.NewHarness(t, f.reg)
+	f.reg = registry(t, set, f.logs)
+	// The run finds known users through the engine (spec command-engine.md,
+	// B17).
+	f.harness = actiontest.NewHarnessWith(t, f.reg, actiontest.NewCommands(), engine.WithUsers(f.known))
 	return f
 }
 
 // registry returns the chat types with a template engine that knows the
 // arguments, the values of the run and the users.
-func registry(t *testing.T, platforms chat.Platforms, known connector.Known, log *logs) *action.Registry {
+func registry(t *testing.T, platforms chat.Platforms, log *logs) *action.Registry {
 	t.Helper()
 	identifiers, err := template.NewRegistry(template.ArgumentFamily(), template.RunFamily(), template.UserFamily(nil))
 	require.NoError(t, err)
 	ds, err := chat.Descriptors(chat.Ports{
 		Templates: template.New(identifiers),
 		Platforms: platforms,
-		Known:     known,
 		Logger:    slog.New(slog.NewTextHandler(log, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	})
 	require.NoError(t, err)
@@ -162,7 +163,7 @@ func sent(from connector.Account, text string) connectortest.Call {
 
 func TestConformance(t *testing.T) {
 	t.Parallel()
-	reg := registry(t, &connector.Set{}, &connectortest.Known{}, &logs{})
+	reg := registry(t, &connector.Set{}, &logs{})
 	d, ok := reg.Descriptor(chat.TypeChat)
 	require.True(t, ok)
 	actiontest.Suite{Descriptor: d, Update: update(), Examples: []actiontest.Example{
@@ -187,7 +188,7 @@ func TestConformance(t *testing.T) {
 // new whisper goes to the user of the run (actions.md B60).
 func TestNew(t *testing.T) {
 	t.Parallel()
-	reg := registry(t, &connector.Set{}, &connectortest.Known{}, &logs{})
+	reg := registry(t, &connector.Set{}, &logs{})
 	d, ok := reg.Descriptor(chat.TypeChat)
 	require.True(t, ok)
 	c, ok := d.New().(chat.Chat)
@@ -457,7 +458,8 @@ func TestFails(t *testing.T) {
 			f.known.Fail(boom)
 			in := f.start(chatParams(), f.whisper("psst", "bob"))
 			require.Len(t, in.Errors, 1)
-			assert.Equal(t, `not sent on twitch, kick: twitch: find account "bob" on twitch: boom; kick: find account "bob" on kick: boom`,
+			assert.Equal(t, `not sent on twitch, kick: twitch: find account "bob" on twitch: look up user "bob" on twitch after 3 attempts: boom; `+
+				`kick: find account "bob" on kick: look up user "bob" on kick after 3 attempts: boom`,
 				in.Errors[0].Message)
 		})
 	})
@@ -481,7 +483,6 @@ func TestPorts(t *testing.T) {
 	full := chat.Ports{
 		Templates: template.New(nil),
 		Platforms: &connector.Set{},
-		Known:     &connectortest.Known{},
 		Logger:    slog.New(slog.DiscardHandler),
 	}
 	_, err := chat.Descriptors(full)
@@ -489,7 +490,6 @@ func TestPorts(t *testing.T) {
 	for name, edit := range map[string]func(*chat.Ports){
 		"templates": func(p *chat.Ports) { p.Templates = nil },
 		"platforms": func(p *chat.Ports) { p.Platforms = nil },
-		"known":     func(p *chat.Ports) { p.Known = nil },
 		"logger":    func(p *chat.Ports) { p.Logger = nil },
 	} {
 		p := full

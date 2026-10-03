@@ -64,9 +64,6 @@ type Platforms interface {
 // Users are the users the core knows; the user service implements it
 // (roadmap 5.2).
 type Users interface {
-	// UserByName finds the user with the login name on platform p,
-	// regardless of case; ok is false if there is none.
-	UserByName(ctx context.Context, p platform.Name, name string) (u user.User, ok bool, err error)
 	// UserByPlatformID finds the user with the account platformUserID on
 	// platform p; ok is false if there is none.
 	UserByPlatformID(ctx context.Context, p platform.Name, platformUserID string) (u user.User, ok bool, err error)
@@ -188,7 +185,7 @@ func (l UserLookup) find(ctx context.Context, run *engine.Run, key string) (iden
 			"instance_id", run.InstanceID(), "platform", l.Platform)
 		return user.Identity{}, false, nil
 	}
-	if ident, ok, err := l.known(ctx, key); err != nil || ok {
+	if ident, ok, err := l.known(ctx, run, key); err != nil || ok {
 		return ident, ok, err
 	}
 	target, ok := l.ports.Platforms.Platform(l.Platform)
@@ -218,10 +215,11 @@ func (l UserLookup) find(ctx context.Context, run *engine.Run, key string) (iden
 	return ident, true, nil
 }
 
-// known returns the account of a known user with the login name key or
-// the platform ID key.
-func (l UserLookup) known(ctx context.Context, key string) (user.Identity, bool, error) {
-	u, ok, err := l.ports.Users.UserByName(ctx, l.Platform, key)
+// known returns the account of a known user with the login name key,
+// found through the lookup of the run (spec command-engine.md, B17), or
+// with the platform ID key.
+func (l UserLookup) known(ctx context.Context, run *engine.Run, key string) (user.Identity, bool, error) {
+	u, ok, err := run.UserByName(ctx, l.Platform, key)
 	if err != nil {
 		return user.Identity{}, false, err
 	}
