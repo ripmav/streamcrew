@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/counter"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/template"
@@ -32,7 +33,7 @@ func FuzzRender(f *testing.F) {
 	}
 	empty := template.New(nil)
 	e := template.New(newRegistry(f), template.WithSources(mapSource{"deaths": "3"}))
-	counters := fakeCounters{calls: new(atomic.Int64), list: []counter.Counter{{Name: "deaths", Value: 1234}}}
+	counters := fakeCounters{calls: new(atomic.Int64), list: []counter.Counter{{Name: "deaths", Value: decimal.New(1234)}}}
 	stream := fakeStream{calls: new(atomic.Int64), state: template.StreamState{Live: true, Title: "t", StartedAt: time.Now()}}
 	alice, bob, users := testUsers()
 	all, err := template.NewRegistry(

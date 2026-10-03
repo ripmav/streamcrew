@@ -39,7 +39,7 @@ const MaxTimeout = 14 * 24 * 60 * 60
 
 // secondsRange is the range of the duration of a timeout (B80).
 func secondsRange() action.Range {
-	return action.Range{Min: 1, Max: MaxTimeout, Integer: true}
+	return action.WholeBetween(1, MaxTimeout)
 }
 
 // Kind is what a moderation action does (actions.md B80).
