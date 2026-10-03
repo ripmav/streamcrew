@@ -29,6 +29,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/ripmav/streamcrew/internal/template"
 )
@@ -217,7 +219,7 @@ func (p *parser) sequence(i int, inCall bool) ([]node, int, error) {
 			open++
 		case c == ')' && open > 0:
 			open--
-		case isLetter(c) && (i == 0 || !isWordByte(p.src[i-1])):
+		case isLetter(c) && !endsWord(p.src[:i]):
 			end := i
 			for end < len(p.src) && isLetter(p.src[end]) {
 				end++
@@ -246,11 +248,7 @@ func (p *parser) sequence(i int, inCall bool) ([]node, int, error) {
 // skipToken returns the position after the $ token at i, or after the "$"
 // if no token starts there (template.md, B1).
 func (p *parser) skipToken(i int) int {
-	end := i + 1
-	for end < len(p.src) && isTokenByte(p.src[end]) {
-		end++
-	}
-	return end
+	return template.TokenEnd(p.src, i)
 }
 
 // call parses the call whose name starts at at and whose "(" is at paren,
@@ -356,13 +354,10 @@ func isLetter(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
-// isWordByte reports whether c continues a word, so that a function name
-// cannot start after it.
-func isWordByte(c byte) bool {
-	return isLetter(c) || c >= '0' && c <= '9'
-}
-
-// isTokenByte reports whether c continues a $ token (template.md, B1).
-func isTokenByte(c byte) bool {
-	return isWordByte(c) || c == ':'
+// endsWord reports whether text ends with a letter, a mark or a digit in
+// the sense of Unicode, so that a function name cannot start after it, in
+// the middle of a word (actions.md, B53).
+func endsWord(text string) bool {
+	r, _ := utf8.DecodeLastRuneInString(text)
+	return unicode.IsLetter(r) || unicode.IsMark(r) || unicode.IsDigit(r)
 }

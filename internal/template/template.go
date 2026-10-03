@@ -17,7 +17,11 @@
 // [Interop].
 package template
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+	"unicode/utf8"
+)
 
 // Template is a parsed text. The zero value is the empty text. A Template is
 // immutable and may be rendered concurrently; actions parse their texts when
@@ -36,9 +40,9 @@ type piece struct {
 }
 
 // Parse splits text into literal text and tokens. A token is a "$" followed
-// by as many ASCII letters, digits and colons as possible (B1); a "$" without
-// such characters is text (B3). There is no escaping (B7). Parse accepts
-// every text.
+// by as many letters, digits and colons as possible, in the sense of
+// Unicode (B1); a "$" without such characters is text (B3). There is no
+// escaping (B7). Parse accepts every text.
 func Parse(text string) Template {
 	t := Template{src: text}
 	literal := 0 // start of the pending literal text
@@ -47,10 +51,7 @@ func Parse(text string) Template {
 			i++
 			continue
 		}
-		end := i + 1
-		for end < len(text) && isTokenByte(text[end]) {
-			end++
-		}
+		end := TokenEnd(text, i)
 		if end == i+1 {
 			i = end
 			continue
@@ -73,9 +74,40 @@ func (t Template) String() string {
 	return t.src
 }
 
-// isTokenByte reports whether c continues a token (B1).
-func isTokenByte(c byte) bool {
-	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == ':'
+// rest returns the token as written after the first n bytes of its name.
+// The name is the token in lower case, rune by rune, so both have the same
+// runes, but a rune may change its length, e.g. "ẞ" has three bytes and
+// "ß" two.
+func (p piece) rest(n int) string {
+	i := 0
+	for range utf8.RuneCountInString(p.name[:n]) {
+		_, size := utf8.DecodeRuneInString(p.text[i:])
+		i += size
+	}
+	return p.text[i:]
+}
+
+// TokenEnd returns the end of the token whose "$" is at text[i]: the index
+// after as many letters, digits and colons as possible (B1), or i + 1 if
+// none follow. Other packages that find tokens, e.g. internal/textfunc, use
+// it.
+func TokenEnd(text string, i int) int {
+	end := i + 1
+	for end < len(text) {
+		r, size := utf8.DecodeRuneInString(text[end:])
+		if !isTokenRune(r) {
+			break
+		}
+		end += size
+	}
+	return end
+}
+
+// isTokenRune reports whether r continues a token (B1): a letter, a mark
+// that belongs to a letter, such as an accent or a vowel sign of Devanagari,
+// a digit or a colon, all in the sense of Unicode.
+func isTokenRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsMark(r) || unicode.IsDigit(r) || r == ':'
 }
 
 // isNameByte reports whether c may appear in the name of an identifier:

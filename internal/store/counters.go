@@ -19,7 +19,7 @@ var _ counter.Repository = (*Store)(nil)
 // Counter implements counter.Repository; the name matches regardless of
 // case.
 func (s *Store) Counter(ctx context.Context, name string) (counter.Counter, error) {
-	row, err := s.reader().GetCounter(ctx, name)
+	row, err := s.reader().GetCounter(ctx, counter.Key(name))
 	if err != nil {
 		return counter.Counter{}, fmt.Errorf("counter %q: %w", name, translate(err))
 	}
@@ -104,6 +104,7 @@ func (s *Store) updateCounter(ctx context.Context, name string, fn func(*counter
 		}
 		return q.UpdateCounter(ctx, sqlcgen.UpdateCounterParams{
 			Name:         c.Name,
+			NameKey:      counter.Key(c.Name),
 			Value:        c.Value.String(),
 			Step:         c.Step.String(),
 			ResetOnStart: flag(c.ResetOnStart),
@@ -119,7 +120,7 @@ func (s *Store) updateCounter(ctx context.Context, name string, fn func(*counter
 
 // readCounter reads the counter name within a write transaction.
 func readCounter(ctx context.Context, q *sqlcgen.Queries, name string) (counter.Counter, error) {
-	row, err := q.GetCounter(ctx, name)
+	row, err := q.GetCounter(ctx, counter.Key(name))
 	if err != nil {
 		return counter.Counter{}, err
 	}
@@ -140,6 +141,7 @@ func insertCounter(ctx context.Context, q *sqlcgen.Queries, c counter.Counter) (
 	return c, q.InsertCounter(ctx, sqlcgen.InsertCounterParams{
 		ID:           c.ID.String(),
 		Name:         c.Name,
+		NameKey:      counter.Key(c.Name),
 		Value:        c.Value.String(),
 		Step:         c.Step.String(),
 		ResetOnStart: flag(c.ResetOnStart),
@@ -151,7 +153,7 @@ func insertCounter(ctx context.Context, q *sqlcgen.Queries, c counter.Counter) (
 // DeleteCounter implements counter.Repository.
 func (s *Store) DeleteCounter(ctx context.Context, name string) error {
 	return s.Write(ctx, func(q *sqlcgen.Queries) error {
-		n, err := q.DeleteCounter(ctx, name)
+		n, err := q.DeleteCounter(ctx, counter.Key(name))
 		if err != nil {
 			return err
 		}

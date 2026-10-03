@@ -67,9 +67,13 @@ const (
 	// PatternID is the canonical text form of an ID: a UUID in lowercase
 	// (Code-ADR-0009).
 	PatternID = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-	// PatternCounterName is the form of counter names: 1 to 64 ASCII
-	// letters and digits (spec counters-and-quotes.md, B7).
-	PatternCounterName = "^[A-Za-z0-9]{1,64}$"
+	// PatternCounterName is what a pattern can say about counter names
+	// without Unicode classes, which ECMA-262 does not know without its u
+	// flag (Code-ADR-0013, point 6): no ASCII character but letters and
+	// digits. Which other characters are letters, digits and marks
+	// (counters-and-quotes.md, B7) only counter.ValidateName checks;
+	// CounterName bounds the length.
+	PatternCounterName = `^[^\x00-/:-@[-` + "`" + `{-\x7F]+$`
 	// PatternPlatform is the form of the names of platforms: 1 to 32
 	// lowercase ASCII letters and digits, as platform.Name.Validate checks
 	// them.
@@ -110,8 +114,10 @@ type Schema struct {
 	// Minimum and Maximum bound a number, both included.
 	Minimum *float64 `json:"minimum,omitempty"`
 	Maximum *float64 `json:"maximum,omitempty"`
-	// MinLength is the least number of characters of a text.
+	// MinLength and MaxLength bound the number of characters of a text,
+	// counted as Unicode code points.
 	MinLength *int `json:"minLength,omitempty"`
+	MaxLength *int `json:"maxLength,omitempty"`
 	// Pattern is a constant of this package; an empty pattern would match
 	// every text, so leaving it out means the same.
 	Pattern string `json:"pattern,omitempty"`
@@ -337,8 +343,12 @@ func Reference(ui UI) *Schema {
 
 // CounterName returns the field of the name of a counter (actions.md B41).
 func CounterName() *Schema {
-	return &Schema{Type: "string", Pattern: PatternCounterName, UI: UICounter}
+	return &Schema{Type: "string", MinLength: new(1), MaxLength: new(counterNameLen), Pattern: PatternCounterName, UI: UICounter}
 }
+
+// counterNameLen is the most characters of a counter name
+// (counters-and-quotes.md, B7).
+const counterNameLen = 64
 
 // Platform returns the field of the name of a streaming platform, e.g.
 // "twitch" (actions.md B67, B90).

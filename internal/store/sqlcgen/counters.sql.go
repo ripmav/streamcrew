@@ -10,11 +10,11 @@ import (
 )
 
 const deleteCounter = `-- name: DeleteCounter :execrows
-DELETE FROM counters WHERE name = ?
+DELETE FROM counters WHERE name_key = ?
 `
 
-func (q *Queries) DeleteCounter(ctx context.Context, name string) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteCounter, name)
+func (q *Queries) DeleteCounter(ctx context.Context, nameKey string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteCounter, nameKey)
 	if err != nil {
 		return 0, err
 	}
@@ -22,11 +22,11 @@ func (q *Queries) DeleteCounter(ctx context.Context, name string) (int64, error)
 }
 
 const getCounter = `-- name: GetCounter :one
-SELECT id, name, value, reset_on_start, created_at, updated_at, step FROM counters WHERE name = ?
+SELECT id, name, value, reset_on_start, created_at, updated_at, step, name_key FROM counters WHERE name_key = ?
 `
 
-func (q *Queries) GetCounter(ctx context.Context, name string) (Counter, error) {
-	row := q.db.QueryRowContext(ctx, getCounter, name)
+func (q *Queries) GetCounter(ctx context.Context, nameKey string) (Counter, error) {
+	row := q.db.QueryRowContext(ctx, getCounter, nameKey)
 	var i Counter
 	err := row.Scan(
 		&i.ID,
@@ -36,18 +36,20 @@ func (q *Queries) GetCounter(ctx context.Context, name string) (Counter, error) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Step,
+		&i.NameKey,
 	)
 	return i, err
 }
 
 const insertCounter = `-- name: InsertCounter :exec
-INSERT INTO counters (id, name, value, step, reset_on_start, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO counters (id, name, name_key, value, step, reset_on_start, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertCounterParams struct {
 	ID           string
 	Name         string
+	NameKey      string
 	Value        string
 	Step         string
 	ResetOnStart int64
@@ -59,6 +61,7 @@ func (q *Queries) InsertCounter(ctx context.Context, arg InsertCounterParams) er
 	_, err := q.db.ExecContext(ctx, insertCounter,
 		arg.ID,
 		arg.Name,
+		arg.NameKey,
 		arg.Value,
 		arg.Step,
 		arg.ResetOnStart,
@@ -69,7 +72,7 @@ func (q *Queries) InsertCounter(ctx context.Context, arg InsertCounterParams) er
 }
 
 const listCounters = `-- name: ListCounters :many
-SELECT id, name, value, reset_on_start, created_at, updated_at, step FROM counters ORDER BY name
+SELECT id, name, value, reset_on_start, created_at, updated_at, step, name_key FROM counters ORDER BY name
 `
 
 func (q *Queries) ListCounters(ctx context.Context) ([]Counter, error) {
@@ -89,6 +92,7 @@ func (q *Queries) ListCounters(ctx context.Context) ([]Counter, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Step,
+			&i.NameKey,
 		); err != nil {
 			return nil, err
 		}
@@ -116,11 +120,12 @@ func (q *Queries) ResetCountersOnStart(ctx context.Context, updatedAt int64) (in
 }
 
 const updateCounter = `-- name: UpdateCounter :exec
-UPDATE counters SET name = ?, value = ?, step = ?, reset_on_start = ?, updated_at = ? WHERE id = ?
+UPDATE counters SET name = ?, name_key = ?, value = ?, step = ?, reset_on_start = ?, updated_at = ? WHERE id = ?
 `
 
 type UpdateCounterParams struct {
 	Name         string
+	NameKey      string
 	Value        string
 	Step         string
 	ResetOnStart int64
@@ -131,6 +136,7 @@ type UpdateCounterParams struct {
 func (q *Queries) UpdateCounter(ctx context.Context, arg UpdateCounterParams) error {
 	_, err := q.db.ExecContext(ctx, updateCounter,
 		arg.Name,
+		arg.NameKey,
 		arg.Value,
 		arg.Step,
 		arg.ResetOnStart,

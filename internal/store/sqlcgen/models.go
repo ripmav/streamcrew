@@ -66,6 +66,7 @@ type Counter struct {
 	CreatedAt    int64
 	UpdatedAt    int64
 	Step         string
+	NameKey      string
 }
 
 type Meta struct {

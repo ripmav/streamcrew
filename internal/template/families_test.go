@@ -287,6 +287,38 @@ func TestCounterSource_Display(t *testing.T) {
 	}
 }
 
+// TestCounterSource_Unicode covers template.md, B1, B2 and
+// counters-and-quotes.md, B7: tokens and counter names with letters of
+// any script, regardless of case, and the rest of a token as written, also
+// where a letter changes its length in lower case.
+func TestCounterSource_Unicode(t *testing.T) {
+	t.Parallel()
+	counters := fakeCounters{calls: new(atomic.Int64), list: []counter.Counter{
+		{Name: "Zähler", Value: decimal.New(3)},
+		{Name: "straße", Value: decimal.New(4)},
+		{Name: "नमस्ते", Value: decimal.New(5)},
+		{Name: "kills", Value: decimal.New(6)},
+	}}
+	e := template.New(nil, template.WithSources(template.CounterSource(counters)))
+	for text, want := range map[string]string{
+		"$zähler":           "3",
+		"$ZÄHLER!":          "3!",
+		"$Zählerdisplay":    "3",
+		"$zählerstand":      "3stand",
+		"$STRAẞE":           "4",
+		"$STRAẞEN und mehr": "4N und mehr",
+		"$नमस्ते.":          "5.",
+		"$नमस्तेजी":         "5जी",
+		"$\u212Aills":       "6",
+		"$\u212AILLSÄ":      "6Ä",
+		"$zä":               "$zä",
+		"$ünknown":          "$ünknown",
+		"$zähler\u00a0und":  "3\u00a0und",
+	} {
+		assert.Equal(t, want, render(t, e, text, new(scope())), text)
+	}
+}
+
 func TestCounterSource_Error(t *testing.T) {
 	t.Parallel()
 	logger, logs := logBuffer()
