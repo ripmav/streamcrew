@@ -30,12 +30,15 @@ type action struct {
 	fn       func(ctx context.Context, run *engine.Run) error
 	children []command.Action
 	disabled bool
+	// waits is the command the action calls with waiting; zero for none.
+	waits id.ID
 }
 
 func (a action) DocType() string            { return a.typ }
 func (a action) Children() []command.Action { return a.children }
 func (a action) Enabled() bool              { return !a.disabled }
 func (a action) Validate() error            { return nil }
+func (a action) WaitsFor() (id.ID, bool)    { return a.waits, !a.waits.IsZero() }
 func (a action) Perform(ctx context.Context, run *engine.Run) error {
 	if a.fn == nil {
 		return nil
