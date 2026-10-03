@@ -52,6 +52,7 @@ func TestDefaultsWhenNeverSaved(t *testing.T) {
 		ErrorCooldownDuration: polydoc.Duration(10 * time.Second),
 		ArgDelimiter:          "|",
 		EntranceMediaGap:      polydoc.Duration(5 * time.Second),
+		QueueSize:             1000,
 	}, c, "B90")
 }
 
@@ -91,6 +92,7 @@ func TestSaveAndLoad(t *testing.T) {
 		ErrorCooldownDuration: polydoc.Duration(time.Minute),
 		ArgDelimiter:          ";",
 		EntranceMediaGap:      polydoc.Duration(1500 * time.Millisecond),
+		QueueSize:             50,
 	}
 	require.NoError(t, settings.Save(ctx, svc, cmds))
 	gotCmds, err := settings.Load(ctx, svc, settings.DefaultCommands())
@@ -98,7 +100,7 @@ func TestSaveAndLoad(t *testing.T) {
 	assert.Equal(t, cmds, gotCmds)
 	doc, _, err = s.Settings(ctx, "commands")
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"type":"commands","schemaVersion":2,"lockMode":"visual_audio","errorCooldown":"global","errorCooldownDuration":"1m0s","argDelimiter":";","entranceMediaGap":"1.5s"}`, string(doc))
+	assert.JSONEq(t, `{"type":"commands","schemaVersion":3,"lockMode":"visual_audio","errorCooldown":"global","errorCooldownDuration":"1m0s","argDelimiter":";","entranceMediaGap":"1.5s","queueSize":50}`, string(doc))
 }
 
 func TestValidation(t *testing.T) {
@@ -121,6 +123,8 @@ func TestValidation(t *testing.T) {
 		withCommands(func(c *settings.Commands) { c.EntranceMediaGap = 0 }),
 		withCommands(func(c *settings.Commands) { c.EntranceMediaGap = polydoc.Duration(999 * time.Millisecond) }),
 		withCommands(func(c *settings.Commands) { c.EntranceMediaGap = polydoc.Duration(time.Minute + time.Millisecond) }),
+		withCommands(func(c *settings.Commands) { c.QueueSize = 0 }),
+		withCommands(func(c *settings.Commands) { c.QueueSize = 10_001 }),
 	} {
 		assert.Error(t, settings.Save(ctx, svc, s), "%+v", s)
 	}
@@ -147,10 +151,13 @@ func TestCommandsModes(t *testing.T) {
 		assert.NoError(t, settings.Save(ctx, svc, withCommands(func(c *settings.Commands) { c.EntranceMediaGap = polydoc.Duration(gap) })),
 			"B43: %s", gap)
 	}
+	for _, size := range []int{settings.MinQueueSize, settings.MaxQueueSize} {
+		assert.NoError(t, settings.Save(ctx, svc, withCommands(func(c *settings.Commands) { c.QueueSize = size })), "B15: %d", size)
+	}
 }
 
 // TestCommandsVersion1: stored version 1 documents are migrated; they get
-// the default gap of B43.
+// the default gap of B43 and the default queue size of B15.
 func TestCommandsVersion1(t *testing.T) {
 	t.Parallel()
 	v1 := `{"type":"commands","schemaVersion":1,"lockMode":"singular","errorCooldown":"off","errorCooldownDuration":"0s","argDelimiter":";"}`
@@ -164,6 +171,7 @@ func TestCommandsVersion1(t *testing.T) {
 		ErrorCooldownDuration: 0,
 		ArgDelimiter:          ";",
 		EntranceMediaGap:      polydoc.Duration(settings.DefaultEntranceMediaGap),
+		QueueSize:             settings.DefaultQueueSize,
 	}, got)
 
 	withGap := `{"type":"commands","schemaVersion":1,"lockMode":"singular","errorCooldown":"off","errorCooldownDuration":"0s","argDelimiter":";","entranceMediaGap":"2s"}`
@@ -171,6 +179,31 @@ func TestCommandsVersion1(t *testing.T) {
 	require.NoError(t, err)
 	_, err = settings.Load(t.Context(), svc, settings.DefaultCommands())
 	require.Error(t, err, "version 1 never had the gap")
+}
+
+// TestCommandsVersion2: stored version 2 documents are migrated; they get
+// the default queue size of B15.
+func TestCommandsVersion2(t *testing.T) {
+	t.Parallel()
+	v2 := `{"type":"commands","schemaVersion":2,"lockMode":"singular","errorCooldown":"off","errorCooldownDuration":"0s","argDelimiter":";","entranceMediaGap":"2s"}`
+	svc, err := settings.New(fakeRepo{doc: []byte(v2)})
+	require.NoError(t, err)
+	got, err := settings.Load(t.Context(), svc, settings.DefaultCommands())
+	require.NoError(t, err)
+	assert.Equal(t, settings.Commands{
+		LockMode:              settings.LockSingular,
+		ErrorCooldown:         settings.ErrorCooldownOff,
+		ErrorCooldownDuration: 0,
+		ArgDelimiter:          ";",
+		EntranceMediaGap:      polydoc.Duration(2 * time.Second),
+		QueueSize:             settings.DefaultQueueSize,
+	}, got)
+
+	withSize := `{"type":"commands","schemaVersion":2,"lockMode":"singular","errorCooldown":"off","errorCooldownDuration":"0s","argDelimiter":";","entranceMediaGap":"2s","queueSize":5}`
+	svc, err = settings.New(fakeRepo{doc: []byte(withSize)})
+	require.NoError(t, err)
+	_, err = settings.Load(t.Context(), svc, settings.DefaultCommands())
+	require.Error(t, err, "version 2 never had the queue size")
 }
 
 // withCommands returns the default commands section changed by edit.
