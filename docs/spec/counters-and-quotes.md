@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Status** | Geprüft |
-| **Stand** | 2026-10-01 |
+| **Stand** | 2026-10-02 |
 | **Bezug** | Roadmap Phase 2.2 (Counter und Quotes), 5.6, 8.3; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md); Plan §5.5, §6.13, Anhang A.3, A.6 |
-| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/counter`, `internal/domain/quote`, Repositories in `internal/store`; Rücksetzen beim Start in `internal/app`. Identifier `$<name>` und `$<name>display` (B1, B4) als Quelle `template.CounterSource`; Abgleich mit eingebauten Identifiern (B7) in `Counter.CheckReserved`, aufgerufen, wenn das Speichern eines Commands einen Counter anlegt, den eine Counter-Action nennt ([`actions.md`](actions.md), B41), später auch über die API (Phase 6). Ändern über die Counter-Action (`internal/action/values`). Schrittweite (B8) als `counter.Counter.Step`, Spalte `step` aus Migration 0006. Offen: Abruf und Format der Quotes per Identifier (B23, B24) mit Phase 3; vorgefertigte Quote-Commands (B22) mit Phase 5.6; Import (B25) |
+| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/counter`, `internal/domain/quote`, Repositories in `internal/store`; Rücksetzen beim Start in `internal/app`. Identifier `$<name>` und `$<name>display` (B1, B4) als Quelle `template.CounterSource`; Abgleich mit eingebauten Identifiern (B7) in `Counter.CheckReserved`, aufgerufen, wenn das Speichern eines Commands einen Counter anlegt, den eine Counter-Action nennt ([`actions.md`](actions.md), B41), später auch über die API (Phase 6). Ändern über die Counter-Action (`internal/action/values`). Schrittweite (B8) als `counter.Counter.Step`, Spalte `step` aus Migration 0006. Offen: Abruf und Format der Quotes per Identifier (B23, B24) mit Phase 3; vorgefertigte Quote-Commands (B22) mit Phase 5.6; Import (B25). Offen seit 2026-10-02: Werte mit Nachkommastellen (B4, B5, B8) und Namen mit Buchstaben über a–z hinaus (B7), Roadmap 3.6 |
 
 ## Zweck und Umfang
 
@@ -28,11 +28,11 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 | B1 | Ein Counter hat einen Namen und einen Wert. Der Name ist zugleich der Name seines Identifiers und deshalb eindeutig je Profil. **[Interop]** `$<name>` | Q6 |
 | B2 | Operationen: um einen Betrag oder um einen Schritt (B8) erhöhen oder verringern, auf einen Wert setzen, auf 0 zurücksetzen. | Q6, A6 |
 | B3 | Ein Counter kann beim Start des Cores auf 0 zurückgesetzt werden (Option je Counter). | Q6 |
-| B4 | Der Wert lässt sich zusätzlich mit Tausendertrennzeichen formatiert ausgeben. **[Interop]** `$<name>display` | Q6 |
-| B5 | Der Wert ist eine ganze Zahl (64 Bit). | Q6 (Beispiele mit ganzen Zahlen), A2 |
+| B4 | Der Wert lässt sich zusätzlich formatiert ausgeben: ganze Werte mit Tausendertrennzeichen, andere zusätzlich mit genau zwei Nachkommastellen, beides nach der Locale ([`template.md`](template.md), B41). `$<name>` selbst zeigt den Wert ohne Tausendertrennzeichen, mit dem Dezimaltrennzeichen der Locale. **[Interop]** `$<name>display` | Q6, Q8 |
+| B5 | Der Wert ist eine Dezimalzahl, auch mit Nachkommastellen wie 2,5, und wird exakt gerechnet: 0,1 + 0,2 ergibt 0,3. Typ, Wertebereich und Genauigkeit legt ein Code-ADR fest (Roadmap 3.6). | Q8, A2 |
 | B6 | Jede Änderung wird sofort gespeichert. | ADR-0012, A1 |
-| B7 | Namen bestehen aus Buchstaben und Ziffern und dürfen nicht mit einem eingebauten Identifier kollidieren. | Q6, A3 |
-| B8 | Ein Counter hat eine Schrittweite, eine ganze Zahl ab 1 (64 Bit). Ohne Angabe ist sie 1, auch für Counter, die es vor der Schrittweite gab. Ein Schritt erhöht oder verringert den Wert um die Schrittweite. | A6 |
+| B7 | Namen bestehen aus 1 bis 64 Buchstaben und Ziffern im Sinne von Unicode, also auch Umlauten und anderen Schriften ([`template.md`](template.md), B1), und dürfen nicht mit einem eingebauten Identifier kollidieren. | Q6, Q8, A3 |
+| B8 | Ein Counter hat eine Schrittweite, eine Zahl größer als 0, auch mit Nachkommastellen (B5). Ohne Angabe ist sie 1, auch für Counter, die es vor der Schrittweite gab. Ein Schritt erhöht oder verringert den Wert um die Schrittweite. | A6 |
 
 ### Quotes
 
@@ -42,7 +42,7 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 | B21 | Die Nummer ist je Profil eindeutig und wird beim Hinzufügen fortlaufend vergeben. | Q7 |
 | B22 | Quotes lassen sich hinzufügen, ändern und löschen, in der Oberfläche und über vorgefertigte Chat-Commands. | Q7, QP (Anhang A.3: Quote, LastQuote, AddQuote, DeleteQuote) |
 | B23 | Abrufbar sind eine bestimmte Quote, eine zufällige, die neueste und die Gesamtzahl. **[Interop]** `$quote<n>`, `$quoterandom`, `$quotelatest`, `$quotetotal` | Q7 |
-| B24 | Die Ausgabe folgt einem einstellbaren Format; ohne Format zeigt sie Nummer, Text, Spiel und Zeitpunkt. Feldnamen im Format: **[Interop]** `$quotenumber`, `$quotetext`, `$quotegame`, `$quotedatetime` | Q7 |
+| B24 | Die Ausgabe folgt einem einstellbaren Format; ohne Format zeigt sie Nummer, Text, Spiel und Zeitpunkt. `$quotedatetime` ist das Datum ohne Uhrzeit im kurzen Format der Locale ([`template.md`](template.md), B41). Feldnamen im Format: **[Interop]** `$quotenumber`, `$quotetext`, `$quotegame`, `$quotedatetime` | Q7 |
 | B25 | Quotes lassen sich aus Text- oder Tabellendateien importieren, Felder getrennt durch Komma oder Tabulator; die Spalten für Nummer, Text und Spiel wählt der Streamer. | Q7 |
 | B26 | Wer eine Quote hinzugefügt hat, wird zusätzlich gespeichert, sofern bekannt. | A4 |
 
@@ -61,10 +61,10 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 | ID | Original | streamcrew | Begründung |
 |---|---|---|---|
 | A1 | Option „in Datei speichern“ schreibt den Wert in einen Ordner der Installation | Werte liegen in der Profildatenbank; eine Ausgabe als Datei, etwa für OBS-Textquellen, kann später als eigene Funktion kommen | ADR-0012; der Core hat keinen Installationsordner |
-| A2 | Werttyp nicht dokumentiert | ganze Zahl (64 Bit) | Beispiele der Doku; zu prüfen (offene Frage) |
-| A3 | Namensregeln nicht dokumentiert | Buchstaben und Ziffern, keine Kollision mit eingebauten Identifiern | eindeutige Auflösung in der Template-Engine (Phase 3) |
+| A2 | Gleitkommazahl; `$<name>` im Format der Regionseinstellung von Windows (Q8) | exakte Dezimalzahl, Ausgabe nach der Locale (B4, B5) | keine Rundungsfehler beim Hoch- und Runterzählen; Counter mit Nachkommastellen aus dem Original lassen sich übernehmen; Entscheidung des Projektinhabers (2026-10-02) |
+| A3 | Unicode-Buchstaben und -Ziffern ohne Längengrenze, kleingeschrieben gespeichert, ohne Abgleich mit eingebauten Identifiern: Ein Counter `date` überschreibt `$date` und zerstört `$datetime` (Q8) | Unicode-Buchstaben und -Ziffern, höchstens 64, Schreibweise wie eingegeben, kein Name eines eingebauten Identifiers (B7) | eindeutige Auflösung in der Template-Engine (Phase 3); Entscheidung des Projektinhabers (2026-10-02) |
 | A4 | nicht dokumentiert | Urheber der Quote wird gespeichert | Nachvollziehbarkeit; optional |
-| A5 | Verhalten der Nummern nach dem Löschen nicht dokumentiert | keine Neuvergabe, keine Umnummerierung | Nummern werden im Chat zitiert und sollen stabil bleiben; zu prüfen |
+| A5 | keine Umnummerierung; eine neue Quote bekommt die höchste vorhandene Nummer plus 1, nach dem Löschen der höchsten also deren Nummer wieder; der Import vergibt einer Quote mit vorhandener Nummer still eine neue (Q8) | keine Neuvergabe, keine Umnummerierung (B41); der Import meldet den Konflikt (B42) | Nummern werden im Chat zitiert und sollen stabil bleiben; Entscheidung des Projektinhabers (2026-10-02) |
 | A6 | Der Betrag steht in jeder Counter-Action (Q6). | Zusätzlich hat jeder Counter eine Schrittweite, voreingestellt 1 (B8); Actions erhöhen oder verringern um einen Schritt. | Entscheidung des Projektinhabers: Der Betrag eines Counters steht an einer Stelle statt in jeder Action. |
 
 ## Akzeptanzkriterien
@@ -75,13 +75,13 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 - [x] B8, B44: Neue Counter haben die Schrittweite 1, bestehende erhalten sie bei der Migration; ein Schritt nutzt die gespeicherte Schrittweite; eine Schrittweite unter 1 wird abgelehnt (Integrationstest gegen SQLite).
 - [x] B21, B41: Nummern werden fortlaufend vergeben und nach dem Löschen nicht neu verwendet.
 - [x] B23: zufällige, neueste und Gesamtzahl lassen sich abfragen (Integrationstest gegen SQLite).
+- [ ] B4, B5, B8: Werte und Schrittweiten mit Nachkommastellen, exakt gerechnet, gespeichert und nach der Locale ausgegeben; bestehende Counter werden übernommen.
+- [ ] B7: Namen mit Umlauten und anderen Schriften, auch als Identifier in Templates.
+- [ ] B24: `$quotedatetime` als kurzes Datum nach der Locale.
 
 ## Offene Fragen
 
-- B5/A2: Kann ein Counter im Original Nachkommastellen haben?
-- B41/A5: Vergibt das Original nach dem Löschen einer Quote die Nummer neu oder nummeriert es um?
-- B7: Welche Zeichen erlaubt das Original in Counter-Namen?
-- B20: Welches Datumsformat nutzt `$quotedatetime` bei anderen Sprachen als Englisch?
+Keine.
 
 ## Quellen
 
@@ -89,6 +89,7 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 |---|---|---|---|
 | Q6 | Doku | <https://mixitup.bot/docs/actions/counter-action> | Operationen, Optionen, Identifier; abgerufen 2026-09-29 |
 | Q7 | Doku | <https://mixitup.bot/docs/quotes> | Felder, Identifier, Format, Import; abgerufen 2026-09-29 |
+| Q8 | Original (Hilfestellung) | `MixItUp.Base/Model/Settings/CounterModel.cs @ v1.8.200`, `MixItUp.Base/Model/Actions/CounterActionModel.cs @ v1.8.200`, `MixItUp.Base/Util/StringExtensions.cs @ v1.8.200`, `MixItUp.Base/Util/SpecialIdentifierStringBuilder.cs @ v1.8.200`, `MixItUp.Base/ViewModel/User/UserQuoteViewModel.cs @ v1.8.200`, `MixItUp.Base/Model/User/UserQuoteModel.cs @ v1.8.200` | Counter mit Nachkommastellen und ihre Ausgabe (B4, B5, A2), Namen mit Unicode-Buchstaben (B7, A3), Nummern der Quotes (A5), `$quotedatetime` als kurzes Datum (B24); gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
 | QP | Projekt | [Plan](../plan.md) §5.5, Anhang A.3, A.6 | vorgefertigte Commands, Identifier-Familien |
 
 ## Änderungshistorie
@@ -101,3 +102,4 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 | 2026-09-30 | Identifier der Counter umgesetzt (`internal/template`, `internal/domain/counter`). Festlegungen dabei: Tausendertrennzeichen nach Englisch (USA), bis das Profil eine Locale hat (B4; Spezifikation Templates, B41). Ein Name kollidiert (B7), wenn `$<name>` oder `$<name>display` mit einem eingebauten Identifier kollidiert (Spezifikation Templates, B12, B74). |
 | 2026-10-01 | B43 geändert (Entscheidung des Projektinhabers): Bei einem Überlauf bleibt der Wert unverändert, statt am Grenzwert stehen zu bleiben, und die Action scheitert. Eine Änderung gilt damit ganz oder gar nicht, wie es [`actions.md`](actions.md), B42, für die Counter-Action festlegt; die Festlegung vom 2026-09-29 zu B43 entfällt. `counter.Counter.Add` lässt den Wert bei einem Überlauf unverändert. |
 | 2026-10-01 | B8, B44 und A6 ergänzt, B2 erweitert (Entscheidung des Projektinhabers): Jeder Counter hat eine Schrittweite, voreingestellt 1, und lässt sich um einen Schritt erhöhen oder verringern. Umgesetzt als `counter.Counter.Step` mit `Increment` und `Decrement`; `counter.New` legt Counter mit der Schrittweite 1 an. Migration 0006 gibt bestehenden Countern die Schrittweite 1. Festlegungen dabei: Die Schrittweite ist mindestens 1, damit ein Schritt immer in die genannte Richtung geht; nach oben begrenzt sie nur der Wertebereich (B5). Ein Überlauf durch einen Schritt verhält sich wie jeder andere (B43). |
+| 2026-10-02 | Offene Fragen am Original geklärt (Q8) und entschieden (Entscheidungen des Projektinhabers). Geändert: Counter-Werte sind exakte Dezimalzahlen mit Ausgabe nach der Locale (B4, B5, A2), Schrittweiten damit auch (B8); Namen dürfen Unicode-Buchstaben und -Ziffern enthalten (B7, A3). Übernommen: `$quotedatetime` ist das kurze Datum (B24). Geblieben, mit dem Verhalten des Originals unter „Abweichungen“: keine Neuvergabe von Quote-Nummern und Konflikte beim Import (A5). |
