@@ -6,9 +6,10 @@
 // that is not met (B2), and it tells the user why a command did not run,
 // in the language of the profile (B70 to B72, ADR-0022).
 //
-// So far it checks the role and finds faulty requirements; cooldowns,
-// arguments, settings and thresholds follow (roadmap 3.4). A command with
-// one of these is not decided yet: Apply returns ErrNotSupported.
+// So far it checks the role and the cooldown and finds faulty
+// requirements; arguments, settings and thresholds follow (roadmap 3.4). A
+// command with arguments or a threshold is not decided yet: Apply returns
+// ErrNotSupported.
 package requirement
 
 import (
@@ -16,9 +17,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
+	"time"
 
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/command"
+	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/i18n"
@@ -48,6 +52,10 @@ type Ports struct {
 	Language Language
 	// Platforms send the messages.
 	Platforms Platforms
+	// Cooldowns store the running cooldowns.
+	Cooldowns Cooldowns
+	// Streamer finds the streamer for runs without a user (B4).
+	Streamer Streamer
 	// Logger records faulty requirements (B7, B8).
 	Logger *slog.Logger
 }
@@ -56,6 +64,9 @@ type Ports struct {
 // engine.Requirements.
 type Service struct {
 	ports Ports
+	// mu makes the decisions one after another, so that two runs cannot
+	// both pass a cooldown that only one may start (B3, B100).
+	mu sync.Mutex
 }
 
 var _ engine.Requirements = (*Service)(nil)
@@ -69,6 +80,10 @@ func New(p Ports) (*Service, error) {
 		return nil, errors.New("requirement service: no language")
 	case p.Platforms == nil:
 		return nil, errors.New("requirement service: no platforms")
+	case p.Cooldowns == nil:
+		return nil, errors.New("requirement service: no cooldowns")
+	case p.Streamer == nil:
+		return nil, errors.New("requirement service: no streamer")
 	case p.Logger == nil:
 		return nil, errors.New("requirement service: no logger")
 	}
@@ -76,22 +91,54 @@ func New(p Ports) (*Service, error) {
 }
 
 // Apply decides whether cmd runs for p (B1, B2): faulty requirements first
-// (B7, B8, B40), then the role (B10 to B12). The first requirement that is
-// not met is the rejection.
+// (B7, B8, B40), then the role (B10 to B12) and the cooldown (B20 to B24).
+// The first requirement that is not met is the rejection. If all are met,
+// it starts the cooldown (B3, B21), which the decision can take back.
+// Decisions are made one after another (B3).
 func (s *Service) Apply(ctx context.Context, cmd command.Command, p engine.Params) (engine.Decision, error) {
-	if r, ok := s.faulty(ctx, cmd); ok {
-		return engine.Rejected(r), nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now()
+	if r, ok, err := s.faulty(ctx, cmd); err != nil || ok {
+		return rejectedOrError(cmd, r, err)
 	}
 	if r, ok := checkRole(cmd, p); ok {
 		return engine.Rejected(r), nil
 	}
+	cooldown, hasCooldown := find[command.CooldownRequirement](cmd)
+	var key command.CooldownKey
+	if hasCooldown {
+		var err error
+		if key, err = s.cooldownKey(ctx, cmd, cooldown, p); err != nil {
+			return rejectedOrError(cmd, engine.Rejection{}, err)
+		}
+		if r, ok, err := s.checkCooldown(ctx, cooldown, key, p, now); err != nil || ok {
+			return rejectedOrError(cmd, r, err)
+		}
+	}
 	for _, req := range cmd.Requirements {
 		switch req.(type) {
-		case command.CooldownRequirement, command.ArgumentsRequirement, command.ThresholdRequirement:
+		case command.ArgumentsRequirement, command.ThresholdRequirement:
 			return engine.Decision{}, fmt.Errorf("decide command %q: %w: %s", cmd.Name, ErrNotSupported, req.DocType())
 		}
 	}
-	return engine.Met(p), nil
+	d := engine.Met(p)
+	if hasCooldown {
+		var err error
+		if d.Revert, err = s.startCooldown(ctx, cooldown, key, now); err != nil {
+			return rejectedOrError(cmd, engine.Rejection{}, err)
+		}
+	}
+	return d, nil
+}
+
+// rejectedOrError returns the rejection r, or the error err of deciding
+// about cmd.
+func rejectedOrError(cmd command.Command, r engine.Rejection, err error) (engine.Decision, error) {
+	if err != nil {
+		return engine.Decision{}, fmt.Errorf("decide command %q: %w", cmd.Name, err)
+	}
+	return engine.Rejected(r), nil
 }
 
 // Notify tells the user of p why cmd did not run (B70 to B72): the reason
@@ -125,13 +172,29 @@ func (s *Service) Notify(ctx context.Context, cmd command.Command, p engine.Para
 	return chat.Send(ctx, m)
 }
 
-// StartCooldown starts the cooldown of cmd for p (B25); without a cooldown
-// requirement it does nothing.
-func (s *Service) StartCooldown(_ context.Context, cmd command.Command, _ engine.Params) error {
-	if _, ok := find[command.CooldownRequirement](cmd); !ok {
+// StartCooldown starts the cooldown of cmd for p as if cmd had just been
+// queued (B25; actions.md, B37); without a cooldown requirement it does
+// nothing. The scopes per user need the user of p: unlike a check of the
+// requirements, a run without a user does not count as the streamer here.
+func (s *Service) StartCooldown(ctx context.Context, cmd command.Command, p engine.Params) error {
+	r, ok := find[command.CooldownRequirement](cmd)
+	if !ok {
 		return nil
 	}
-	return fmt.Errorf("start the cooldown of %q: %w: %s", cmd.Name, ErrNotSupported, command.TypeCooldown)
+	var userID id.ID
+	if p.User != nil {
+		userID = p.User.ID
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key, err := r.Key(cmd.ID, userID)
+	if err != nil {
+		return fmt.Errorf("start the cooldown of %q: %w", cmd.Name, err)
+	}
+	if _, err := s.startCooldown(ctx, r, key, time.Now()); err != nil {
+		return fmt.Errorf("start the cooldown of %q: %w", cmd.Name, err)
+	}
+	return nil
 }
 
 // find returns the requirement of type R of cmd; ok is false if it has
@@ -152,26 +215,44 @@ func told(p engine.Params) bool {
 }
 
 // faulty returns the rejection of a command whose requirements cannot be
-// checked as they are (B7, B8, B40): one of a type this version does not
-// know, or a currency, rank or item, which come with roadmap phase 8. It
-// logs a warning; the user is not told.
-func (s *Service) faulty(ctx context.Context, cmd command.Command) (engine.Rejection, bool) {
+// checked as they are (B7, B8, B40, B103): one of a type this version does
+// not know, a currency, rank or item, which come with roadmap phase 8, or a
+// grouped cooldown without a cooldown group or with one that does not
+// exist. It logs a warning; the user is not told. An error means it could
+// not check.
+func (s *Service) faulty(ctx context.Context, cmd command.Command) (engine.Rejection, bool, error) {
 	for _, req := range cmd.Requirements {
 		var (
 			key i18n.Key
 			why string
 		)
-		switch req.(type) {
+		switch r := req.(type) {
 		case command.UnknownRequirement:
 			key, why = i18n.KeyRequirementUnknown, "this version does not know the requirement type"
 		case command.CurrencyRequirement, command.RankRequirement, command.InventoryRequirement:
 			key, why = i18n.KeyRequirementFaulty, "currencies, ranks and items come with roadmap phase 8"
+		case command.CooldownRequirement:
+			if !r.Scope.Grouped() {
+				continue
+			}
+			if r.Group.IsZero() {
+				key, why = i18n.KeyRequirementFaulty, "the cooldown names no cooldown group"
+				break
+			}
+			_, ok, err := s.cooldownGroup(ctx, r.Group)
+			if err != nil {
+				return engine.Rejection{}, false, err
+			}
+			if ok {
+				continue
+			}
+			key, why = i18n.KeyRequirementFaulty, "the cooldown group does not exist"
 		default:
 			continue
 		}
 		s.ports.Logger.WarnContext(ctx, "command not run: faulty requirement",
 			"command", cmd.Name, "requirement", req.DocType(), "reason", why)
-		return engine.Rejection{Requirement: req.DocType(), Reason: i18n.Message{Key: key}}, true
+		return engine.Rejection{Requirement: req.DocType(), Reason: i18n.Message{Key: key}}, true, nil
 	}
-	return engine.Rejection{}, false
+	return engine.Rejection{}, false, nil
 }
