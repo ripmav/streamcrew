@@ -918,6 +918,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | Logging | `log/slog`; eigene Rotation nach Größe (Code-ADR-0003) | gesetzt | stdlib |
 | Secrets | `crypto/aes` + `crypto/cipher`, `zalando/go-keyring` | gesetzt | stdlib-Krypto; Keyring plattformübergreifend, Fallback Umgebungsvariable oder Datei (ADR-0012) |
 | Ausdrücke | `expr-lang/expr` | gesetzt | sicher, schnell, ersetzt Jace; Werte als Variablen, Größe und Speicher begrenzt (Code-ADR-0012) |
+| Dezimalzahlen | `github.com/cockroachdb/apd/v3` | gesetzt | exakte Dezimalzahlen für Counter, bis 34 gültige Stellen, ungenaue Rechnungen als Fehler; gekapselt in `internal/decimal` ([Code-ADR-0020](adr/code/0020-dezimalzahlen.md)) |
 | Scripting | `dop251/goja` | Kandidat | reines Go, sandboxfähig (ADR-0017) |
 | YouTube | `google.golang.org/api/youtube/v3`, `google.golang.org/grpc` für `streamList` | Kandidat | offizielle Clients bzw. Proto |
 | OBS | `andreykaipov/goobs` | Kandidat | obs-websocket v5 |
@@ -1200,6 +1201,7 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0017 | `0017-klare-signale-statt-magischer-werte.md` | Werte ohne Doppelbedeutung, benannte Ausgänge, Fehler nur für Fehler; **vorgeschlagen** | 3 |
 | 0018 | `0018-json-v2.md` | `encoding/json/v2` für alles JSON, strenges Lesen, reproduzierbares Schreiben; ergänzt Code-ADR-0010; **akzeptiert** | 3 |
 | 0019 | `0019-host-rechte-in-der-startkonfiguration.md` | Capabilities je Betriebsmodus mit `grant` und `revoke`, freigegebene Wurzeln, Allowlist für Netzziele, alle ohne Neustart änderbar; Umgebung für Programme; ergänzt Code-ADR-0005; **akzeptiert** | 3 |
+| 0020 | `0020-dezimalzahlen.md` | exakte Dezimalzahlen mit `cockroachdb/apd/v3` in `internal/decimal`, bis 34 gültige Stellen, als Text in Datenbank und JSON; **akzeptiert** | 3 |
 
 ---
 
