@@ -67,9 +67,10 @@ const (
 	// PatternID is the canonical text form of an ID: a UUID in lowercase
 	// (Code-ADR-0009).
 	PatternID = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-	// PatternCounterName is the form of counter names: 1 to 64 ASCII
-	// letters and digits (spec counters-and-quotes.md, B7).
-	PatternCounterName = "^[A-Za-z0-9]{1,64}$"
+	// PatternCounterName is the form of counter names: 1 to 64 letters,
+	// marks and digits in the sense of Unicode, not starting with a mark
+	// (spec counters-and-quotes.md, B7).
+	PatternCounterName = `^[\p{L}\p{Nd}][\p{L}\p{M}\p{Nd}]{0,63}$`
 	// PatternPlatform is the form of the names of platforms: 1 to 32
 	// lowercase ASCII letters and digits, as platform.Name.Validate checks
 	// them.

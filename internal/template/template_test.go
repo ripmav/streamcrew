@@ -21,7 +21,7 @@ func TestRender_Golden(t *testing.T) {
 
 func TestParse_String(t *testing.T) {
 	t.Parallel()
-	for _, text := range []string{"", "$", "plain", "$username", "a $$b $ c$"} {
+	for _, text := range []string{"", "$", "plain", "$username", "a $$b $ c$", "$zähler $ÄRGER", "$\u0301x", "$\xff"} {
 		assert.Equal(t, text, template.Parse(text).String())
 	}
 }

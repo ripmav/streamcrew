@@ -462,7 +462,7 @@ Zuerst die Änderungen an Datenmodell und Engine aus den geklärten Fragen vom 2
   - [x] Eigener Auswerter in `internal/expr` auf Dezimalzahlen, Zahlen in `internal/template`, Mengenangaben der Actions, Bedingung und Argumente vom Typ `number` und `integer`; `expr-lang/expr` entfällt, erledigt 2026-10-03 (zwei Teilschritte in einem PR, weil der Zahlentyp der Templates alle Nutzer zugleich umstellt)
   - [x] Counter: Werte und Schrittweiten, Migration nach `TEXT` (0011), Counter-Action, Ausgabe, erledigt 2026-10-03
   - [x] Hexadezimale Zahlen und Ziffern mit `_` in `internal/decimal`, in Ausdrücken und Argumenten (Entscheidung des Projektinhabers), erledigt 2026-10-03
-- [ ] Namen mit Unicode-Buchstaben: Tokens der Template-Engine und Counter-Namen ([`template.md`](spec/template.md), B1; [`counters-and-quotes.md`](spec/counters-and-quotes.md), B7) (S)
+- [x] Namen mit Unicode-Buchstaben: Tokens der Template-Engine und Counter-Namen ([`template.md`](spec/template.md), B1; [`counters-and-quotes.md`](spec/counters-and-quotes.md), B7) (S), erledigt 2026-10-03: Tokens und Counter-Namen mit Buchstaben, Zeichen und Ziffern aller Schriften, Schlüssel `name_key` für Counter (Migration 0012)
 
 - [ ] Prüfen, ob die YAML-Bibliothek aus [Code-ADR-0005](adr/code/0005-konfiguration.md) (`go.yaml.in/yaml/v3`) für Commands als Code genügt, etwa bei Fehlermeldungen mit Zeile und Spalte; sonst ein neues Code-ADR (S)
 - [ ] Typkatalog als JSON-Schema exportieren (`schema export` → `schemas/`) (S)
@@ -1331,3 +1331,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-03 | Ausdrücke rechnen dezimal mit eigenem Auswerter in `internal/expr`; `expr-lang/expr` entfällt. Zahlen der Templates, Mengenangaben der Actions, die Bedingung und die Argumente vom Typ `number` und `integer` nutzen `internal/decimal`. |
 | 2026-10-03 | Counter mit Dezimalzahlen: Werte und Schrittweiten als Text (Migration 0011), Counter-Action mit Dezimalbeträgen, `$<name>display` mit zwei Nachkommastellen. Die Aufgabe „Exakte Dezimalzahlen“ in 3.5 ist erledigt. |
 | 2026-10-03 | Hexadezimale Zahlen nach `0x` und Unterstriche zwischen Ziffern (Entscheidung des Projektinhabers): `decimal.Parse`, die Zahlen in Ausdrücken und die Argumente vom Typ `number` und `integer` lesen sie und rechnen sie in Dezimalzahlen um. |
+| 2026-10-03 | Namen mit Unicode-Buchstaben: Tokens der Template-Engine und Counter-Namen mit Buchstaben aller Schriften, ohne Beachtung der Schreibweise nach Unicode; Counter über den Schlüssel `name_key` (Migration 0012); Textfunktionen beginnen nicht mitten in einem Wort einer beliebigen Schrift. |
