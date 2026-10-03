@@ -5,9 +5,9 @@
 // document (Code-ADR-0010) in the settings table of the profile database;
 // a section that was never saved has its defaults.
 //
-// There are the sections "backups" and "time" (roadmap 2.2) and "commands"
-// (roadmap 3.2); the others (general, chat, moderation, overlay, locale)
-// follow with their features.
+// There are the sections "backups" and "time" (roadmap 2.2), "commands"
+// (roadmap 3.2) and "locale" (roadmap 3.4, ADR-0022); the others (general,
+// chat, moderation, overlay) follow with their features.
 package settings
 
 import (
@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/polydoc"
 )
 
@@ -48,6 +49,7 @@ func New(repo Repository) (*Service, error) {
 		{Type: sectionBackups, Version: 1, Decode: decode[Backups]},
 		{Type: sectionTime, Version: 2, Decode: decode[Time], Migrations: []polydoc.Migration{migrateTimeV1}},
 		{Type: sectionCommands, Version: 2, Decode: decode[Commands], Migrations: []polydoc.Migration{migrateCommandsV1}},
+		{Type: sectionLocale, Version: 1, Decode: decode[Locale]},
 	} {
 		if err := r.Register(e); err != nil {
 			return nil, err
@@ -107,7 +109,31 @@ const (
 	sectionBackups  = "backups"
 	sectionTime     = "time"
 	sectionCommands = "commands"
+	sectionLocale   = "locale"
 )
+
+// Locale holds the language of the profile (ADR-0022, point 7): the bot
+// writes its chat messages in it. The formats of dates, times and numbers
+// follow in a later version of the section (roadmap 3.6).
+type Locale struct {
+	// Language is a language with a catalog, e.g. "de".
+	Language i18n.Language `json:"language"`
+}
+
+// DefaultLocale returns English, the source language of the catalogs.
+func DefaultLocale() Locale {
+	return Locale{Language: i18n.English}
+}
+
+// DocType implements polydoc.Document.
+func (Locale) DocType() string { return sectionLocale }
+
+func (l Locale) validate() error {
+	if !l.Language.Valid() {
+		return fmt.Errorf("language %q has no catalog; known are %v", l.Language, i18n.Languages())
+	}
+	return nil
+}
 
 // Backups configures the automatic backups (ADR-0012).
 type Backups struct {
