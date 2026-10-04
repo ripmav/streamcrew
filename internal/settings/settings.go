@@ -50,6 +50,7 @@ func New(repo Repository) (*Service, error) {
 		{Type: sectionTime, Version: 2, Decode: decode[Time], Migrations: []polydoc.Migration{migrateTimeV1}},
 		{Type: sectionCommands, Version: 4, Decode: decode[Commands], Migrations: []polydoc.Migration{migrateCommandsV1, migrateCommandsV2, migrateCommandsV3}},
 		{Type: sectionLocale, Version: 1, Decode: decode[Locale]},
+		{Type: sectionEvents, Version: 1, Decode: decode[Events]},
 	} {
 		if err := r.Register(e); err != nil {
 			return nil, err
@@ -110,7 +111,63 @@ const (
 	sectionTime     = "time"
 	sectionCommands = "commands"
 	sectionLocale   = "locale"
+	sectionEvents   = "events"
 )
+
+// Limits of the section "events" (spec events.md, B5, B8, B10).
+const (
+	// DefaultMassGiftThreshold is the threshold of a profile that never set
+	// one.
+	DefaultMassGiftThreshold = 2
+	// MinMassGiftThreshold and MaxMassGiftThreshold limit the threshold.
+	MinMassGiftThreshold = 2
+	MaxMassGiftThreshold = 1000
+	// DefaultStreamGracePeriod is the grace period of a profile that never
+	// set one.
+	DefaultStreamGracePeriod = 10 * time.Minute
+	// MaxStreamGracePeriod is the longest grace period; 0 is the shortest,
+	// a stream session without grace period.
+	MaxStreamGracePeriod = time.Hour
+)
+
+// Events configures the event service (spec events.md, B10).
+type Events struct {
+	// MassGiftThreshold is the number of gifts of a mass gift from which
+	// only the mass gift fires, and below which only the single gifts do
+	// (B5), from MinMassGiftThreshold to MaxMassGiftThreshold. A change
+	// applies from the next mass gift.
+	MassGiftThreshold int `json:"massGiftThreshold"`
+	// StreamGracePeriod is how long a stream may stay offline without
+	// ending its session (B8), from 0 to MaxStreamGracePeriod. A change
+	// applies from the next time the stream goes offline.
+	StreamGracePeriod polydoc.Duration `json:"streamGracePeriod"`
+}
+
+// DefaultEvents returns the defaults of B10.
+func DefaultEvents() Events {
+	return Events{
+		MassGiftThreshold: DefaultMassGiftThreshold,
+		StreamGracePeriod: polydoc.Duration(DefaultStreamGracePeriod),
+	}
+}
+
+// DocType implements polydoc.Document.
+func (Events) DocType() string { return sectionEvents }
+
+// Validate checks the section, e.g. before the event service uses it.
+func (e Events) Validate() error {
+	return e.validate()
+}
+
+func (e Events) validate() error {
+	if e.MassGiftThreshold < MinMassGiftThreshold || e.MassGiftThreshold > MaxMassGiftThreshold {
+		return fmt.Errorf("mass gift threshold %d is not between %d and %d", e.MassGiftThreshold, MinMassGiftThreshold, MaxMassGiftThreshold)
+	}
+	if grace := e.StreamGracePeriod.Std(); grace < 0 || grace > MaxStreamGracePeriod {
+		return fmt.Errorf("stream grace period %s is not between 0 and %s", grace, MaxStreamGracePeriod)
+	}
+	return nil
+}
 
 // Locale holds the language of the profile (ADR-0022, point 7): the bot
 // writes its chat messages in it. The formats of dates, times and numbers

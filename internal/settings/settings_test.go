@@ -57,6 +57,10 @@ func TestDefaultsWhenNeverSaved(t *testing.T) {
 		UserLookupAttempts:    3,
 		UserLookupTimeout:     polydoc.Duration(2 * time.Second),
 	}, c, "B90")
+
+	e, err := settings.Load(t.Context(), svc, settings.DefaultEvents())
+	require.NoError(t, err)
+	assert.Equal(t, settings.Events{MassGiftThreshold: 2, StreamGracePeriod: polydoc.Duration(10 * time.Minute)}, e, "events.md B10")
 }
 
 func TestSaveAndLoad(t *testing.T) {
@@ -106,6 +110,15 @@ func TestSaveAndLoad(t *testing.T) {
 	doc, _, err = s.Settings(ctx, "commands")
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"type":"commands","schemaVersion":4,"lockMode":"visual_audio","errorCooldown":"global","errorCooldownDuration":"1m0s","argDelimiter":";","entranceMediaGap":"1.5s","queueSize":50,"userLookupAttempts":5,"userLookupTimeout":"500ms"}`, string(doc))
+
+	events := settings.Events{MassGiftThreshold: 1000, StreamGracePeriod: 0}
+	require.NoError(t, settings.Save(ctx, svc, events), "B10: 0 is without grace period")
+	gotEvents, err := settings.Load(ctx, svc, settings.DefaultEvents())
+	require.NoError(t, err)
+	assert.Equal(t, events, gotEvents)
+	doc, _, err = s.Settings(ctx, "events")
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"type":"events","schemaVersion":1,"massGiftThreshold":1000,"streamGracePeriod":"0s"}`, string(doc))
 }
 
 func TestValidation(t *testing.T) {
@@ -134,6 +147,10 @@ func TestValidation(t *testing.T) {
 		withCommands(func(c *settings.Commands) { c.UserLookupAttempts = 11 }),
 		withCommands(func(c *settings.Commands) { c.UserLookupTimeout = polydoc.Duration(99 * time.Millisecond) }),
 		withCommands(func(c *settings.Commands) { c.UserLookupTimeout = polydoc.Duration(30*time.Second + time.Millisecond) }),
+		settings.Events{MassGiftThreshold: 1, StreamGracePeriod: 0},
+		settings.Events{MassGiftThreshold: 1001, StreamGracePeriod: 0},
+		settings.Events{MassGiftThreshold: 2, StreamGracePeriod: -1},
+		settings.Events{MassGiftThreshold: 2, StreamGracePeriod: polydoc.Duration(time.Hour + time.Millisecond)},
 	} {
 		assert.Error(t, settings.Save(ctx, svc, s), "%+v", s)
 	}
