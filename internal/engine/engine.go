@@ -189,6 +189,8 @@ type Engine struct {
 
 	// wg has the goroutines of the instances.
 	wg sync.WaitGroup
+	// ready is closed when Run begins to take instances.
+	ready chan struct{}
 
 	mu    sync.Mutex
 	phase phase
@@ -239,6 +241,7 @@ func New(commands Commands, types ActionTypes, opts ...Option) (*Engine, error) 
 		logger:          slog.New(slog.DiscardHandler),
 		config:          func(context.Context) (Config, error) { return DefaultConfig(), nil },
 		shutdownTimeout: DefaultShutdownTimeout,
+		ready:           make(chan struct{}),
 		active:          make(map[id.ID]*instance),
 		held:            make(map[string]struct{}),
 		changed:         make(chan struct{}),
@@ -266,6 +269,7 @@ func (e *Engine) Run(ctx context.Context) error {
 	}
 	e.phase = phaseRunning
 	e.mu.Unlock()
+	close(e.ready)
 
 	<-ctx.Done()
 	stopCtx := context.WithoutCancel(ctx)
@@ -303,6 +307,12 @@ func (e *Engine) Run(ctx context.Context) error {
 	}
 	e.wg.Wait()
 	return nil
+}
+
+// Ready returns a channel that is closed when Run begins to take
+// instances, e.g. to trigger the event commands of "app.started" only then.
+func (e *Engine) Ready() <-chan struct{} {
+	return e.ready
 }
 
 // Start queues cmd by hand, e.g. from the user interface or the API (B14):
