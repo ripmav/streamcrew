@@ -493,22 +493,23 @@ Der Core läuft **primär auf dem Streaming-PC** und **sekundär als Server-Anwe
 ### 6.7 Event-Bus und Datenfluss
 
 - **Umschlag:** ID (UUIDv7), Zeitstempel, Quelle (Plattform, Integration, System), Typ als stabiler String (z. B. `twitch.channel.follow`, `chat.message`) und typisierte Nutzlast.
-- **Konsumenten:** Event-Service (löst Event-Commands aus), Chat, Nutzer, Statistik, Overlay-Widgets (Event-Liste, Ziele) sowie Abonnenten des API-Streams.
+- **Eingang:** Adapter übergeben Chatnachrichten, Ereignisse und den Zustand des Streams über einen Port an den Event-Service. Er wendet die Regeln aus [`events.md`](spec/events.md) an, veröffentlicht die Ereignisse und löst Event-Commands und die Trigger der Chat-Commands aus ([Code-ADR-0011](adr/code/0011-event-bus.md), Punkt 4, seit Roadmap 3.6).
+- **Konsumenten:** Chat, Nutzer, Statistik, Overlay-Widgets (Event-Liste, Ziele) sowie Abonnenten des API-Streams.
 - **Gegendruck:** Jeder Abonnent hat einen eigenen Puffer. Langsame API-Abonnenten verlieren Ereignisse und bekommen einen Lag-Hinweis; die Engine blockiert nie.
 - **Deduplizierung:** Plattform-Nachrichten-IDs (z. B. Twitch `message_id`, Kick-Event-ID) werden mit TTL zwischengespeichert. Einmal-Events pro Nutzer (erster Join, erste Nachricht) werden wie im Original unterdrückt.
 
 ```mermaid
 sequenceDiagram
     participant P as Plattform-Adapter
-    participant B as Event-Bus
-    participant C as Chat-Service
+    participant C as Event-Service
     participant M as Moderation
+    participant B as Event-Bus
     participant E as Command-Engine
     participant F as Frontends
-    P->>B: chat.message (normalisiert)
-    B->>C: zustellen
+    P->>C: Chatnachricht (normalisiert, ohne Duplikate)
     C->>M: prüfen (Filter, Links, Strikes)
     M-->>C: ok oder Maßnahme
+    C->>B: chat.user.*, chat.message
     C->>C: Trigger erkennen
     C->>E: Command-Instanz einreihen
     E->>E: Requirements prüfen und ausführen
@@ -649,7 +650,7 @@ type ChannelPoints interface {
 | YouTube | OAuth 2.0 für Desktop-Apps (Loopback + PKCE) | `liveChatMessages.streamList` (gRPC-Streaming), Polling nur als Fallback | `liveChatMessages.insert` | Quota (Standard 10.000 Einheiten/Tag); im Google-„Testing“-Modus verfallen Refresh-Tokens nach 7 Tagen |
 | Kick | OAuth 2.1 + PKCE (App mit Client-ID und Secret) | ausschließlich Webhooks an eine öffentliche HTTPS-URL; bei wiederholten Fehlern kündigt Kick das Abo | REST | Server-Modus, Relay oder Tunnel nötig (ADR-0015) |
 | Velora, VPZone | OAuth | WebSocket (Velora teils Socket.IO) | REST | kleine Plattformen, P3 |
-| Mock | – | synthetisch (CLI, TUI, API) | Log/Bus | Tests, Demos, Entwicklung |
+| Mock | – | synthetisch (Mock-Konsole `streamcrew mock`, ab Phase 6 CLI, TUI und API) | Log/Bus | Tests, Demos, Entwicklung |
 
 ### 6.12 Authentifizierung, Tokens und Secrets
 
@@ -819,6 +820,7 @@ streamcrew
 ├── command   list|show|create|edit|delete|enable|disable|run|import|export|validate
 ├── chat      send|tail
 ├── event     tail|simulate                # simulate nur im Mock-/Dev-Modus
+├── mock      [--commands …] [--script …]  # Core mit Mock-Plattform gegen eine Kopie des Profils, Konsole
 ├── user      show|list|set|link|merge
 ├── counter   list|get|set|add|reset
 ├── quote     list|add|delete              # P1
@@ -837,6 +839,7 @@ streamcrew
 
 - **Ausgabe:** menschenlesbar oder per `--output json` für Skripte.
 - **Remote:** Verbindung zu einem entfernten Core mit `--server` und `--token` oder den entsprechenden Umgebungsvariablen.
+- **Mock-Konsole:** `streamcrew mock` startet den Core mit der Mock-Plattform in einem Prozess, gegen eine Kopie des Profils, die am Ende verworfen wird. Er liest zeilenweise Befehle wie `chat send --as <nutzer> <text>` und `event simulate <typ>` von der Standardeingabe oder aus `--script`; `--commands` lädt Commands als Code in die Kopie. Bis zur API (Phase 6) ist das der Weg, Commands mit simulierten Nachrichten und Ereignissen zu prüfen; danach sprechen `chat send` und `event simulate` einen laufenden Core über die API an (Entscheidung des Projektinhabers, 2026-10-04).
 
 ### 7.3 TUI (Bubble Tea v2)
 
