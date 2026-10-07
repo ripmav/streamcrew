@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12); Phase 2 abgeschlossen (PR #36) |
+| **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12); Phase 2 abgeschlossen (PR #36); Phase 3 abgeschlossen, M1 erreicht (PR #143) |
 | **Stand** | 2026-10-04 |
 | **Grundlage** | [`plan.md`](plan.md) (Architektur, Prioritäten, Risiken), [`starting.md`](starting.md), [`adr/`](adr/README.md) |
 | **Aktuelle Phase** | Phase 3: Engine, Templates, Actions, Mock (in Arbeit) |
@@ -92,7 +92,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
-| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); 3.2 Command-Engine abgeschlossen (Settings-Sektion „commands“, Warteschlange, Ausführung, Auslösen, Aufrufe); 3.3 Action-Framework und P0-Actions abgeschlossen (Typ-Registry, Rechte je Betriebsmodus, alle 15 P0-Actions); 3.4 abgeschlossen bis auf die Schwelle (P1); 3.5 abgeschlossen (Commands als Code, Typkatalog); 3.6 abgeschlossen bis auf die M1-Exitkriterien (Testabdeckung, Fuzz-Targets in der CI) |
+| Phase 3: Engine, Templates, Actions, Mock | abgeschlossen 2026-10-07, M1 erreicht (PR #143, CI grün); vertagt: die Schwelle der Sammelgeschenke (3.4, P1) |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
@@ -504,9 +504,9 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 
 **Exit-Kriterien (M1):**
 
-- Beispiel-Commands aus YAML reagieren auf simulierte Chat-Nachrichten und Events der Mock-Plattform.
-- Die Testabdeckung von `engine`, `template` und `requirement` liegt bei mindestens 80 %.
-- Die Fuzz-Targets laufen in der CI.
+- [x] Beispiel-Commands aus YAML reagieren auf simulierte Chat-Nachrichten und Events der Mock-Plattform. Erledigt 2026-10-07 (PR #140): Der End-to-End-Test lädt Beispiel-Commands als Code in die Mock-Konsole, und die Chat-Commands der simulierten Nachricht und des „app.started“-Ereignis-Commands erreichen die Mock-Plattform.
+- [x] Die Testabdeckung von `engine`, `template` und `requirement` liegt bei mindestens 80 %. Erreicht 2026-10-07: 97,5 %, 99,2 % und 99,2 % (`go test -cover`).
+- [x] Die Fuzz-Targets laufen in der CI. In der Qualitätspipeline (Code-ADR-0001) seit Phase 1: Die CI führt `scripts/fuzz.sh`, das jedes Fuzz-Target des Moduls für kurze Zeit läuft (20 s je Target).
 
 ---
 
@@ -1198,6 +1198,10 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 - Velora und VPZone (P3): offizielle API-Dokumentation sichten, Aufwand schätzen, Go/No-Go (S); Adapter umsetzen (je L), falls Go
 - Exit-Kriterien, wenn die Plattformen eingeplant werden: Ein gleichzeitiger Stream auf Twitch, YouTube und Kick läuft mit gemeinsamen Commands und gemeinsamer Währung; plattformübergreifend verknüpfte Nutzer werden korrekt zusammengeführt.
 
+**Robustheit:**
+
+- Herunterfahren ohne Verlust: Eine Nachricht, die die Plattform dem Core schon übergeben hat, kann ihren Command verlieren, wenn die Command-Engine vor dem Auslösen durch das Ereignis-Service stoppt (in der CI von PR #140 beobachtet: der Trigger scheiterte mit „command engine is shut down“). Das Ereignis-Service soll vor der Command-Engine aufhören zu lösen und die Engine die schon anstehenden Instanzen noch abarbeiten (S)
+
 **Abhängigkeiten:**
 
 - Auf `go.yaml.in/yaml/v4` wechseln, sobald es stabil ist: Syntaxfehler in YAML nennen dann auch die Spalte ([Code-ADR-0005](adr/code/0005-konfiguration.md), Punkt 3; Entscheidung des Projektinhabers vom 2026-10-03) (S)
@@ -1370,3 +1374,5 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-07 | Die Rechenfunktionen von Jace in `internal/expr` umgesetzt (3.6, Punkt „Rechenfunktionen“): die Funktionen von B53 unter ihren Namen und die Konstanten `e` und `pi`; die transzendenten Funktionen rechnen über `float64`, Runden, Mittel- und Extremwerte mit den exakten Dezimalzahlen; `random(n)` und `randomrange(a, b)` schließen die Obergrenze ein, und die Zufallsquelle lässt sich über `expr.WithRandom` bei `Compile` injizieren, damit Tests deterministisch sind; die falsche Zahl von Werten ist ein Fehler beim Kompilieren, Werte außerhalb der Domain und die falsche Art ein Fehler bei der Auswertung. Damit bleibt in 3.6 nur noch „Locale-Formate“. |
 | 2026-10-07 | Locale-Formate umgesetzt (3.6, letzter Punkt): die Settings-Sektion „locale“ kennt als Version 2 das Feld „locale“ mit `system` oder einer der Locales `en-US`, `en-GB`, `de-DE`, `de-AT`, `de-CH`; die Version 1 bekommt bei der Migration `system` dazu. `system` liest die Locale der Umgebung aus `LC_ALL`, `LC_TIME` und `LANG` (`config.SystemLocale`: Kodierung gestrichen, Unterstriche als Bindestriche), fällt außerhalb der Liste auf die erste Locale mit ihrer Sprache und sonst auf `en-US` zurück, mit einer Warnung im Log. Die Locale wandert über `engine.Config` in `template.Scope.Locale` (Nullwert `en-US`), und Datum, Uhrzeit, Monats- und Wochentagsnamen der Templates samt `$streamstart…` und `$userlastseendate` folgen ihr; die deutschen Lander teilen sich die Muster, und die Zahlen bleiben kanonisch ([`template.md`](spec/template.md), B41, A7). Damit sind alle Punkte von 3.6 bis auf die M1-Exitkriterien erledigt. |
 | 2026-10-07 | Fix: Die Reihenfolge von `app.started` und `app.stopping` war nicht garantiert ([`events.md`](spec/events.md), B12) — unter Last konnte `app.started` nach `app.stopping` oder nach dem `supervisor.status`-Ereignis des Engine-Starts auf den Bus kommen. `app.started` wird jetzt nur veröffentlicht, solange kein Herunterfahren begonnen hat, und beide Veröffentlichungen laufen durch dieselbe Sperre der Readiness, sodass `app.started` nie nach `app.stopping` kommt; die Status-Events werden vor dem Readiness-Update veröffentlicht, damit `app.started` sie einholt. Der Lifecycle-Test lässt den Core nach der Bereitschaft einen Moment laufen, bevor er ihn beendet. |
+| 2026-10-07 | M1 „Engine mit Mock“ erreicht, Phase 3 abgeschlossen. Exit-Kriterien: Beispiel-Commands aus YAML reagieren auf simulierte Chat-Nachrichten und Events (End-to-End-Test der Mock-Konsole, PR #140); die Testabdeckung von `engine`, `template` und `requirement` liegt bei 97,5 %, 99,2 % und 99,2 % (mindestens 80 %); die Fuzz-Targets laufen in der CI (`scripts/fuzz.sh`, 20 s je Target). Vertagt bleibt die Schwelle der Sammelgeschenke (3.4, P1). |
+| 2026-10-07 | Im Backlog notiert (Robustheit): Ein Herunterfahren kann einen Command verlieren, dessen Nachricht die Plattform dem Core schon übergeben hat, weil die Command-Engine vor dem Auslösen durch das Ereignis-Service stoppt; in der CI von PR #140 beobachtet. |
