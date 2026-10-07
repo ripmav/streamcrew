@@ -22,6 +22,7 @@ import (
 
 	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/polydoc"
+	"github.com/ripmav/streamcrew/internal/template"
 )
 
 // Section is a settings section. Its DocType is the section name.
@@ -49,7 +50,7 @@ func New(repo Repository) (*Service, error) {
 		{Type: sectionBackups, Version: 1, Decode: decode[Backups]},
 		{Type: sectionTime, Version: 2, Decode: decode[Time], Migrations: []polydoc.Migration{migrateTimeV1}},
 		{Type: sectionCommands, Version: 4, Decode: decode[Commands], Migrations: []polydoc.Migration{migrateCommandsV1, migrateCommandsV2, migrateCommandsV3}},
-		{Type: sectionLocale, Version: 1, Decode: decode[Locale]},
+		{Type: sectionLocale, Version: 2, Decode: decode[Locale], Migrations: []polydoc.Migration{migrateLocaleV1}},
 		{Type: sectionEvents, Version: 1, Decode: decode[Events]},
 	} {
 		if err := r.Register(e); err != nil {
@@ -169,25 +170,49 @@ func (e Events) validate() error {
 	return nil
 }
 
-// Locale holds the language of the profile (ADR-0022, point 7): the bot
-// writes its chat messages in it. The formats of dates, times and numbers
-// follow in a later version of the section (roadmap 3.6).
+// LocaleSystem names the locale of the environment the core runs in, as
+// TimeZoneSystem names the time zone of the system (B41).
+const LocaleSystem = "system"
+
+// Locale holds the language of the profile (ADR-0022, point 7) and the
+// locale of the formats of dates and times in the templates (B41). Version
+// 1 of the section had no format locale.
 type Locale struct {
 	// Language is a language with a catalog, e.g. "de".
 	Language i18n.Language `json:"language"`
+	// Locale is the locale of the formats of dates and times: LocaleSystem
+	// or a locale the core knows (B41).
+	Locale string `json:"locale"`
 }
 
-// DefaultLocale returns English, the source language of the catalogs.
+// DefaultLocale returns English, the source language of the catalogs, and
+// the locale of the environment.
 func DefaultLocale() Locale {
-	return Locale{Language: i18n.English}
+	return Locale{Language: i18n.English, Locale: LocaleSystem}
 }
 
 // DocType implements polydoc.Document.
 func (Locale) DocType() string { return sectionLocale }
 
+// migrateLocaleV1 adds the format locale of version 2 with its default.
+func migrateLocaleV1(doc map[string]jsontext.Value) error {
+	if _, ok := doc["locale"]; ok {
+		return errors.New("format locale in version 1")
+	}
+	v, err := json.Marshal(LocaleSystem)
+	if err != nil {
+		return err
+	}
+	doc["locale"] = v
+	return nil
+}
+
 func (l Locale) validate() error {
 	if !l.Language.Valid() {
 		return fmt.Errorf("language %q has no catalog; known are %v", l.Language, i18n.Languages())
+	}
+	if l.Locale != LocaleSystem && !template.KnownLocale(l.Locale) {
+		return fmt.Errorf("locale %q is unknown; known are system and %v", l.Locale, template.Locales())
 	}
 	return nil
 }

@@ -43,7 +43,7 @@ func TestDefaultsWhenNeverSaved(t *testing.T) {
 
 	l, err := settings.Load(t.Context(), svc, settings.DefaultLocale())
 	require.NoError(t, err)
-	assert.Equal(t, settings.Locale{Language: i18n.English}, l, "ADR-0022, point 7")
+	assert.Equal(t, settings.Locale{Language: i18n.English, Locale: settings.LocaleSystem}, l, "ADR-0022, point 7; B41")
 
 	c, err := settings.Load(t.Context(), svc, settings.DefaultCommands())
 	require.NoError(t, err)
@@ -78,13 +78,14 @@ func TestSaveAndLoad(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"type":"backups","schemaVersion":1,"enabled":false,"at":"23:30","keepDaily":3,"keepWeekly":2,"keepMonthly":1}`, string(doc))
 
-	require.NoError(t, settings.Save(ctx, svc, settings.Locale{Language: i18n.German}))
+	require.NoError(t, settings.Save(ctx, svc, settings.Locale{Language: i18n.German, Locale: settings.LocaleSystem}))
 	locale, err := settings.Load(ctx, svc, settings.DefaultLocale())
 	require.NoError(t, err)
 	assert.Equal(t, i18n.German, locale.Language)
+	assert.Equal(t, settings.LocaleSystem, locale.Locale)
 	doc, _, err = s.Settings(ctx, "locale")
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"type":"locale","schemaVersion":1,"language":"de"}`, string(doc))
+	assert.JSONEq(t, `{"type":"locale","schemaVersion":2,"language":"de","locale":"system"}`, string(doc))
 
 	require.NoError(t, settings.Save(ctx, svc, settings.Time{TimeZone: "Europe/Berlin"}))
 	tz, err := settings.Load(ctx, svc, settings.DefaultTime())
@@ -132,6 +133,9 @@ func TestValidation(t *testing.T) {
 		settings.Time{TimeZone: "Mars/Olympus"},
 		settings.Locale{Language: "fr"},
 		settings.Locale{},
+		settings.Locale{Language: i18n.English, Locale: "fr-FR"},
+		settings.Locale{Language: i18n.English, Locale: ""},
+		settings.Locale{Language: i18n.English, Locale: "de"},
 		withCommands(func(c *settings.Commands) { c.LockMode = "per_user" }),
 		withCommands(func(c *settings.Commands) { c.LockMode = "" }),
 		withCommands(func(c *settings.Commands) { c.ErrorCooldown = "sometimes" }),
@@ -290,6 +294,37 @@ func TestUnloadableTimeZoneFallsBackToUTC(t *testing.T) {
 	loc, err := settings.Time{TimeZone: "Mars/Olympus"}.Location()
 	require.Error(t, err)
 	assert.Equal(t, time.UTC, loc)
+}
+
+// TestLocaleVersion1: stored version 1 documents are migrated; they get the
+// default format locale "system" (B41).
+func TestLocaleVersion1(t *testing.T) {
+	t.Parallel()
+	for doc, want := range map[string]settings.Locale{
+		`{"type":"locale","schemaVersion":1,"language":"de"}`: {Language: i18n.German, Locale: settings.LocaleSystem},
+		`{"type":"locale","schemaVersion":1,"language":"en"}`: {Language: i18n.English, Locale: settings.LocaleSystem},
+	} {
+		svc, err := settings.New(fakeRepo{doc: []byte(doc)})
+		require.NoError(t, err)
+		got, err := settings.Load(t.Context(), svc, settings.DefaultLocale())
+		require.NoError(t, err, doc)
+		assert.Equal(t, want, got, doc)
+	}
+	svc, err := settings.New(fakeRepo{doc: []byte(`{"type":"locale","schemaVersion":1,"language":"de","locale":"de-DE"}`)})
+	require.NoError(t, err)
+	_, err = settings.Load(t.Context(), svc, settings.DefaultLocale())
+	require.Error(t, err, "version 1 never had the format locale")
+}
+
+// TestLocaleModes: the locales the core knows and system are storable,
+// regardless of case (B41).
+func TestLocaleModes(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc, _ := newService(t)
+	for _, name := range []string{settings.LocaleSystem, "en-US", "en-GB", "de-DE", "de-AT", "de-CH", "de-de"} {
+		assert.NoError(t, settings.Save(ctx, svc, settings.Locale{Language: i18n.English, Locale: name}), name)
+	}
 }
 
 // TestTimeZoneSystem: the system time zone has its own name instead of an

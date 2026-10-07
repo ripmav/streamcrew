@@ -120,12 +120,16 @@ type App struct {
 	users      *userLookup
 	mute       *chatMute
 	programEnv []string
-	templates  *template.Engine
-	actions    *action.Registry
-	commands   *command.Service
-	engine     *engine.Engine
-	events     *eventservice.Service
-	catalog    *event.Catalog
+	// systemLocale is the locale of the environment, read once at start
+	// (B41); the templates format dates and times with it when the profile
+	// has "system" as the locale of the formats.
+	systemLocale string
+	templates    *template.Engine
+	actions      *action.Registry
+	commands     *command.Service
+	engine       *engine.Engine
+	events       *eventservice.Service
+	catalog      *event.Catalog
 }
 
 // New builds the core from a resolved configuration (config.Config.Resolve).
@@ -190,6 +194,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if a.programEnv == nil {
 		a.programEnv = []string{}
 	}
+	a.systemLocale = config.SystemLocale()
 
 	catalog, err := newCatalog()
 	if err != nil {

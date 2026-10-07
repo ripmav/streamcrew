@@ -369,8 +369,8 @@ func (l *lateSwitches) SwitchGroup(ctx context.Context, groupID id.ID, sw comman
 }
 
 // engineConfig reads the settings the engine reads for every instance: the
-// section "commands" and the time zone of the profile (command-engine.md,
-// B28, B90; Code-ADR-0009).
+// sections "commands" and "locale", and the time zone of the profile
+// (command-engine.md, B28, B90; Code-ADR-0009; spec template.md, B41).
 func (a *App) engineConfig(ctx context.Context) (engine.Config, error) {
 	c, err := settings.Load(ctx, a.settings, settings.DefaultCommands())
 	if err != nil {
@@ -387,7 +387,29 @@ func (a *App) engineConfig(ctx context.Context) (engine.Config, error) {
 		a.logger.WarnContext(ctx, "invalid profile time zone", "error", err)
 		loc = time.UTC
 	}
-	return engine.Config{Commands: c, Location: loc}, nil
+	l, err := settings.Load(ctx, a.settings, settings.DefaultLocale())
+	if err != nil {
+		return engine.Config{}, fmt.Errorf("settings locale: %w", err)
+	}
+	return engine.Config{Commands: c, Location: loc, Locale: a.formatLocale(ctx, l.Locale)}, nil
+}
+
+// formatLocale resolves the locale of the section to a locale of the core
+// (B41): a name of the list as is, and LocaleSystem as the locale of the
+// environment, with a warning for an environment locale outside the list.
+func (a *App) formatLocale(ctx context.Context, name string) template.Locale {
+	if name != settings.LocaleSystem {
+		l, _ := template.ResolveLocale(name)
+		return l
+	}
+	if a.systemLocale == "" {
+		return template.LocaleUSEnglish
+	}
+	l, known := template.ResolveLocale(a.systemLocale)
+	if !known {
+		a.logger.WarnContext(ctx, "the locale of the environment is outside the list", "locale", a.systemLocale, "using", string(l))
+	}
+	return l
 }
 
 // localeLanguage is the language of the profile: it reads the section
