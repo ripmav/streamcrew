@@ -8,6 +8,16 @@ import (
 	"database/sql"
 )
 
+type Account struct {
+	Platform  string
+	Role      string
+	Login     string
+	UserID    string
+	Scopes    string
+	ClientID  string
+	UpdatedAt int64
+}
+
 type Command struct {
 	ID           string
 	Name         string
