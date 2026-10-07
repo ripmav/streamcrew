@@ -146,6 +146,7 @@ internal/auth/
 
 ### Task 1 — ADR-0014 (Docs-PR, unterstes PR im Stack)
 
+**Status:** erledigt, PR #144
 **Zweig:** `docs/oauth-adr` (von `main`)
 **PR:** `docs(adr): OAuth and app credentials (ADR-0014)`
 
@@ -194,6 +195,7 @@ internal/auth/
 
 ### Task 2 — `accounts`-Tabelle im Store
 
+**Status:** erledigt, PR #145
 **Zweig:** `feat/auth-accounts-store` (auf `docs/oauth-adr`)
 **PR:** `feat(store): accounts table for platform logins`
 
@@ -239,6 +241,7 @@ CRUD inkl. Upsert-Semantik (erneuter Login ersetzt, `updated_at` neu) und
 
 ### Task 3 — `internal/auth`: Twitch-Device-Code-Flow
 
+**Status:** erledigt, PR folgt (Stack #146)
 **Zweig:** `feat/auth-device-flow` (auf `feat/auth-accounts-store`)
 **PR:** `feat(auth): Twitch device code flow`
 
