@@ -16,27 +16,18 @@ import (
 // template.md, purpose and scope) and may be replaced after the legal
 // assessment (roadmap Gate O, O.1).
 
-// The formats of the original, English (USA), until the profile has a locale
-// setting (B41, roadmap 3.6).
-const (
-	layoutDate     = "1/2/2006"
-	layoutTime     = "3:04 PM"
-	layoutDateTime = layoutDate + " " + layoutTime
-)
-
 // DateTimeFamily returns the identifiers of the current date and time in the
 // time zone of the profile (B40, B41): $datetime, $date, $dateyear,
 // $datemonth, $datemonthname, $dateday, $dayoftheweek, $time, $timehour
 // (00 to 23), $timeminute, $timesecond and $timedigits (hours and minutes as
-// in 1345). All of them use the same instant within a render.
+// in 1345). All of them use the same instant within a render. The formats of
+// date, time, month and weekday names follow the locale of the scope (B41),
+// en-US for the zero value.
 func DateTimeFamily() Family {
-	text := func(format func(time.Time) string) Resolver {
+	text := func(format func(time.Time, localePattern) string) Resolver {
 		return func(_ context.Context, s *Scope) (Value, bool, error) {
-			return TextValue(format(s.now())), true, nil
+			return TextValue(format(s.now(), s.pattern())), true, nil
 		}
-	}
-	layout := func(layout string) Resolver {
-		return text(func(t time.Time) string { return t.Format(layout) })
 	}
 	digits := func(width int, part func(time.Time) int) Resolver {
 		return func(_ context.Context, s *Scope) (Value, bool, error) {
@@ -46,14 +37,14 @@ func DateTimeFamily() Family {
 	return Family{
 		Name: "datetime",
 		Identifiers: []Identifier{
-			{Name: "datetime", Resolve: layout(layoutDateTime)},
-			{Name: "date", Resolve: layout(layoutDate)},
+			{Name: "datetime", Resolve: text(func(t time.Time, p localePattern) string { return t.Format(p.datetime) })},
+			{Name: "date", Resolve: text(func(t time.Time, p localePattern) string { return t.Format(p.date) })},
 			{Name: "dateyear", Resolve: digits(4, time.Time.Year)},
 			{Name: "datemonth", Resolve: digits(2, func(t time.Time) int { return int(t.Month()) })},
-			{Name: "datemonthname", Resolve: text(func(t time.Time) string { return t.Month().String() })},
+			{Name: "datemonthname", Resolve: text(func(t time.Time, p localePattern) string { return p.months[int(t.Month())-1] })},
 			{Name: "dateday", Resolve: digits(2, time.Time.Day)},
-			{Name: "dayoftheweek", Resolve: text(func(t time.Time) string { return t.Weekday().String() })},
-			{Name: "time", Resolve: layout(layoutTime)},
+			{Name: "dayoftheweek", Resolve: text(func(t time.Time, p localePattern) string { return p.weekdays[int(t.Weekday())] })},
+			{Name: "time", Resolve: text(func(t time.Time, p localePattern) string { return t.Format(p.time) })},
 			{Name: "timehour", Resolve: digits(2, time.Time.Hour)},
 			{Name: "timeminute", Resolve: digits(2, time.Time.Minute)},
 			{Name: "timesecond", Resolve: digits(2, time.Time.Second)},

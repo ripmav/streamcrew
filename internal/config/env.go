@@ -27,3 +27,22 @@ func withoutOwn(env []string) []string {
 		return len(name) >= len(prefix) && strings.EqualFold(name[:len(prefix)], prefix)
 	})
 }
+
+// SystemLocale returns the locale of the environment the process runs in
+// (B41): the first non-empty of LC_ALL, LC_TIME and LANG, with the encoding
+// stripped and underscores as hyphens, e.g. "de-DE" for "de_DE.UTF-8";
+// empty when none is set.
+func SystemLocale() string {
+	for _, name := range []string{"LC_ALL", "LC_TIME", "LANG"} {
+		v := os.Getenv(name)
+		if v == "" {
+			continue
+		}
+		v = strings.SplitN(v, ".", 2)[0]
+		v = strings.ReplaceAll(v, "_", "-")
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}

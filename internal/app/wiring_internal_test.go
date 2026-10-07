@@ -3,6 +3,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
+	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/store"
 	"github.com/ripmav/streamcrew/internal/template"
 )
@@ -207,4 +209,34 @@ func TestLateSwitches(t *testing.T) {
 	_, err := l.SwitchCommand(ctx, id.New(), command.SwitchOff)
 	assert.Error(t, err)
 	assert.Error(t, l.SwitchGroup(ctx, id.New(), command.SwitchOff))
+}
+
+// TestFormatLocale_B41: a name of the section is used as is; "system" is
+// the locale of the environment, with a warning for an environment locale
+// outside the list.
+func TestFormatLocale_B41(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	logs := &bytes.Buffer{}
+	a := &App{logger: slog.New(slog.NewTextHandler(logs, nil)), systemLocale: "de_DE"}
+
+	assert.Equal(t, template.LocaleDEGerman, a.formatLocale(ctx, "de-DE"))
+	assert.Equal(t, template.LocaleDEGerman, a.formatLocale(ctx, "de-de"), "regardless of case")
+	assert.Equal(t, template.LocaleDEGerman, a.formatLocale(ctx, settings.LocaleSystem))
+	assert.Empty(t, logs.String(), "a locale of the list needs no warning")
+
+	a.systemLocale = "de"
+	assert.Equal(t, template.LocaleDEGerman, a.formatLocale(ctx, settings.LocaleSystem), "the first locale of the language")
+	assert.Contains(t, logs.String(), "outside the list")
+
+	logs.Reset()
+	a.systemLocale = "fr-FR"
+	assert.Equal(t, template.LocaleUSEnglish, a.formatLocale(ctx, settings.LocaleSystem), "no language in the list")
+	assert.Contains(t, logs.String(), "outside the list")
+
+	logs.Reset()
+	a.systemLocale = ""
+	assert.Equal(t, template.LocaleUSEnglish, a.formatLocale(ctx, settings.LocaleSystem), "without an environment locale")
+	assert.Empty(t, logs.String(), "nothing to warn about")
 }
