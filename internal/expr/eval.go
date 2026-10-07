@@ -3,8 +3,8 @@
 package expr
 
 import (
-	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/ripmav/streamcrew/internal/decimal"
@@ -37,6 +37,9 @@ func (v value) describe() string {
 // evaluator evaluates a syntax tree with the values of its variables.
 type evaluator struct {
 	vars []value
+	// rnd draws the random numbers of random(n) and randomrange(a, b): a
+	// whole number from 1 to n, including both ends.
+	rnd func(n int) int
 }
 
 // eval returns the value of n.
@@ -185,18 +188,24 @@ func compare(op string, a, b value) (value, error) {
 	return value{kind: Bool, bool: r}, nil
 }
 
-// call evaluates a function; all functions take numbers.
+// call evaluates a function (B53).
 func (e *evaluator) call(n callNode) (value, error) {
-	args := make([]decimal.Decimal, len(n.args))
-	for i, arg := range n.args {
-		v, err := e.eval(arg)
-		if err != nil {
-			return value{}, err
-		}
-		if v.kind != Number {
-			return value{}, fmt.Errorf("%s(%s)", n.name, v.describe())
-		}
-		args[i] = v.number
+	switch functions()[n.name].class {
+	case fnIf:
+		return e.callIf(n)
+	case fnCompare:
+		return e.callCompare(n)
+	case fnNumber:
+	}
+	args, err := e.numberArgs(n)
+	if err != nil {
+		return value{}, err
+	}
+	switch n.name {
+	case "random":
+		return e.random(n.name, args[0])
+	case "randomrange":
+		return e.randomRange(args[0], args[1])
 	}
 	r, err := function(n.name, args)
 	if err != nil {
@@ -205,17 +214,174 @@ func (e *evaluator) call(n callNode) (value, error) {
 	return value{kind: Number, number: r}, nil
 }
 
-// function computes a function of B50. round rounds half away from zero.
+// numberArgs evaluates all arguments of n as numbers.
+func (e *evaluator) numberArgs(n callNode) ([]decimal.Decimal, error) {
+	args := make([]decimal.Decimal, len(n.args))
+	for i, arg := range n.args {
+		v, err := e.eval(arg)
+		if err != nil {
+			return nil, err
+		}
+		if v.kind != Number {
+			return nil, fmt.Errorf("%s(%s)", n.name, v.describe())
+		}
+		args[i] = v.number
+	}
+	return args, nil
+}
+
+// callIf evaluates if(condition, then, else): the condition is a truth
+// value or a number, zero for false; the branches are values of one kind.
+func (e *evaluator) callIf(n callNode) (value, error) {
+	cond, err := e.eval(n.args[0])
+	if err != nil {
+		return value{}, err
+	}
+	var ok bool
+	switch cond.kind {
+	case Bool:
+		ok = cond.bool
+	case Number:
+		ok = !cond.number.IsZero()
+	default:
+		return value{}, fmt.Errorf("if(%s): the condition", cond.describe())
+	}
+	then, err := e.eval(n.args[1])
+	if err != nil {
+		return value{}, err
+	}
+	els, err := e.eval(n.args[2])
+	if err != nil {
+		return value{}, err
+	}
+	if then.kind != els.kind {
+		return value{}, fmt.Errorf("if: %s and %s of different kinds", then.describe(), els.describe())
+	}
+	if ok {
+		return then, nil
+	}
+	return els, nil
+}
+
+// callCompare evaluates ifless, ifmore and ifequal: it compares the first
+// two numbers and returns the third or the fourth value, which are of one
+// kind.
+func (e *evaluator) callCompare(n callNode) (value, error) {
+	a, err := e.eval(n.args[0])
+	if err != nil {
+		return value{}, err
+	}
+	b, err := e.eval(n.args[1])
+	if err != nil {
+		return value{}, err
+	}
+	if a.kind != Number || b.kind != Number {
+		return value{}, fmt.Errorf("%s: numbers to compare, got %s and %s", n.name, a.describe(), b.describe())
+	}
+	var ok bool
+	switch n.name {
+	case "ifless":
+		ok = a.number.Cmp(b.number) < 0
+	case "ifmore":
+		ok = a.number.Cmp(b.number) > 0
+	default:
+		ok = a.number.Equal(b.number)
+	}
+	then, err := e.eval(n.args[2])
+	if err != nil {
+		return value{}, err
+	}
+	els, err := e.eval(n.args[3])
+	if err != nil {
+		return value{}, err
+	}
+	if then.kind != els.kind {
+		return value{}, fmt.Errorf("%s: %s and %s of different kinds", n.name, then.describe(), els.describe())
+	}
+	if ok {
+		return then, nil
+	}
+	return els, nil
+}
+
+// random evaluates random(n): a whole number from 1 to n, including n.
+func (e *evaluator) random(name string, n decimal.Decimal) (value, error) {
+	k, err := whole(name, n)
+	if err != nil {
+		return value{}, err
+	}
+	if k < 1 {
+		return value{}, fmt.Errorf("%s(%s): n must be at least 1", name, n)
+	}
+	return value{kind: Number, number: decimal.New(int64(e.rnd(int(k))))}, nil
+}
+
+// randomRange evaluates randomrange(a, b): a whole number from a to b,
+// including b.
+func (e *evaluator) randomRange(a, b decimal.Decimal) (value, error) {
+	lo, err := whole("randomrange", a)
+	if err != nil {
+		return value{}, err
+	}
+	hi, err := whole("randomrange", b)
+	if err != nil {
+		return value{}, err
+	}
+	if hi < lo {
+		return value{}, fmt.Errorf("randomrange(%s, %s): b is less than a", a, b)
+	}
+	return value{kind: Number, number: decimal.New(lo + int64(e.rnd(int(hi-lo+1))-1))}, nil
+}
+
+// whole returns the whole number d stands for; numbers with decimal places
+// and numbers beyond the whole numbers are an error.
+func whole(name string, d decimal.Decimal) (int64, error) {
+	if !d.IsWhole() {
+		return 0, fmt.Errorf("%s(%s): not a whole number", name, d)
+	}
+	k, err := d.Int64()
+	if err != nil {
+		return 0, fmt.Errorf("%s(%s): beyond the whole numbers", name, d)
+	}
+	return k, nil
+}
+
+// function computes a function of B50 and B53 with numbers. round rounds
+// half away from zero, truncate toward zero.
 func function(name string, args []decimal.Decimal) (decimal.Decimal, error) {
 	switch name {
 	case "abs":
 		return args[0].Abs(), nil
-	case "ceil":
+	case "ceil", "ceiling":
 		return args[0].Round(0, decimal.RoundCeiling)
 	case "floor":
 		return args[0].Round(0, decimal.RoundFloor)
+	case "truncate":
+		return args[0].Round(0, decimal.RoundDown)
 	case "round":
 		return args[0].Round(0, decimal.RoundHalfAway)
+	case "avg":
+		sum := decimal.Decimal{}
+		for _, a := range args {
+			s, err := sum.Add(a)
+			if err != nil {
+				return decimal.Decimal{}, err
+			}
+			sum = s
+		}
+		return sum.Quo(decimal.New(int64(len(args))))
+	case "median":
+		s := slices.Clone(args)
+		slices.SortFunc(s, func(a, b decimal.Decimal) int { return a.Cmp(b) })
+		m := len(s) / 2
+		if len(s)%2 == 1 {
+			return s[m], nil
+		}
+		mid, err := s[m-1].Add(s[m])
+		if err != nil {
+			return decimal.Decimal{}, err
+		}
+		return mid.Quo(decimal.New(2))
 	case "min", "max":
 		r := args[0]
 		for _, a := range args[1:] {
@@ -224,7 +390,6 @@ func function(name string, args []decimal.Decimal) (decimal.Decimal, error) {
 			}
 		}
 		return r, nil
-	default:
-		return decimal.Decimal{}, errors.New("unknown function")
 	}
+	return mathFunction(name, args)
 }

@@ -5,6 +5,7 @@ package expr
 import (
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 
 	"github.com/ripmav/streamcrew/internal/decimal"
@@ -93,17 +94,82 @@ func unaryPrecedence(op string) (int, bool) {
 	}
 }
 
-// functions are the functions of expressions and their least and most
-// numbers of arguments; -1 is any number.
-func functions() map[string][2]int {
-	return map[string][2]int{
-		"abs":   {1, 1},
-		"ceil":  {1, 1},
-		"floor": {1, 1},
-		"round": {1, 1},
-		"min":   {1, -1},
-		"max":   {1, -1},
+// fnClass is the class of a function: how it evaluates its arguments.
+type fnClass int
+
+const (
+	// fnNumber takes numbers and returns a number.
+	fnNumber fnClass = iota
+	// fnIf is if(condition, then, else): a truth value or a number as the
+	// condition, two values of one kind as the branches.
+	fnIf
+	// fnCompare is ifless, ifmore and ifequal: two numbers to compare and
+	// two values of one kind as the branches.
+	fnCompare
+)
+
+// functionDef is a function of expressions (B53): its least and most
+// numbers of arguments, -1 is any number, and its class.
+type functionDef struct {
+	min, max int
+	class    fnClass
+}
+
+// functions are the functions of expressions (B53).
+func functions() map[string]functionDef {
+	one := functionDef{min: 1, max: 1, class: fnNumber}
+	variadic := functionDef{min: 1, max: -1, class: fnNumber}
+	return map[string]functionDef{
+		"abs":         one,
+		"acos":        one,
+		"acot":        one,
+		"asin":        one,
+		"atan":        one,
+		"avg":         variadic,
+		"ceil":        one,
+		"ceiling":     one,
+		"cos":         one,
+		"cot":         one,
+		"csc":         one,
+		"floor":       one,
+		"if":          {min: 3, max: 3, class: fnIf},
+		"ifequal":     {min: 4, max: 4, class: fnCompare},
+		"ifless":      {min: 4, max: 4, class: fnCompare},
+		"ifmore":      {min: 4, max: 4, class: fnCompare},
+		"log10":       one,
+		"loge":        one,
+		"logn":        {min: 2, max: 2, class: fnNumber},
+		"max":         variadic,
+		"median":      variadic,
+		"min":         variadic,
+		"random":      one,
+		"randomrange": {min: 2, max: 2, class: fnNumber},
+		"round":       one,
+		"sec":         one,
+		"sin":         one,
+		"sqrt":        one,
+		"tan":         one,
+		"truncate":    one,
 	}
+}
+
+// constant returns the number the name stands for, if it is one: the
+// constants e and pi of B53, as the decimal numbers of their float64.
+func constant(name string) (decimal.Decimal, bool) {
+	var f float64
+	switch name {
+	case "e":
+		f = math.E
+	case "pi":
+		f = math.Pi
+	default:
+		return decimal.Decimal{}, false
+	}
+	d, err := fromFloat(f)
+	if err != nil {
+		panic("expr: the constants are finite")
+	}
+	return d, true
 }
 
 // parser reads tokens into a syntax tree.
@@ -229,13 +295,16 @@ func (p *parser) operand() (node, error) {
 	return nil, fmt.Errorf("unexpected %q", t.text)
 }
 
-// name reads a truth value or a function call.
+// name reads a truth value, a constant or a function call.
 func (p *parser) name(name string) (node, error) {
 	switch name {
 	case "true", "false":
 		return p.add(boolNode{value: name == "true"})
 	}
-	arity, ok := functions()[name]
+	if c, ok := constant(name); ok {
+		return p.add(numberNode{value: c})
+	}
+	def, ok := functions()[name]
 	if !ok {
 		return nil, fmt.Errorf("unknown name %q", name)
 	}
@@ -259,7 +328,7 @@ func (p *parser) name(name string) (node, error) {
 	if t := p.next(); t.kind != tokClose {
 		return nil, fmt.Errorf("function %q: missing ) before %q", name, t.text)
 	}
-	if len(args) < arity[0] || arity[1] >= 0 && len(args) > arity[1] {
+	if len(args) < def.min || def.max >= 0 && len(args) > def.max {
 		return nil, fmt.Errorf("function %q: %d arguments", name, len(args))
 	}
 	return p.add(callNode{name: name, args: args})
