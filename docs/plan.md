@@ -1170,7 +1170,7 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0011 | `0011-keine-telemetrie.md` | Telemetrie, Datenhaltung | 0 | **akzeptiert**: keine Telemetrie, Diagnose-Paket |
 | 0012 | `0012-persistenz.md` | Speicherung, Profile, Sperre, Backups, Secrets im Ruhezustand | 2 | **akzeptiert**: SQLite je Profil, `VACUUM INTO`-Backups, AES-256-GCM mit Schlüssel aus Umgebung, Schlüsselbund oder Datei |
 | 0013 | `0013-sicherheitsmodell.md` | Capabilities, API-Auth, Modi | 2 (Entwurf), 11 (final) | **akzeptiert** (Entwurf): Default-Deny im Server-Modus, Rechte nur lokal erweiterbar |
-| 0014 | `0014-oauth-und-app-credentials.md` | Flows, BYO-Credentials, Token-Speicher | 4 | DCF (Twitch), PKCE + Loopback, BYO |
+| 0014 | `0014-oauth-und-app-credentials.md` | Flows, BYO-Credentials, Token-Speicher | 4 | **akzeptiert**: DCF (Twitch) ohne PKCE (Device-Code ist das Geheimnis), Authorization-Code + PKCE + Loopback für spätere Plattformen, BYO (Client-Secrets im Vault, IDs sind öffentlich), Tokens AES-256-GCM im Vault, Accounts in SQLite, Scope-Abgleich → „Anmeldung erforderlich“, Widerruf beim Logout |
 | 0015 | `0015-eingehende-webhooks-und-relay.md` | Dienste mit Webhooks, später Kick | 9 | Server-Modus + Tunnel; Relay optional |
 | 0016 | `0016-youtube-chat-streaming.md` | `streamList` vs. Polling | Backlog | `streamList` mit Polling-Fallback |
 | 0017 | `0017-scripting.md` | Ersatz für C#-Skripte | 9 | goja (JavaScript) |
