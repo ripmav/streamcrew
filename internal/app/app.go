@@ -465,9 +465,10 @@ func (a *App) Run(ctx context.Context) (err error) {
 	defer func() { err = errors.Join(err, a.close()) }()
 
 	stopWatching := context.AfterFunc(ctx, func() {
-		a.ready.stopping()
 		stopCtx := context.WithoutCancel(ctx)
-		if err := a.events.Application(stopCtx, eventtype.AppStopping, Stopping{}); err != nil {
+		if err := a.ready.publishStopping(func() error {
+			return a.events.Application(stopCtx, eventtype.AppStopping, Stopping{})
+		}); err != nil {
 			a.logger.ErrorContext(stopCtx, "the stopping event failed", "error", err)
 		}
 	})
@@ -487,11 +488,16 @@ func (a *App) Run(ctx context.Context) (err error) {
 	// "app.started" goes through the event service (events.md, B12), when
 	// the core is ready for the first time: the engine takes instances and
 	// the platforms are connected, so its event command runs and its output
-	// reaches the platforms.
+	// reaches the platforms. publishStarted waits for and is seen by the
+	// shutdown, so it is never published after "app.stopping".
 	select {
 	case <-a.ready.Done():
-		if err := a.events.Application(ctx, eventtype.AppStarted, Started{Version: a.version, Mode: string(a.cfg.Mode), Profile: a.profile.ID}); err != nil {
-			a.logger.ErrorContext(ctx, "the started event failed", "error", err)
+		if ctx.Err() == nil {
+			if err := a.ready.publishStarted(func() error {
+				return a.events.Application(ctx, eventtype.AppStarted, Started{Version: a.version, Mode: string(a.cfg.Mode), Profile: a.profile.ID})
+			}); err != nil {
+				a.logger.ErrorContext(ctx, "the started event failed", "error", err)
+			}
 		}
 	case err := <-supErr:
 		a.logger.ErrorContext(ctx, "streamcrew stopped with an error", "error", err)
@@ -547,10 +553,12 @@ func (a *App) resetCounters(ctx context.Context) error {
 	return nil
 }
 
-// onStatus tracks readiness and publishes every state change of a runnable.
+// onStatus publishes every state change of a runnable and then tracks
+// readiness, so that "app.started", which follows the readiness, reaches the
+// bus after the "supervisor.status" events it is based on.
 func (a *App) onStatus(st supervisor.Status) {
-	a.ready.update(st)
 	a.publish(context.Background(), TypeSupervisorStatus, st)
+	a.ready.update(st)
 }
 
 func (a *App) publish(ctx context.Context, typ event.Type, payload any) {
@@ -635,6 +643,8 @@ type readiness struct {
 	mu       sync.Mutex
 	states   map[string]supervisor.State
 	shutdown bool
+	// started is true once "app.started" was published or given up.
+	started bool
 	// done closes when every runnable runs for the first time.
 	done   chan struct{}
 	closed bool
@@ -672,10 +682,28 @@ func (r *readiness) Done() <-chan struct{} {
 	return r.done
 }
 
-func (r *readiness) stopping() {
+// publishStarted publishes "app.started" through fn, at most once, and never
+// after the shutdown has begun (events.md, B12). It holds the lock while fn
+// runs, so the shutdown waits for a publication in flight. fn must not call
+// back into the readiness.
+func (r *readiness) publishStarted(fn func() error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.shutdown || r.started {
+		return nil
+	}
+	r.started = true
+	return fn()
+}
+
+// publishStopping marks the shutdown and publishes "app.stopping" through fn
+// (events.md, B12): it waits for a "app.started" in flight, and every later
+// publishStarted sees the shutdown and gives up.
+func (r *readiness) publishStopping(fn func() error) error {
+	r.mu.Lock()
 	r.shutdown = true
+	r.mu.Unlock()
+	return fn()
 }
 
 // Ready reports whether all runnables run and no shutdown has begun.

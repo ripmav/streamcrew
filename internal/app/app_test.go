@@ -193,6 +193,9 @@ func TestEventsDuringLifecycle(t *testing.T) {
 	errc := make(chan error, 1)
 	go func() { errc <- a.Run(ctx) }()
 	require.Eventually(t, a.Ready, 5*time.Second, 10*time.Millisecond)
+	// Let the core run a moment, so that "app.started" is published before
+	// the shutdown; Ready can be true before Run takes the ready state.
+	time.Sleep(100 * time.Millisecond)
 	cancel()
 	require.NoError(t, <-errc)
 
