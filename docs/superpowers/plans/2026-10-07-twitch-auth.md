@@ -289,7 +289,7 @@ CRUD inkl. Upsert-Semantik (erneuter Login ersetzt, `updated_at` neu) und
 
 ### Task 4 — `internal/auth`: Service, Token-Speicher, Refresh, Ereignisse
 
-**Status:** erledigt (Stack #146)
+**Status:** erledigt, PR #148
 **Zweig:** `feat/auth-service` (auf `feat/auth-device-flow`)
 **PR:** `feat(auth): accounts, encrypted tokens and the refresh loop`
 
