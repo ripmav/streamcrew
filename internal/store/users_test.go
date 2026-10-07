@@ -207,3 +207,45 @@ func TestDeleteUser(t *testing.T) {
 	assert.True(t, created)
 	assert.NotEqual(t, u.ID, again.ID)
 }
+
+// TestUserByLogin finds users by login name regardless of case, the
+// account changed last among several with the name.
+func TestUserByLogin(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+	ada, _, err := s.UpsertIdentity(ctx, twitchIdentity("1001", "Ada"))
+	require.NoError(t, err)
+
+	got, err := s.UserByLogin(ctx, platform.Twitch, "ada")
+	require.NoError(t, err)
+	assert.Equal(t, ada.ID, got.ID)
+	_, err = s.UserByLogin(ctx, platform.YouTube, "ada")
+	require.ErrorIs(t, err, store.ErrNotFound, "another platform")
+	_, err = s.UserByLogin(ctx, platform.Twitch, "bob")
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	time.Sleep(2 * time.Millisecond)
+	renamed, _, err := s.UpsertIdentity(ctx, twitchIdentity("1002", "ADA"))
+	require.NoError(t, err)
+	got, err = s.UserByLogin(ctx, platform.Twitch, "Ada")
+	require.NoError(t, err)
+	assert.Equal(t, renamed.ID, got.ID, "the account changed last")
+}
+
+func TestResetStrikes(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+	ada, _, err := s.UpsertIdentity(ctx, twitchIdentity("1001", "ada"))
+	require.NoError(t, err)
+	_, err = s.UpdateUser(ctx, ada.ID, func(u *user.User) error {
+		u.Stats.Strikes = 3
+		return nil
+	})
+	require.NoError(t, err)
+	require.NoError(t, s.ResetStrikes(ctx))
+	got, err := s.User(ctx, ada.ID)
+	require.NoError(t, err)
+	assert.Zero(t, got.Stats.Strikes)
+}

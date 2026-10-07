@@ -54,6 +54,41 @@ func (q *Queries) GetIdentity(ctx context.Context, arg GetIdentityParams) (UserI
 	return i, err
 }
 
+const getIdentityByLogin = `-- name: GetIdentityByLogin :one
+
+SELECT platform, platform_user_id, user_id, login, display_name, color, avatar_url, roles, followed_at, subscribed_at, sub_tier, account_created_at, data_updated_at, created_at, updated_at FROM user_identities WHERE platform = ? AND login = ? COLLATE NOCASE
+ORDER BY updated_at DESC, platform_user_id LIMIT 1
+`
+
+type GetIdentityByLoginParams struct {
+	Platform string
+	Login    string
+}
+
+// SPDX-License-Identifier: MIT
+func (q *Queries) GetIdentityByLogin(ctx context.Context, arg GetIdentityByLoginParams) (UserIdentity, error) {
+	row := q.db.QueryRowContext(ctx, getIdentityByLogin, arg.Platform, arg.Login)
+	var i UserIdentity
+	err := row.Scan(
+		&i.Platform,
+		&i.PlatformUserID,
+		&i.UserID,
+		&i.Login,
+		&i.DisplayName,
+		&i.Color,
+		&i.AvatarUrl,
+		&i.Roles,
+		&i.FollowedAt,
+		&i.SubscribedAt,
+		&i.SubTier,
+		&i.AccountCreatedAt,
+		&i.DataUpdatedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUser = `-- name: GetUser :one
 SELECT id, title, notes, excluded, regular, entrance_command_id, created_at, updated_at FROM users WHERE id = ?
 `
@@ -259,6 +294,15 @@ func (q *Queries) PutUserStats(ctx context.Context, arg PutUserStatsParams) erro
 		arg.DonatedCents,
 		arg.Strikes,
 	)
+	return err
+}
+
+const resetStrikes = `-- name: ResetStrikes :exec
+UPDATE user_stats SET strikes = 0 WHERE strikes <> 0
+`
+
+func (q *Queries) ResetStrikes(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, resetStrikes)
 	return err
 }
 

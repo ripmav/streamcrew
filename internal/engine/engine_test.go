@@ -806,8 +806,8 @@ func TestShutdown(t *testing.T) {
 	}
 }
 
-// TestNotRunning: instances are only taken while Run runs, and Run runs
-// once.
+// TestNotRunning: instances are only taken while Run runs, Ready says
+// when it begins, and Run runs once.
 func TestNotRunning(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
@@ -816,10 +816,16 @@ func TestNotRunning(t *testing.T) {
 		cmd := command.Command{Name: "x", Kind: command.KindChat, ErrorPolicy: command.ErrorContinue}
 		_, err = e.Start(t.Context(), cmd, engine.Params{})
 		require.ErrorIs(t, err, engine.ErrNotRunning)
+		select {
+		case <-e.Ready():
+			t.Fatal("ready before Run")
+		default:
+		}
 
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		require.NoError(t, e.Run(ctx))
+		<-e.Ready()
 		require.ErrorIs(t, e.Run(ctx), engine.ErrAlreadyRunning)
 		_, err = e.Start(t.Context(), cmd, engine.Params{})
 		require.ErrorIs(t, err, engine.ErrClosed)

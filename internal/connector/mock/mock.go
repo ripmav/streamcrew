@@ -18,6 +18,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -136,6 +138,9 @@ type Platform struct {
 	// including the streamer's and the bot's.
 	users   map[string]user.Identity
 	channel connector.ChannelInfo
+	// present are the keys of the users in the chat: who wrote or joined
+	// and did not leave.
+	present map[string]bool
 	// lastID numbers the IDs the platform gives messages and events.
 	lastID int
 }
@@ -168,6 +173,7 @@ func New(r connector.Receiver, opts ...Option) (*Platform, error) {
 		dedup:     dedup,
 		streamer:  key(o.streamer.Login),
 		users:     map[string]user.Identity{key(o.streamer.Login): o.streamer},
+		present:   make(map[string]bool),
 	}
 	if o.bot != nil {
 		p.bot, p.hasBot = key(o.bot.Login), true
@@ -257,6 +263,42 @@ func (p *Platform) Streamer() user.Identity {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.users[p.streamer]
+}
+
+// Identity implements connector.Identities.
+func (p *Platform) Identity(a connector.Account) (user.Identity, bool) {
+	switch a {
+	case connector.AccountStreamer:
+		return p.Streamer(), true
+	case connector.AccountBot:
+		return p.Bot()
+	default:
+		return user.Identity{}, false
+	}
+}
+
+// Chatters implements connector.Chatters: the simulated users who wrote or
+// joined and did not leave, in the order of their login names.
+func (p *Platform) Chatters(context.Context) ([]user.Identity, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	keys := slices.Sorted(maps.Keys(p.present))
+	out := make([]user.Identity, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, p.users[k])
+	}
+	return out, nil
+}
+
+// setPresent records whether the user with the login name is in the chat.
+func (p *Platform) setPresent(login string, present bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if present {
+		p.present[key(login)] = true
+	} else {
+		delete(p.present, key(login))
+	}
 }
 
 // Bot returns the bot account; ok is false if the channel has none.

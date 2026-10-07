@@ -23,12 +23,14 @@ import (
 	"github.com/ripmav/streamcrew/internal/polydoc"
 )
 
-// The mock platform implements the port and the optional capabilities of
-// its chat.
+// The mock platform implements the port, its optional capabilities and
+// those of its chat.
 var (
-	_ connector.Platform  = (*mock.Platform)(nil)
-	_ connector.Replier   = (*mock.Platform)(nil).Chat().(connector.Replier)
-	_ connector.Whisperer = (*mock.Platform)(nil).Chat().(connector.Whisperer)
+	_ connector.Platform   = (*mock.Platform)(nil)
+	_ connector.Identities = (*mock.Platform)(nil)
+	_ connector.Chatters   = (*mock.Platform)(nil)
+	_ connector.Replier    = (*mock.Platform)(nil).Chat().(connector.Replier)
+	_ connector.Whisperer  = (*mock.Platform)(nil).Chat().(connector.Whisperer)
 )
 
 // receiver records what the platform hands over and fails with err.
@@ -421,4 +423,39 @@ func TestRegisterEvents(t *testing.T) {
 	require.NoError(t, mock.RegisterEvents(c))
 	e := event.New(event.Source{Kind: event.SourcePlatform, Name: "mock"}, mock.TypeOutput, mock.Output{Op: mock.OpSend})
 	require.NoError(t, c.Check(e))
+}
+
+// TestAccountsAndChatters covers the optional capabilities: the accounts
+// of the channel and the users in the chat.
+func TestAccountsAndChatters(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		p, _, _ := start(t, mock.WithBot("Bot"))
+		streamer, ok := p.Identity(connector.AccountStreamer)
+		require.True(t, ok)
+		assert.Equal(t, mock.DefaultStreamer, streamer.Login)
+		bot, ok := p.Identity(connector.AccountBot)
+		require.True(t, ok)
+		assert.Equal(t, "Bot", bot.Login)
+
+		ctx := t.Context()
+		_, err := p.Say(ctx, "carol", "hi")
+		require.NoError(t, err)
+		require.NoError(t, p.Join(ctx, "ada"))
+		chatters, err := p.Chatters(ctx)
+		require.NoError(t, err)
+		require.Len(t, chatters, 2)
+		assert.Equal(t, "ada", chatters[0].Login)
+		assert.Equal(t, "carol", chatters[1].Login)
+
+		_, err = p.Simulate(ctx, mock.Event{Type: eventtype.ChatUserLeave, User: "ada"})
+		require.NoError(t, err)
+		chatters, err = p.Chatters(ctx)
+		require.NoError(t, err)
+		require.Len(t, chatters, 1, "ada left")
+	})
+	q, err := mock.New(&receiver{})
+	require.NoError(t, err)
+	_, ok := q.Identity(connector.AccountBot)
+	assert.False(t, ok, "no bot")
 }
