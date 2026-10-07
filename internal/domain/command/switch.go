@@ -59,7 +59,9 @@ func (s *Service) SwitchCommand(ctx context.Context, commandID id.ID, sw Switch)
 	if !sw.Valid() {
 		return Command{}, fmt.Errorf("%w: unknown switch %q", ErrInvalid, sw)
 	}
-	if err := s.repo.SwitchCommands(ctx, []id.ID{commandID}, sw, now()); err != nil {
+	err := s.repo.SwitchCommands(ctx, []id.ID{commandID}, sw, now())
+	s.changed()
+	if err != nil {
 		return Command{}, fmt.Errorf("switch command %s %s: %w", commandID, sw, err)
 	}
 	return s.Command(ctx, commandID)
@@ -85,7 +87,9 @@ func (s *Service) SwitchGroup(ctx context.Context, groupID id.ID, sw Switch) err
 			ids = append(ids, rec.ID)
 		}
 	}
-	if err := s.repo.SwitchCommands(ctx, ids, sw, now()); err != nil {
+	err = s.repo.SwitchCommands(ctx, ids, sw, now())
+	s.changed()
+	if err != nil {
 		return fmt.Errorf("switch command group %s %s: %w", groupID, sw, err)
 	}
 	return nil
