@@ -7,11 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"path/filepath"
 	"strings"
 
+	"github.com/ripmav/streamcrew/internal/auth"
 	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
+	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/eventservice"
@@ -45,9 +48,23 @@ func newCatalog() (*event.Catalog, error) {
 		event.Register[Started](c, eventtype.AppStarted),
 		event.Register[Stopping](c, eventtype.AppStopping),
 		event.Register[supervisor.Status](c, TypeSupervisorStatus),
+		auth.RegisterEvents(c),
 		engine.RegisterEvents(c),
 		eventservice.RegisterEvents(c),
 	)
+}
+
+// authFlows returns the login flows of the platforms (roadmap 4.1); only
+// Twitch has one so far.
+func authFlows(client *http.Client) func(p platform.Name, clientID string) (auth.Flow, error) {
+	return func(p platform.Name, clientID string) (auth.Flow, error) {
+		switch p {
+		case platform.Twitch:
+			return auth.NewTwitch(clientID, client), nil
+		default:
+			return nil, fmt.Errorf("no login flow for platform %q", p)
+		}
+	}
 }
 
 // BackupDir returns the backup directory of a data directory.

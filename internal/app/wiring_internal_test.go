@@ -16,6 +16,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/connector/mock"
 	"github.com/ripmav/streamcrew/internal/domain/command"
+	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
@@ -58,6 +59,21 @@ func runPlatform(t *testing.T, mp *mock.Platform) {
 		}
 	}()
 	require.Eventually(t, func() bool { return mp.Status().Streamer }, 2*time.Second, time.Millisecond)
+}
+
+// TestCatalog covers the event types the bus knows: the application
+// events, the auth events of roadmap 4.1, and the types of the services.
+func TestCatalog(t *testing.T) {
+	t.Parallel()
+	c, err := newCatalog()
+	require.NoError(t, err)
+	types := c.Types()
+	assert.Contains(t, types, eventtype.AppStarted)
+	assert.Contains(t, types, eventtype.AppStopping)
+	assert.Contains(t, types, eventtype.AuthActionRequired)
+	assert.Contains(t, types, eventtype.AuthLoginCompleted)
+	assert.Contains(t, types, eventtype.AuthLoginFailed)
+	assert.Contains(t, types, TypeSupervisorStatus)
 }
 
 // TestUserLookup covers the lookup the core uses until the user service

@@ -241,7 +241,7 @@ CRUD inkl. Upsert-Semantik (erneuter Login ersetzt, `updated_at` neu) und
 
 ### Task 3 — `internal/auth`: Twitch-Device-Code-Flow
 
-**Status:** erledigt, PR folgt (Stack #146)
+**Status:** erledigt (Stack #146)
 **Zweig:** `feat/auth-device-flow` (auf `feat/auth-accounts-store`)
 **PR:** `feat(auth): Twitch device code flow`
 
@@ -289,6 +289,7 @@ CRUD inkl. Upsert-Semantik (erneuter Login ersetzt, `updated_at` neu) und
 
 ### Task 4 — `internal/auth`: Service, Token-Speicher, Refresh, Ereignisse
 
+**Status:** erledigt (Stack #146)
 **Zweig:** `feat/auth-service` (auf `feat/auth-device-flow`)
 **PR:** `feat(auth): accounts, encrypted tokens and the refresh loop`
 

@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package auth keeps the platform accounts of a profile (ADR-0014,
-// ADR-0023): it starts and follows logins, stores the tokens encrypted
-// in the vault, refreshes them before they expire, and reports which
-// accounts need a new login.
 package auth
 
 import (
