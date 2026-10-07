@@ -74,3 +74,10 @@ UPDATE user_identities SET
 WHERE platform = ? AND platform_user_id = ?;
 
 -- SPDX-License-Identifier: Apache-2.0
+
+-- name: GetIdentityByLogin :one
+SELECT * FROM user_identities WHERE platform = ? AND login = ? COLLATE NOCASE
+ORDER BY updated_at DESC, platform_user_id LIMIT 1;
+
+-- name: ResetStrikes :exec
+UPDATE user_stats SET strikes = 0 WHERE strikes <> 0;
