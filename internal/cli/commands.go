@@ -29,6 +29,7 @@ type Root struct {
 	config.Config
 
 	Serve      serveCmd   `cmd:"" help:"Run the core until SIGINT or SIGTERM."`
+	Mock       mockCmd    `cmd:"" help:"Run the core with the mock platform against a copy of the profile; the console simulates chat, events and the stream."`
 	ProfileCmd profileCmd `cmd:"" name:"profile" help:"Manage profiles. Changes need a stopped core."`
 	Backup     backupCmd  `cmd:"" help:"Create, list and restore profile backups."`
 	Vault      vaultCmd   `cmd:"" name:"secret" help:"Manage the key that encrypts tokens at rest."`
