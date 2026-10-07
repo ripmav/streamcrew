@@ -21,9 +21,15 @@ import (
 // (internal/domain/eventtype), so event commands cannot react to it.
 const TypeOutput event.Type = "mock.output"
 
-// RegisterEvents adds the event types of the mock platform to c.
+// RegisterEvents adds the event types of the platform to c.
 func RegisterEvents(c *event.Catalog) error {
 	return event.Register[Output](c, TypeOutput)
+}
+
+// RegisterEvents implements app.eventRegistrar: the bus of the core must
+// know the payload of mock.output.
+func (p *Platform) RegisterEvents(c *event.Catalog) error {
+	return RegisterEvents(c)
 }
 
 // Op is an operation the core asked of the mock platform.
