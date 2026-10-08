@@ -12,6 +12,8 @@
 - Commands enthalten Listen verschiedenartiger Actions und Requirements, dazu kommen Trigger, Settings-Sektionen, Overlay-Widgets und später Integrationen: jeweils viele Typen hinter einer gemeinsamen Schnittstelle (Plan §6.9).
 - Plan §6.9 sieht JSON-Dokumente mit `type`-Diskriminator und `schemaVersion` vor, Migrationen je Typversion und die Kodierung mit `encoding/json/v2`.
 - `encoding/json/v2` ist in go1.27.1 noch nur mit `GOEXPERIMENT=jsonv2` verfügbar (geprüft 2026-09-29). Plan §6.9 nahm das Gegenteil an.
+
+  *Berichtigt am 2026-09-30: Die Prüfung vom 2026-09-29 war falsch. In go1.27.1 gehört das Experiment `jsonv2` zum Standardsatz (`internal/buildcfg`); `encoding/json/v2` und `encoding/json/jsontext` stehen in `api/go1.27.txt` und bauen ohne `GOEXPERIMENT`, auch in der CI. Abschalten lässt es sich nur ausdrücklich mit `GOEXPERIMENT=nojsonv2`. Die Bedingung aus Punkt 7 ist damit erfüllt; der Wechsel von `internal/polydoc` braucht weiterhin das dort genannte ergänzende Code-ADR. Gefunden im Review von PR #42.*
 - Dieselben Dokumente erscheinen als Commands als Code in YAML (Plan §6.9, `go.yaml.in/yaml/v3` nach [Code-ADR-0005](0005-konfiguration.md)), in der API und später beim Import.
 - Typen ändern sich über die Versionen: Felder kommen hinzu, werden umbenannt oder bekommen eine andere Bedeutung. Gespeicherte Commands müssen trotzdem weiter laufen.
 - Eine Datenbank kann Typen enthalten, die die laufende Version nicht kennt, etwa nach einem Downgrade oder wenn ein Typ entfernt wurde. Solche Daten dürfen beim nächsten Speichern nicht verloren gehen.
@@ -71,3 +73,4 @@
 - [x] `internal/polydoc` mit Registry, Migrationskette, `Unknown` und Fuzz-Test umsetzen (Roadmap Phase 2.2), erledigt 2026-09-29
 - [x] Golden Files für die Versionen der ersten echten Typen, erledigt 2026-09-29 für die Anforderungsarten der Commands (`internal/domain/command/testdata`, neu geschrieben mit `STREAMCREW_UPDATE_GOLDEN=1`); die Action-Typen folgen in Phase 3 nach demselben Muster
 - [ ] Die Typ-Registry in Phase 3 auf `internal/polydoc` aufbauen
+- [ ] Ergänzendes Code-ADR zum Wechsel von `internal/polydoc` auf `encoding/json/v2` (Punkt 7); die Bedingung ist seit go1.27.1 erfüllt (berichtigt 2026-09-30)

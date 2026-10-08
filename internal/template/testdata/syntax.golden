@@ -1,0 +1,57 @@
+# Templates for TestRender_Golden, one per line, with the fictional test
+# family of helpers_test.go and the character family. Lines with "#" are
+# comments and go into the golden file unchanged.
+# B1: a token is "$" with letters, digits and colons; case does not matter
+in:  "Hello $username!"
+out: "Hello Alice!"
+
+in:  "Hello $UserName, and $USERNAME again."
+out: "Hello Alice, and Alice again."
+
+# B70: punctuation ends a token
+in:  "($username) $username's turn, $username."
+out: "(Alice) Alice's turn, Alice."
+
+# B1: colons belong to the token; the rest after the identifier stays
+in:  "$username:$time"
+out: "Alice:1:45 PM"
+
+# B2, B72: the longest known prefix wins, the rest of the token stays
+in:  "$usernames $timedigits $timedigitsAgo $timed"
+out: "Alices 13:45 13:45Ago 1:45 PMd"
+
+in:  "$arg1text2 $arg2text"
+out: "one2 two"
+
+# B32: line break, also as the longest prefix of a longer token
+in:  "one$linebreaktwo"
+out: "one\ntwo"
+
+# B33: characters by decimal number
+in:  "$unicode937 and $unicode10."
+out: "Ω and \n."
+
+# B71, B7: no escaping; the first "$" of "$$" is text
+in:  "$$username \\$username"
+out: "$Alice \\Alice"
+
+# B78: a literal "$" before an identifier name
+in:  "$unicode36username"
+out: "$username"
+
+# B3: unknown tokens and a lone "$" stay
+in:  "$unknown, $ alone, $5 and 5$"
+out: "$unknown, $ alone, $5 and 5$"
+
+# B4: identifiers without a value stay
+in:  "$targetusername $arg3text"
+out: "$targetusername $arg3text"
+
+# B6, B73: invalid numbers are no match, the token stays
+in:  "$unicode0 $unicode13 $unicode55296 $unicode1114112 $arg0text"
+out: "$unicode0 $unicode13 $unicode55296 $unicode1114112 $arg0text"
+
+# B23: a failing identifier stays
+in:  "$followage"
+out: "$followage"
+

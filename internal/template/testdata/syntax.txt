@@ -1,0 +1,30 @@
+# Templates for TestRender_Golden, one per line, with the fictional test
+# family of helpers_test.go and the character family. Lines with "#" are
+# comments and go into the golden file unchanged.
+
+# B1: a token is "$" with letters, digits and colons; case does not matter
+Hello $username!
+Hello $UserName, and $USERNAME again.
+# B70: punctuation ends a token
+($username) $username's turn, $username.
+# B1: colons belong to the token; the rest after the identifier stays
+$username:$time
+# B2, B72: the longest known prefix wins, the rest of the token stays
+$usernames $timedigits $timedigitsAgo $timed
+$arg1text2 $arg2text
+# B32: line break, also as the longest prefix of a longer token
+one$linebreaktwo
+# B33: characters by decimal number
+$unicode937 and $unicode10.
+# B71, B7: no escaping; the first "$" of "$$" is text
+$$username \$username
+# B78: a literal "$" before an identifier name
+$unicode36username
+# B3: unknown tokens and a lone "$" stay
+$unknown, $ alone, $5 and 5$
+# B4: identifiers without a value stay
+$targetusername $arg3text
+# B6, B73: invalid numbers are no match, the token stays
+$unicode0 $unicode13 $unicode55296 $unicode1114112 $arg0text
+# B23: a failing identifier stays
+$followage
