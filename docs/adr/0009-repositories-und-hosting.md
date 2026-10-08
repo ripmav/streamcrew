@@ -36,6 +36,7 @@
 5. **Arbeitsweise:**
    - `main` ist geschützt, gearbeitet wird auf Branches nach dem Schema `<präfix>/<kurzbeschreibung>`.
    - Abhängigkeits-Updates laufen automatisiert (Renovate oder Dependabot).
+   - Nach dem Merge löscht GitHub den Branch automatisch (Repository-Einstellung, aktiv seit 2026-09-28).
 
 ## Betrachtete Alternativen
 
