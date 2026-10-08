@@ -186,5 +186,5 @@
 - [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen; Code-ADR-0005 und ADR-0013 als ergänzt vermerken, erledigt 2026-10-01
 - [x] `internal/config`: `grant`, `revoke`, `file_root`, `outbound_allow` mit Prüfung, die Menge der Capabilities je Modus, das Nachladen der Datei und die Umgebung für Programme. Typ-Registry mit einer Quelle der Menge, Composition Root, Log, `doctor` und README-Tabelle (Roadmap 3.3, „Capability-Prüfung je Betriebsmodus“), erledigt 2026-10-01: `config.Rights`, `config.Live`, `config.Watcher`, `config.ProgramEnv`, `netguard.Allowlist`, `capability.Source`; die Composition Root hält die Rechte in `App.Rights` und gibt sie der Registry, sobald sie Engine und Registry baut (Roadmap 3.6)
 - [ ] Wurzeln in der Datei-Action und hinter `command.Roots` (Roadmap 3.3, `file`)
-- [ ] Umgebung ohne `STREAMCREW_*` in der Action `external_program` (Roadmap 3.3)
+- [x] Umgebung ohne `STREAMCREW_*` in der Action `external_program` (Roadmap 3.3), erledigt 2026-10-02: Port `host.Ports.Env`, der nicht nil sein darf
 - [ ] SSRF-Dialer mit gesperrten Netzen und der aktuellen Allowlist, ungenutzte Verbindungen nach einer Änderung schließen (Roadmap 3.3, `web_request`)
