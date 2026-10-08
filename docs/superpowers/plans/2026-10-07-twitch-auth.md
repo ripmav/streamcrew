@@ -422,6 +422,7 @@ type authLoginCmd struct {
 
 ### Task 6 — Doku: `events.md`, README, Roadmap-Aufräumen (Docs-PR, oberstes PR)
 
+**Status:** erledigt, PR #150
 **Zweig:** `docs/auth-events` (auf `feat/auth-cli`)
 **PR:** `docs: auth events, commands and roadmap 4.1`
 
@@ -522,7 +523,7 @@ BYO (eigene Confidential-App des Nutzers, Secret im Vault unter
 | R3 | `Flow`-Interface verallgemeinern (Login-Handle + Prompt statt nur DeviceAuthResponse); `twitchCodeFlow`: Authorize-URL, Loopback-Listener (localhost, state, Fehler-Redirect), Code-Austausch mit Secret; DCF-Implementierung bleibt; Tests gegen Fake-Server | `feat/auth-device-flow` / #147 | erledigt |
 | R4 | Service: `Credentials` (ID, Secret, DeviceFlow) für Start/Wait (flagless: App aus dem Vault auflösen, sonst Fehler), App-Credentials im Vault (`auth/<platform>/client`, Plattform-Ebene, mit Account/Token transaktional gespeichert), Flow-Auflösung je `flow`-Spalte (Secret aus Vault), Re-Login widerruft vorher best-effort, Logout entfernt Account + Token und behält die App-Credentials, `Status`/`Token` ohne Secret = `login_required`, `auth.action_required` im Code-Flow (URL, leeres `code`, Fensterende) | `feat/auth-service` / #148 | erledigt |
 | R5 | CLI: `auth login twitch` = Code-Flow-Standard, `--device-flow` (DCF), `--client-id`/`--client-secret` (erster Login, danach aus dem Vault; Flags überschreiben), Fehlermeldung ohne Credentials, Kong-Tests | `feat/auth-cli` / #149 | erledigt |
-| R6 | Doku: README (BYO-App-Setup + Redirect-Registrierung, `--device-flow`, Statusparagraf), `events.md` (Code-Flow-Semantik), Roadmap 4.1-Abschnitt + Historie, Plan-Status | `docs/auth-events` / #150 | offen |
+| R6 | Doku: README (BYO-App-Setup + Redirect-Registrierung, `--device-flow`, Statusparagraf), `events.md` (Code-Flow-Semantik), Roadmap 4.1-Abschnitt + Historie, Plan-Status | `docs/auth-events` / #150 | erledigt |
 
 **E2E (ersetzt §7.2):**
 
