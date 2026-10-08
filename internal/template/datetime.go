@@ -15,7 +15,7 @@ import (
 // assessment (roadmap Gate O, O.1).
 
 // The formats of the original, English (USA), until the profile has a locale
-// setting (B41, roadmap 3.2).
+// setting (B41, roadmap 3.6).
 const (
 	layoutDate     = "1/2/2006"
 	layoutTime     = "3:04 PM"
