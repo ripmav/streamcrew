@@ -139,6 +139,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
   - Cross-Builds für linux, windows und darwin (amd64, arm64)
   - Docker-Smoke-Test (`scripts/docker-smoke.sh`)
   - wöchentlich und auf Anforderung: Tests nativ unter Windows und macOS ([Code-ADR-0006](docs/adr/code/0006-teststrategie.md))
+  - Jeder Job hat einen eigenen Go-Cache (Module und Build-Ausgaben), damit Race-, Fuzz- und Cross-Builds die Abhängigkeiten nicht bei jedem Lauf neu kompilieren.
 - `.github/workflows/docs.yml` prüft die internen Links aller Markdown-Dateien.
 - Tests nutzen `testing` mit testify (`assert`, `require`) und `testing/synctest` für Zeitverhalten ([Code-ADR-0006](docs/adr/code/0006-teststrategie.md)).
 - Wie im Repository gearbeitet wird (Branches, Commits, ADR-Abnahme, Herkunftsregeln), steht in [`CONTRIBUTING.md`](CONTRIBUTING.md).
