@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/counter"
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/store/sqlcgen"
@@ -103,8 +104,8 @@ func (s *Store) updateCounter(ctx context.Context, name string, fn func(*counter
 		}
 		return q.UpdateCounter(ctx, sqlcgen.UpdateCounterParams{
 			Name:         c.Name,
-			Value:        c.Value,
-			Step:         c.Step,
+			Value:        c.Value.String(),
+			Step:         c.Step.String(),
 			ResetOnStart: flag(c.ResetOnStart),
 			UpdatedAt:    c.UpdatedAt.UnixMilli(),
 			ID:           c.ID.String(),
@@ -139,8 +140,8 @@ func insertCounter(ctx context.Context, q *sqlcgen.Queries, c counter.Counter) (
 	return c, q.InsertCounter(ctx, sqlcgen.InsertCounterParams{
 		ID:           c.ID.String(),
 		Name:         c.Name,
-		Value:        c.Value,
-		Step:         c.Step,
+		Value:        c.Value.String(),
+		Step:         c.Step.String(),
 		ResetOnStart: flag(c.ResetOnStart),
 		CreatedAt:    c.CreatedAt.UnixMilli(),
 		UpdatedAt:    c.UpdatedAt.UnixMilli(),
@@ -177,11 +178,19 @@ func toCounter(row sqlcgen.Counter) (counter.Counter, error) {
 	if err != nil {
 		return counter.Counter{}, err
 	}
+	value, err := decimal.Parse(row.Value)
+	if err != nil {
+		return counter.Counter{}, fmt.Errorf("counter %q: value: %w", row.Name, err)
+	}
+	step, err := decimal.Parse(row.Step)
+	if err != nil {
+		return counter.Counter{}, fmt.Errorf("counter %q: step: %w", row.Name, err)
+	}
 	return counter.Counter{
 		ID:           cid,
 		Name:         row.Name,
-		Value:        row.Value,
-		Step:         row.Step,
+		Value:        value,
+		Step:         step,
 		ResetOnStart: row.ResetOnStart != 0,
 		CreatedAt:    fromMillis(row.CreatedAt),
 		UpdatedAt:    fromMillis(row.UpdatedAt),

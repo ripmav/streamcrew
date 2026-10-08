@@ -34,7 +34,7 @@ type probe struct {
 }
 
 // secondsRange is the range of probe.Seconds.
-func secondsRange() action.Range { return action.Range{Min: 0, Max: 3600} }
+func secondsRange() action.Range { return action.Between(0, 3600) }
 
 func (probe) DocType() string { return "probe" }
 
@@ -90,7 +90,7 @@ func (switcher) DocType() string { return "switcher" }
 func (s switcher) Validate() error {
 	switch s.Kind {
 	case "a":
-		return s.N.Validate(action.Range{Min: 1, Max: 10, Integer: true})
+		return s.N.Validate(action.WholeBetween(1, 10))
 	case "b":
 		if !s.N.IsZero() {
 			return errors.New("kind b has no n")
@@ -108,7 +108,7 @@ func switcherType() action.Descriptor {
 		Category: action.CategoryModeration,
 		Schema: schema.Kinds(nil,
 			schema.Variant{Kind: "a", Props: []schema.Property{
-				{Name: "n", Schema: action.Range{Min: 1, Max: 10, Integer: true}.Schema(), Required: true},
+				{Name: "n", Schema: action.WholeBetween(1, 10).Schema(), Required: true},
 			}},
 			schema.Variant{Kind: "b"},
 		),
@@ -476,7 +476,7 @@ func TestAmountJSON(t *testing.T) {
 // TestAmount covers actions.md B4: ranges, whole numbers and expressions.
 func TestAmount(t *testing.T) {
 	t.Parallel()
-	whole := action.Range{Min: 0, Max: 1000, Integer: true}
+	whole := action.WholeBetween(0, 1000)
 	require.NoError(t, action.Fixed(decimal.New(1000)).Validate(whole))
 	require.ErrorIs(t, action.Fixed(decimal.New(1001)).Validate(whole), action.ErrInvalid)
 	require.ErrorIs(t, action.Fixed(oneAndAHalf(t)).Validate(whole), action.ErrInvalid, "fractions are not rounded")
@@ -509,7 +509,7 @@ func TestAmount(t *testing.T) {
 // same value as Eval.
 func TestAmountWithTexts(t *testing.T) {
 	t.Parallel()
-	whole := action.Range{Min: 0, Max: 1000, Integer: true}
+	whole := action.WholeBetween(0, 1000)
 	engine := template.New(nil)
 	scope := &template.Scope{ArgDelimiter: "|", Location: time.UTC}
 	scope.SetValue("n", template.IntValue(21))
@@ -528,7 +528,7 @@ func TestAmountWithTexts(t *testing.T) {
 	v, err := a.EvalWithTexts(texts, whole)
 	require.NoError(t, err)
 	assert.Equal(t, "45", v.String())
-	_, err = a.EvalWithTexts(texts, action.Range{Min: 0, Max: 10, Integer: true})
+	_, err = a.EvalWithTexts(texts, action.WholeBetween(0, 10))
 	require.ErrorIs(t, err, action.ErrInvalid, "45 is out of range")
 	_, err = a.EvalWithTexts(texts[:1], whole)
 	require.Error(t, err, "a text is missing")
@@ -559,7 +559,7 @@ func TestAmountDecimals(t *testing.T) {
 	t.Parallel()
 	engine := template.New(nil)
 	scope := &template.Scope{ArgDelimiter: "|", Location: time.UTC}
-	wide := action.Range{Min: -10, Max: 10}
+	wide := action.Between(-10, 10)
 	v, err := action.Expression("0.1 + 0.2").Eval(t.Context(), engine, scope, wide)
 	require.NoError(t, err)
 	assert.Equal(t, "0.3", v.String(), "exact, not 0.30000000000000004")

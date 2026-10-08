@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 
 // Package counter is the model of counters (spec counters-and-quotes.md, B1
-// to B8): named whole numbers of a profile, e.g. deaths in a game, that
-// actions change and identifiers print.
+// to B8): named numbers of a profile, e.g. deaths in a game, that actions
+// change and identifiers print. Values and steps are exact decimals
+// (Code-ADR-0020).
 //
 // The identifiers $<name> and $<name>display (B1, B4) come from the counter
 // source of the template engine (internal/template).
@@ -12,22 +13,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/id"
 )
 
-// Counter is a named whole number (B1, B5).
+// Counter is a named number (B1, B5).
 type Counter struct {
 	ID id.ID
 	// Name is also the name of the counter's identifier, "$<name>", and
 	// unique per profile regardless of case (B1).
-	Name  string
-	Value int64
-	// Step is what Increment adds and Decrement subtracts, at least 1 (B8).
-	// New counters have DefaultStep.
-	Step int64
+	Name string
+	// Value is the value, a decimal; the zero value is 0 (B5).
+	Value decimal.Decimal
+	// Step is what Increment adds and Decrement subtracts, greater than 0
+	// (B8). New counters have DefaultStep.
+	Step decimal.Decimal
 	// ResetOnStart sets the value to 0 when the core starts (B3).
 	ResetOnStart bool
 	// CreatedAt and UpdatedAt are maintained by the repository.
@@ -35,8 +37,8 @@ type Counter struct {
 	UpdatedAt time.Time
 }
 
-// ErrOverflow is returned when a change would leave the range of int64
-// (B43).
+// ErrOverflow is returned when a change would leave the range of decimals,
+// an absolute value of 10^34 or more (B43; Code-ADR-0020).
 var ErrOverflow = errors.New("counter value out of range")
 
 // ErrInvalid is wrapped by validation errors.
@@ -45,23 +47,25 @@ var ErrInvalid = errors.New("invalid counter")
 // maxNameLen is the maximum length of a counter name.
 const maxNameLen = 64
 
-// DefaultStep is the step of a new counter (B8).
-const DefaultStep = 1
+// DefaultStep returns the step of a new counter, 1 (B8).
+func DefaultStep() decimal.Decimal {
+	return decimal.New(1)
+}
 
 // New returns a new counter with the name: value 0, DefaultStep, not reset
 // on start.
 func New(name string) Counter {
-	return Counter{Name: name, Step: DefaultStep}
+	return Counter{Name: name, Step: DefaultStep()}
 }
 
 // Validate checks a counter before it is stored: a valid name (ValidateName)
-// and a step of at least 1 (B8).
+// and a step greater than 0 (B8, B44).
 func (c Counter) Validate() error {
 	if err := ValidateName(c.Name); err != nil {
 		return err
 	}
-	if c.Step < 1 {
-		return fmt.Errorf("%w: counter %q: step %d: want at least 1", ErrInvalid, c.Name, c.Step)
+	if c.Step.Sign() <= 0 {
+		return fmt.Errorf("%w: counter %q: step %s: want more than 0", ErrInvalid, c.Name, c.Step)
 	}
 	return nil
 }
@@ -104,36 +108,38 @@ func (c Counter) CheckReserved(r Reserver) error {
 	return nil
 }
 
-// Add adds delta, which may be negative (B2). If the result would leave the
-// range of int64, Add returns ErrOverflow and the value stays as it was
-// (B43).
-func (c *Counter) Add(delta int64) error {
-	if delta > 0 && c.Value > math.MaxInt64-delta || delta < 0 && c.Value < math.MinInt64-delta {
-		return fmt.Errorf("counter %q: %d %+d: %w", c.Name, c.Value, delta, ErrOverflow)
+// Add adds delta, which may be negative (B2), exactly if the result fits
+// the decimals, otherwise rounded like every calculation (B5;
+// Code-ADR-0020). If the result would leave their range, Add returns
+// ErrOverflow and the value stays as it was (B43).
+func (c *Counter) Add(delta decimal.Decimal) error {
+	v, err := c.Value.Add(delta)
+	if err != nil {
+		return fmt.Errorf("counter %q: %s + %s: %w: %w", c.Name, c.Value, delta, ErrOverflow, err)
 	}
-	c.Value += delta
+	c.Value = v
 	return nil
 }
 
 // Increment adds the step (B2, B8). Like Add, it returns ErrOverflow and
-// keeps the value if the result would leave the range of int64 (B43).
+// keeps the value if the result would leave the range (B43).
 func (c *Counter) Increment() error {
 	return c.Add(c.Step)
 }
 
 // Decrement subtracts the step (B2, B8), like Increment.
 func (c *Counter) Decrement() error {
-	return c.Add(-c.Step)
+	return c.Add(c.Step.Neg())
 }
 
 // Set sets the value (B2).
-func (c *Counter) Set(v int64) {
+func (c *Counter) Set(v decimal.Decimal) {
 	c.Value = v
 }
 
 // Reset sets the value to 0 (B2).
 func (c *Counter) Reset() {
-	c.Value = 0
+	c.Value = decimal.Decimal{}
 }
 
 // Repository stores counters; *store.Store implements it. Methods return an

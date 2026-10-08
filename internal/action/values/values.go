@@ -29,16 +29,11 @@ import (
 // point 1).
 const TypeCounter = "counter"
 
-// maxAmount bounds the amount of add and the value of set, 2^53 - 1 as
-// before amounts were decimals, until counters hold decimals too (roadmap
-// 3.5; Code-ADR-0020).
-const maxAmount = 1<<53 - 1
-
 // amountRange is the range of the amount of add and the value of set
-// (actions.md B4, B40): whole numbers up to maxAmount. The counter itself
-// and its step hold 64 bits (counters-and-quotes.md, B5, B8).
+// (actions.md B4, B40): every decimal, also with decimal places, as the
+// counter itself holds (counters-and-quotes.md, B5; Code-ADR-0020).
 func amountRange() action.Range {
-	return action.Range{Min: -maxAmount, Max: maxAmount, Integer: true}
+	return action.Range{Min: decimal.Max().Neg(), Max: decimal.Max()}
 }
 
 // CounterKind is what a counter action does (actions.md B40).
@@ -162,10 +157,10 @@ type Counter struct {
 	// creates a counter that does not exist with the value 0, and so does
 	// the action when it runs (B41).
 	Counter string `json:"counter"`
-	// Amount is what add adds, a whole number, also negative; no amount for
+	// Amount is what add adds, a decimal, also negative; no amount for
 	// the other kinds.
 	Amount action.Amount `json:"amount,omitzero"`
-	// Value is what set sets, a whole number; no amount for the other
+	// Value is what set sets, a decimal; no amount for the other
 	// kinds.
 	Value action.Amount `json:"value,omitzero"`
 	ports *ports
@@ -210,7 +205,7 @@ func (c Counter) References() []command.Reference {
 // Perform implements engine.Performer. The change is stored at once and is
 // atomic, and increment and decrement read the step in the same
 // transaction. A missing counter is created in it with the value 0 and the
-// default step (B41). A result beyond 64 bits lets the action fail, and the
+// default step (B41). A result beyond the decimals lets the action fail, and the
 // value stays as it was, or the counter is not created (B42).
 func (c Counter) Perform(ctx context.Context, run *engine.Run) error {
 	var change func(*counter.Counter) error
@@ -224,22 +219,14 @@ func (c Counter) Perform(ctx context.Context, run *engine.Run) error {
 		if err != nil {
 			return field("amount", err)
 		}
-		n, err := action.Whole(delta)
-		if err != nil {
-			return field("amount", err)
-		}
-		change = func(k *counter.Counter) error { return k.Add(n) }
+		change = func(k *counter.Counter) error { return k.Add(delta) }
 	case CounterSet:
 		v, err := c.Value.Eval(ctx, c.ports.Templates, run.Scope(), amountRange())
 		if err != nil {
 			return field("value", err)
 		}
-		n, err := action.Whole(v)
-		if err != nil {
-			return field("value", err)
-		}
 		change = func(k *counter.Counter) error {
-			k.Set(n)
+			k.Set(v)
 			return nil
 		}
 	case CounterReset:

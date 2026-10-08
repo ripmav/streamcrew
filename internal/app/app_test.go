@@ -21,6 +21,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/capability"
 	"github.com/ripmav/streamcrew/internal/config"
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/counter"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/lockfile"
@@ -222,9 +223,9 @@ func TestNewResetsCounters(t *testing.T) {
 
 	s, err := store.Open(ctx, path)
 	require.NoError(t, err)
-	_, err = s.CreateCounter(ctx, counter.Counter{Name: "session", Value: 5, Step: counter.DefaultStep, ResetOnStart: true})
+	_, err = s.CreateCounter(ctx, counter.Counter{Name: "session", Value: decimal.New(5), Step: counter.DefaultStep(), ResetOnStart: true})
 	require.NoError(t, err)
-	_, err = s.CreateCounter(ctx, counter.Counter{Name: "total", Value: 5, Step: counter.DefaultStep})
+	_, err = s.CreateCounter(ctx, counter.Counter{Name: "total", Value: decimal.New(5), Step: counter.DefaultStep()})
 	require.NoError(t, err)
 	require.NoError(t, s.Close())
 
@@ -238,10 +239,10 @@ func TestNewResetsCounters(t *testing.T) {
 	defer s.Close()
 	session, err := s.Counter(ctx, "session")
 	require.NoError(t, err)
-	assert.Zero(t, session.Value)
+	assert.True(t, session.Value.IsZero())
 	total, err := s.Counter(ctx, "total")
 	require.NoError(t, err)
-	assert.Equal(t, int64(5), total.Value)
+	assert.Equal(t, "5", total.Value.String())
 }
 
 func TestPreMigrationBackup(t *testing.T) {

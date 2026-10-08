@@ -66,6 +66,11 @@ func TestParse(t *testing.T) {
 		require.ErrorIs(t, err, decimal.ErrRange, in)
 	}
 	assert.Equal(t, "9999999999999999999999999999999999", num(t, "9999999999999999999999999999999999.4").String())
+	assert.Equal(t, "9999999999999999999999999999999999", decimal.Max().String())
+	_, err := decimal.Max().Add(num(t, "1e-34"))
+	require.NoError(t, err, "rounds back to the largest")
+	_, err = decimal.Max().Add(decimal.New(1))
+	require.ErrorIs(t, err, decimal.ErrRange)
 }
 
 // TestZeroValue: the zero value is 0.

@@ -15,6 +15,6 @@ UPDATE counters SET name = ?, value = ?, step = ?, reset_on_start = ?, updated_a
 DELETE FROM counters WHERE name = ?;
 
 -- name: ResetCountersOnStart :execrows
-UPDATE counters SET value = 0, updated_at = ? WHERE reset_on_start = 1;
+UPDATE counters SET value = '0', updated_at = ? WHERE reset_on_start = 1;
 
 -- SPDX-License-Identifier: MIT

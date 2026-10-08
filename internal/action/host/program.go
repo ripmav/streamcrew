@@ -47,7 +47,7 @@ const waitDelay = time.Second
 
 // timeoutRange is the range of the timeout (B110).
 func timeoutRange() action.Range {
-	return action.Range{Min: 1, Max: 3600, Integer: true}
+	return action.WholeBetween(1, 3600)
 }
 
 // ErrTimeout is the error of a program that ran longer than its timeout;

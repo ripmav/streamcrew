@@ -94,9 +94,9 @@ Nicht Teil dieser Spezifikation:
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B40 | **Counter** (`counter`), Arten: `increment` und `decrement` (um die Schrittweite des Counters erhöhen bzw. verringern), `add` (Betrag, ganze Zahl, auch negativ), `set` (Wert, ganze Zahl), `reset` (auf 0) ([`counters-and-quotes.md`](counters-and-quotes.md), B2, B8). | Q8, A15 |
+| B40 | **Counter** (`counter`), Arten: `increment` und `decrement` (um die Schrittweite des Counters erhöhen bzw. verringern), `add` (Betrag, eine Dezimalzahl, auch negativ), `set` (Wert, eine Dezimalzahl), `reset` (auf 0) ([`counters-and-quotes.md`](counters-and-quotes.md), B2, B8). | Q8, A15 |
 | B41 | Der Counter wird über seinen Namen gewählt. Nennt eine Action beim Speichern einen Counter, den es nicht gibt, legt das Speichern ihn mit dem Wert 0 an, nach den Namensregeln der Counter ([`counters-and-quotes.md`](counters-and-quotes.md), B1, B7). Fehlt er beim Ausführen, etwa weil er inzwischen gelöscht wurde, legt die Action ihn ebenso an und ändert ihn dann, in einem Schritt (B42); scheitert die Action vorher oder an der Änderung, entsteht kein Counter. | Q8, A21 |
-| B42 | Die Änderung ist atomar und sofort gespeichert ([`counters-and-quotes.md`](counters-and-quotes.md), B6): Addieren zwei Instanzen gleichzeitig, zählen beide. Ein Ergebnis außerhalb von 64 Bit lässt die Action scheitern, der Wert bleibt unverändert. | Q8, [`counters-and-quotes.md`](counters-and-quotes.md) B5 |
+| B42 | Die Änderung ist atomar und sofort gespeichert ([`counters-and-quotes.md`](counters-and-quotes.md), B6): Addieren zwei Instanzen gleichzeitig, zählen beide. Ein Ergebnis außerhalb des Wertebereichs der Counter ([`counters-and-quotes.md`](counters-and-quotes.md), B5) lässt die Action scheitern, der Wert bleibt unverändert. | Q8, [`counters-and-quotes.md`](counters-and-quotes.md) B5 |
 | B43 | Folgende Actions sehen den neuen Wert über **[Interop]** `$<name>` und `$<name>display`; weitere Ergebniswerte setzt die Action nicht. | Q8 |
 
 ### Special Identifier
@@ -211,7 +211,7 @@ Nicht Teil dieser Spezifikation:
 | B217 | Datei mit dem Pfad `../geheim.txt` | Die Action scheitert. | B102 |
 | B218 | Zwei Instanzen hängen gleichzeitig an dieselbe Datei an | Beide Zeilen stehen in der Datei. | B109 |
 | B219 | Externes Programm mit dem Argument `$arg1text`, das Argument lautet `x; rm -rf ~` | Das Programm bekommt genau ein Argument mit diesem Text; es gibt keine Shell. | B111 |
-| B220 | Counter `add` mit dem Betrag 1.5 | Die Action scheitert, der Counter bleibt. | B4, B40 |
+| B220 | Counter `add` mit dem Betrag 1.5 | Der Counter steigt um 1,5 (seit 2026-10-03; vorher scheiterte die Action). | B4, B40 |
 
 ## Abweichungen vom Original
 
@@ -309,3 +309,4 @@ Keine.
 | 2026-10-02 | B102 ergänzt (Entscheidung des Projektinhabers): Im Pfad der Datei-Action trennen `/` und `\` Verzeichnisse auf jedem System. Bisher trennte nur `/`, und unter Linux und macOS war `\` ein gewöhnliches Zeichen im Namen; ein Pfad wie `a\..\..\b` gilt dort jetzt ebenfalls als Weg aus der Wurzel. |
 | 2026-10-03 | Die bekannten Nutzer suchen die Chat-Action beim Flüstern (B63), die Moderation (B81, B84) und die Nutzersuche (B91) über die Suche des Durchlaufs (`engine.Run.UserByName`, [`command-engine.md`](command-engine.md), B17): Ein Nutzer, den der Durchlauf schon gefunden hat, etwa als Zielnutzer oder für ein Argument, wird nicht noch einmal gesucht, und Versuche und Zeitgrenze kommen aus den Settings. Die Suche über die Plattform für Unbekannte bleibt bis zum Nutzer-Service (Roadmap 5.2) in den Actions. Die Chat-Action hat dafür keinen eigenen Port mehr, Moderation und Nutzersuche keine eigene Suche nach Namen. |
 | 2026-10-03 | Mengenangaben sind exakte Dezimalzahlen (Code-ADR-0020, [`template.md`](template.md), B50); B4 ergänzt. Festlegungen dabei: Eine feste Mengenangabe, eine JSON-Zahl, wird exakt aus ihrem Text gelesen. Sekunden werden zu einer Dauer mit ganzen Nanosekunden, die Hälfte zur geraden Ziffer gerundet; das betrifft das Warten (B11), die Zeitgrenze des externen Programms und die Dauer der Moderation. Die Grenzen der Bereiche bleiben ganze Zahlen. Die Counter-Action rechnet noch mit ganzen Zahlen bis 2^53 − 1, bis die Counter selbst Dezimalzahlen halten (Roadmap 3.5). |
+| 2026-10-03 | Counter-Action mit Dezimalzahlen ([`counters-and-quotes.md`](counters-and-quotes.md), B5; Code-ADR-0020): Betrag und Wert sind Dezimalzahlen im Wertebereich der Counter; B40, B42 und der Randfall B220 angepasst. |

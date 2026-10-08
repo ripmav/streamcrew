@@ -37,7 +37,7 @@ const MaxEachLines = 1000
 // lineRange is the range of a line number (B100): from 1, at most as many
 // as a file of MaxFileSize can have lines.
 func lineRange() action.Range {
-	return action.Range{Min: 1, Max: MaxFileSize + 1, Integer: true}
+	return action.WholeBetween(1, MaxFileSize+1)
 }
 
 // rootPattern is the form of the names of released roots.

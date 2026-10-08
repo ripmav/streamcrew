@@ -3,83 +3,88 @@
 package counter_test
 
 import (
-	"math"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/counter"
 )
 
-// TestOperations covers B2.
+// num reads a decimal in a test.
+func num(t *testing.T, s string) decimal.Decimal {
+	t.Helper()
+	d, err := decimal.Parse(s)
+	require.NoError(t, err)
+	return d
+}
+
+// TestOperations covers B2 and B5: values are exact decimals.
 func TestOperations(t *testing.T) {
 	t.Parallel()
 	c := counter.New("deaths")
-	require.NoError(t, c.Add(3))
-	require.NoError(t, c.Add(-5))
-	assert.Equal(t, int64(-2), c.Value)
-	c.Set(40)
-	assert.Equal(t, int64(40), c.Value)
+	require.NoError(t, c.Add(decimal.New(3)))
+	require.NoError(t, c.Add(decimal.New(-5)))
+	assert.Equal(t, "-2", c.Value.String())
+	c.Set(num(t, "0.1"))
+	require.NoError(t, c.Add(num(t, "0.2")))
+	assert.Equal(t, "0.3", c.Value.String(), "B5: exact")
+	c.Set(decimal.New(40))
+	assert.Equal(t, "40", c.Value.String())
 	c.Reset()
-	assert.Zero(t, c.Value)
+	assert.True(t, c.Value.IsZero())
 }
 
 // TestNew covers B8: a new counter starts at 0 with the step 1.
 func TestNew(t *testing.T) {
 	t.Parallel()
 	c := counter.New("deaths")
-	assert.Equal(t, counter.Counter{Name: "deaths", Step: 1}, c)
+	assert.Equal(t, "deaths", c.Name)
+	assert.True(t, c.Value.IsZero())
+	assert.Equal(t, "1", c.Step.String())
+	assert.True(t, counter.DefaultStep().Equal(decimal.New(1)))
 	require.NoError(t, c.Validate())
 }
 
 // TestSteps covers B2 and B8: Increment and Decrement change the value by
-// the step, and keep it on an overflow (B43).
+// the step, also one with decimal places, and keep it on an overflow (B43).
 func TestSteps(t *testing.T) {
 	t.Parallel()
 	c := counter.New("points")
 	require.NoError(t, c.Increment())
-	assert.Equal(t, int64(1), c.Value)
-	c.Step = 10
+	assert.Equal(t, "1", c.Value.String())
+	c.Step = num(t, "2.5")
 	require.NoError(t, c.Increment())
 	require.NoError(t, c.Increment())
 	require.NoError(t, c.Decrement())
-	assert.Equal(t, int64(11), c.Value)
+	assert.Equal(t, "3.5", c.Value.String())
 
-	c.Set(math.MaxInt64 - 5)
+	c.Set(decimal.Max())
 	require.ErrorIs(t, c.Increment(), counter.ErrOverflow)
-	assert.Equal(t, int64(math.MaxInt64-5), c.Value)
-	c.Set(math.MinInt64 + 5)
+	assert.Equal(t, decimal.Max().String(), c.Value.String())
+	c.Set(decimal.Max().Neg())
 	require.ErrorIs(t, c.Decrement(), counter.ErrOverflow)
-	assert.Equal(t, int64(math.MinInt64+5), c.Value)
+	assert.Equal(t, decimal.Max().Neg().String(), c.Value.String())
 
-	c.Step = math.MaxInt64
+	c.Step = decimal.Max()
 	c.Reset()
 	require.NoError(t, c.Decrement(), "the largest step")
-	assert.Equal(t, int64(-math.MaxInt64), c.Value)
+	assert.Equal(t, decimal.Max().Neg().String(), c.Value.String())
 }
 
 // TestOverflow covers B43: Add reports an overflow, and the value stays as
 // it was.
 func TestOverflow(t *testing.T) {
 	t.Parallel()
-	c := counter.Counter{Name: "big", Value: math.MaxInt64 - 1, Step: counter.DefaultStep}
-	require.ErrorIs(t, c.Add(10), counter.ErrOverflow)
-	assert.Equal(t, int64(math.MaxInt64-1), c.Value)
-	require.NoError(t, c.Add(1), "up to the limit")
-	assert.Equal(t, int64(math.MaxInt64), c.Value)
-	require.ErrorIs(t, c.Add(1), counter.ErrOverflow)
-	assert.Equal(t, int64(math.MaxInt64), c.Value)
-
-	c.Set(math.MinInt64 + 1)
-	require.ErrorIs(t, c.Add(-2), counter.ErrOverflow)
-	assert.Equal(t, int64(math.MinInt64+1), c.Value)
-	require.NoError(t, c.Add(-1))
-	assert.Equal(t, int64(math.MinInt64), c.Value)
-	require.ErrorIs(t, c.Add(math.MinInt64), counter.ErrOverflow)
-	require.NoError(t, c.Add(math.MaxInt64))
-	assert.Equal(t, int64(-1), c.Value)
+	c := counter.Counter{Name: "big", Value: decimal.Max(), Step: counter.DefaultStep()}
+	require.ErrorIs(t, c.Add(decimal.New(1)), counter.ErrOverflow)
+	assert.Equal(t, decimal.Max().String(), c.Value.String())
+	require.NoError(t, c.Add(num(t, "-0.5")), "rounded to 34 digits, half to even")
+	assert.Equal(t, "9999999999999999999999999999999998", c.Value.String())
+	require.NoError(t, c.Add(decimal.New(1)))
+	assert.Equal(t, decimal.Max().String(), c.Value.String())
 }
 
 // TestValidate covers B7 and B8.
@@ -93,14 +98,14 @@ func TestValidate(t *testing.T) {
 		require.ErrorIs(t, counter.ValidateName(name), counter.ErrInvalid, name)
 		assert.ErrorIs(t, counter.New(name).Validate(), counter.ErrInvalid, name)
 	}
-	for _, step := range []int64{1, 10, math.MaxInt64} {
+	for _, step := range []string{"1", "10", "0.25", "1e-34", "9999999999999999999999999999999999"} {
 		c := counter.New("deaths")
-		c.Step = step
+		c.Step = num(t, step)
 		assert.NoError(t, c.Validate(), step)
 	}
-	for _, step := range []int64{0, -1, math.MinInt64} {
+	for _, step := range []string{"0", "-1", "-0.5"} {
 		c := counter.New("deaths")
-		c.Step = step
+		c.Step = num(t, step)
 		assert.ErrorIs(t, c.Validate(), counter.ErrInvalid, step)
 	}
 }

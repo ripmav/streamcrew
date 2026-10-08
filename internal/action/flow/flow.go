@@ -33,7 +33,7 @@ const (
 )
 
 // waitRange is the duration of a wait in seconds (actions.md B10).
-func waitRange() action.Range { return action.Range{Min: 0, Max: 3600} }
+func waitRange() action.Range { return action.Between(0, 3600) }
 
 // maxRepeats is how often an action may repeat other actions
 // (command-engine.md B74): the count of random and repeat, the passes of a
@@ -41,7 +41,7 @@ func waitRange() action.Range { return action.Range{Min: 0, Max: 3600} }
 const maxRepeats = 1000
 
 // countRange is the count of random and repeat (actions.md B11, B15).
-func countRange() action.Range { return action.Range{Min: 0, Max: maxRepeats, Integer: true} }
+func countRange() action.Range { return action.WholeBetween(0, maxRepeats) }
 
 // waitSlack is how much longer than its duration a wait may take before it
 // fails (actions.md B8).

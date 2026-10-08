@@ -70,9 +70,47 @@ func TestCounterStepMigration(t *testing.T) {
 
 	c, err := s.Counter(ctx, "deaths")
 	require.NoError(t, err)
-	assert.Equal(t, int64(4), c.Value)
-	assert.Equal(t, int64(1), c.Step)
+	assert.Equal(t, "4", c.Value.String())
+	assert.Equal(t, "1", c.Step.String())
 	require.NoError(t, c.Validate())
+}
+
+// TestCounterDecimalMigration covers counters-and-quotes.md B5 and B8:
+// whole values and steps of counters keep their digits as decimals, and
+// the way down cuts decimal places off.
+func TestCounterDecimalMigration(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, err := Open(ctx, filepath.Join(t.TempDir(), "p.db"))
+	require.NoError(t, err)
+	defer s.Close()
+	fsys, err := fs.Sub(migrations, "migrations")
+	require.NoError(t, err)
+	p, err := goose.NewProvider(goose.DialectSQLite3, s.write, fsys, goose.WithDisableGlobalRegistry(true))
+	require.NoError(t, err)
+
+	const beforeDecimals = 10
+	_, err = p.DownTo(ctx, beforeDecimals)
+	require.NoError(t, err)
+	_, err = s.write.ExecContext(ctx, `INSERT INTO counters (id, name, value, reset_on_start, created_at, updated_at, step) VALUES
+		('0190a5e0-0000-7000-8000-000000000001', 'deaths', -9223372036854775808, 1, 0, 0, 3)`)
+	require.NoError(t, err)
+	_, err = p.Up(ctx)
+	require.NoError(t, err)
+	c, err := s.Counter(ctx, "deaths")
+	require.NoError(t, err)
+	assert.Equal(t, "-9223372036854775808", c.Value.String())
+	assert.Equal(t, "3", c.Step.String())
+	assert.True(t, c.ResetOnStart)
+
+	_, err = s.write.ExecContext(ctx, `UPDATE counters SET value = '2.75', step = '0.5'`)
+	require.NoError(t, err)
+	_, err = p.DownTo(ctx, beforeDecimals)
+	require.NoError(t, err)
+	var value, step int64
+	require.NoError(t, s.write.QueryRowContext(ctx, "SELECT value, step FROM counters").Scan(&value, &step))
+	assert.Equal(t, int64(2), value)
+	assert.Equal(t, int64(1), step, "a step below 1 becomes 1")
 }
 
 // TestTriggerModeMigration covers commands.md B11, B13 and B14: chat
