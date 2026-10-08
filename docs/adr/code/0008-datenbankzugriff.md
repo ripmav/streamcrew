@@ -85,6 +85,6 @@
 **Folgearbeiten:**
 
 - [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
-- [ ] `internal/store` mit Pools, Migrationen, Transaktions-Helfer und Fehlerübersetzung umsetzen; `sqlc.yaml` anlegen (Roadmap Phase 2.1)
-- [ ] CI: `sqlc diff` im Checks-Job; Renovate-Regex-Manager um `go:generate`-Zeilen in Go-Dateien erweitern
+- [x] `internal/store` mit Pools, Migrationen, Transaktions-Helfer und Fehlerübersetzung umsetzen; `sqlc.yaml` anlegen (Roadmap Phase 2.1), erledigt 2026-09-29
+- [x] CI: `sqlc diff` im Checks-Job; Renovate-Regex-Manager um `go:generate`-Zeilen in Go-Dateien erweitern, erledigt 2026-09-29
 - [ ] Das Code-ADR zur Codegenerierung (Phase 6: `buf`, esbuild) nimmt die Konventionen dieses ADRs für sqlc auf

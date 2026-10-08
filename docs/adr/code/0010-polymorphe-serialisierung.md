@@ -68,5 +68,6 @@
 **Folgearbeiten:**
 
 - [x] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) anpassen und Plan §6.9 zu `encoding/json/v2` berichtigen, erledigt 2026-09-29
-- [ ] `internal/polydoc` mit Registry, Migrationskette, `Unknown`, Golden Files und Fuzz-Test umsetzen (Roadmap Phase 2.2)
+- [x] `internal/polydoc` mit Registry, Migrationskette, `Unknown` und Fuzz-Test umsetzen (Roadmap Phase 2.2), erledigt 2026-09-29
+- [ ] Golden Files für die Versionen der ersten echten Typen (Roadmap Phase 3); der Mechanismus selbst ist mit Erwartungen im Test abgedeckt
 - [ ] Die Typ-Registry in Phase 3 auf `internal/polydoc` aufbauen

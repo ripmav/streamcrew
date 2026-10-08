@@ -8,7 +8,7 @@
 
 ## Status
 
-Phase 1 (Fundament) ist umgesetzt: Toolchain, Linting, CI, Container-Image und das Skelett des Cores. `streamcrew serve` startet, meldet sich über `/healthz` und `/readyz` gesund und beendet sich sauber; fachliche Funktionen folgen ab Phase 2. Den Stand zeigt die [Roadmap](docs/roadmap.md).
+Phase 1 (Fundament) ist abgeschlossen. In Phase 2 stehen Speicher, Profile, Backups, Event-Bus und die Verschlüsselung der Secrets; das Domänenmodell (Nutzer, Rollen, Commands) folgt nach seinen Spezifikationen. `streamcrew serve` startet mit dem aktiven Profil, meldet sich über `/healthz` und `/readyz` gesund und beendet sich sauber. Den Stand zeigt die [Roadmap](docs/roadmap.md).
 
 Das Repository ist privat. Nur der Projektinhaber schaltet es öffentlich.
 
@@ -30,7 +30,22 @@ streamcrew version [-o json]      # Version, Commit, Go-Version, Plattform
 streamcrew config show [-o json]  # wirksame Konfiguration im Format der Konfigurationsdatei
 streamcrew config path [-o json]  # Konfigurationsdatei, Daten- und Log-Verzeichnis
 streamcrew doctor [-o json]       # Umgebung prüfen: Datenverzeichnis, Adresse, Zeitzonen
+
+streamcrew profile list [-o json]              # Profile; * markiert das aktive
+streamcrew profile create <name> [--id <id>]   # Profil anlegen; die ID folgt sonst aus dem Namen
+streamcrew profile rename <id> <name>          # Anzeigenamen ändern; die ID bleibt
+streamcrew profile use <id>                    # aktives Profil festlegen
+streamcrew profile delete <id> --yes           # löschen; vorher entsteht ein Backup
+
+streamcrew backup create                       # Backup des Profils, auch bei laufendem Core
+streamcrew backup list [-o json]               # Backups des Profils, neueste zuerst
+streamcrew backup restore <datei.zip> --yes    # zurückspielen; vorher wird der aktuelle Stand gesichert
+
+streamcrew secret rotate                       # neuen Schlüssel erzeugen, Tokens aller Profile neu verschlüsseln
 ```
+
+- `profile …` (außer `list`), `backup restore` und `secret rotate` brauchen einen gestoppten Core. Sie nehmen dieselbe Sperre wie `serve` und brechen sonst mit einem Hinweis ab ([ADR-0012](docs/adr/0012-persistenz.md)).
+- `backup …` wirkt auf das aktive Profil oder auf `--profile <id>`.
 
 Exit-Codes: `0` Erfolg, `1` Fehler, `2` ungültige Kommandozeile oder Konfiguration.
 
@@ -50,6 +65,7 @@ Die Startkonfiguration kommt aus Flags, Umgebungsvariablen und einer optionalen 
 |---|---|---|---|
 | `--config` | `STREAMCREW_CONFIG` | – | `config.yaml` im Standard-Datenverzeichnis, falls vorhanden |
 | `--data-dir` | `STREAMCREW_DATA_DIR` | `data_dir` | `os.UserConfigDir()/streamcrew`, z. B. `~/.config/streamcrew` |
+| `--profile` | `STREAMCREW_PROFILE` | `profile` | das aktive Profil (`profile use`); beim ersten Start `default` |
 | `--mode` | `STREAMCREW_MODE` | `mode` | `daemon`; außerdem `desktop` und `server` ([ADR-0003](docs/adr/0003-betriebsmodi.md)) |
 | `--listen` | `STREAMCREW_LISTEN` | `listen` | `127.0.0.1:8740`, im Server-Modus `:8740` |
 | `--dev` | `STREAMCREW_DEV` | `dev` | aus |
@@ -72,6 +88,20 @@ log_component_level:
 - Unbekannte Schlüssel in der Datei sind ein Fehler.
 - **Portabler Modus:** Liegt neben dem Binary eine Datei `streamcrew.portable`, liegen die Daten in `streamcrew-data` neben dem Binary.
 - Secrets werden in Logs maskiert ([Code-ADR-0003](docs/adr/code/0003-fehler-und-logging.md)).
+- Einstellungen, die während des Betriebs änderbar sind (Backup-Zeitplan, Zeitzone), liegen im Profil, nicht in der Startkonfiguration.
+
+### Datenverzeichnis
+
+| Pfad | Inhalt |
+|---|---|
+| `profiles/<id>.db` | SQLite-Datenbank je Profil ([ADR-0012](docs/adr/0012-persistenz.md)) |
+| `profiles/active` | ID des aktiven Profils |
+| `backups/<id>-<Zeit>.zip` | Backups mit `profile.db` und `manifest.json`; automatisch täglich um 04:00 in der Zeitzone des Profils, behalten werden 7 tägliche, 4 wöchentliche und 12 monatliche |
+| `logs/` | Log-Dateien (JSON Lines) |
+| `streamcrew.lock` | Sperre gegen einen zweiten Core auf demselben Verzeichnis |
+| `secret.key` | Schlüssel für die Tokens, nur ohne Schlüsselbund des Systems und ohne `STREAMCREW_SECRET_KEY` |
+
+**Tokens** liegen verschlüsselt (AES-256-GCM) in der Profildatenbank. Den Schlüssel sucht der Core in dieser Reihenfolge: `STREAMCREW_SECRET_KEY` (32 Byte in Base64), der Schlüsselbund des Systems, `secret.key`. Backups enthalten den Schlüssel nicht; für einen Umzug auf einen anderen Rechner wird er mitgenommen oder die Anmeldungen erfolgen neu.
 
 ## Container
 
@@ -80,7 +110,8 @@ docker build -t streamcrew .
 docker run -d --name streamcrew -p 8740:8740 -v streamcrew-data:/data streamcrew
 ```
 
-- Das Image enthält nur das statische Binary und die CA-Zertifikate (`scratch`, rund 16 MB) und läuft als Nutzer `65532`.
+- Das Image enthält nur das statische Binary und die CA-Zertifikate (`scratch`, rund 25 MB) und läuft als Nutzer `65532`.
+- Im Container gibt es keinen Schlüsselbund. Ohne `STREAMCREW_SECRET_KEY` legt der Core den Schlüssel als `/data/secret.key` ins selbe Volume wie die Daten; wer das Volume sichert, sichert dann den Schlüssel mit. Empfohlen: den Schlüssel über `-e STREAMCREW_SECRET_KEY=…` oder ein Secret des Orchestrierers übergeben (`openssl rand -base64 32`).
 - Voreingestellt sind der Server-Modus, das Datenverzeichnis `/data` (Volume), JSON-Logs auf stderr und kein Datei-Log. Ein eingebundenes Host-Verzeichnis muss für den Nutzer `65532` beschreibbar sein.
 - Für Orchestrierer eignen sich `/healthz` als Liveness- und `/readyz` als Readiness-Probe. Einen `HEALTHCHECK` im Image gibt es nicht, weil `scratch` kein Werkzeug für HTTP-Abfragen enthält.
 
@@ -99,6 +130,7 @@ scripts/fuzz.sh         # alle Fuzz-Ziele kurz laufen lassen (FUZZTIME, Standard
 scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network host", falls Build-Container kein Netz haben
 ```
 
+- Nach Änderungen an SQL in `internal/store/queries` oder `internal/store/migrations`: `go generate ./internal/store/...` (sqlc, per `go run` gepinnt). Die CI prüft mit `sqlc diff`, dass der generierte Code passt.
 - `scripts/check.sh` führt die Checkliste aus Plan §11.1 in der festgelegten Reihenfolge aus: `go fix`, `gofmt`, `go vet`, golangci-lint, `govulncheck`, `go test`. `go fix` und `gofmt` schreiben Dateien um; den Diff vor dem Commit ansehen.
 - Die CI (`.github/workflows/ci.yml`) wiederholt diese Prüfungen und ergänzt:
   - Tests mit Race-Detector
@@ -123,6 +155,14 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `internal/httpserver` | HTTP-Server mit `/healthz`, `/readyz`, pprof |
 | `internal/doctor` | Prüfungen für `streamcrew doctor` |
 | `internal/buildinfo` | Version aus den eingebetteten Build-Informationen |
+| `internal/domain/id` | IDs als UUIDv7 aus der Standardbibliothek ([Code-ADR-0009](docs/adr/code/0009-ids-und-zeit.md)) |
+| `internal/event` | Ereignisse, Katalog und nicht blockierender Event-Bus ([Code-ADR-0011](docs/adr/code/0011-event-bus.md)) |
+| `internal/polydoc` | polymorphe JSON-Dokumente mit Typ, Version und Migrationen ([Code-ADR-0010](docs/adr/code/0010-polymorphe-serialisierung.md)) |
+| `internal/store` | SQLite je Profil, goose-Migrationen, sqlc-Abfragen ([Code-ADR-0008](docs/adr/code/0008-datenbankzugriff.md)) |
+| `internal/profile`, `internal/lockfile` | Profile und die Sperre des Datenverzeichnisses ([ADR-0012](docs/adr/0012-persistenz.md)) |
+| `internal/settings` | typisierte Einstellungen je Profil |
+| `internal/backup` | Backups, Aufbewahrung, Zeitplan, Restore |
+| `internal/vault` | verschlüsselte Secrets und ihr Schlüssel |
 
 ## Abhängigkeiten
 
@@ -134,7 +174,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
   | Scope und Label | Inhalt |
   |---|---|
   | `(go)` / `go` | alle Go-Module, dazu die `go`-Direktive in `go.mod`; danach läuft `go mod tidy` |
-  | `(actions)` / `github-actions` | alle Actions, dazu die Werkzeugversionen in den Workflows (golangci-lint, `go-licenses`) |
+  | `(actions)` / `github-actions` | alle Actions, dazu die Werkzeugversionen in Workflows und `go:generate`-Zeilen (golangci-lint, `go-licenses`, sqlc) |
   | `(docker)` / `docker` | Basis-Images im `Dockerfile`, per Digest gepinnt |
 
   Beispiel für einen Titel: `fix(go): update go modules`. Jeder Pull Request trägt zusätzlich das Label `dependencies`.
