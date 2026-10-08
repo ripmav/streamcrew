@@ -469,7 +469,9 @@ Zuerst die Änderungen an Datenmodell und Engine aus den geklärten Fragen vom 2
 - [x] Eindeutige Command-Namen ohne Rücksicht auf die Schreibweise, damit Commands als Code einen Command an seinem Namen erkennen ([`commands.md`](spec/commands.md), B7; [`commands-as-code.md`](spec/commands-as-code.md), B22) (S), Entscheidung des Projektinhabers vom 2026-10-03, erledigt 2026-10-03: Spalte `name_key` (Migration 0013) und Go-Migration 14, die doppelte Namen umbenennt
 - [ ] YAML/JSON-Format (`apiVersion`, `kind`, `metadata`, `spec`) mit Import, Export und Validierung: `command validate|import|export` (M), begonnen 2026-10-03 ([`commands-as-code.md`](spec/commands-as-code.md)):
   - [x] Dateien lesen (YAML und JSON mit Zeile und Spalte, doppelte Schlüssel, YAML 1.2) und doppelte Namen in den Dateien finden (B60), erledigt 2026-10-03 in `internal/commandfile`
-  - [ ] `command validate`: Dokumente in Go dekodieren und prüfen (je Dokument der erste Fehler mit Zeile und Spalte), Namen in IDs auflösen, dieselben Prüfungen wie beim Speichern gegen das Profil, Konflikte der Trigger und Ereignistypen, Ausgabe als Text und JSON
+  - [ ] `command validate`:
+    - [x] Dokumente in Go umwandeln und prüfen, je Dokument der erste Fehler mit Zeile und Spalte, Namen in IDs auflösen (B1–B5, B10–B14, B20–B24), erledigt 2026-10-03 mit `commandfile.Convert`
+    - [ ] CLI mit denselben Prüfungen wie beim Speichern gegen das Profil, Konflikten der Trigger und Ereignistypen und Ausgabe als Text und JSON
   - [ ] `command import`: eine Transaktion, Ersetzen nach Namen, gestoppter Core
   - [ ] `command export`: YAML und JSON, `--file`, `--dir` mit der Version im Dateinamen, Rundlauf
 
@@ -1345,3 +1347,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-03 | Eindeutige Command-Namen (`commands.md`, B7): Schlüssel in Kleinbuchstaben nach Unicode mit eindeutigem Index; die erste Go-Migration des Stores (14) füllt ihn und benennt doppelte Namen um. |
 | 2026-10-03 | Schema-Export für Commands als Code (`commands-as-code.md`, B30): eine Datei mit Definitionen je Art sowie je Action- und Anforderungsart, Verweise als Namen, ohne `schemaVersion`; ein Test hält `schemas/` aktuell. Die Anforderungsarten haben jetzt Schemas mit Konformitätstest. Nebenbei behoben: `default` und `const` mit leerem Text, leerer Liste oder leerem Objekt fehlten in den Schemas der Action-Typen. |
 | 2026-10-03 | Commands als Code: Dateien lesen (`commandfile.Read`). Die Aufgabe „YAML/JSON-Format“ ist in vier Teilschritte aufgeteilt. Entscheidungen des Projektinhabers: Der Export mit `--dir` hängt die Version des Formats an den Dateinamen (`commands-as-code.md`, B38); Dateien prüft allein der Go-Code, ohne eigenen Prüfer gegen das Schema (B31, B32). |
+| 2026-10-03 | Commands als Code: Dokumente in Commands, Gruppen und Cooldown-Gruppen umwandeln (`commandfile.Convert`), Namen in IDs auflösen, je Dokument der erste Fehler mit seiner Stelle. |

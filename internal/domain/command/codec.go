@@ -72,6 +72,18 @@ func (c *Codec) RequirementTypes() []string {
 	return c.requirements.Types()
 }
 
+// Action decodes one action document; an unknown type comes back as
+// UnknownAction.
+func (c *Codec) Action(data []byte) (Action, error) {
+	return c.actions.Decode(data)
+}
+
+// Requirement decodes one requirement document; an unknown type comes back
+// as UnknownRequirement.
+func (c *Codec) Requirement(data []byte) (Requirement, error) {
+	return c.requirements.Decode(data)
+}
+
 // Record encodes a command.
 func (c *Codec) Record(cmd Command) (Record, error) {
 	reqs, err := encodeList(c.requirements, cmd.Requirements)

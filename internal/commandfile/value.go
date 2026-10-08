@@ -253,6 +253,8 @@ func typeName(typ string) string {
 		return "a number"
 	case "boolean":
 		return "a truth value"
+	case "object":
+		return "an object"
 	default:
 		return typ
 	}
