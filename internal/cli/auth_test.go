@@ -36,17 +36,19 @@ func testSecretKey() string {
 }
 
 // fakeLoginFlow is the login flow of the tests: Start returns a fixed
-// device response, Wait completes when the test releases it, the revokes
-// are counted, and the client IDs of the flows are remembered.
+// prompt (a code when the flow is a device code login), Wait completes when
+// the test releases it, the revokes are counted, and the credentials of the
+// flows are remembered.
 type fakeLoginFlow struct {
 	mu        sync.Mutex
 	release   chan struct{}
 	token     *oauth2.Token
 	userID    string
 	login     string
+	code      string
 	revoked   []string
 	revokeErr error
-	clientIDs []string
+	creds     []auth.Credentials
 }
 
 // newFakeLoginFlow returns a flow that grants the scopes of scopes (space
@@ -66,31 +68,26 @@ func newFakeLoginFlow(scopes string) *fakeLoginFlow {
 }
 
 // flows is the flows port of the command for the fake; it remembers the
-// client ID of every flow it makes, so that the tests can check which app
+// credentials of every flow it makes, so that the tests can check which app
 // a call was made with.
-func (f *fakeLoginFlow) flows() func(platform.Name, string) (auth.Flow, error) {
-	return func(_ platform.Name, clientID string) (auth.Flow, error) {
+func (f *fakeLoginFlow) flows() func(platform.Name, auth.Credentials) (auth.Flow, error) {
+	return func(_ platform.Name, c auth.Credentials) (auth.Flow, error) {
 		f.mu.Lock()
-		f.clientIDs = append(f.clientIDs, clientID)
+		f.creds = append(f.creds, c)
 		f.mu.Unlock()
 		return f, nil
 	}
 }
 
-func (f *fakeLoginFlow) Start(context.Context) (*oauth2.DeviceAuthResponse, error) {
-	return &oauth2.DeviceAuthResponse{
-		DeviceCode:      "dc-1",
-		UserCode:        "ABCD-EFGH",
-		VerificationURI: "https://www.twitch.tv/activate",
-		Interval:        1,
-		Expiry:          time.Now().Add(30 * time.Minute),
+func (f *fakeLoginFlow) Start(context.Context) (*auth.Login, *auth.Prompt, error) {
+	return &auth.Login{}, &auth.Prompt{
+		URL:    "https://id.twitch.tv/oauth2/authorize",
+		Code:   f.code,
+		Expiry: time.Now().Add(10 * time.Minute),
 	}, nil
 }
 
-func (f *fakeLoginFlow) Wait(ctx context.Context, da *oauth2.DeviceAuthResponse) (*oauth2.Token, error) {
-	if da.DeviceCode != "dc-1" {
-		return nil, errors.New("fake login flow: unknown device code")
-	}
+func (f *fakeLoginFlow) Wait(ctx context.Context, _ *auth.Login) (*oauth2.Token, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -131,10 +128,10 @@ func (f *fakeLoginFlow) revokedList() []string {
 	return slices.Clone(f.revoked)
 }
 
-func (f *fakeLoginFlow) clientIDList() []string {
+func (f *fakeLoginFlow) credsList() []auth.Credentials {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return slices.Clone(f.clientIDs)
+	return slices.Clone(f.creds)
 }
 
 // authEnv prepares a data directory with the profile "demo" and returns
@@ -159,16 +156,16 @@ func authEnv(ctx context.Context, t *testing.T) (*Env, string) {
 
 // login runs "auth login twitch" on the profile of env with the fake flow,
 // completing the login as soon as the prompt is up, and returns the output
-// of the command; bot and clientID are the flags of the command.
-func login(ctx context.Context, t *testing.T, env *Env, flow *fakeLoginFlow, bot bool, clientID string) (*syncedLog, error) {
+// of the command; bot selects the role, creds the flags of the command.
+func login(ctx context.Context, t *testing.T, env *Env, flow *fakeLoginFlow, bot bool, creds auth.Credentials) (*syncedLog, error) {
 	t.Helper()
 	stdout, stderr := &syncedLog{}, &syncedLog{}
 	env.Stdout, env.Stderr = stdout, stderr
-	cmd := authLoginCmd{Platform: "twitch", Bot: bot, ClientID: clientID, flows: flow.flows()}
+	cmd := authLoginCmd{Platform: "twitch", Bot: bot, DeviceFlow: creds.DeviceFlow, ClientID: creds.ID, ClientSecret: creds.Secret, flows: flow.flows()}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Run(ctx, env) }()
 	require.Eventually(t, func() bool {
-		return stdout.Contains("enter the code ABCD-EFGH")
+		return stdout.Contains("authorize the app") || stdout.Contains("enter the code")
 	}, 10*time.Second, 10*time.Millisecond, "the prompt of the login did not appear")
 	flow.complete()
 	select {
@@ -199,22 +196,23 @@ func TestAuthKong(t *testing.T) {
 	var root Root
 	parser, err := kong.New(&root, append(opts, kong.Exit(func(int) { t.Error("kong exited on a valid command line") }))...)
 	require.NoError(t, err, "the auth commands are a valid kong structure")
-	kctx, err := parser.Parse([]string{"auth", "login", "twitch", "--bot", "--client-id", "byo"})
+	kctx, err := parser.Parse([]string{"auth", "login", "twitch", "--bot", "--device-flow", "--client-id", "byo", "--client-secret", "s"})
 	require.NoError(t, err)
 	assert.Equal(t, "auth login <platform>", kctx.Command())
 	assert.True(t, root.Auth.Login.Bot)
+	assert.True(t, root.Auth.Login.DeviceFlow)
 	assert.Equal(t, "byo", root.Auth.Login.ClientID, "the flag is derived from ClientID")
+	assert.Equal(t, "s", root.Auth.Login.ClientSecret, "the flag is derived from ClientSecret")
 
 	kctx, err = parser.Parse([]string{"auth", "status", "-o", "json"})
 	require.NoError(t, err)
 	assert.Equal(t, "auth status", kctx.Command())
 	assert.Equal(t, "json", root.Auth.Status.Output)
 
-	kctx, err = parser.Parse([]string{"auth", "logout", "twitch", "--bot", "--client-id", "byo"})
+	kctx, err = parser.Parse([]string{"auth", "logout", "twitch", "--bot"})
 	require.NoError(t, err)
 	assert.Equal(t, "auth logout <platform>", kctx.Command())
 	assert.True(t, root.Auth.Logout.Bot)
-	assert.Equal(t, "byo", root.Auth.Logout.ClientID, "the flag is derived from ClientID")
 
 	bad, err := kong.New(&Root{}, append(opts, kong.Exit(func(int) {}))...)
 	require.NoError(t, err)
@@ -223,44 +221,74 @@ func TestAuthKong(t *testing.T) {
 }
 
 // TestAuthLogin covers the login end to end: the prompt, the result line,
-// and the account and the token in the store and the vault.
+// and the account and the token in the store and the vault. The subtests
+// run in order: the later ones build on the app stored by the first.
 func TestAuthLogin(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	env, dataDir := authEnv(ctx, t)
 	allScopes := strings.Join(auth.Scopes, " ")
+	app := auth.Credentials{ID: "app-1", Secret: "secret-1"}
 
-	t.Run("streamer", func(t *testing.T) {
-		flow := newFakeLoginFlow(allScopes)
-		stdout, err := login(ctx, t, env, flow, false, "")
-		require.NoError(t, err)
-		// The prompt as text for the user.
-		assert.Contains(t, stdout.String(),
-			"twitch: open https://www.twitch.tv/activate and enter the code ABCD-EFGH\n(the code expires in 30m)\n")
-		assert.Contains(t, stdout.String(), "twitch: logged in as streamy (streamer)\n")
-
-		// The account and the token are stored under the account of the
-		// login.
+	readAccount := func(t *testing.T, role string) store.Account {
+		t.Helper()
 		ro, err := store.OpenReadOnly(ctx, profile.NewManager(dataDir).Path("demo"))
 		require.NoError(t, err)
 		defer ro.Close()
 		list, err := ro.Accounts(ctx)
 		require.NoError(t, err)
-		require.Len(t, list, 1)
-		assert.Equal(t, "twitch", list[0].Platform)
-		assert.Equal(t, "streamer", list[0].Role)
-		assert.Equal(t, "streamy", list[0].Login)
-		assert.Equal(t, "u-1", list[0].UserID)
-		assert.Equal(t, allScopes, list[0].Scopes)
-		assert.Equal(t, auth.ClientID, list[0].ClientID, "the default client ID of the platform is stored")
+		for _, a := range list {
+			if a.Role == role {
+				return a
+			}
+		}
+		t.Fatalf("no account with role %q", role)
+		return store.Account{}
+	}
+
+	t.Run("streamer by the authorization code flow", func(t *testing.T) {
+		flow := newFakeLoginFlow(allScopes)
+		stdout, err := login(ctx, t, env, flow, false, app)
+		require.NoError(t, err)
+		// The prompt as text for the user.
+		assert.Contains(t, stdout.String(),
+			"twitch: open https://id.twitch.tv/oauth2/authorize and authorize the app\n(the login expires in 10m)\n")
+		assert.Contains(t, stdout.String(), "twitch: logged in as streamy (streamer)\n")
+		// The login flow is made with the BYO app, start and wait alike.
+		require.Equal(t, []auth.Credentials{app, app}, flow.credsList())
+
+		acc := readAccount(t, "streamer")
+		assert.Equal(t, "streamy", acc.Login)
+		assert.Equal(t, "u-1", acc.UserID)
+		assert.Equal(t, allScopes, acc.Scopes)
+		assert.Equal(t, "app-1", acc.ClientID, "the BYO client ID is stored with the account")
+		assert.Equal(t, auth.FlowAuthorizationCode, acc.Flow, "the flow column records the code flow")
+
+		ro, err := store.OpenReadOnly(ctx, profile.NewManager(dataDir).Path("demo"))
+		require.NoError(t, err)
+		defer ro.Close()
 		_, found, err := ro.GetSecret(ctx, "auth/twitch/streamer")
 		require.NoError(t, err)
 		assert.True(t, found, "the token is stored in the vault")
+		_, found, err = ro.GetSecret(ctx, "auth/twitch/client")
+		require.NoError(t, err)
+		assert.True(t, found, "the app credentials are stored in the vault")
+	})
+
+	t.Run("without flags the app of the last login is reused", func(t *testing.T) {
+		flow := newFakeLoginFlow(allScopes)
+		flow.login = "reuse"
+		stdout, err := login(ctx, t, env, flow, false, auth.Credentials{})
+		require.NoError(t, err)
+		assert.Contains(t, stdout.String(), "twitch: logged in as reuse (streamer)\n")
+		// The service resolved the stored app for the revoke of the
+		// previous login, the start, and the wait alike.
+		require.Equal(t, []auth.Credentials{app, app, app}, flow.credsList())
 	})
 
 	t.Run("bot", func(t *testing.T) {
 		flow := newFakeLoginFlow(allScopes)
-		stdout, err := login(ctx, t, env, flow, true, "")
+		stdout, err := login(ctx, t, env, flow, true, auth.Credentials{})
 		require.NoError(t, err)
 		assert.Contains(t, stdout.String(), "twitch: logged in as streamy (bot)\n")
 		ro, err := store.OpenReadOnly(ctx, profile.NewManager(dataDir).Path("demo"))
@@ -274,36 +302,58 @@ func TestAuthLogin(t *testing.T) {
 	t.Run("re-login replaces the account", func(t *testing.T) {
 		flow := newFakeLoginFlow(allScopes)
 		flow.login = "other"
-		stdout, err := login(ctx, t, env, flow, false, "")
+		other := auth.Credentials{ID: "app-2", Secret: "secret-2"}
+		stdout, err := login(ctx, t, env, flow, false, other)
 		require.NoError(t, err)
 		assert.Contains(t, stdout.String(), "twitch: logged in as other (streamer)\n")
-		ro, err := store.OpenReadOnly(ctx, profile.NewManager(dataDir).Path("demo"))
-		require.NoError(t, err)
-		defer ro.Close()
-		list, err := ro.Accounts(ctx)
-		require.NoError(t, err)
-		require.Len(t, list, 2, "the re-login replaces the streamer account, it does not add one")
-		for _, a := range list {
-			if a.Role == "streamer" {
-				assert.Equal(t, "other", a.Login, "the re-login updates the account")
-			}
-		}
+		assert.Equal(t, []string{"rt-1"}, flow.revokedList(), "the previous login is revoked")
+		assert.Equal(t, []auth.Credentials{other, other, app}, flow.credsList(),
+			"the start and the wait use the given app, the revoke the app of the previous login")
+		acc := readAccount(t, "streamer")
+		assert.Equal(t, "other", acc.Login, "the re-login updates the account")
+		assert.Equal(t, "app-2", acc.ClientID, "the re-login stores its app")
 	})
 }
 
-// TestAuthLoginClientID covers --client-id (BYO, ADR-0014): the login flow
-// is made with the given client ID, and it is stored with the account, so
-// that the later refreshes and revokes use the same app.
-func TestAuthLoginClientID(t *testing.T) {
+// TestAuthLoginErrors covers the command line errors of the login.
+func TestAuthLoginErrors(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	t.Run("the authorization code flow without an app fails", func(t *testing.T) {
+		t.Parallel()
+		env, _ := authEnv(ctx, t)
+		flow := newFakeLoginFlow(strings.Join(auth.Scopes, " "))
+		env.Stdout, env.Stderr = &syncedLog{}, &syncedLog{}
+		err := authLoginCmd{Platform: "twitch", flows: flow.flows()}.Run(ctx, env)
+		assert.ErrorContains(t, err, "no app for the login")
+	})
+
+	t.Run("the client ID without the secret fails", func(t *testing.T) {
+		t.Parallel()
+		env, _ := authEnv(ctx, t)
+		flow := newFakeLoginFlow(strings.Join(auth.Scopes, " "))
+		env.Stdout, env.Stderr = &syncedLog{}, &syncedLog{}
+		err := authLoginCmd{Platform: "twitch", ClientID: "app-x", flows: flow.flows()}.Run(ctx, env)
+		assert.ErrorContains(t, err, "given together")
+	})
+}
+
+// TestAuthLoginDeviceFlow covers the fallback of the device code flow
+// (ADR-0023): the prompt shows the code, the project app is used, and no
+// app credentials are stored.
+func TestAuthLoginDeviceFlow(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	env, dataDir := authEnv(ctx, t)
-	allScopes := strings.Join(auth.Scopes, " ")
 
-	flow := newFakeLoginFlow(allScopes)
-	_, err := login(ctx, t, env, flow, false, "byo-id")
+	flow := newFakeLoginFlow(strings.Join(auth.Scopes, " "))
+	flow.code = "ABCD-EFGH"
+	stdout, err := login(ctx, t, env, flow, true, auth.Credentials{DeviceFlow: true})
 	require.NoError(t, err)
-	require.Equal(t, []string{"byo-id", "byo-id"}, flow.clientIDList(), "the login flow is made with the BYO client ID")
+	assert.Contains(t, stdout.String(),
+		"twitch: open https://id.twitch.tv/oauth2/authorize and enter the code ABCD-EFGH\n(the code expires in 10m)\n")
+	assert.Contains(t, stdout.String(), "twitch: logged in as streamy (bot)\n")
 
 	ro, err := store.OpenReadOnly(ctx, profile.NewManager(dataDir).Path("demo"))
 	require.NoError(t, err)
@@ -311,7 +361,11 @@ func TestAuthLoginClientID(t *testing.T) {
 	list, err := ro.Accounts(ctx)
 	require.NoError(t, err)
 	require.Len(t, list, 1)
-	assert.Equal(t, "byo-id", list[0].ClientID, "the BYO client ID is stored with the account")
+	assert.Equal(t, auth.FlowDeviceCode, list[0].Flow, "the flow column records the device code flow")
+	assert.Equal(t, auth.ClientID, list[0].ClientID, "the project app is used by default")
+	_, found, err := ro.GetSecret(ctx, "auth/twitch/client")
+	require.NoError(t, err)
+	assert.False(t, found, "a device code login stores no app credentials")
 }
 
 // TestAuthLoginAbort covers that a canceled context stops the login with
@@ -327,11 +381,11 @@ func TestAuthLoginAbort(t *testing.T) {
 	flow := newFakeLoginFlow(strings.Join(auth.Scopes, " "))
 	stdout, stderr := &syncedLog{}, &syncedLog{}
 	env.Stdout, env.Stderr = stdout, stderr
-	cmd := authLoginCmd{Platform: "twitch", flows: flow.flows()}
+	cmd := authLoginCmd{Platform: "twitch", ClientID: "app-1", ClientSecret: "secret-1", flows: flow.flows()}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Run(abortCtx, env) }()
 	require.Eventually(t, func() bool {
-		return stdout.Contains("enter the code ABCD-EFGH")
+		return stdout.Contains("authorize the app")
 	}, 10*time.Second, 10*time.Millisecond, "the prompt of the login did not appear")
 	cancel()
 	select {
@@ -356,6 +410,7 @@ func TestAuthStatus(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	env, dataDir := authEnv(ctx, t)
+	byo := auth.Credentials{ID: "app-1", Secret: "secret-1"}
 
 	runStatus := func(output string) (string, error) {
 		stdout := &bytes.Buffer{}
@@ -374,10 +429,10 @@ func TestAuthStatus(t *testing.T) {
 	})
 
 	flow := newFakeLoginFlow(strings.Join(auth.Scopes, " "))
-	_, err := login(ctx, t, env, flow, false, "")
+	_, err := login(ctx, t, env, flow, false, byo)
 	require.NoError(t, err)
 	botFlow := newFakeLoginFlow("chat:read user:read:chat")
-	_, err = login(ctx, t, env, botFlow, true, "")
+	_, err = login(ctx, t, env, botFlow, true, auth.Credentials{})
 	require.NoError(t, err)
 
 	// parseRow splits a table row: the first four columns are fixed, the
@@ -470,7 +525,7 @@ func TestAuthStatusNoToken(t *testing.T) {
 	require.NoError(t, err)
 	err = w.UpsertAccount(ctx, store.Account{
 		Platform: "twitch", Role: "streamer", Login: "ghost", UserID: "u-9",
-		Scopes: strings.Join(auth.Scopes, " "), ClientID: auth.ClientID,
+		Scopes: strings.Join(auth.Scopes, " "), ClientID: auth.ClientID, Flow: auth.FlowDeviceCode,
 	})
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -484,12 +539,14 @@ func TestAuthStatusNoToken(t *testing.T) {
 	assert.Equal(t, []string{"twitch", "streamer", "ghost", "login_required", "-"}, strings.Fields(lines[1]))
 }
 
-// TestAuthLogout covers the logout: the refresh token is revoked, the
-// account and the token are removed, and a failed revoke keeps them.
+// TestAuthLogout covers the logout: the refresh token is revoked with the
+// client of the account row, the account and the token are removed, the app
+// credentials stay, and a failed revoke keeps them.
 func TestAuthLogout(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	env, dataDir := authEnv(ctx, t)
+	app := auth.Credentials{ID: "app-1", Secret: "secret-1"}
 
 	t.Run("no account", func(t *testing.T) {
 		env.Stdout, env.Stderr = &bytes.Buffer{}, &bytes.Buffer{}
@@ -498,16 +555,20 @@ func TestAuthLogout(t *testing.T) {
 	})
 
 	flow := newFakeLoginFlow(strings.Join(auth.Scopes, " "))
-	_, err := login(ctx, t, env, flow, false, "")
+	_, err := login(ctx, t, env, flow, false, app)
 	require.NoError(t, err)
 
-	t.Run("removes the account", func(t *testing.T) {
+	t.Run("removes the account, keeps the app credentials", func(t *testing.T) {
 		stdout := &bytes.Buffer{}
 		env.Stdout, env.Stderr = stdout, &bytes.Buffer{}
 		err := authLogoutCmd{Platform: "twitch", flows: flow.flows()}.Run(ctx, env)
 		require.NoError(t, err)
 		assert.Equal(t, "twitch: removed streamy (streamer)\n", stdout.String())
 		assert.Equal(t, []string{"rt-1"}, flow.revokedList(), "the refresh token is revoked")
+		// The revoke is made with the stored app (ADR-0023).
+		creds := flow.credsList()
+		require.NotEmpty(t, creds)
+		assert.Equal(t, app, creds[len(creds)-1], "the stored client ID and secret are used")
 
 		ro, err := store.OpenReadOnly(ctx, profile.NewManager(dataDir).Path("demo"))
 		require.NoError(t, err)
@@ -518,13 +579,16 @@ func TestAuthLogout(t *testing.T) {
 		_, found, err := ro.GetSecret(ctx, "auth/twitch/streamer")
 		require.NoError(t, err)
 		assert.False(t, found)
+		_, found, err = ro.GetSecret(ctx, "auth/twitch/client")
+		require.NoError(t, err)
+		assert.True(t, found, "the app credentials stay for the next login")
 	})
 
 	t.Run("revoke error keeps the account", func(t *testing.T) {
 		env2, dataDir2 := authEnv(ctx, t)
 		flow2 := newFakeLoginFlow(strings.Join(auth.Scopes, " "))
 		flow2.setRevokeErr(errors.New("revoke broken"))
-		_, err := login(ctx, t, env2, flow2, false, "")
+		_, err := login(ctx, t, env2, flow2, false, app)
 		require.NoError(t, err)
 
 		stdout := &bytes.Buffer{}
@@ -538,54 +602,5 @@ func TestAuthLogout(t *testing.T) {
 		list, err := ro.Accounts(ctx)
 		require.NoError(t, err)
 		assert.Len(t, list, 1, "the account stays, so that the logout can be retried")
-	})
-}
-
-// TestAuthLogoutClientID covers the client ID of the logout (ADR-0014): the
-// revoke is made with the client ID stored with the account; a missing one
-// falls back to the flag.
-func TestAuthLogoutClientID(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	env, dataDir := authEnv(ctx, t)
-	allScopes := strings.Join(auth.Scopes, " ")
-
-	runLogout := func(clientID string, flow *fakeLoginFlow) error {
-		t.Helper()
-		stdout := &bytes.Buffer{}
-		env.Stdout, env.Stderr = stdout, &bytes.Buffer{}
-		return authLogoutCmd{Platform: "twitch", ClientID: clientID, flows: flow.flows()}.Run(ctx, env)
-	}
-
-	t.Run("the stored client ID wins over the flag", func(t *testing.T) {
-		flow := newFakeLoginFlow(allScopes)
-		_, err := login(ctx, t, env, flow, false, "byo-id")
-		require.NoError(t, err)
-
-		require.NoError(t, runLogout("flag-id", flow))
-		ids := flow.clientIDList()
-		assert.Contains(t, ids, "byo-id", "the revoke is made with the client ID of the account")
-		assert.NotContains(t, ids, "flag-id", "the flag is ignored when the account has its own client ID")
-	})
-
-	t.Run("a missing stored client ID falls back to the flag", func(t *testing.T) {
-		flow := newFakeLoginFlow(allScopes)
-		_, err := login(ctx, t, env, flow, false, "")
-		require.NoError(t, err)
-		// Remove the client ID of the account, like an account from before
-		// the login recorded it.
-		w, err := store.Open(ctx, profile.NewManager(dataDir).Path("demo"))
-		require.NoError(t, err)
-		row, found, err := w.Account(ctx, "twitch", "streamer")
-		require.NoError(t, err)
-		require.True(t, found)
-		row.ClientID = ""
-		err = errors.Join(w.UpsertAccount(ctx, row), w.Close())
-		require.NoError(t, err)
-
-		require.NoError(t, runLogout("flag-id", flow))
-		ids := flow.clientIDList()
-		require.NotEmpty(t, ids)
-		assert.Equal(t, "flag-id", ids[len(ids)-1], "the revoke falls back to the client ID of the flag")
 	})
 }

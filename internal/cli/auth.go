@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The auth commands (roadmap 4.1): they log in the platform accounts of a
-// profile by the device code flow, show their state, and remove them again.
+// profile by the authorization code flow (the device code flow with
+// --device-flow), show their state, and remove them again (ADR-0023).
 // "auth login" and "auth logout" change the profile and take the data
 // directory lock; "auth status" reads the profile read-only and works while
 // the core runs.
@@ -29,24 +30,29 @@ import (
 
 // authCmd is the auth command group.
 type authCmd struct {
-	Login  authLoginCmd  `cmd:"" help:"Log in a Twitch account by the device code flow."`
+	Login  authLoginCmd  `cmd:"" help:"Log in a Twitch account by the authorization code flow (the device code flow with --device-flow)."`
 	Status authStatusCmd `cmd:"" help:"Show the logged-in accounts and their state."`
 	Logout authLogoutCmd `cmd:"" help:"Revoke the token and remove the account."`
 }
 
 type authLoginCmd struct {
-	Platform string `arg:"" enum:"twitch" help:"The platform to log in: ${enum}."`
-	Bot      bool   `help:"Log in the bot account instead of the streamer account."`
-	ClientID string `env:"-" help:"Client ID of a Twitch app instead of the project app (development, BYO)." default:""`
+	Platform     string `arg:"" enum:"twitch" help:"The platform to log in: ${enum}."`
+	Bot          bool   `help:"Log in the bot account instead of the streamer account."`
+	DeviceFlow   bool   `help:"Use the device code flow instead of the authorization code flow (fallback, ADR-0023)."`
+	ClientID     string `env:"-" help:"Client ID of your own Twitch app (BYO); without it the app of the last login is used." default:""`
+	ClientSecret string `env:"-" help:"Client secret of your own Twitch app, stored encrypted in the profile; given together with the client ID." default:""`
 
 	// flows is replaced by the tests; the real flows are the ones of the
 	// platforms.
-	flows func(p platform.Name, clientID string) (auth.Flow, error)
+	flows func(p platform.Name, c auth.Credentials) (auth.Flow, error)
 }
 
-// Run logs in the account by the device code flow (ADR-0014): it shows the
-// code the user enters at the URL and follows the login until the user
-// completes it, then it stores the account and its token.
+// Run logs in the account (ADR-0023): by default it starts the
+// authorization code flow, shows the URL the user opens to authorize the
+// app, and follows the login until the loopback redirect completes it; with
+// --device-flow it shows the code the user enters at the URL. The given app
+// (--client-id/--client-secret) is stored encrypted in the profile; without
+// it, the app of the last login of the platform is used.
 func (c authLoginCmd) Run(ctx context.Context, e *Env) (err error) {
 	cfg, err := e.resolve()
 	if err != nil {
@@ -93,14 +99,23 @@ func (c authLoginCmd) Run(ctx context.Context, e *Env) (err error) {
 		role = connector.AccountBot
 	}
 	p := platform.Name(c.Platform)
-	da, pr, err := svc.StartLogin(ctx, p, role, c.ClientID)
+	if !c.DeviceFlow && (c.ClientID == "") != (c.ClientSecret == "") {
+		return errors.New("the client ID and the client secret are given together: --client-id and --client-secret")
+	}
+	creds := auth.Credentials{ID: c.ClientID, Secret: c.ClientSecret, DeviceFlow: c.DeviceFlow}
+	lg, pr, err := svc.StartLogin(ctx, p, role, creds)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(e.Stdout, "%s: open %s and enter the code %s\n", p, pr.URL, pr.Code)
-	fmt.Fprintf(e.Stdout, "(the code expires in %s)\n", until(pr.Expiry))
+	if pr.Code == "" {
+		fmt.Fprintf(e.Stdout, "%s: open %s and authorize the app\n", p, pr.URL)
+		fmt.Fprintf(e.Stdout, "(the login expires in %s)\n", until(pr.Expiry))
+	} else {
+		fmt.Fprintf(e.Stdout, "%s: open %s and enter the code %s\n", p, pr.URL, pr.Code)
+		fmt.Fprintf(e.Stdout, "(the code expires in %s)\n", until(pr.Expiry))
+	}
 
-	acc, err := svc.WaitLogin(ctx, da, p, role, c.ClientID)
+	acc, err := svc.WaitLogin(ctx, lg, p, role, creds)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return fmt.Errorf("%s: login aborted", p)
@@ -175,15 +190,16 @@ func (c authStatusCmd) Run(ctx context.Context, e *Env) error {
 type authLogoutCmd struct {
 	Platform string `arg:"" enum:"twitch" help:"The platform to log out: ${enum}."`
 	Bot      bool   `help:"Log out the bot account instead of the streamer account."`
-	ClientID string `env:"-" help:"Client ID of the app the login was made with; defaults to the one of the account." default:""`
 
 	// flows is replaced by the tests; the real flows are the ones of the
 	// platforms.
-	flows func(p platform.Name, clientID string) (auth.Flow, error)
+	flows func(p platform.Name, c auth.Credentials) (auth.Flow, error)
 }
 
-// Run revokes the token of the account at the platform and removes the
-// account and its token (ADR-0014). A failed revoke keeps both.
+// Run revokes the token of the account at the platform with the client of
+// the account row and removes the account and its token (ADR-0023); the app
+// credentials of the platform stay for the next login. A failed revoke keeps
+// the account and the token, so that the logout can be retried.
 func (c authLogoutCmd) Run(ctx context.Context, e *Env) (err error) {
 	cfg, err := e.resolve()
 	if err != nil {
@@ -237,7 +253,7 @@ func (c authLogoutCmd) Run(ctx context.Context, e *Env) (err error) {
 	if !found {
 		return fmt.Errorf("%s %s: %w", p, role, auth.ErrNoAccount)
 	}
-	if err := svc.Logout(ctx, p, role, c.ClientID); err != nil {
+	if err := svc.Logout(ctx, p, role); err != nil {
 		return err
 	}
 	_, err = fmt.Fprintf(e.Stdout, "%s: removed %s (%s)\n", p, row.Login, role)
@@ -247,7 +263,7 @@ func (c authLogoutCmd) Run(ctx context.Context, e *Env) (err error) {
 // authService is the auth service of the CLI commands over the profile
 // store; the tokens join the transactions of the store through the vault
 // factory (Code-ADR-0008). The commands publish no auth events.
-func authService(st auth.Store, ks *vault.KeySet, flows func(p platform.Name, clientID string) (auth.Flow, error)) (*auth.Service, error) {
+func authService(st auth.Store, ks *vault.KeySet, flows func(p platform.Name, c auth.Credentials) (auth.Flow, error)) (*auth.Service, error) {
 	return auth.New(auth.Ports{
 		Store:  st,
 		Vault:  func(repo vault.Repository) *vault.Vault { return vault.New(repo, ks) },
@@ -256,14 +272,15 @@ func authService(st auth.Store, ks *vault.KeySet, flows func(p platform.Name, cl
 	})
 }
 
-// realFlows returns the login flows of the platforms for a client ID; only
-// Twitch has one so far (roadmap 4.1), like the flows of the core.
-func realFlows() func(p platform.Name, clientID string) (auth.Flow, error) {
+// realFlows returns the login flows of the platforms for their
+// credentials; only Twitch has one so far (roadmap 4.1), like the flows of
+// the core.
+func realFlows() func(p platform.Name, c auth.Credentials) (auth.Flow, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
-	return func(p platform.Name, clientID string) (auth.Flow, error) {
+	return func(p platform.Name, c auth.Credentials) (auth.Flow, error) {
 		switch p {
 		case platform.Twitch:
-			return auth.NewTwitch(clientID, client), nil
+			return auth.NewTwitch(c, client)
 		default:
 			return nil, fmt.Errorf("no login flow for platform %q", p)
 		}
@@ -272,7 +289,7 @@ func realFlows() func(p platform.Name, clientID string) (auth.Flow, error) {
 
 // noFlows is the flows port of "auth status", which never starts or
 // refreshes a login.
-func noFlows(p platform.Name, _ string) (auth.Flow, error) {
+func noFlows(p platform.Name, _ auth.Credentials) (auth.Flow, error) {
 	return nil, fmt.Errorf("no login flow for platform %q in auth status", p)
 }
 
