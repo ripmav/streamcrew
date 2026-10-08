@@ -16,6 +16,15 @@ const (
 	// KeyRequirementRole tells that the command needs the role role or a
 	// higher one (requirements.md, B12).
 	KeyRequirementRole Key = "requirement.role"
+	// KeyRequirementArgumentsUsage shows how to use the command, its
+	// trigger and arguments as usage (requirements.md, B32).
+	KeyRequirementArgumentsUsage Key = "requirement.arguments.usage"
+	// KeyRequirementArgumentsType says that the argument argument needs a
+	// value of the type type (requirements.md, B33).
+	KeyRequirementArgumentsType Key = "requirement.arguments.type"
+	// KeyRequirementArgumentsUser says that there is no user name for the
+	// argument argument (requirements.md, B33).
+	KeyRequirementArgumentsUser Key = "requirement.arguments.user"
 	// KeyRequirementCooldownAll says that the command is blocked for
 	// everyone for the duration remaining (requirements.md, B24).
 	KeyRequirementCooldownAll Key = "requirement.cooldown.all"

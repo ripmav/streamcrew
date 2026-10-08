@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -120,6 +121,37 @@ func (c *cooldowns) fail(err error) {
 	c.err = err
 }
 
+// users is a fake of engine.Users: users by platform and lowercase login
+// name.
+type users struct {
+	mu     sync.Mutex
+	byName map[platform.Name]map[string]user.User
+	err    error
+}
+
+func newUsers(people ...*user.User) *users {
+	u := &users{byName: make(map[platform.Name]map[string]user.User)}
+	for _, p := range people {
+		for _, ident := range p.Identities {
+			if u.byName[ident.Platform] == nil {
+				u.byName[ident.Platform] = make(map[string]user.User)
+			}
+			u.byName[ident.Platform][strings.ToLower(ident.Login)] = *p
+		}
+	}
+	return u
+}
+
+func (u *users) UserByName(_ context.Context, p platform.Name, name string) (user.User, bool, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.err != nil {
+		return user.User{}, false, u.err
+	}
+	found, ok := u.byName[p][strings.ToLower(name)]
+	return found, ok, nil
+}
+
 // streamer is a fake of requirement.Streamer.
 type streamer map[platform.Name]id.ID
 
@@ -141,6 +173,8 @@ type fixture struct {
 	cooldowns *cooldowns
 	// streamer has the user of the streamer on Twitch and Kick.
 	streamer streamer
+	// users knows bob on Twitch and kim on Kick.
+	users *users
 }
 
 func newFixture(t *testing.T, lang language) *fixture {
@@ -153,12 +187,13 @@ func newFixture(t *testing.T, lang language) *fixture {
 		logs:      &bytes.Buffer{},
 		cooldowns: newCooldowns(),
 		streamer:  streamer{platform.Twitch: id.New(), platform.Kick: id.New()},
+		users:     newUsers(person("bob", platform.Twitch), person("kim", platform.Kick)),
 	}
 	set, err := connector.NewSet(f.twitch, f.kick)
 	require.NoError(t, err)
 	f.service, err = requirement.New(requirement.Ports{
 		Catalog: catalog, Language: lang, Platforms: set,
-		Cooldowns: f.cooldowns, Streamer: f.streamer,
+		Cooldowns: f.cooldowns, Streamer: f.streamer, Users: f.users,
 		Logger: slog.New(slog.NewTextHandler(f.logs, nil)),
 	})
 	require.NoError(t, err)
@@ -274,20 +309,21 @@ func TestFaulty(t *testing.T) {
 	}
 }
 
-// TestNotSupported: arguments and thresholds cannot be decided yet; the
-// service says so instead of guessing (B1), and starts no cooldown.
+// TestNotSupported: thresholds cannot be decided yet; the service says so
+// instead of guessing (B1), after the arguments, and starts no cooldown.
 func TestNotSupported(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, language{lang: i18n.English})
 	minute := command.CooldownRequirement{Scope: command.CooldownStandard, Duration: polydoc.Duration(time.Minute)}
-	for _, req := range []command.Requirement{
-		command.ArgumentsRequirement{Arguments: []command.Argument{{Name: "a", Type: command.ArgumentText}}},
-		command.ThresholdRequirement{Users: 2, Within: 1},
-	} {
-		_, err := f.service.Apply(t.Context(), cmd(req, minute), chat(person("ada", platform.Twitch)))
-		require.ErrorIs(t, err, requirement.ErrNotSupported, req.DocType())
-	}
+	threshold := command.ThresholdRequirement{Users: 2, Within: 1}
+	_, err := f.service.Apply(t.Context(), cmd(threshold, minute), chat(person("ada", platform.Twitch)))
+	require.ErrorIs(t, err, requirement.ErrNotSupported)
 	assert.Empty(t, f.cooldowns.running())
+
+	needed := command.ArgumentsRequirement{Arguments: []command.Argument{{Name: "a", Type: command.ArgumentText, Required: true}}}
+	d, err := f.service.Apply(t.Context(), cmd(threshold, needed), chat(person("ada", platform.Twitch)))
+	require.NoError(t, err)
+	assert.Equal(t, command.TypeArguments, d.Rejection.Requirement, "the arguments come before the threshold")
 }
 
 // TestNotify covers requirements.md B70 to B72: the reason in the language
@@ -358,7 +394,7 @@ func TestNew(t *testing.T) {
 	require.NoError(t, err)
 	full := requirement.Ports{
 		Catalog: catalog, Language: language{}, Platforms: set,
-		Cooldowns: newCooldowns(), Streamer: streamer{}, Logger: slog.New(slog.DiscardHandler),
+		Cooldowns: newCooldowns(), Streamer: streamer{}, Users: newUsers(), Logger: slog.New(slog.DiscardHandler),
 	}
 	for name, change := range map[string]func(*requirement.Ports){
 		"catalog":   func(p *requirement.Ports) { p.Catalog = nil },
@@ -366,6 +402,7 @@ func TestNew(t *testing.T) {
 		"platforms": func(p *requirement.Ports) { p.Platforms = nil },
 		"cooldowns": func(p *requirement.Ports) { p.Cooldowns = nil },
 		"streamer":  func(p *requirement.Ports) { p.Streamer = nil },
+		"users":     func(p *requirement.Ports) { p.Users = nil },
 		"logger":    func(p *requirement.Ports) { p.Logger = nil },
 	} {
 		p := full
