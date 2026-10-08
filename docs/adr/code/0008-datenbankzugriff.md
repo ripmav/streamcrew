@@ -50,6 +50,8 @@
 6. **Repositories:** `internal/store` implementiert die Interfaces, die die Konsumenten definieren ([Code-ADR-0002](0002-dependency-injection.md)).
    - Sie übersetzen zwischen sqlc-Zeilen und Domänentypen; sqlc-Typen verlassen `internal/store` nicht.
    - Schreibende Abläufe laufen in einer Transaktion auf dem Schreib-Pool über einen Helfer, der bei einem Fehler zurückrollt. Lesende Abfragen nutzen den Lese-Pool.
+
+     *Ergänzt am 2026-10-03 (Entscheidung des Projektinhabers) für den Import von Commands als Code ([`commands-as-code.md`](../../spec/commands-as-code.md), B33): `Store.Atomically(ctx, fn)` gibt `fn` einen Store, dessen Lesen und Schreiben über eine Transaktion auf dem Schreib-Pool laufen; sie wird bestätigt, wenn `fn` ohne Fehler endet, sonst zurückgerollt. So gelingen mehrere Speichervorgänge der Services gemeinsam oder keiner. Lesen innerhalb dieser Transaktion nutzt nicht den Lese-Pool, damit es die Schreibvorgänge davor sieht. Ein Aufruf auf einem solchen Store läuft in derselben Transaktion; schließen lässt er sich nicht.*
    - Fehler werden an der Grenze übersetzt ([Code-ADR-0003](0003-fehler-und-logging.md)): `sql.ErrNoRows` zu `store.ErrNotFound`, Verletzungen von Eindeutigkeit und Fremdschlüsseln zu `store.ErrConflict`.
 7. **Tests** laufen gegen eine echte SQLite in `t.TempDir()` ([Code-ADR-0006](0006-teststrategie.md)), ohne Build-Tags und ohne Fakes für die Datenbank.
 
