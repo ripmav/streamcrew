@@ -171,6 +171,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `internal/action/flow` | Actions für den Ablauf: Warten, Zufall, Gruppe, Wiederholen, Bedingung ([Spezifikation](docs/spec/actions.md), B10–B29) |
 | `internal/action/commands` | Command-Action: Commands ausführen und schalten, Warteschlange abbrechen und pausieren, Cooldowns starten, Command beenden ([Spezifikation](docs/spec/actions.md), B30–B38) |
 | `internal/action/values` | Actions für Werte: Counter mit Schritten, Betrag, Setzen und Zurücksetzen; Special Identifier mit Textfunktionen, Rechnen und globalen Werten ([Spezifikation](docs/spec/actions.md), B40–B57) |
+| `internal/connector` | Ports der Streaming-Plattformen: Chat mit Antworten und Flüstern, Moderation, Nutzersuche, Kanalinformation; die Plattformen eines Profils und die Suche von Konten; Fakes in `internal/connector/connectortest` ([Plan §6.11](docs/plan.md)) |
 | `internal/capability` | Capabilities nach dem Sicherheitsmodell ([ADR-0013](docs/adr/0013-sicherheitsmodell.md)) |
 | `internal/event` | Ereignisse, Katalog und nicht blockierender Event-Bus ([Code-ADR-0011](docs/adr/code/0011-event-bus.md)) |
 | `internal/polydoc` | polymorphe JSON-Dokumente mit Typ, Version und Migrationen, auch verschachtelt, auf `encoding/json/v2` ([Code-ADR-0010](docs/adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0018](docs/adr/code/0018-json-v2.md), [Code-ADR-0013](docs/adr/code/0013-typ-registry.md)) |
