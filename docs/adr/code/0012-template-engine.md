@@ -57,6 +57,8 @@
 
    *Ergänzt am 2026-10-01 für die Bedingung ([`actions.md`](../../spec/actions.md), B22, B24, B27): `Expression.Templates` und `Expression.EvalWithTexts` lassen einen Aufrufer die Identifier eines Ausdrucks zusammen mit anderen Templates in einem Rendervorgang auflösen. `template.Engine.RenderEach` meldet je Template, ob jedes Token einen Wert bekommen hat (`template.Rendered.Replaced`), für den Vergleich `replaced`. `expr.ParseNumber` stellt die Regel aus B51, was als Zahl gilt, auch dem Vergleich der Bedingung bereit.*
 
+   *Ergänzt am 2026-10-02 für den Web-Request ([`actions.md`](../../spec/actions.md), B3, B71): `template.Engine.RenderParts` rendert Templates für Orte mit verschiedenen Kodierungen, etwa Adresse (URL), Header (Text) und Body (JSON), in einem Rendervorgang; `RenderEach` ist der Sonderfall mit Text.*
+
    *Ergänzt am 2026-10-01 für die Textfunktionen der Special-Identifier-Action ([`actions.md`](../../spec/actions.md), B52–B55): Sie liegen im Paket `internal/textfunc`, das wie `internal/expr` arbeitet. `textfunc.Parse` liest die Struktur vor dem Einsetzen der Identifier, `Text.Templates` und `Text.EvalWithTexts` lassen den Aufrufer alle Texte in einem Rendervorgang auflösen. Zeitspannen für `datefrom` und `dateto` formatiert `template.FormatSpan`, damit die Formate nach Punkt 7 in `internal/template` bleiben.*
 9. **Tests** ([Code-ADR-0006](0006-teststrategie.md)): Golden Files mit Template, Kontext und Ausgabe je Familie in `internal/template/testdata`; tabellengetriebene Tests für Rangfolge, Kodierung und Randfälle; `testing/synctest` für Datum, Zeit und Uptime; Fuzz-Tests für `Parse` und `Render` (keine Panics, ohne bekannte Identifier gleich der Eingabe) und für Ausdrücke; ein Benchmark für das Rendern.
 
