@@ -141,6 +141,13 @@ func (p *Platform) Calls() []Call {
 	return slices.Clone(p.calls)
 }
 
+// ForgetCalls forgets the calls so far, so that Calls and Ops start anew.
+func (p *Platform) ForgetCalls() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = nil
+}
+
 // Ops returns the operations of the calls so far, in order.
 func (p *Platform) Ops() []Op {
 	p.mu.Lock()

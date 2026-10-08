@@ -114,6 +114,21 @@ func TestSet(t *testing.T) {
 	})
 }
 
+// TestDefaultFirst covers actions.md B82: the default platform Twitch
+// comes first, the others keep their order, and the list given stays as it
+// is.
+func TestDefaultFirst(t *testing.T) {
+	t.Parallel()
+	twitch := connectortest.New(platform.Twitch, connectortest.Features{})
+	youtube := connectortest.New(platform.YouTube, connectortest.Features{})
+	kick := connectortest.New(platform.Kick, connectortest.Features{})
+	given := []connector.Platform{kick, youtube, twitch}
+	assert.Equal(t, []connector.Platform{twitch, kick, youtube}, connector.DefaultFirst(given))
+	assert.Equal(t, []connector.Platform{kick, youtube, twitch}, given)
+	assert.Equal(t, []connector.Platform{youtube, kick}, connector.DefaultFirst([]connector.Platform{youtube, kick}))
+	assert.Empty(t, connector.DefaultFirst(nil))
+}
+
 func TestNewSetRejects(t *testing.T) {
 	t.Parallel()
 	twitch := connectortest.New(platform.Twitch, connectortest.Features{})

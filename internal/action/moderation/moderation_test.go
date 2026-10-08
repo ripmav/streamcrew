@@ -190,7 +190,9 @@ func newFixture(t *testing.T) *fixture {
 		mute:    &mute{},
 		logs:    &logs{},
 	}
-	set, err := connector.NewSet(f.twitch, f.youtube, f.kick)
+	// Twitch comes last, so that the tests see the default platform searched
+	// first (B82).
+	set, err := connector.NewSet(f.kick, f.youtube, f.twitch)
 	require.NoError(t, err)
 	f.reg = registry(t, moderation.Ports{Platforms: set, Users: f.store, Strikes: f.store, Mute: f.mute},
 		slog.New(slog.NewTextHandler(f.logs, nil)))
@@ -352,24 +354,40 @@ func TestUnknownUser(t *testing.T) {
 }
 
 // TestWithoutPlatform covers actions.md B82: without a platform of the run
-// the action acts on every connected platform, with a user on every one
-// where it finds them.
+// the kinds without a user act on every connected platform; those with a
+// user look for it on the connected platforms in their order and act only
+// on the first that has it. A lookup that fails lets the action fail.
 func TestWithoutPlatform(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		f := newFixture(t)
 		f.youtube.SetStatus(connector.Status{})
 		f.store.add(0, f.twitch.Account("bob"))
-		f.kick.AddAccounts(f.kick.Account("bob"))
+		f.kick.AddAccounts(f.kick.Account("bob"), f.kick.Account("dave"))
 		in := f.start(timer(), f.on(moderation.KindPurge, "bob"), f.action(`{"kind":"clear_chat"}`))
 		assert.Empty(t, in.Errors)
 		assert.Equal(t, []connectortest.Op{connectortest.OpPurge, connectortest.OpClearChat}, f.twitch.Ops())
-		assert.Equal(t, []connectortest.Op{connectortest.OpUserByLogin, connectortest.OpPurge, connectortest.OpClearChat}, f.kick.Ops())
+		assert.Equal(t, []connectortest.Op{connectortest.OpClearChat}, f.kick.Ops(), "the namesake on kick is left alone")
 		assert.Empty(t, f.youtube.Calls(), "not connected")
+
+		f.twitch.ForgetCalls()
+		f.kick.ForgetCalls()
+		in = f.start(timer(), f.on(moderation.KindBan, "dave"))
+		assert.Empty(t, in.Errors)
+		assert.Equal(t, []connectortest.Op{connectortest.OpUserByLogin}, f.twitch.Ops())
+		assert.Equal(t, []connectortest.Op{connectortest.OpUserByLogin, connectortest.OpBan}, f.kick.Ops())
 
 		in = f.start(timer(), f.on(moderation.KindPurge, "carol"))
 		require.Len(t, in.Errors, 1)
 		assert.Equal(t, `user: unknown user "carol" on any connected platform`, in.Errors[0].Message)
+
+		f.kick.ForgetCalls()
+		f.twitch.Fail(connectortest.OpUserByLogin, errors.New("rate limited"))
+		in = f.start(timer(), f.on(moderation.KindBan, "dave"))
+		require.Len(t, in.Errors, 1)
+		assert.Contains(t, in.Errors[0].Message, "user: failed on twitch: ")
+		assert.Contains(t, in.Errors[0].Message, "rate limited")
+		assert.Empty(t, f.kick.Calls(), "the first match may lie on twitch")
 	})
 }
 
@@ -483,8 +501,8 @@ func TestStrikes(t *testing.T) {
 
 // TestStrikeLookup covers actions.md B81, B82 and B84: a user found only
 // over the platform is stored for the strike; without a platform of the
-// run each user counts once; known users get strikes even if the platform
-// of the run is not connected.
+// run only the first match counts; known users get strikes even if the
+// platform of the run is not connected.
 func TestStrikeLookup(t *testing.T) {
 	t.Parallel()
 	t.Run("over the platform", func(t *testing.T) {
@@ -503,12 +521,14 @@ func TestStrikeLookup(t *testing.T) {
 		t.Parallel()
 		synctest.Test(t, func(t *testing.T) {
 			f := newFixture(t)
-			f.store.add(0, f.twitch.Account("bob"), f.kick.Account("bob"))
+			f.store.add(0, f.twitch.Account("bob"))
+			f.store.add(0, f.kick.Account("bob"))
 			f.store.add(0, f.youtube.Account("bob"))
 			in := f.start(timer(), f.on(moderation.KindAddStrike, "bob"))
 			assert.Empty(t, in.Errors)
-			assert.Equal(t, int64(1), f.store.strikes(platform.Twitch, "bob"), "one user with two accounts")
-			assert.Equal(t, int64(1), f.store.strikes(platform.YouTube, "bob"), "another user of that name")
+			assert.Equal(t, int64(1), f.store.strikes(platform.Twitch, "bob"), "the first match, on the default platform")
+			assert.Equal(t, int64(0), f.store.strikes(platform.Kick, "bob"), "another user of that name")
+			assert.Equal(t, int64(0), f.store.strikes(platform.YouTube, "bob"), "another user of that name")
 		})
 	})
 	t.Run("the platform of the run is not connected", func(t *testing.T) {
