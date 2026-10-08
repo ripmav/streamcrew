@@ -328,3 +328,32 @@ func (q *Queries) PutCommandGroup(ctx context.Context, arg PutCommandGroupParams
 	)
 	return err
 }
+
+const setCommandEnabled = `-- name: SetCommandEnabled :exec
+UPDATE commands SET enabled = ?, updated_at = ? WHERE id = ?
+`
+
+type SetCommandEnabledParams struct {
+	Enabled   int64
+	UpdatedAt int64
+	ID        string
+}
+
+func (q *Queries) SetCommandEnabled(ctx context.Context, arg SetCommandEnabledParams) error {
+	_, err := q.db.ExecContext(ctx, setCommandEnabled, arg.Enabled, arg.UpdatedAt, arg.ID)
+	return err
+}
+
+const setTriggersActive = `-- name: SetTriggersActive :exec
+UPDATE command_triggers SET active = ? WHERE command_id = ?
+`
+
+type SetTriggersActiveParams struct {
+	Active    int64
+	CommandID string
+}
+
+func (q *Queries) SetTriggersActive(ctx context.Context, arg SetTriggersActiveParams) error {
+	_, err := q.db.ExecContext(ctx, setTriggersActive, arg.Active, arg.CommandID)
+	return err
+}

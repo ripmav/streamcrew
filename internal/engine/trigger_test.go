@@ -40,6 +40,10 @@ type requirements struct {
 	notifyErr error
 	applied   []string
 	notified  []string
+	// cooldowns are the commands whose cooldown was started, with the ID
+	// of the user of the run.
+	cooldowns   []string
+	cooldownErr error
 }
 
 func (r *requirements) Apply(_ context.Context, cmd command.Command, p engine.Params) (engine.Decision, error) {
@@ -69,6 +73,27 @@ func (r *requirements) Notify(_ context.Context, cmd command.Command, _ engine.P
 	defer r.mu.Unlock()
 	r.notified = append(r.notified, cmd.Name+" "+rej.Requirement)
 	return r.notifyErr
+}
+
+func (r *requirements) StartCooldown(_ context.Context, cmd command.Command, p engine.Params) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.cooldownErr != nil {
+		return r.cooldownErr
+	}
+	if p.User == nil {
+		r.cooldowns = append(r.cooldowns, cmd.Name+" without a user")
+		return nil
+	}
+	r.cooldowns = append(r.cooldowns, cmd.Name+" for "+p.User.ID.String())
+	return nil
+}
+
+// started returns the cooldowns started so far.
+func (r *requirements) started() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.cooldowns)
 }
 
 // decide sets the decision for the command name; met removes it.

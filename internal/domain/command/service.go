@@ -132,9 +132,9 @@ func (s *Service) DeleteGroup(ctx context.Context, groupID id.ID) error {
 // stamps returns the creation and update time of a save, in UTC with the
 // millisecond precision of the database (Code-ADR-0009).
 func stamps(created time.Time) (createdAt, updatedAt time.Time) {
-	now := time.Now().UTC().Truncate(time.Millisecond)
+	updatedAt = now()
 	if created.IsZero() {
-		created = now
+		created = updatedAt
 	}
-	return created, now
+	return created, updatedAt
 }

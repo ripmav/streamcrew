@@ -387,3 +387,95 @@ func TestNewServiceNeedsChecks(t *testing.T) {
 	_, err = command.NewService(s, nil, full)
 	require.Error(t, err, "codec")
 }
+
+// TestSwitchCommand covers actions.md B34 with commands.md B14: the switch
+// changes for good, a command in the target state stays unchanged, and the
+// triggers follow the switch.
+func TestSwitchCommand(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc, _ := commandService(t)
+	hug, err := svc.Save(ctx, chatCommand("hug", true, "hug"))
+	require.NoError(t, err)
+
+	off, err := svc.SwitchCommand(ctx, hug.ID, command.SwitchOff)
+	require.NoError(t, err)
+	assert.False(t, off.Enabled)
+	assert.False(t, off.UpdatedAt.Before(hug.UpdatedAt))
+
+	again, err := svc.SwitchCommand(ctx, hug.ID, command.SwitchOff)
+	require.NoError(t, err, "the target state is no error")
+	assert.Equal(t, off, again, "a command in the target state stays unchanged")
+
+	on, err := svc.SwitchCommand(ctx, hug.ID, command.SwitchToggle)
+	require.NoError(t, err)
+	assert.True(t, on.Enabled)
+	toggled, err := svc.SwitchCommand(ctx, hug.ID, command.SwitchToggle)
+	require.NoError(t, err)
+	assert.False(t, toggled.Enabled)
+
+	other, err := svc.Save(ctx, chatCommand("hug 2", true, "HUG"))
+	require.NoError(t, err, "the trigger of a disabled command is free")
+	_, err = svc.SwitchCommand(ctx, hug.ID, command.SwitchOn)
+	require.ErrorIs(t, err, store.ErrConflict, "B14: enabling it collides")
+	stored, err := svc.Command(ctx, hug.ID)
+	require.NoError(t, err)
+	assert.False(t, stored.Enabled)
+
+	_, err = svc.SwitchCommand(ctx, other.ID, command.SwitchOff)
+	require.NoError(t, err)
+	_, err = svc.SwitchCommand(ctx, hug.ID, command.SwitchOn)
+	require.NoError(t, err, "free once the other one is disabled")
+
+	_, err = svc.SwitchCommand(ctx, id.New(), command.SwitchOn)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	_, err = svc.SwitchCommand(ctx, hug.ID, "flip")
+	require.ErrorIs(t, err, command.ErrInvalid)
+}
+
+// TestSwitchGroup covers actions.md B34: all commands of the group, all or
+// none.
+func TestSwitchGroup(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc, _ := commandService(t)
+	fun, err := svc.SaveGroup(ctx, command.Group{Name: "fun"})
+	require.NoError(t, err)
+	inGroup := func(name string, enabled bool, triggers ...string) command.Command {
+		cmd := chatCommand(name, enabled, triggers...)
+		cmd.GroupID = fun.ID
+		cmd, err := svc.Save(ctx, cmd)
+		require.NoError(t, err)
+		return cmd
+	}
+	a := inGroup("a", true, "a")
+	b := inGroup("b", false, "b")
+	outside, err := svc.Save(ctx, chatCommand("c", true, "c"))
+	require.NoError(t, err)
+
+	require.NoError(t, svc.SwitchGroup(ctx, fun.ID, command.SwitchOn))
+	enabled := func(cmd command.Command) bool {
+		stored, err := svc.Command(ctx, cmd.ID)
+		require.NoError(t, err)
+		return stored.Enabled
+	}
+	assert.True(t, enabled(a))
+	assert.True(t, enabled(b))
+
+	require.NoError(t, svc.SwitchGroup(ctx, fun.ID, command.SwitchOff))
+	assert.False(t, enabled(a))
+	assert.False(t, enabled(b))
+	assert.True(t, enabled(outside), "only the commands of the group")
+
+	_, err = svc.Save(ctx, chatCommand("b elsewhere", true, "B"))
+	require.NoError(t, err)
+	require.ErrorIs(t, svc.SwitchGroup(ctx, fun.ID, command.SwitchOn), store.ErrConflict)
+	assert.False(t, enabled(a), "all or none")
+	assert.False(t, enabled(b))
+
+	empty, err := svc.SaveGroup(ctx, command.Group{Name: "empty"})
+	require.NoError(t, err)
+	require.NoError(t, svc.SwitchGroup(ctx, empty.ID, command.SwitchOn), "a group without commands")
+	require.ErrorIs(t, svc.SwitchGroup(ctx, id.New(), command.SwitchOn), store.ErrNotFound)
+	require.ErrorIs(t, svc.SwitchGroup(ctx, fun.ID, ""), command.ErrInvalid)
+}

@@ -1,0 +1,8 @@
+{
+  "type": "kinded",
+  "schemaVersion": 1,
+  "enabled": true,
+  "kind": "loud",
+  "volume": 3,
+  "text": "hi"
+}

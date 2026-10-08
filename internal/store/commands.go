@@ -123,6 +123,45 @@ func (s *Store) PutCommand(ctx context.Context, rec command.Record) error {
 	return nil
 }
 
+// SwitchCommands implements command.Repository. The triggers of a chat
+// command follow its switch, so enabling one whose trigger an enabled chat
+// command uses fails with ErrConflict (B14).
+func (s *Store) SwitchCommands(ctx context.Context, commandIDs []id.ID, sw command.Switch, updatedAt time.Time) error {
+	err := s.Write(ctx, func(q *sqlcgen.Queries) error {
+		for _, commandID := range commandIDs {
+			row, err := q.GetCommand(ctx, commandID.String())
+			if err != nil {
+				return fmt.Errorf("command %s: %w", commandID, err)
+			}
+			old := row.Enabled != 0
+			enabled, err := sw.Apply(old)
+			if err != nil {
+				return err
+			}
+			if enabled == old {
+				continue
+			}
+			err = q.SetCommandEnabled(ctx, sqlcgen.SetCommandEnabledParams{
+				Enabled: flag(enabled), UpdatedAt: updatedAt.UnixMilli(), ID: row.ID,
+			})
+			if err != nil {
+				return fmt.Errorf("command %s: %w", commandID, err)
+			}
+			err = q.SetTriggersActive(ctx, sqlcgen.SetTriggersActiveParams{
+				Active: flag(enabled && command.Kind(row.Kind) == command.KindChat), CommandID: row.ID,
+			})
+			if err != nil {
+				return fmt.Errorf("triggers of command %s: %w", commandID, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("switch commands %s: %w", sw, err)
+	}
+	return nil
+}
+
 // DeleteCommand implements command.Repository.
 func (s *Store) DeleteCommand(ctx context.Context, commandID id.ID) error {
 	return s.Write(ctx, func(q *sqlcgen.Queries) error {

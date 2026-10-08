@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,15 +26,24 @@ import (
 type Harness struct {
 	t        *testing.T
 	engine   *engine.Engine
-	commands *commandStore
+	commands *Commands
 }
 
 // NewHarness returns a harness whose engine knows the action types from
-// types, e.g. an action.Registry.
+// types, e.g. an action.Registry, and reads commands from a store of its
+// own.
 func NewHarness(t *testing.T, types engine.ActionTypes) *Harness {
 	t.Helper()
-	store := &commandStore{cmds: make(map[id.ID]command.Command)}
-	e, err := engine.New(store, types)
+	return NewHarnessWith(t, types, NewCommands())
+}
+
+// NewHarnessWith returns a harness whose engine knows the action types from
+// types, reads commands from commands and has the options opts, e.g.
+// engine.WithRequirements. Action types that switch commands get the same
+// store as a port.
+func NewHarnessWith(t *testing.T, types engine.ActionTypes, commands *Commands, opts ...engine.Option) *Harness {
+	t.Helper()
+	e, err := engine.New(commands, types, opts...)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	var wg sync.WaitGroup
@@ -43,7 +53,7 @@ func NewHarness(t *testing.T, types engine.ActionTypes) *Harness {
 		wg.Wait()
 	})
 	synctest.Wait()
-	return &Harness{t: t, engine: e, commands: store}
+	return &Harness{t: t, engine: e, commands: commands}
 }
 
 // Engine returns the engine.
@@ -62,7 +72,7 @@ func (h *Harness) Command(name string, actions ...command.Action) command.Comman
 
 // Put stores cmd.
 func (h *Harness) Put(cmd command.Command) {
-	h.commands.put(cmd)
+	h.commands.Put(cmd)
 }
 
 // Start starts cmd by hand, waits until the engine has nothing more to do
@@ -83,29 +93,94 @@ func (h *Harness) Instance(instanceID id.ID) engine.Instance {
 	return in
 }
 
-// commandStore is a fake of engine.Commands.
-type commandStore struct {
+// Commands is a fake command store: the engine reads commands from it
+// (engine.Commands), and the command action switches them as
+// command.Service does (spec actions.md, B34).
+type Commands struct {
 	mu   sync.Mutex
 	cmds map[id.ID]command.Command
+	// groups are the known groups.
+	groups map[id.ID]bool
 }
 
-// errNoCommand is returned for a command the store does not have.
-var errNoCommand = errors.New("no such command")
+// NewCommands returns an empty store.
+func NewCommands() *Commands {
+	return &Commands{cmds: make(map[id.ID]command.Command), groups: make(map[id.ID]bool)}
+}
 
-func (s *commandStore) Command(_ context.Context, commandID id.ID) (command.Command, error) {
+// ErrNotFound is returned for a command or group the store does not have.
+var ErrNotFound = errors.New("not found")
+
+// Command implements engine.Commands.
+func (s *Commands) Command(_ context.Context, commandID id.ID) (command.Command, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cmd, ok := s.cmds[commandID]
 	if !ok {
-		return command.Command{}, fmt.Errorf("command %s: %w", commandID, errNoCommand)
+		return command.Command{}, fmt.Errorf("command %s: %w", commandID, ErrNotFound)
 	}
 	return cmd, nil
 }
 
-func (s *commandStore) put(cmd command.Command) {
+// Put stores cmd, and its group as a known group.
+func (s *Commands) Put(cmd command.Command) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cmds[cmd.ID] = cmd
+	if !cmd.GroupID.IsZero() {
+		s.groups[cmd.GroupID] = true
+	}
+}
+
+// AddGroup makes groupID a known group, also without commands.
+func (s *Commands) AddGroup(groupID id.ID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.groups[groupID] = true
+}
+
+// SwitchCommand switches the command as command.Service.SwitchCommand does,
+// without the triggers.
+func (s *Commands) SwitchCommand(_ context.Context, commandID id.ID, sw command.Switch) (command.Command, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cmd, ok := s.cmds[commandID]
+	if !ok {
+		return command.Command{}, fmt.Errorf("command %s: %w", commandID, ErrNotFound)
+	}
+	return s.switchLocked(cmd, sw)
+}
+
+// SwitchGroup switches the commands of the group as
+// command.Service.SwitchGroup does.
+func (s *Commands) SwitchGroup(_ context.Context, groupID id.ID, sw command.Switch) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.groups[groupID] {
+		return fmt.Errorf("command group %s: %w", groupID, ErrNotFound)
+	}
+	for _, cmd := range s.cmds {
+		if cmd.GroupID != groupID {
+			continue
+		}
+		if _, err := s.switchLocked(cmd, sw); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// switchLocked switches cmd; s.mu is held.
+func (s *Commands) switchLocked(cmd command.Command, sw command.Switch) (command.Command, error) {
+	enabled, err := sw.Apply(cmd.Enabled)
+	if err != nil {
+		return command.Command{}, err
+	}
+	if enabled != cmd.Enabled {
+		cmd.Enabled, cmd.UpdatedAt = enabled, time.Now()
+		s.cmds[cmd.ID] = cmd
+	}
+	return cmd, nil
 }
 
 // Journal records what note actions do, in order.

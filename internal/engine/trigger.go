@@ -123,6 +123,12 @@ type Requirements interface {
 	// Notify tells the user of p the reason of r (B11). The engine calls it
 	// only for a rejection with Tell, outside the error cooldown (B12).
 	Notify(ctx context.Context, cmd command.Command, p Params, r Rejection) error
+	// StartCooldown starts the cooldown of cmd as if cmd had just been
+	// queued for the run p, by the kind of its cooldown requirement; for the
+	// kinds per user for the user of p (actions.md B37). Without a cooldown
+	// requirement it does nothing. For a cooldown per user and a run without
+	// a user it returns an error.
+	StartCooldown(ctx context.Context, cmd command.Command, p Params) error
 }
 
 // Users finds the user an argument names (B81); the user service

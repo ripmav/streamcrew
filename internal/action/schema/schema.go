@@ -12,6 +12,7 @@
 package schema
 
 import (
+	"bytes"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
 	"fmt"
@@ -63,7 +64,13 @@ const (
 	// PatternName is the pattern of the names of result values
 	// (actions.md B5).
 	PatternName = "^[a-z0-9]+$"
+	// PatternID is the canonical text form of an ID: a UUID in lowercase
+	// (Code-ADR-0009).
+	PatternID = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
+
+// KeyKind is the member that picks the kind of an action document (Kinds).
+const KeyKind = "kind"
 
 // Schema is a JSON Schema of draft 2020-12, limited to the keywords the
 // building blocks need. A keyword whose field is empty or nil is left out:
@@ -202,7 +209,7 @@ func Kinds(common []Property, variants ...Variant) *Schema {
 	for i, v := range variants {
 		alts[i] = Alternative{Values: []string{v.Kind}, Props: v.Props}
 	}
-	s := pick(header(), "kind", common, alts)
+	s := pick(header(), KeyKind, common, alts)
 	s.Dialect = Draft
 	return s
 }
@@ -222,6 +229,21 @@ type Alternative struct {
 // (Code-ADR-0017). The members in common come first.
 func Pick(key string, common []Property, alts ...Alternative) *Schema {
 	return pick(common, key, nil, alts)
+}
+
+// Variant returns the alternative of s, a schema of Kinds or Pick, that
+// the value of key chooses; ok is false if there is none.
+func (s *Schema) Variant(key, value string) (alt *Schema, ok bool) {
+	for _, alt := range s.OneOf {
+		p, ok := alt.Properties.Lookup(key)
+		if !ok {
+			continue
+		}
+		if slices.Contains(p.Schema.Enum, value) || bytes.Equal(p.Schema.Const, quote(value)) {
+			return alt, true
+		}
+	}
+	return nil, false
 }
 
 // pick returns a closed object with the members before, the required
@@ -287,6 +309,12 @@ func Expression() *Schema {
 // of them.
 func List(items *Schema, minItems int) *Schema {
 	return &Schema{Type: "array", Items: items.Clone(), MinItems: new(minItems), UI: UIList}
+}
+
+// Reference returns the field of a reference by ID, e.g. to a command
+// (UICommand) or a group (UIGroup) (actions.md B31).
+func Reference(ui UI) *Schema {
+	return &Schema{Type: "string", Pattern: PatternID, UI: ui}
 }
 
 // ResultName returns the field of the name of a result value
