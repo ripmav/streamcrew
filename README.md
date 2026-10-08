@@ -8,7 +8,7 @@
 
 ## Status
 
-Die Phasen 1 (Fundament), 2 (Domäne und Persistenz) und 3 (Engine, Templates, Actions, Mock) sind abgeschlossen, Meilenstein M1 ist erreicht: Der Core führt Commands aus, und Commands aus YAML reagieren auf simulierte Chat-Nachrichten und Events. Die Template-Engine kennt Ausdrücke mit den Rechenfunktionen der Rechenbibliothek des Originals, und Datum, Uhrzeit, Monats- und Wochentagsnamen folgen der Locale des Profils mit eigenen Mustern für `en-US`, `en-GB`, `de-DE`, `de-AT` und `de-CH` (Standard: die Locale des Systems); die Zahlen bleiben kanonisch. Die Mock-Konsole `streamcrew mock` startet den Core in einem Prozess gegen eine Kopie des Profils — mit simulierten Chat-Nachrichten, Events und dem Stream; die Kopie wird am Ende verworfen. `streamcrew serve` startet mit dem aktiven Profil, meldet sich über `/healthz` und `/readyz` gesund und beendet sich sauber. Den Stand zeigt die [Roadmap](docs/roadmap.md).
+Die Phasen 1 (Fundament), 2 (Domäne und Persistenz) und 3 (Engine, Templates, Actions, Mock) sind abgeschlossen, Meilenstein M1 ist erreicht: Der Core führt Commands aus, und Commands aus YAML reagieren auf simulierte Chat-Nachrichten und Events. Die Template-Engine kennt Ausdrücke mit den Rechenfunktionen der Rechenbibliothek des Originals, und Datum, Uhrzeit, Monats- und Wochentagsnamen folgen der Locale des Profils mit eigenen Mustern für `en-US`, `en-GB`, `de-DE`, `de-AT` und `de-CH` (Standard: die Locale des Systems); die Zahlen bleiben kanonisch. Die Mock-Konsole `streamcrew mock` startet den Core in einem Prozess gegen eine Kopie des Profils — mit simulierten Chat-Nachrichten, Events und dem Stream; die Kopie wird am Ende verworfen. `streamcrew serve` startet mit dem aktiven Profil, meldet sich über `/healthz` und `/readyz` gesund und beendet sich sauber. Phase 4 (Twitch) ist mit 4.1 (Authentifizierung) begonnen: Die Twitch-Konten von Streamer und Bot werden vom Nutzer im Browser angemeldet (Authorization Code Flow mit Loopback-Redirect, der Device Code Flow ist der Fallback), ihre Tokens und die App-Credentials liegen verschlüsselt im Profil und werden vor Ablauf erneuert; `auth login`, `auth status` und `auth logout` sind die dazugehörigen Befehle ([ADR-0023](docs/adr/0023-twitch-login-authorization-code-flow.md)). Den Stand zeigt die [Roadmap](docs/roadmap.md).
 
 Das Repository ist privat. Nur der Projektinhaber schaltet es öffentlich.
 
@@ -43,15 +43,20 @@ streamcrew backup restore <datei.zip> --yes    # zurückspielen; vorher wird der
 
 streamcrew secret rotate                       # neuen Schlüssel erzeugen, Tokens aller Profile neu verschlüsseln
 
+streamcrew auth login twitch [--bot] [--device-flow] [--client-id <id> --client-secret <secret>]   # Konto im Browser anmelden, --bot statt Streamer
+streamcrew auth status [-o json]                                                                    # Konten: Zustand, fehlende Scopes, Ablauf
+streamcrew auth logout twitch [--bot]                                                               # Refresh-Token widerrufen und Konto entfernen
+
 streamcrew schema export [--dir schemas]       # JSON-Schema der Dateien von Commands als Code schreiben
 streamcrew command validate <pfade> [-o json]  # Dateien von Commands als Code gegen das Profil prüfen
 streamcrew command import <pfade> [-o json]    # alle Dokumente übernehmen oder, bei einem Fehler, keines
 streamcrew command export [namen] [--file <datei> | --dir <verz>] [--format yaml|json]  # Commands als Dateien schreiben
 ```
 
-- `profile …` (außer `list`), `backup restore`, `secret rotate` und `command import` brauchen einen gestoppten Core. Sie nehmen dieselbe Sperre wie `serve` und brechen sonst mit einem Hinweis ab ([ADR-0012](docs/adr/0012-persistenz.md)).
+- `profile …` (außer `list`), `backup restore`, `secret rotate`, `command import`, `auth login` und `auth logout` brauchen einen gestoppten Core. Sie nehmen dieselbe Sperre wie `serve` und brechen sonst mit einem Hinweis ab ([ADR-0012](docs/adr/0012-persistenz.md)).
 - `backup …` wirkt auf das aktive Profil oder auf `--profile <id>`.
 - `command validate` prüft YAML- und JSON-Dateien, auch ganze Verzeichnisse, gegen eine Kopie des aktiven Profils oder von `--profile <id>`, mit denselben Prüfungen wie beim Speichern. Es ändert nichts und darf laufen, während der Core läuft. Fehler und Warnungen nennen Datei, Zeile, Spalte und Pfad; mit Fehlern endet es mit Status 1. `command import` prüft genauso und übernimmt dann alle Dokumente in einer Transaktion: Ein Dokument ersetzt das gleicher Art und gleichen Namens und behält dessen ID; andere bleiben unverändert. `command export` schreibt die genannten Commands mit ihren Gruppen und Cooldown-Gruppen, ohne Namen alles; mit `--dir` je Dokument eine Datei wie `chat-command-hug.v1alpha1.yaml`. Exportieren und wieder Importieren ändert nichts außer der Zeit der Änderung.
+- `auth login twitch` startet die Anmeldung im Browser ([ADR-0023](docs/adr/0023-twitch-login-authorization-code-flow.md)): Es wird die URL gezeigt, an der der Nutzer seine Twitch-App autorisiert; der Loopback-Redirect auf `http://localhost:8741` schließt den Login ab. `--device-flow` nutzt stattdessen den Device Code Flow (Code an der URL eingeben), `--client-id`/`--client-secret` eine eigene Twitch-App (BYO): eine Confidential-App, die `http://localhost:8741` als Redirect registriert; zusammen zu geben. Ohne die Flags wird die App der letzten Anmeldung der Plattform genutzt, der erste Login braucht also die Flags oder `--device-flow`. `--bot` meldet das Bot-Konto an. Die App-Credentials speichert der Login verschlüsselt im Profil und nutzt sie bei der nächsten Anmeldung. `auth status` zeigt die Konten des Profils als Tabelle oder JSON — `ok` oder `login_required` (fehlende Scopes, fehlendes oder abgelaufenes Token, fehlendes App-Secret) samt Ablauf des Access-Tokens; es liest das Profil read-only und läuft neben dem Core. `auth logout` widerruft zuerst den Refresh-Token bei Twitch mit dem Client der Account-Zeile und entfernt danach Konto und Token; schlägt der Widerruf fehl, bleiben beide, so dass er erneut versucht werden kann. Die App-Credentials bleiben für die nächste Anmeldung.
 - `schema export` schreibt `streamcrew-v1alpha1.schema.json` für Editoren, etwa für die YAML-Erweiterung von VS Code; die aktuelle Fassung liegt in [`schemas/`](schemas/). Format und Regeln stehen in [`commands-as-code.md`](docs/spec/commands-as-code.md).
 
 Exit-Codes: `0` Erfolg, `1` Fehler, `2` ungültige Kommandozeile oder Konfiguration.
@@ -212,6 +217,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `internal/profile`, `internal/lockfile` | Profile und die Sperre des Datenverzeichnisses ([ADR-0012](docs/adr/0012-persistenz.md)) |
 | `internal/settings` | typisierte Einstellungen je Profil: Backups, Zeitzone, Command-Engine und Sprache des Profils ([ADR-0022](docs/adr/0022-internationalisierung.md)) |
 | `internal/backup` | Backups, Aufbewahrung, Zeitplan, Restore |
+| `internal/auth` | Plattform-Konten und ihre Tokens ([ADR-0014](docs/adr/0014-oauth-und-app-credentials.md), [ADR-0023](docs/adr/0023-twitch-login-authorization-code-flow.md)): Anmelden per Authorization Code Flow (Device Code Flow als Fallback), verschlüsselte Tokens und App-Credentials im Vault mit Refresh-Loop, die `auth`-Befehle der CLI und die Ereignisse `auth.*` ([Spezifikation](docs/spec/events.md)) |
 | `internal/vault` | verschlüsselte Secrets und ihr Schlüssel |
 
 ## Abhängigkeiten
