@@ -297,6 +297,13 @@ func Template() *Schema {
 	return Text(UITemplate)
 }
 
+// NonEmpty returns a text field shown as ui that is not empty, e.g. a chat
+// message as a template (UITemplate) or the recipient of a whisper
+// (UIUser).
+func NonEmpty(ui UI) *Schema {
+	return &Schema{Type: "string", MinLength: new(1), UI: ui}
+}
+
 // Choice returns a field that takes one of values.
 func Choice(values ...string) *Schema {
 	return &Schema{Type: "string", Enum: slices.Clone(values), UI: UIChoice}

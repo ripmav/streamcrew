@@ -89,6 +89,10 @@ type Params struct {
 	// Message is the triggering chat message, with the trigger; empty if
 	// there is none.
 	Message string
+	// MessageID is the platform's ID of the triggering chat message, e.g.
+	// for a reply (actions.md B64); empty if there is none or the platform
+	// gave none. It needs Message and Platform.
+	MessageID string
 	// Emotes are the emote codes in Message as the platform marks them;
 	// there are none without a message.
 	Emotes []string
