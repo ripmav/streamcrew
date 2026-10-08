@@ -120,6 +120,26 @@ func TestConfigShow(t *testing.T) {
 	assert.Equal(t, config.ModeServer, fromJSON.Mode)
 }
 
+// TestConfigShowRights covers Code-ADR-0019: the rights come from the file
+// as YAML lists and objects and are shown as set.
+func TestConfigShowRights(t *testing.T) {
+	userDir := isolate(t)
+	obs := t.TempDir()
+	defaultFile := filepath.Join(userDir, config.AppDirName, config.ConfigFileName)
+	require.NoError(t, os.MkdirAll(filepath.Dir(defaultFile), 0o700))
+	require.NoError(t, os.WriteFile(defaultFile, []byte(
+		"grant:\n  - host:input\nrevoke: [script]\nfile_root:\n  obs: "+obs+"\noutbound_allow: [nas, 10.0.0.0/8]\n"), 0o600))
+
+	res := runCLI(t.Context(), t, "config", "show")
+	require.Equal(t, cli.ExitOK, res.code, res.stderr)
+	var view config.FileView
+	require.NoError(t, yaml.Unmarshal([]byte(res.stdout), &view))
+	assert.Equal(t, []string{"host:input"}, view.Grant)
+	assert.Equal(t, []string{"script"}, view.Revoke)
+	assert.Equal(t, map[string]string{"obs": obs}, view.FileRoot)
+	assert.Equal(t, []string{"nas", "10.0.0.0/8"}, view.OutboundAllow)
+}
+
 func TestConfigPath(t *testing.T) {
 	userDir := isolate(t)
 	dataDir := filepath.Join(userDir, config.AppDirName)
@@ -150,6 +170,16 @@ func TestDoctor(t *testing.T) {
 	assert.NotEmpty(t, results)
 	assert.False(t, doctor.Failed(results))
 
+	gone := filepath.Join(t.TempDir(), "gone") // absolute on every system, and missing
+	res = runCLI(t.Context(), t, "--data-dir", t.TempDir(), "--listen", "127.0.0.1:0", "--mode", "server",
+		"--grant", "host:process", "--file-root", "gone="+gone, "doctor", "-o", "json")
+	require.Equal(t, cli.ExitOK, res.code, res.stderr)
+	require.NoError(t, json.Unmarshal([]byte(res.stdout), &results))
+	assert.Contains(t, results, doctor.Result{Check: "capabilities", Status: doctor.StatusOK, Detail: "host:process, net:outbound, script"})
+	assert.Contains(t, results, doctor.Result{Check: "file roots", Status: doctor.StatusOK, Detail: "gone=" + gone})
+	assert.Contains(t, results, doctor.Result{Check: "rights", Status: doctor.StatusWarn, Detail: "host:process is on in server mode"})
+	assert.Contains(t, results, doctor.Result{Check: "rights", Status: doctor.StatusWarn, Detail: "the file roots have no effect without host:fs"})
+
 	blocker := filepath.Join(t.TempDir(), "file")
 	require.NoError(t, os.WriteFile(blocker, nil, 0o600))
 	res = runCLI(t.Context(), t, "--data-dir", blocker, "--listen", "127.0.0.1:0", "doctor")
@@ -170,6 +200,9 @@ func TestUsageErrors(t *testing.T) {
 		{name: "invalid listen address", args: []string{"--listen=nowhere", "config", "show"}, wantStderr: "--listen"},
 		{name: "unknown key in config file", file: "lg_level: debug\n", args: []string{"config", "show"}, wantStderr: `unknown key "lg_level"`},
 		{name: "missing config file", args: []string{"--config=/does/not/exist.yaml", "config", "show"}, wantStderr: "read config file"},
+		{name: "unknown capability", args: []string{"--grant=host:root", "config", "show"}, wantStderr: `--grant: unknown capability "host:root"`},
+		{name: "relative file root", file: "file_root:\n  obs: obs\n", args: []string{"config", "show"}, wantStderr: "--file-root obs"},
+		{name: "invalid allowlist", args: []string{"--outbound-allow=*.local", "doctor"}, wantStderr: "--outbound-allow"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -33,13 +33,38 @@ func TestHealthyEnvironment(t *testing.T) {
 	dataDir := t.TempDir()
 	results := doctor.Run(t.Context(), doctor.Config{DataDir: dataDir, Listen: "127.0.0.1:0"})
 
-	require.Len(t, results, 4)
+	require.Len(t, results, 7)
 	for _, r := range results {
 		assert.Equal(t, doctor.StatusOK, r.Status, "%s: %s", r.Check, r.Detail)
 	}
 	assert.False(t, doctor.Failed(results))
 	assert.Equal(t, dataDir, find(t, results, "data directory").Detail)
 	assert.Contains(t, find(t, results, "config file").Detail, "none")
+	assert.Equal(t, "none", find(t, results, "capabilities").Detail)
+}
+
+// TestRights covers Code-ADR-0019, point 7: the report names the rights
+// and warns about what the configuration knows to be wrong.
+func TestRights(t *testing.T) {
+	t.Parallel()
+	results := doctor.Run(t.Context(), doctor.Config{DataDir: t.TempDir(), Listen: "127.0.0.1:0", Rights: doctor.Rights{
+		Capabilities: []string{"host:fs", "net:outbound"},
+		Roots:        map[string]string{"obs": "/srv/obs", "clips": "/srv/clips"},
+		Outbound:     []string{"10.0.0.0/8", "nas"},
+		Warnings:     []string{"host:fs is on in server mode", "file root obs: missing"},
+	}})
+	assert.Equal(t, "host:fs, net:outbound", find(t, results, "capabilities").Detail)
+	assert.Equal(t, "clips=/srv/clips, obs=/srv/obs", find(t, results, "file roots").Detail)
+	assert.Equal(t, "10.0.0.0/8, nas", find(t, results, "outbound allowlist").Detail)
+	var warnings []string
+	for _, r := range results {
+		if r.Check == "rights" {
+			assert.Equal(t, doctor.StatusWarn, r.Status)
+			warnings = append(warnings, r.Detail)
+		}
+	}
+	assert.Equal(t, []string{"host:fs is on in server mode", "file root obs: missing"}, warnings)
+	assert.False(t, doctor.Failed(results), "warnings are no failure")
 }
 
 func TestDataDirectory(t *testing.T) {

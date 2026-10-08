@@ -75,6 +75,9 @@ Die Startkonfiguration kommt aus Flags, Umgebungsvariablen und einer optionalen 
 | `--log-format` | `STREAMCREW_LOG_FORMAT` | `log_format` | `text` |
 | `--[no-]log-file` | `STREAMCREW_LOG_FILE` | `log_file` | an: `<data-dir>/logs/streamcrew.log` (JSON Lines) |
 | `--log-max-size`, `--log-max-files` | `STREAMCREW_LOG_MAX_SIZE`, `…_MAX_FILES` | `log_max_size`, `log_max_files` | 10 MiB, 5 Dateien |
+| `--grant`, `--revoke` | `STREAMCREW_GRANT`, `STREAMCREW_REVOKE` | `grant`, `revoke` | Rechte des Modus, siehe unten |
+| `--file-root NAME=DIR` | `STREAMCREW_FILE_ROOT` | `file_root` | keine Wurzel |
+| `--outbound-allow` | `STREAMCREW_OUTBOUND_ALLOW` | `outbound_allow` | – |
 
 Beispiel für `config.yaml`; die Ausgabe von `streamcrew config show` hat dasselbe Format:
 
@@ -86,6 +89,19 @@ log_component_level:
 ```
 
 - Unbekannte Schlüssel in der Datei sind ein Fehler.
+- **Rechte** ([Code-ADR-0019](docs/adr/code/0019-host-rechte-in-der-startkonfiguration.md)): Desktop und Daemon dürfen Dateien unter freigegebenen Wurzeln lesen und schreiben (`host:fs`), Programme starten (`host:process`), Ton ausgeben (`host:audio`), Web-Requests senden (`net:outbound`) und Skripte ausführen (`script`). Der Server-Modus erlaubt nur `net:outbound` und `script`, und Web-Requests erreichen dort keine internen Netze. `--grant` und `--revoke` ändern die Rechte; `--file-root` gibt Verzeichnisse für die Datei-Action frei (absolut, nicht im Datenverzeichnis); `--outbound-allow` öffnet im Server-Modus interne Ziele (IP-Adresse, Netz oder Hostname). Dienste wie Twitch und öffentliche Ziele brauchen keinen Eintrag.
+- **Ohne Neustart:** Ändern sich `grant`, `revoke`, `file_root` oder `outbound_allow` in der Datei, gelten sie nach höchstens etwa einer Sekunde, alle vier gemeinsam; eine ungültige Datei ändert nichts, das Log nennt den Grund. Was per Flag oder Umgebungsvariable gesetzt ist, bleibt fest. `streamcrew doctor` zeigt die Rechte und warnt etwa vor fehlenden Wurzeln.
+
+```yaml
+mode: server
+grant:
+  - host:fs
+file_root:
+  obs: /srv/obs
+outbound_allow:
+  - homeassistant
+  - 192.168.1.0/24
+```
 - **Portabler Modus:** Liegt neben dem Binary eine Datei `streamcrew.portable`, liegen die Daten in `streamcrew-data` neben dem Binary.
 - Secrets werden in Logs maskiert ([Code-ADR-0003](docs/adr/code/0003-fehler-und-logging.md)).
 - Einstellungen, die während des Betriebs änderbar sind (Backup-Zeitplan, Zeitzone), liegen im Profil, nicht in der Startkonfiguration.
@@ -151,7 +167,8 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `cmd/streamcrew` | nur `main.go`: Signale, Umgebung, kong-Initialisierung, Parsen, Exit-Code |
 | `internal/cli` | Definition der Kommandozeile (`cli.Root`) mit allen Unterkommandos, Fehler und Exit-Codes |
 | `internal/app` | Composition Root: verdrahtet alles, Bereitschaft ([Code-ADR-0002](docs/adr/code/0002-dependency-injection.md)) |
-| `internal/config` | Startkonfiguration, Konfigurationsdatei, Datenverzeichnis ([Code-ADR-0005](docs/adr/code/0005-konfiguration.md)) |
+| `internal/config` | Startkonfiguration, Konfigurationsdatei, Datenverzeichnis ([Code-ADR-0005](docs/adr/code/0005-konfiguration.md)); Rechte je Betriebsmodus, Wurzeln und Allowlist mit Nachladen ohne Neustart ([Code-ADR-0019](docs/adr/code/0019-host-rechte-in-der-startkonfiguration.md)) |
+| `internal/netguard` | Schutz der Verbindungen aus Commands: Allowlist für Netzziele im Server-Modus ([ADR-0013](docs/adr/0013-sicherheitsmodell.md), [Code-ADR-0019](docs/adr/code/0019-host-rechte-in-der-startkonfiguration.md)) |
 | `internal/logging` | slog-Handler, Level je Komponente, Rotation, Maskierung ([Code-ADR-0003](docs/adr/code/0003-fehler-und-logging.md)) |
 | `internal/supervisor` | Runnables mit Neustart, Backoff und geordnetem Shutdown ([Code-ADR-0004](docs/adr/code/0004-nebenlaeufigkeit-und-supervisor.md)) |
 | `internal/httpserver` | HTTP-Server mit `/healthz`, `/readyz`, pprof |

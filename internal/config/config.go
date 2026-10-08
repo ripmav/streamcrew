@@ -47,6 +47,14 @@ type Config struct {
 	Dev             bool          `help:"Developer mode: serves pprof under /debug/pprof/. Requires a loopback listen address."`
 	ShutdownTimeout time.Duration `default:"15s" help:"Time limit for the whole shutdown."`
 	Log             LogConfig     `embed:"" prefix:"log-"`
+
+	// Grant, Revoke, FileRoot and OutboundAllow are the rights of
+	// Code-ADR-0019. Changes of them in the configuration file apply
+	// without a restart (Watcher).
+	Grant         []string          `placeholder:"CAPABILITY" help:"Turn on a capability in addition to those of the mode, e.g. host:fs. Repeatable."`
+	Revoke        []string          `placeholder:"CAPABILITY" help:"Turn off a capability of the mode, e.g. net:outbound. Repeatable."`
+	FileRoot      map[string]string `name:"file-root" placeholder:"NAME=DIR" help:"Directory the file action may use under NAME, an absolute path outside the data directory. Repeatable."`
+	OutboundAllow []string          `name:"outbound-allow" placeholder:"TARGET" help:"Internal target that web requests may reach in server mode: an IP address, a network in CIDR notation or a host name. Repeatable."`
 }
 
 // LogConfig configures logging (Code-ADR-0003).
@@ -100,6 +108,9 @@ func (c *Config) Resolve() error {
 		errs = append(errs, fmt.Errorf("--shutdown-timeout: must be positive, got %s", c.ShutdownTimeout))
 	}
 	errs = append(errs, c.Log.check()...)
+	if _, err := c.Rights(); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
 }
 

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 
 // Package doctor checks the environment of the core for "streamcrew doctor"
-// (ADR-0011): data directory, configuration file, listen address and time
-// zone database. Later phases add checks for tokens and connections.
+// (ADR-0011): data directory, configuration file, listen address, time
+// zone database and the rights of Code-ADR-0019. Later phases add checks
+// for tokens and connections.
 package doctor
 
 import (
@@ -10,10 +11,13 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -46,16 +50,57 @@ type Config struct {
 	ConfigFile string
 	// Listen is the listen address of the HTTP server.
 	Listen string
+	// Rights are the rights the configuration gives now.
+	Rights Rights
+}
+
+// Rights are the rights of the core as the configuration gives them now
+// (Code-ADR-0019, point 7).
+type Rights struct {
+	// Capabilities are the capabilities that are on.
+	Capabilities []string
+	// Roots maps the names of the released roots to their directories.
+	Roots map[string]string
+	// Outbound are the entries of the allowlist of network targets.
+	Outbound []string
+	// Warnings are the problems the configuration knows of, e.g. a root
+	// whose directory is missing.
+	Warnings []string
 }
 
 // Run runs all checks.
 func Run(ctx context.Context, cfg Config) []Result {
-	return []Result{
+	results := []Result{
 		checkDataDir(cfg.DataDir),
 		checkConfigFile(cfg.ConfigFile),
 		checkListen(ctx, cfg.Listen),
 		checkTimeZones(),
 	}
+	return append(results, checkRights(cfg.Rights)...)
+}
+
+// checkRights reports the rights and warns about what the configuration
+// knows to be wrong (Code-ADR-0019, point 7).
+func checkRights(r Rights) []Result {
+	roots := make([]string, 0, len(r.Roots))
+	for _, name := range slices.Sorted(maps.Keys(r.Roots)) {
+		roots = append(roots, name+"="+r.Roots[name])
+	}
+	list := func(items []string) string {
+		if len(items) == 0 {
+			return "none"
+		}
+		return strings.Join(items, ", ")
+	}
+	results := []Result{
+		{Check: "capabilities", Status: StatusOK, Detail: list(r.Capabilities)},
+		{Check: "file roots", Status: StatusOK, Detail: list(roots)},
+		{Check: "outbound allowlist", Status: StatusOK, Detail: list(r.Outbound)},
+	}
+	for _, w := range r.Warnings {
+		results = append(results, Result{Check: "rights", Status: StatusWarn, Detail: w})
+	}
+	return results
 }
 
 // Failed reports whether any result has StatusFail.

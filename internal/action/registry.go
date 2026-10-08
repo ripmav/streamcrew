@@ -21,15 +21,19 @@ import (
 // engine.ActionTypes.
 type Registry struct {
 	types map[string]Descriptor
-	// granted are the capabilities the core has.
-	granted capability.Set
+	// granted gives the capabilities the core has now.
+	granted capability.Source
 }
 
-// NewRegistry returns a registry of the descriptors. granted are the
-// capabilities the core has in its operating mode (ADR-0013). Every
-// descriptor is checked; an error names the type, and the core does not
-// start with it.
-func NewRegistry(granted capability.Set, descriptors ...Descriptor) (*Registry, error) {
+// NewRegistry returns a registry of the descriptors. granted gives the
+// capabilities the core has now (ADR-0013); a capability.Set is a source
+// that never changes, the configuration of the core one that follows the
+// configuration file (Code-ADR-0019). Every descriptor is checked; an error
+// names the type, and the core does not start with it.
+func NewRegistry(granted capability.Source, descriptors ...Descriptor) (*Registry, error) {
+	if granted == nil {
+		return nil, fmt.Errorf("%w: no source of capabilities", ErrInvalid)
+	}
 	r := &Registry{types: make(map[string]Descriptor, len(descriptors)), granted: granted}
 	docs := polydoc.NewRegistry("action", func(u polydoc.Unknown) command.Action { return command.UnknownAction{Unknown: u} })
 	var errs []error
@@ -157,8 +161,10 @@ func (r *Registry) VisualAudio(actionType string) bool {
 }
 
 // Missing implements engine.ActionTypes: the capabilities that actions of
-// the type need and the core does not have (actions.md B7). The engine runs
-// only actions of known types, so for an unknown type the list is empty.
+// the type need and the core does not have now (actions.md B7). The engine
+// runs only actions of known types, so for an unknown type the list is
+// empty. It asks the source at every call, so a change of the configuration
+// applies to the next check (Code-ADR-0019, point 5).
 func (r *Registry) Missing(actionType string) []capability.Capability {
-	return r.granted.Missing(r.types[actionType].Capabilities)
+	return r.granted.Current().Missing(r.types[actionType].Capabilities)
 }
