@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -139,6 +140,29 @@ func (f failingSource) Match(context.Context, *template.Scope, string) (int, tem
 func logBuffer() (*slog.Logger, *bytes.Buffer) {
 	var buf bytes.Buffer
 	return slog.New(slog.NewTextHandler(&buf, nil)), &buf
+}
+
+// renderGolden renders each template of testdata/<name>.txt, one per line,
+// with e and s and compares the templates and results with
+// testdata/<name>.golden. Lines with "#" are comments and go into the golden
+// file unchanged; empty lines are left out.
+func renderGolden(t *testing.T, e *template.Engine, s *template.Scope, name string) {
+	t.Helper()
+	in, err := os.ReadFile(filepath.Join("testdata", name+".txt"))
+	require.NoError(t, err)
+	var got bytes.Buffer
+	for line := range strings.Lines(string(in)) {
+		line = strings.TrimRight(line, "\r\n") // also for files with CRLF line ends
+		switch {
+		case line == "":
+		case strings.HasPrefix(line, "#"):
+			got.WriteString(line + "\n")
+		default:
+			got.WriteString("in:  " + strconv.Quote(line) + "\n")
+			got.WriteString("out: " + strconv.Quote(render(t, e, line, s)) + "\n\n")
+		}
+	}
+	golden(t, name, got.Bytes())
 }
 
 // golden compares got with testdata/<name>.golden. With

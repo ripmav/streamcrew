@@ -1,0 +1,9 @@
+# CounterSource with the counters Deaths = 1234567, neg = -1234, x = 5 and
+# xdisplay = 7 (spec counters-and-quotes.md, B1, B4).
+
+$deaths $DEATHS $Deathsx
+$deathsdisplay $deathsdisplayed
+$negdisplay
+# a counter wins over the formatted value of another one with the same length
+$x $xdisplay $xdisplays
+$unknown

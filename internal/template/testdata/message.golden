@@ -1,0 +1,11 @@
+# MessageFamily with the message "Hello Kappa world  Kappa PogChamp" and the
+# emotes Kappa, Kappa and PogChamp.
+in:  "$message"
+out: "Hello Kappa world  Kappa PogChamp"
+
+in:  "$messagenoemotes"
+out: "Hello world"
+
+in:  "$messageemotecount emotes"
+out: "3 emotes"
+

@@ -49,3 +49,28 @@ func TestValidate(t *testing.T) {
 		assert.ErrorIs(t, counter.Counter{Name: name}.Validate(), counter.ErrInvalid, name)
 	}
 }
+
+// reserver is a fake of the template registry: names that start with one of
+// its built-in names are reserved.
+type reserver []string
+
+func (r reserver) Reserved(name string) (string, bool) {
+	for _, builtIn := range r {
+		if strings.HasPrefix(strings.ToLower(name), builtIn) {
+			return builtIn, true
+		}
+	}
+	return "", false
+}
+
+// TestCheckReserved covers B7: neither $<name> nor $<name>display may
+// collide with a built-in identifier.
+func TestCheckReserved(t *testing.T) {
+	t.Parallel()
+	r := reserver{"username", "deathsdisplayed"}
+	require.NoError(t, counter.Counter{Name: "deaths"}.CheckReserved(r))
+	require.ErrorIs(t, counter.Counter{Name: "UserNames"}.CheckReserved(r), counter.ErrReserved)
+	err := counter.Counter{Name: "deaths"}.CheckReserved(reserver{"deathsdisplay"})
+	require.ErrorIs(t, err, counter.ErrReserved)
+	assert.Contains(t, err.Error(), "$deathsdisplay")
+}
