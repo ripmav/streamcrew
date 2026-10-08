@@ -12,10 +12,10 @@ import (
 	"github.com/ripmav/streamcrew/internal/store/sqlcgen"
 )
 
-// Account is the metadata of a platform login (ADR-0014); the tokens of the
-// login are encrypted in the vault under the name "auth/<platform>/<role>".
-// Platform and Role are the raw IDs of the platform and the account, mapped
-// to their typed values by the caller.
+// Account is the metadata of a platform login (ADR-0014, ADR-0023); the
+// tokens of the login are encrypted in the vault under the name
+// "auth/<platform>/<role>". Platform and Role are the raw IDs of the
+// platform and the account, mapped to their typed values by the caller.
 type Account struct {
 	// Platform is the ID of the platform, e.g. "twitch".
 	Platform string
@@ -29,6 +29,9 @@ type Account struct {
 	Scopes string
 	// ClientID is the client ID of the app the login was made with.
 	ClientID string
+	// Flow is how the login was made: "authorization_code" or
+	// "device_code" (ADR-0023); refresh and revoke must use the same flow.
+	Flow string
 	// UpdatedAt is the time the account was last changed.
 	UpdatedAt time.Time
 }
@@ -44,6 +47,7 @@ func (s *Store) UpsertAccount(ctx context.Context, a Account) error {
 			UserID:    a.UserID,
 			Scopes:    a.Scopes,
 			ClientID:  a.ClientID,
+			Flow:      a.Flow,
 			UpdatedAt: time.Now().UnixMilli(),
 		})
 	})
@@ -95,6 +99,7 @@ func accountFrom(r sqlcgen.Account) Account {
 		UserID:    r.UserID,
 		Scopes:    r.Scopes,
 		ClientID:  r.ClientID,
+		Flow:      r.Flow,
 		UpdatedAt: time.UnixMilli(r.UpdatedAt).UTC(),
 	}
 }

@@ -15,6 +15,7 @@ type Account struct {
 	UserID    string
 	Scopes    string
 	ClientID  string
+	Flow      string
 	UpdatedAt int64
 }
 

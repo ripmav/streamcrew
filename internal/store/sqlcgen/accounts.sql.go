@@ -27,7 +27,7 @@ func (q *Queries) DeleteAccount(ctx context.Context, arg DeleteAccountParams) (i
 }
 
 const getAccount = `-- name: GetAccount :one
-SELECT platform, role, login, user_id, scopes, client_id, updated_at FROM accounts WHERE platform = ? AND role = ?
+SELECT platform, role, login, user_id, scopes, client_id, flow, updated_at FROM accounts WHERE platform = ? AND role = ?
 `
 
 type GetAccountParams struct {
@@ -46,13 +46,14 @@ func (q *Queries) GetAccount(ctx context.Context, arg GetAccountParams) (Account
 		&i.UserID,
 		&i.Scopes,
 		&i.ClientID,
+		&i.Flow,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const listAccounts = `-- name: ListAccounts :many
-SELECT platform, role, login, user_id, scopes, client_id, updated_at FROM accounts ORDER BY platform, role
+SELECT platform, role, login, user_id, scopes, client_id, flow, updated_at FROM accounts ORDER BY platform, role
 `
 
 func (q *Queries) ListAccounts(ctx context.Context) ([]Account, error) {
@@ -71,6 +72,7 @@ func (q *Queries) ListAccounts(ctx context.Context) ([]Account, error) {
 			&i.UserID,
 			&i.Scopes,
 			&i.ClientID,
+			&i.Flow,
 			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -87,13 +89,14 @@ func (q *Queries) ListAccounts(ctx context.Context) ([]Account, error) {
 }
 
 const upsertAccount = `-- name: UpsertAccount :exec
-INSERT INTO accounts (platform, role, login, user_id, scopes, client_id, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO accounts (platform, role, login, user_id, scopes, client_id, flow, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (platform, role) DO UPDATE SET
     login = excluded.login,
     user_id = excluded.user_id,
     scopes = excluded.scopes,
     client_id = excluded.client_id,
+    flow = excluded.flow,
     updated_at = excluded.updated_at
 `
 
@@ -104,6 +107,7 @@ type UpsertAccountParams struct {
 	UserID    string
 	Scopes    string
 	ClientID  string
+	Flow      string
 	UpdatedAt int64
 }
 
@@ -115,6 +119,7 @@ func (q *Queries) UpsertAccount(ctx context.Context, arg UpsertAccountParams) er
 		arg.UserID,
 		arg.Scopes,
 		arg.ClientID,
+		arg.Flow,
 		arg.UpdatedAt,
 	)
 	return err
