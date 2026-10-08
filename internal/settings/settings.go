@@ -284,12 +284,15 @@ const (
 	ErrorCooldownGlobal ErrorCooldown = "global"
 	// ErrorCooldownOff sends a message for every rejection.
 	ErrorCooldownOff ErrorCooldown = "off"
+	// ErrorCooldownSilent sends no message at all; rejections are only
+	// logged.
+	ErrorCooldownSilent ErrorCooldown = "silent"
 )
 
 // Valid reports whether c is a known error cooldown mode.
 func (c ErrorCooldown) Valid() bool {
 	switch c {
-	case ErrorCooldownPerCommand, ErrorCooldownGlobal, ErrorCooldownOff:
+	case ErrorCooldownPerCommand, ErrorCooldownGlobal, ErrorCooldownOff, ErrorCooldownSilent:
 		return true
 	default:
 		return false

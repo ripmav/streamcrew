@@ -137,7 +137,7 @@ func TestCommandsModes(t *testing.T) {
 		assert.NoError(t, settings.Save(ctx, svc, withCommands(func(c *settings.Commands) { c.LockMode = m })), m)
 	}
 	for _, m := range []settings.ErrorCooldown{
-		settings.ErrorCooldownPerCommand, settings.ErrorCooldownGlobal, settings.ErrorCooldownOff,
+		settings.ErrorCooldownPerCommand, settings.ErrorCooldownGlobal, settings.ErrorCooldownOff, settings.ErrorCooldownSilent,
 	} {
 		assert.NoError(t, settings.Save(ctx, svc, withCommands(func(c *settings.Commands) { c.ErrorCooldown = m })), m)
 	}

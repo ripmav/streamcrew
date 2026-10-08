@@ -296,12 +296,19 @@ func TestErrorCooldown(t *testing.T) {
 			{command: "a", unmet: "cooldown", message: true},
 			{command: "a", unmet: "cooldown", message: true},
 		}},
+		{settings.ErrorCooldownSilent, []step{
+			{command: "a", unmet: "cooldown"},
+			{wait: time.Minute, command: "b", unmet: "role"},
+			{command: "a"},
+			{command: "a", unmet: "cooldown"},
+		}},
 	} {
 		t.Run(string(tc.mode), func(t *testing.T) {
 			t.Parallel()
 			synctest.Test(t, func(t *testing.T) {
 				reqs := newRequirements()
-				f := newFixture(t, settings.LockNone, engine.WithRequirements(reqs))
+				logs := &records{}
+				f := newFixture(t, settings.LockNone, engine.WithRequirements(reqs), engine.WithLogger(slog.New(logs)))
 				defer f.stop()
 				f.configs.mu.Lock()
 				f.configs.cfg.Commands.ErrorCooldown = tc.mode
@@ -327,6 +334,10 @@ func TestErrorCooldown(t *testing.T) {
 						messages = []string{s.command + " " + s.unmet}
 					}
 					assert.Equal(t, messages, reqs.messages(), "step %d", i)
+				}
+				assert.NotContains(t, logs.messages(), "error cooldown failed")
+				if tc.mode == settings.ErrorCooldownSilent {
+					assert.Contains(t, logs.messages(), "requirement not met, messages are off")
 				}
 			})
 		})
