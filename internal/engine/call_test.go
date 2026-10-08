@@ -31,7 +31,11 @@ func wait() engine.CallOptions {
 // call returns an action that calls the command commandID. It writes the
 // error, if any, and outcomes other than completed and queued.
 func (f *fixture) call(commandID id.ID, opts engine.CallOptions) action {
-	return action{typ: "command", fn: func(ctx context.Context, run *engine.Run) error {
+	var waits id.ID
+	if opts.Wait {
+		waits = commandID
+	}
+	return action{typ: "command", waits: waits, fn: func(ctx context.Context, run *engine.Run) error {
 		res, err := run.Call(ctx, commandID, opts)
 		switch {
 		case err != nil:
