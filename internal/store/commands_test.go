@@ -3,7 +3,7 @@
 package store_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"testing"
 	"time"
 
@@ -36,7 +36,7 @@ func TestCommandKeepsUnknownActions(t *testing.T) {
 	ctx := t.Context()
 	svc, codec := commandService(t)
 
-	actions := json.RawMessage(`[{"type":"chat.send","schemaVersion":1,"message":"Hi $username!"},{"type":"obs.scene","schemaVersion":4,"scene":"Main"}]`)
+	actions := jsontext.Value(`[{"type":"chat.send","schemaVersion":1,"message":"Hi $username!"},{"type":"obs.scene","schemaVersion":4,"scene":"Main"}]`)
 	cmd, err := codec.Command(command.Record{
 		Name: "hug", Kind: command.KindChat, Enabled: true, Unlocked: true, Triggers: []string{"hug"}, Wildcard: true,
 		ErrorPolicy: command.ErrorContinue, Actions: actions,

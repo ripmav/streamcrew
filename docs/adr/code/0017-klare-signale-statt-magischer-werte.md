@@ -59,7 +59,7 @@ Die Regeln gelten für jede Schnittstelle im Projekt: exportierte Go-APIs, Ports
   - `template.StreamFamily` und `template.UserFamily`: ein `nil`-Port heißt „keine Werte“
   - `platform.Name.ProfileURL`: leerer Text für „keine Adresse“
   - `role.Role.Rank`: 0 für eine unbekannte Rolle
-  - `polydoc.Registry.Version`: 0 für einen unbekannten Typ
+  - `polydoc.Registry.Version`: 0 für einen unbekannten Typ; erledigt 2026-09-30 mit dem Wechsel nach Code-ADR-0018 (`(version, ok)`), ebenso das fehlende `schemaVersion` als eigener Fall
   - `logging.Config`: `Console` `nil` und `File` leer schalten die Ausgabe ab
   - `supervisor.New`, `event.NewBus`, `httpserver.New`, `backup.NewScheduler`: ein `nil`-Logger verwirft; bei `httpserver.New` meldet ein `nil`-`ready` immer bereit
   - `app.WithKeyring(nil)`: überspringt den Schlüsselbund

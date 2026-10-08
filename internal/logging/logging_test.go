@@ -5,7 +5,7 @@ package logging_test
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
+	json "encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"os"

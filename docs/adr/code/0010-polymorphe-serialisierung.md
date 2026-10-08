@@ -39,6 +39,7 @@
 5. **Unbekannte Typen und zu neue Versionen** werden nicht verworfen. Sie werden als `polydoc.Unknown` mit dem unveränderten JSON gehalten und beim Speichern unverändert zurückgeschrieben. Ausgeführt werden sie nicht; die Engine meldet sie als deaktiviert mit Grund.
 6. **Kodieren:** immer in der aktuellen Version, mit `type` und `schemaVersion`. Migrierte Dokumente werden in der Datenbank erst beim nächsten Speichern neu geschrieben; ein Massenlauf ist nicht nötig.
 7. **`encoding/json` (v1)**, bis `encoding/json/v2` ohne `GOEXPERIMENT` verfügbar ist. Das Format ist davon unabhängig. Der Wechsel betrifft nur `internal/polydoc` und die Typen selbst und bekommt dann ein ergänzendes Code-ADR, das die abweichenden Standards von v2 bewertet, etwa bei ungültigem UTF-8 und doppelten Schlüsseln.
+   *Abgelöst am 2026-09-30 durch [Code-ADR-0018](0018-json-v2.md): Der Core nutzt `encoding/json/v2`. Migrationen arbeiten seitdem auf `map[string]jsontext.Value` statt `map[string]any` (Punkt 4.2), und `json.RejectUnknownMembers` ersetzt `DisallowUnknownFields` (Punkt 4.3).*
 8. **Tests:** Für jede Version eines Typs gibt es Golden Files in `testdata/`: das gespeicherte Dokument der alten Version und das erwartete Ergebnis nach der Migration ([Code-ADR-0006](0006-teststrategie.md)). Die Dekodierung bekommt einen Fuzz-Test, weil sie Eingaben von außen verarbeitet.
 
 ## Betrachtete Alternativen
@@ -73,4 +74,4 @@
 - [x] `internal/polydoc` mit Registry, Migrationskette, `Unknown` und Fuzz-Test umsetzen (Roadmap Phase 2.2), erledigt 2026-09-29
 - [x] Golden Files für die Versionen der ersten echten Typen, erledigt 2026-09-29 für die Anforderungsarten der Commands (`internal/domain/command/testdata`, neu geschrieben mit `STREAMCREW_UPDATE_GOLDEN=1`); die Action-Typen folgen in Phase 3 nach demselben Muster
 - [ ] Die Typ-Registry in Phase 3 auf `internal/polydoc` aufbauen
-- [ ] Ergänzendes Code-ADR zum Wechsel von `internal/polydoc` auf `encoding/json/v2` (Punkt 7); die Bedingung ist seit go1.27.1 erfüllt (berichtigt 2026-09-30)
+- [x] Ergänzendes Code-ADR zum Wechsel von `internal/polydoc` auf `encoding/json/v2` (Punkt 7); die Bedingung ist seit go1.27.1 erfüllt (berichtigt 2026-09-30); erledigt 2026-09-30 mit [Code-ADR-0018](0018-json-v2.md)

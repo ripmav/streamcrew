@@ -3,7 +3,7 @@
 package polydoc_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"testing"
 
@@ -22,7 +22,7 @@ type step interface {
 // say is at version 2: version 1 called the field "text".
 type say struct {
 	Message string `json:"message"`
-	AsBot   bool   `json:"asBot,omitempty"`
+	AsBot   bool   `json:"asBot,omitzero"`
 }
 
 func (say) DocType() string { return "chat.say" }
@@ -38,9 +38,9 @@ func (wait) isStep()         {}
 // unknownStep keeps documents the registry cannot decode.
 type unknownStep struct{ polydoc.Unknown }
 
-func (u unknownStep) DocType() string          { return u.Type }
-func (u unknownStep) RawJSON() json.RawMessage { return u.Raw }
-func (unknownStep) isStep()                    {}
+func (u unknownStep) DocType() string         { return u.Type }
+func (u unknownStep) RawJSON() jsontext.Value { return u.Raw }
+func (unknownStep) isStep()                   {}
 
 func newRegistry(t *testing.T) *polydoc.Registry[step] {
 	t.Helper()
@@ -52,7 +52,7 @@ func newRegistry(t *testing.T) *polydoc.Registry[step] {
 			return polydoc.Strict[say](data)
 		},
 		Migrations: []polydoc.Migration{
-			func(doc map[string]any) error { // 1 → 2: "text" becomes "message"
+			func(doc map[string]jsontext.Value) error { // 1 → 2: "text" becomes "message"
 				doc["message"] = doc["text"]
 				delete(doc, "text")
 				return nil
@@ -144,6 +144,11 @@ func TestDecodeErrors(t *testing.T) {
 		"migrated field clash":   `{"type":"chat.say","schemaVersion":1,"text":"a","message":"b","extra":1}`,
 		"huge version":           `{"type":"flow.wait","schemaVersion":99999999999,"millis":1}`,
 		"number too big for i64": `{"type":"flow.wait","millis":1e30}`,
+		// Strict reading of encoding/json/v2 (Code-ADR-0018).
+		"duplicate name":     `{"type":"flow.wait","millis":1,"millis":2}`,
+		"other spelling":     `{"type":"flow.wait","Millis":1}`,
+		"invalid UTF-8":      "{\"type\":\"chat.say\",\"message\":\"\xff\"}",
+		"version with a dot": `{"type":"flow.wait","schemaVersion":1.0,"millis":1}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -210,8 +215,11 @@ func TestRegisterValidation(t *testing.T) {
 	require.NoError(t, r.Register(polydoc.Entry[step]{Type: "a.b", Version: 1, Decode: decode}))
 	assert.ErrorContains(t, r.Register(polydoc.Entry[step]{Type: "a.b", Version: 1, Decode: decode}), "already registered")
 	assert.Equal(t, []string{"a.b"}, r.Types())
-	assert.Equal(t, 1, r.Version("a.b"))
-	assert.Zero(t, r.Version("x.y"))
+	version, ok := r.Version("a.b")
+	assert.True(t, ok)
+	assert.Equal(t, 1, version)
+	_, ok = r.Version("x.y")
+	assert.False(t, ok)
 }
 
 // TestWithoutPlaceholder checks that a registry without a placeholder for
@@ -234,7 +242,7 @@ func TestMigrationError(t *testing.T) {
 	require.NoError(t, r.Register(polydoc.Entry[step]{
 		Type: "a.b", Version: 2,
 		Decode:     func([]byte) (step, error) { return wait{}, nil },
-		Migrations: []polydoc.Migration{func(map[string]any) error { return errors.New("cannot migrate") }},
+		Migrations: []polydoc.Migration{func(map[string]jsontext.Value) error { return errors.New("cannot migrate") }},
 	}))
 	_, err := r.Decode([]byte(`{"type":"a.b","schemaVersion":1}`))
 	assert.ErrorContains(t, err, "migrate version 1 to 2: cannot migrate")

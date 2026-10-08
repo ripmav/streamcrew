@@ -27,7 +27,7 @@ type Info struct {
 	// Time is the commit time in RFC 3339 format, if known.
 	Time string `json:"time,omitempty"`
 	// Modified reports whether the working tree had uncommitted changes.
-	Modified bool `json:"modified,omitempty"`
+	Modified bool `json:"modified,omitzero"`
 	// GoVersion is the Go toolchain that built the binary.
 	GoVersion string `json:"go_version"`
 	// Platform is the target as GOOS/GOARCH.
