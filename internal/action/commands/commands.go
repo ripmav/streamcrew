@@ -194,6 +194,15 @@ type RunOptions struct {
 // DocType implements command.Action.
 func (Command) DocType() string { return TypeCommand }
 
+var _ engine.WaitingCaller = Command{}
+
+// WaitsFor implements engine.WaitingCaller: run with waiting runs the
+// called command as part of its own instance, so its actions count for the
+// locks (command-engine.md, B22, B23).
+func (c Command) WaitsFor() (id.ID, bool) {
+	return c.Command, c.Kind == KindRun && c.Run != nil && c.Run.Wait
+}
+
 // Validate implements command.Action. That the command or group exists,
 // saving checks (B31).
 func (c Command) Validate() error {

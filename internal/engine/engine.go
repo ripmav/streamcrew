@@ -493,7 +493,7 @@ type admission struct {
 // enqueue queues an instance of cmd with the settings cfg; cmd and p are
 // checked.
 func (e *Engine) enqueue(ctx context.Context, cmd command.Command, src Source, p Params, cfg Config, adm admission, org origin) (id.ID, error) {
-	locks, err := e.locks(cmd, cfg.Commands.LockMode)
+	locks, err := e.locks(ctx, cmd, cfg.Commands.LockMode)
 
 	e.mu.Lock()
 	defer e.mu.Unlock()

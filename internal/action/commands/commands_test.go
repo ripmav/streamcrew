@@ -302,6 +302,25 @@ func TestRun(t *testing.T) {
 	})
 }
 
+// TestWaitsFor covers command-engine.md, B22 and B23: only run with
+// waiting tells the engine the called command, whose actions then count
+// for the locks.
+func TestWaitsFor(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		target := id.New()
+		var caller engine.WaitingCaller = f.action(commands.KindRun, target)
+		got, ok := caller.WaitsFor()
+		assert.True(t, ok, "a new action waits")
+		assert.Equal(t, target, got)
+		_, ok = f.run(target, commands.RunOptions{Args: commands.CallerArgs()}).WaitsFor()
+		assert.False(t, ok, "without waiting")
+		_, ok = f.action(commands.KindEnable, target).WaitsFor()
+		assert.False(t, ok, "a kind that runs nothing")
+	})
+}
+
 // TestRunWithoutRunning covers actions.md B33: a disabled command, a
 // rejection and a waiting threshold let the action succeed without the
 // command running, and the core logs them. Completed and queued are in

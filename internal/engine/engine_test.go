@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -324,6 +325,67 @@ func TestNestedActionLocks(t *testing.T) {
 				assert.Equal(t, engine.StatePending, f.state(nested))
 			})
 		})
+	}
+}
+
+// TestWaitedCallLocks covers B22 and B23: the actions of commands called
+// with waiting count for the locks, also further down and in a cycle;
+// calls without waiting and inactive calls do not, and a called command
+// that cannot be read counts nothing.
+func TestWaitedCallLocks(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []settings.LockMode{settings.LockPerActionType, settings.LockVisualAudio} {
+		for name, tc := range map[string]struct {
+			caller func(f *fixture) command.Command
+			want   engine.State
+		}{
+			"two levels down": {func(f *fixture) command.Command {
+				sound := f.command("sound", command.KindActionGroup, action{typ: "sound"})
+				middle := f.command("middle", command.KindActionGroup, f.call(sound.ID, wait()))
+				return f.command("caller", command.KindChat, f.call(middle.ID, wait()))
+			}, engine.StatePending},
+			"cycle": {func(f *fixture) command.Command {
+				a := command.Command{ID: id.New(), Name: "a", Kind: command.KindChat, Enabled: true, ErrorPolicy: command.ErrorContinue}
+				b := f.command("b", command.KindActionGroup, f.call(a.ID, wait()), action{typ: "sound"})
+				a.Actions = []command.Action{f.call(b.ID, wait())}
+				f.commands.put(a)
+				return a
+			}, engine.StatePending},
+			"without waiting": {func(f *fixture) command.Command {
+				sound := f.command("sound", command.KindActionGroup, action{typ: "sound"})
+				return f.command("caller", command.KindChat, f.call(sound.ID, engine.CallOptions{}))
+			}, engine.StateCompleted},
+			"inactive call": {func(f *fixture) command.Command {
+				sound := f.command("sound", command.KindActionGroup, action{typ: "sound"})
+				call := f.call(sound.ID, wait())
+				call.disabled = true
+				return f.command("caller", command.KindChat, call, f.journal.note("caller"))
+			}, engine.StateCompleted},
+			"unknown command": {func(f *fixture) command.Command {
+				return f.command("caller", command.KindChat, f.call(id.New(), wait()))
+			}, engine.StateCompleted},
+			"after an unknown command": {func(f *fixture) command.Command {
+				return f.command("caller", command.KindChat, f.call(id.New(), wait()), action{typ: "sound"})
+			}, engine.StatePending},
+		} {
+			t.Run(string(mode)+"/"+name, func(t *testing.T) {
+				t.Parallel()
+				synctest.Test(t, func(t *testing.T) {
+					logs := &records{}
+					f := newFixtureWithTypes(t, mode, visual("sound"), engine.WithLogger(slog.New(logs)))
+					defer f.stop()
+					release := make(chan struct{})
+					defer close(release)
+					f.start(f.command("holder", command.KindChat, f.journal.hold("sound", "holder", release)), engine.Params{})
+
+					caller := f.start(tc.caller(f), engine.Params{})
+					assert.Equal(t, tc.want, f.state(caller))
+					if strings.Contains(name, "unknown command") {
+						assert.Contains(t, logs.messages(), "the locks leave out a called command that cannot be read")
+					}
+				})
+			})
+		}
 	}
 }
 
