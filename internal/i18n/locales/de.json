@@ -9,6 +9,6 @@
   "requirement.cooldown.all": "Dieser Command ist in {remaining} wieder verfügbar.",
   "requirement.cooldown.user": "Du kannst diesen Command in {remaining} wieder nutzen.",
   "requirement.faulty": "Dieser Command kann nicht laufen, weil eine seiner Anforderungen fehlerhaft ist.",
-  "requirement.role": "Dieser Command braucht die Rolle {role, select, banned {gebannt} user {Nutzer} creator {Creator} follower {Follower} regular {Stammzuschauer} vip {VIP} subscriber {Abonnent} platform_staff {Plattform-Team} moderator {Moderator} editor {Editor} streamer {Streamer} other {{role}}} oder eine höhere.",
+  "requirement.role": "Dieser Command braucht die Rolle {role, select, banned {gebannt} user {Nutzer} twitch_affiliate {Twitch-Affiliate} twitch_partner {Twitch-Partner} follower {Follower} youtube_subscriber {YouTube-Abonnent} regular {Stammzuschauer} twitch_vip {Twitch-VIP} kick_vip {Kick-VIP} kick_og {Kick-OG} velora_vip {Velora-VIP} vpzone_plus {VPZone Plus} vpzone_founder {VPZone-Founder} vpzone_ambassador {VPZone-Ambassador} subscriber {Abonnent} youtube_member {YouTube-Mitglied} twitch_global_mod {globaler Twitch-Moderator} twitch_staff {Twitch-Mitarbeiter} moderator {Moderator} editor {Editor} streamer {Streamer} other {{role}}} oder eine höhere.",
   "requirement.unknown": "Dieser Command kann nicht laufen, weil diese Version eine seiner Anforderungen nicht kennt."
 }

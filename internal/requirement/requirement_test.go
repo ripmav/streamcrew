@@ -472,3 +472,32 @@ func (noTypes) VisualAudio(string) bool { return false }
 func (noTypes) Missing(string) []capability.Capability {
 	return []capability.Capability{}
 }
+
+// TestRoleMessages covers B12 with users-and-roles.md, B20: the message
+// names each level of the ranking in both languages, not by its ID.
+func TestRoleMessages(t *testing.T) {
+	t.Parallel()
+	catalog, err := i18n.Load()
+	require.NoError(t, err)
+	render := func(lang i18n.Language, r role.Role) string {
+		text, err := catalog.Render(lang, roleMessage(r))
+		require.NoError(t, err)
+		return text
+	}
+	assert.Equal(t, "This command needs the role Kick OG or a higher one.", render(i18n.English, role.KickOG))
+	assert.Equal(t, "Dieser Command braucht die Rolle globaler Twitch-Moderator oder eine höhere.", render(i18n.German, role.TwitchGlobalMod))
+	assert.Equal(t, "Dieser Command braucht die Rolle YouTube-Abonnent oder eine höhere.", render(i18n.German, role.YouTubeSubscriber))
+	for _, r := range role.All() {
+		for _, lang := range []i18n.Language{i18n.English, i18n.German} {
+			text := render(lang, r)
+			if strings.Contains(string(r), "_") || lang == i18n.German {
+				assert.NotContains(t, text, " "+string(r)+" ", "%s: %s has a name", lang, r)
+			}
+		}
+	}
+}
+
+// roleMessage returns the message of a rejection for the minimum role r.
+func roleMessage(r role.Role) i18n.Message {
+	return i18n.Message{Key: i18n.KeyRequirementRole, Args: map[string]i18n.Value{"role": i18n.Text(string(r))}}
+}
