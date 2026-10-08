@@ -521,6 +521,38 @@ func TestSaveChecksRequirements(t *testing.T) {
 	}, saved.Warnings, "the requirements first")
 }
 
+// TestSaveFindsUnicodeCounters covers counters-and-quotes.md, B1 and B7,
+// with actions.md, B41: a counter that exists in another case is not
+// created again, also beyond ASCII.
+func TestSaveFindsUnicodeCounters(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+	codec, err := command.NewCodec(polydoc.Entry[command.Action]{
+		Type: "ref", Version: 1,
+		Decode: func(data []byte, opts json.Options) (command.Action, error) {
+			return polydoc.Strict[refAction](data, opts)
+		},
+	})
+	require.NoError(t, err)
+	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: noNames{}, Types: noTypes{}, Roots: noRoots{}})
+	require.NoError(t, err)
+	_, err = s.CreateCounter(ctx, counter.New("Zähler"))
+	require.NoError(t, err)
+
+	cmd := chatCommand("count", true, "count")
+	cmd.Actions = []command.Action{refAction{Counters: []string{"ZÄHLER", "Straße"}}}
+	_, err = svc.Save(ctx, cmd)
+	require.NoError(t, err)
+	counters, err := s.Counters(ctx)
+	require.NoError(t, err)
+	var names []string
+	for _, c := range counters {
+		names = append(names, c.Name)
+	}
+	assert.ElementsMatch(t, []string{"Zähler", "Straße"}, names)
+}
+
 func TestNewServiceNeedsChecks(t *testing.T) {
 	t.Parallel()
 	s := openStore(t)

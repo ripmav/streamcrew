@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ripmav/streamcrew/internal/domain/command"
+	"github.com/ripmav/streamcrew/internal/domain/counter"
 	"github.com/ripmav/streamcrew/internal/domain/id"
 )
 
@@ -260,6 +261,37 @@ func TestFineRolesMigration(t *testing.T) {
 	var back string
 	require.NoError(t, s.write.QueryRowContext(ctx, "SELECT roles FROM user_identities WHERE platform_user_id = 't2'").Scan(&back))
 	assert.JSONEq(t, `["creator","follower","vip","platform_staff"]`, back, "the way down merges the levels")
+}
+
+// TestCounterNameKeyMigration covers counters-and-quotes.md, B1: counters
+// from before the name key are found regardless of case.
+func TestCounterNameKeyMigration(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, err := Open(ctx, filepath.Join(t.TempDir(), "p.db"))
+	require.NoError(t, err)
+	defer s.Close()
+	fsys, err := fs.Sub(migrations, "migrations")
+	require.NoError(t, err)
+	p, err := goose.NewProvider(goose.DialectSQLite3, s.write, fsys, goose.WithDisableGlobalRegistry(true))
+	require.NoError(t, err)
+
+	const beforeKey = 11
+	_, err = p.DownTo(ctx, beforeKey)
+	require.NoError(t, err)
+	_, err = s.write.ExecContext(ctx, `INSERT INTO counters (id, name, value, reset_on_start, created_at, updated_at, step) VALUES
+		('0190a5e0-0000-7000-8000-000000000001', 'Deaths', '4', 0, 0, 0, '1')`)
+	require.NoError(t, err)
+	_, err = p.Up(ctx)
+	require.NoError(t, err)
+	c, err := s.Counter(ctx, "DEATHS")
+	require.NoError(t, err)
+	assert.Equal(t, "Deaths", c.Name)
+	assert.Equal(t, "4", c.Value.String())
+	_, err = s.CreateCounter(ctx, counter.New("deaths"))
+	require.Error(t, err, "the key is unique")
+	_, err = p.DownTo(ctx, beforeKey)
+	require.NoError(t, err)
 }
 
 func TestLatestVersionMatchesFiles(t *testing.T) {

@@ -13,7 +13,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/id"
@@ -70,19 +73,31 @@ func (c Counter) Validate() error {
 	return nil
 }
 
-// ValidateName checks the name of a counter: 1 to 64 ASCII letters and
-// digits, because the template engine reads identifier names from these
-// characters only (B7, plan §6.10).
+// ValidateName checks the name of a counter (B7): 1 to 64 letters and
+// digits in the sense of Unicode, as the template engine reads them in
+// tokens (template.md, B1), also umlauts and other scripts. Marks that
+// belong to a letter, such as an accent or a vowel sign of Devanagari,
+// count as characters too, but cannot start a name.
 func ValidateName(name string) error {
-	if name == "" || len(name) > maxNameLen {
+	if n := utf8.RuneCountInString(name); n == 0 || n > maxNameLen {
 		return fmt.Errorf("%w: name %q: want 1 to %d characters", ErrInvalid, name, maxNameLen)
 	}
-	for _, r := range name {
-		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
-			return fmt.Errorf("%w: name %q: only ASCII letters and digits are allowed", ErrInvalid, name)
+	for i, r := range name {
+		switch {
+		case unicode.IsLetter(r), unicode.IsDigit(r):
+		case unicode.IsMark(r) && i > 0:
+		default:
+			return fmt.Errorf("%w: name %q: only letters and digits are allowed", ErrInvalid, name)
 		}
 	}
 	return nil
+}
+
+// Key returns the key under which a counter name is unique and found,
+// regardless of case (B1): the name in lower case, rune by rune, as the
+// template engine compares tokens (template.md, B1).
+func Key(name string) string {
+	return strings.ToLower(name)
 }
 
 // ErrReserved is wrapped when the name of a counter collides with a

@@ -94,6 +94,14 @@ func TestValidate(t *testing.T) {
 		require.NoError(t, counter.ValidateName(name), name)
 		assert.NoError(t, counter.New(name).Validate(), name)
 	}
+	for _, name := range []string{"zähler", "Счётчик", "नमस्ते", "計數器", "x٣", strings.Repeat("ä", 64)} {
+		require.NoError(t, counter.ValidateName(name), "B7: %s", name)
+	}
+	for _, name := range []string{"\u0301abc", strings.Repeat("ä", 65), "zähler!", "\xff", "a\u00a0b"} {
+		require.ErrorIs(t, counter.ValidateName(name), counter.ErrInvalid, "%q", name)
+	}
+	assert.Equal(t, "zähler", counter.Key("ZÄHLER"))
+	assert.Equal(t, "straße", counter.Key("STRAẞE"))
 	for _, name := range []string{"", "two words", "tode_zähler", "a-b", "$x", strings.Repeat("a", 65)} {
 		require.ErrorIs(t, counter.ValidateName(name), counter.ErrInvalid, name)
 		assert.ErrorIs(t, counter.New(name).Validate(), counter.ErrInvalid, name)
