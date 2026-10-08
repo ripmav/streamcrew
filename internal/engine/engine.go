@@ -28,8 +28,6 @@ import (
 
 // Limits of the spec.
 const (
-	// MaxPending is the most instances that wait at the same time (B15).
-	MaxPending = 1000
 	// HistorySize is the number of instances the history keeps (B60).
 	HistorySize = 200
 	// DefaultTimeLimit is the time limit of an action until it sets another
@@ -51,7 +49,8 @@ var (
 	// ErrClosed is returned for an instance queued after the core began to
 	// stop (B55).
 	ErrClosed = errors.New("the command engine is shut down")
-	// ErrQueueFull is returned when MaxPending instances wait (B15).
+	// ErrQueueFull is returned when as many instances wait as the queue
+	// size of the settings allows (B15).
 	ErrQueueFull = errors.New("the command queue is full")
 	// ErrNotFound is returned for an instance that is neither queued,
 	// running nor in the history.
@@ -478,6 +477,9 @@ type admission struct {
 	whileStopping bool
 	// greeting makes the instance a greeting (B41).
 	greeting bool
+	// queueSize is how many instances may wait (B15); an instance with a
+	// reserved place does not need it.
+	queueSize int
 }
 
 // enqueue queues an instance of cmd with the settings cfg; cmd and p are
@@ -493,6 +495,7 @@ func (e *Engine) enqueue(ctx context.Context, cmd command.Command, src Source, p
 	if err != nil {
 		return id.ID{}, fmt.Errorf("queue command %q: %w", cmd.Name, err)
 	}
+	adm.queueSize = cfg.Commands.QueueSize
 	if err := e.admitLocked(ctx, cmd, src, adm); err != nil {
 		return id.ID{}, err
 	}
@@ -583,9 +586,9 @@ func (e *Engine) admitLocked(ctx context.Context, cmd command.Command, src Sourc
 	default:
 		return fmt.Errorf("queue command %q: %w", cmd.Name, ErrClosed)
 	}
-	if !adm.reserved && len(e.pending)+e.reserved >= MaxPending {
+	if !adm.reserved && len(e.pending)+e.reserved >= adm.queueSize {
 		e.logger.WarnContext(ctx, "command queue full, command dropped",
-			"command", cmd.Name, "source", src, "pending", len(e.pending))
+			"command", cmd.Name, "source", src, "pending", len(e.pending), "queue_size", adm.queueSize)
 		return fmt.Errorf("queue command %q: %w", cmd.Name, ErrQueueFull)
 	}
 	return nil

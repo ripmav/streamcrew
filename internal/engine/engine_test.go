@@ -547,23 +547,47 @@ func TestInvalidTimeLimit(t *testing.T) {
 	})
 }
 
-// TestQueueFull covers B15.
+// TestQueueFull covers B15 and B90: as many instances wait as the queue
+// size of the settings allows; a new size applies to the next instances,
+// and a smaller one than the instances waiting takes no new ones until
+// enough have started.
 func TestQueueFull(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		f := newFixture(t, settings.LockSingular)
 		defer f.stop()
+		f.configs.queueSize(3)
 
 		release := make(chan struct{})
-		defer close(release)
 		f.start(f.command("holder", command.KindChat, f.journal.hold("x", "holder", release)), engine.Params{})
 		waiting := f.command("waiting", command.KindChat, f.journal.note("waiting"))
-		for range engine.MaxPending {
+		queue := func(want error) {
+			t.Helper()
 			_, err := f.engine.Start(t.Context(), waiting, engine.Params{})
-			require.NoError(t, err)
+			if want == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, want)
 		}
+		for range 3 {
+			queue(nil)
+		}
+		queue(engine.ErrQueueFull)
+		f.configs.queueSize(4)
+		queue(nil)
+		queue(engine.ErrQueueFull)
+		f.configs.queueSize(2)
+		queue(engine.ErrQueueFull)
+
+		close(release)
+		synctest.Wait()
+		assert.Len(t, f.journal.get(), 5, "the waiting instances ran")
+		queue(nil)
+		queue(nil)
+		f.configs.queueSize(0)
 		_, err := f.engine.Start(t.Context(), waiting, engine.Params{})
-		require.ErrorIs(t, err, engine.ErrQueueFull)
+		require.ErrorIs(t, err, engine.ErrInvalidConfig, "a size the settings would not save")
 	})
 }
 
@@ -842,7 +866,8 @@ func TestLogs(t *testing.T) {
 		f.start(f.command("unknown", command.KindChat, unknown{typ: "obs.scene"}), engine.Params{})
 		f.start(f.command("holder", command.KindChat, f.journal.hold("x", "holder", release)), engine.Params{})
 		waiting := f.command("waiting", command.KindChat, f.journal.note("waiting"))
-		for range engine.MaxPending {
+		f.configs.queueSize(2)
+		for range 2 {
 			_, err := f.engine.Start(t.Context(), waiting, engine.Params{})
 			require.NoError(t, err)
 		}

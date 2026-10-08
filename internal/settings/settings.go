@@ -48,7 +48,7 @@ func New(repo Repository) (*Service, error) {
 	for _, e := range []polydoc.Entry[Section]{
 		{Type: sectionBackups, Version: 1, Decode: decode[Backups]},
 		{Type: sectionTime, Version: 2, Decode: decode[Time], Migrations: []polydoc.Migration{migrateTimeV1}},
-		{Type: sectionCommands, Version: 2, Decode: decode[Commands], Migrations: []polydoc.Migration{migrateCommandsV1}},
+		{Type: sectionCommands, Version: 3, Decode: decode[Commands], Migrations: []polydoc.Migration{migrateCommandsV1, migrateCommandsV2}},
 		{Type: sectionLocale, Version: 1, Decode: decode[Locale]},
 	} {
 		if err := r.Register(e); err != nil {
@@ -309,10 +309,21 @@ const (
 	MaxEntranceMediaGap = time.Minute
 )
 
+// Limits of Commands.QueueSize (spec command-engine.md, B15, B90).
+const (
+	// DefaultQueueSize is the queue size of a profile that never set one.
+	DefaultQueueSize = 1000
+	// MinQueueSize is the smallest queue.
+	MinQueueSize = 1
+	// MaxQueueSize is the largest queue; each waiting instance holds a
+	// goroutine and its data.
+	MaxQueueSize = 10_000
+)
+
 // Commands configures the command engine (spec command-engine.md, B90).
 // Changes apply to the instances queued afterwards. Version 1 of the section
-// had no EntranceMediaGap; version 2 has it, and the migration sets
-// DefaultEntranceMediaGap.
+// had no EntranceMediaGap, version 2 no QueueSize; the migrations set
+// DefaultEntranceMediaGap and DefaultQueueSize.
 type Commands struct {
 	// LockMode is the lock mode of all commands (B20).
 	LockMode LockMode `json:"lockMode"`
@@ -328,6 +339,11 @@ type Commands struct {
 	// after the playback of the one before (B43), from MinEntranceMediaGap
 	// to MaxEntranceMediaGap.
 	EntranceMediaGap polydoc.Duration `json:"entranceMediaGap"`
+	// QueueSize is how many instances may wait at the same time (B15),
+	// from MinQueueSize to MaxQueueSize. A size below the number of
+	// waiting instances takes no new ones until enough of them have
+	// started.
+	QueueSize int `json:"queueSize"`
 }
 
 // DefaultCommands returns the defaults of B90.
@@ -338,6 +354,7 @@ func DefaultCommands() Commands {
 		ErrorCooldownDuration: polydoc.Duration(10 * time.Second),
 		ArgDelimiter:          "|",
 		EntranceMediaGap:      polydoc.Duration(DefaultEntranceMediaGap),
+		QueueSize:             DefaultQueueSize,
 	}
 }
 
@@ -351,6 +368,19 @@ func migrateCommandsV1(doc map[string]jsontext.Value) error {
 		return err
 	}
 	doc["entranceMediaGap"] = gap
+	return nil
+}
+
+// migrateCommandsV2 adds the queue size of version 3 with its default.
+func migrateCommandsV2(doc map[string]jsontext.Value) error {
+	if _, ok := doc["queueSize"]; ok {
+		return errors.New("queue size in version 2")
+	}
+	size, err := json.Marshal(DefaultQueueSize)
+	if err != nil {
+		return err
+	}
+	doc["queueSize"] = size
 	return nil
 }
 
@@ -380,6 +410,9 @@ func (c Commands) validate() error {
 	}
 	if gap := c.EntranceMediaGap.Std(); gap < MinEntranceMediaGap || gap > MaxEntranceMediaGap {
 		return fmt.Errorf("entrance media gap %s is not between %s and %s", gap, MinEntranceMediaGap, MaxEntranceMediaGap)
+	}
+	if c.QueueSize < MinQueueSize || c.QueueSize > MaxQueueSize {
+		return fmt.Errorf("queue size %d is not between %d and %d", c.QueueSize, MinQueueSize, MaxQueueSize)
 	}
 	return nil
 }

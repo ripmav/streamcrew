@@ -164,6 +164,12 @@ func (c *configs) lockMode(m settings.LockMode) {
 	c.cfg.Commands.LockMode = m
 }
 
+func (c *configs) queueSize(n int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cfg.Commands.QueueSize = n
+}
+
 // fixture is a running engine with a subscription to its events. Create it
 // inside a synctest bubble and defer stop.
 type fixture struct {

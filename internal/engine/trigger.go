@@ -258,13 +258,18 @@ func (e *Engine) Trigger(ctx context.Context, req Request) (Result, error) {
 	if !cmd.Enabled {
 		return Result{Outcome: OutcomeDisabled}, nil
 	}
+	cfg, err := e.readConfig(ctx)
+	if err != nil {
+		return Result{}, fmt.Errorf("trigger command %q: %w", cmd.Name, err)
+	}
 	adm := admission{
 		whileStopping: req.Source == SourceEvent && req.Event == eventtype.AppStopping,
 		greeting:      req.Entrance || req.Source == SourceEvent && req.Event == eventtype.ChatUserEntrance,
+		queueSize:     cfg.Commands.QueueSize,
 	}
 
 	e.mu.Lock()
-	err := e.reserveLocked(ctx, cmd, req.Source, adm)
+	err = e.reserveLocked(ctx, cmd, req.Source, adm)
 	e.mu.Unlock()
 	if err != nil {
 		return Result{}, err
@@ -275,11 +280,6 @@ func (e *Engine) Trigger(ctx context.Context, req Request) (Result, error) {
 		e.reserved--
 	}
 
-	cfg, err := e.readConfig(ctx)
-	if err != nil {
-		release()
-		return Result{}, fmt.Errorf("trigger command %q: %w", cmd.Name, err)
-	}
 	p := e.lookupTarget(ctx, req.Params)
 	d, err := e.decide(ctx, cmd, p)
 	if err != nil {
