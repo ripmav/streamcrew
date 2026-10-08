@@ -41,6 +41,8 @@
 
 *\*\* Präzisiert am 2026-09-29, Entscheidung des Projektinhabers: Ohne gespeicherte Zone gilt die Zeitzone des Systems zur Laufzeit, nicht die beim Anlegen. Unter Windows lässt sich der IANA-Name der Systemzone nicht zuverlässig ermitteln. Kann weder die gespeicherte noch die Systemzone genutzt werden, gilt UTC; eine gespeicherte, aber nicht ladbare Zone wird im Log gemeldet.*
 
+*Geändert am 2026-09-30, Entscheidung des Projektinhabers nach [Code-ADR-0017](0017-klare-signale-statt-magischer-werte.md): Die Systemzone steht in der Settings-Sektion „time“ als ausdrücklicher Wert `system` statt als leerer Name. Die Sektion hat dafür Version 2; ihre Migration macht aus dem leeren Namen der Version 1 `system`. Ein leerer Name ist seitdem ungültig.*
+
 *\*\*\* Präzisiert am 2026-09-29: Dauern in polymorphen Dokumenten ([Code-ADR-0010](0010-polymorphe-serialisierung.md)), etwa Cooldowns in Anforderungen, stehen auch im JSON der Datenbank als Go-Dauer (`polydoc.Duration`). So sehen JSON und YAML gleich aus, wie Code-ADR-0010 es verlangt; `INTEGER` in Millisekunden gilt für Spalten.*
 
 ## Betrachtete Alternativen

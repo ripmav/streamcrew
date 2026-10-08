@@ -13,6 +13,7 @@ package settings
 import (
 	"context"
 	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"strings"
@@ -45,7 +46,7 @@ func New(repo Repository) (*Service, error) {
 	r := polydoc.NewRegistry("settings", func(u polydoc.Unknown) Section { return unknown{u} })
 	for _, e := range []polydoc.Entry[Section]{
 		{Type: sectionBackups, Version: 1, Decode: decode[Backups]},
-		{Type: sectionTime, Version: 1, Decode: decode[Time]},
+		{Type: sectionTime, Version: 2, Decode: decode[Time], Migrations: []polydoc.Migration{migrateTimeV1}},
 		{Type: sectionCommands, Version: 1, Decode: decode[Commands]},
 	} {
 		if err := r.Register(e); err != nil {
@@ -148,30 +149,59 @@ func (b Backups) validate() error {
 	return nil
 }
 
-// Time holds the time zone of the profile (Code-ADR-0009, as decided by the
-// project owner on 2026-09-29): an IANA name, or empty for the time zone of
-// the system at run time. UTC is the fallback when neither can be used.
+// TimeZoneSystem names the time zone of the system at run time (Code-ADR-0009,
+// as decided by the project owner on 2026-09-29 and 2026-09-30).
+const TimeZoneSystem = "system"
+
+// Time holds the time zone of the profile (Code-ADR-0009): TimeZoneSystem or
+// an IANA name. UTC is the fallback when neither can be used. Version 1 of
+// the section wrote an empty name for the system zone; version 2 writes
+// TimeZoneSystem (Code-ADR-0017).
 type Time struct {
-	// TimeZone is an IANA name such as "Europe/Berlin"; empty means the
-	// time zone of the system.
+	// TimeZone is TimeZoneSystem or an IANA name such as "Europe/Berlin".
 	TimeZone string `json:"timeZone"`
 }
 
 // DefaultTime returns the system time zone.
 func DefaultTime() Time {
-	return Time{}
+	return Time{TimeZone: TimeZoneSystem}
+}
+
+// migrateTimeV1 turns the empty name of version 1 into TimeZoneSystem.
+func migrateTimeV1(doc map[string]jsontext.Value) error {
+	raw, ok := doc["timeZone"]
+	if !ok {
+		return errors.New("time zone missing")
+	}
+	var name string
+	if err := json.Unmarshal(raw, &name); err != nil {
+		return fmt.Errorf("time zone: %w", err)
+	}
+	if name != "" {
+		return nil
+	}
+	system, err := jsontext.AppendQuote(nil, TimeZoneSystem)
+	if err != nil {
+		return err
+	}
+	doc["timeZone"] = system
+	return nil
 }
 
 // DocType implements polydoc.Document.
 func (Time) DocType() string { return sectionTime }
 
-// Location returns the time zone: the named one, or the system zone if none
-// is set. Go uses UTC as the system zone when it cannot determine one. If
-// the named zone cannot be loaded, Location returns UTC together with the
-// error, so that callers can warn and carry on.
+// Location returns the time zone: the system zone for TimeZoneSystem, else
+// the named one. Go uses UTC as the system zone when it cannot determine
+// one. If the named zone cannot be loaded, Location returns UTC together
+// with the error, so that callers can warn and carry on; an empty name is
+// such an error.
 func (t Time) Location() (*time.Location, error) {
-	if t.TimeZone == "" {
+	switch t.TimeZone {
+	case TimeZoneSystem:
 		return time.Local, nil
+	case "":
+		return time.UTC, errors.New("no time zone, using UTC")
 	}
 	loc, err := time.LoadLocation(t.TimeZone)
 	if err != nil {
