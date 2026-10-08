@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-10-03 |
 | **Bezug** | Roadmap Phase 2.2 (Commands), 3.2–3.5, 5.4; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md); Plan §5.2, §5.4, §6.8, §6.9; [`users-and-roles.md`](users-and-roles.md), [`events.md`](events.md) |
-| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/command`, Repository in `internal/store`; Cooldown-Gruppen als `command.CooldownGroup` (B33, Migration 0007); den Schalter „aktiv“ ändern `command.Service.SwitchCommand` und `SwitchGroup` für die Command-Action ([`actions.md`](actions.md), B34), mit B14 für die Trigger. Ausführung, Sperren, Prüfung der Anforderungen und fehlerhafte Verweise (B3, B5, B15, B21, B63) folgen mit `command-engine.md` (Phase 3), B6 mit den vorgefertigten Commands (Phase 5.6). Der Schalter „`!` voranstellen“ und die Option „Platzhalter“ stehen als Trigger-Art `command.TriggerMode` im Datenmodell (`exclamation`, `literal`, `wildcard`; B11, B13, Migration 0009), Trigger mit Schreibweise und ihre Eindeutigkeit (B14) in `command.TriggerKey`, der Vergleich einer Nachricht mit einem Trigger in `command.MatchTrigger`. Die Erkennung (B16) folgt mit der Trigger-Erkennung (Roadmap 3.6) |
+| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/command`, Repository in `internal/store`; Cooldown-Gruppen als `command.CooldownGroup` (B33, Migration 0007); den Schalter „aktiv“ ändern `command.Service.SwitchCommand` und `SwitchGroup` für die Command-Action ([`actions.md`](actions.md), B34), mit B14 für die Trigger. Ausführung, Sperren, Prüfung der Anforderungen und fehlerhafte Verweise (B3, B5, B15, B21, B63) folgen mit `command-engine.md` (Phase 3), B6 mit den vorgefertigten Commands (Phase 5.6). Der Schalter „`!` voranstellen“ und die Option „Platzhalter“ stehen als Trigger-Art `command.TriggerMode` im Datenmodell (`exclamation`, `literal`, `wildcard`; B11, B13, Migration 0009), Trigger mit Schreibweise und ihre Eindeutigkeit (B14) in `command.TriggerKey`, der Vergleich einer Nachricht mit einem Trigger in `command.MatchTrigger`. Die Erkennung (B16) folgt mit der Trigger-Erkennung (Roadmap 3.6); eindeutige Namen (B7) mit `command.NameKey` und der Spalte `name_key` (Migrationen 0013 und 14) seit Roadmap 3.5 |
 
 ## Zweck und Umfang
 
@@ -41,6 +41,7 @@ Nicht Teil dieser Spezifikation, sondern von `command-engine.md` (Phase 3):
 | B4 | Actions sind polymorphe Dokumente mit `type` und `schemaVersion`; ihre Reihenfolge ist die Ausführungsreihenfolge. Unbekannte Action-Typen bleiben erhalten und werden nicht ausgeführt. | Code-ADR-0010 |
 | B5 | Freigegeben heißt: Der Command läuft sofort, auch wenn ein anderer Command derselben Sperrgruppe gerade läuft. Wie gesperrt wird, legt eine globale Einstellung fest (je Art, je Action-Art, visuell/akustisch, eine Sperre für alles, keine). | Q3 |
 | B6 | Vorgefertigte Commands können nicht gelöscht werden, nur deaktiviert oder geändert. | Q3 („nutzererstellte Commands lassen sich löschen“) |
+| B7 | Der Name eines Commands ist ohne Rücksicht auf die Schreibweise eindeutig, auch über die Arten hinweg und bei Buchstaben jenseits von ASCII; ein Command darf die Schreibweise seines eigenen Namens ändern. Daran erkennen Commands als Code einen Command (`commands-as-code.md`, B22). | Entscheidung des Projektinhabers |
 
 ### Chat-Commands
 
@@ -98,6 +99,7 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | B65 | Trigger `Hallo` und `hallo` an zwei Commands, Nachricht „!HALLO“ | löst nichts aus, weil beide ohne Schreibweise passen; Eintrag im Log | B16 |
 | B66 | Schalter „`!` voranstellen“ aus, Trigger `?hallo`, Nachrichten „?hallo welt“ und „!?hallo“ | die erste löst mit dem Argument „welt“ aus, die zweite nicht | B11, B16 |
 | B67 | Ein Platzhalter-Trigger `hallo` und ein normaler Trigger `hallo`, Nachricht „!hallo“ | der normale Trigger gewinnt | B16 |
+| B68 | Gespeicherte Commands mit Namen, die sich nur in der Schreibweise unterscheiden, beim Wechsel auf eindeutige Namen | Der älteste behält seinen Namen, die übrigen bekommen das erste freie Suffix „ (2)“, „ (3)“ und so fort. | B7 |
 
 ## Abweichungen vom Original
 
@@ -111,6 +113,7 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 ## Akzeptanzkriterien
 
 - [x] B1, B4: Ein Command mit Actions unbekannten Typs wird gespeichert, geladen und unverändert zurückgeschrieben.
+- [x] B7, B68: Ein zweiter Command mit einem Namen in anderer Schreibweise wird abgelehnt, auch jenseits von ASCII; gespeicherte doppelte Namen bekommen beim Wechsel ein Suffix.
 - [x] B11, B12: Trigger werden mit dem Schalter ohne `!` und als Liste gespeichert; Eingaben mit Leerzeichen und Semikolon werden richtig zerlegt.
 - [x] B13: Tabellengetriebener Test der Wortgrenzen für Platzhalter-Trigger.
 - [x] B14: Ein zweiter aktiver Chat-Command mit gleichem Trigger wird abgelehnt (bis 2026-10-02 ohne Beachtung der Schreibweise).
@@ -148,3 +151,4 @@ Keine.
 | 2026-10-02 | B45: neuer Argumenttyp `integer` neben `text`, `number` und `user` (Entscheidung des Projektinhabers; Einzelheiten in [`requirements.md`](requirements.md), B33). Die offene Frage zu B45 ist geklärt. |
 | 2026-10-02 | Offene Fragen am Original geklärt (Q10) und entschieden (Entscheidungen des Projektinhabers). Übernommen: der Schalter „`!` voranstellen“ je Chat-Command (B11) und Platzhalter-Trigger ohne `!` und ohne Schreibweise (B13). Geändert: Trigger beachten die Schreibweise, mit exakten Treffern vor eindeutigen ohne Schreibweise (B14, A1); neue Regel B16 für die Erkennung mit dem längsten Treffer; Randfälle B60 und B65–B67. Geblieben, mit dem Verhalten des Originals unter „Abweichungen“: Wortgrenzen der Platzhalter an Satzzeichen (A5). Übereinstimmend: höchstens ein Ereignis-Command je Ereignistyp (B20, die Zeile A2 entfällt). |
 | 2026-10-03 | Schalter, Platzhalter und Schreibweise im Datenmodell umgesetzt (Roadmap 3.5). Festlegungen dabei: Der Schalter „`!` voranstellen“ und die Option „Platzhalter“ sind zusammen die Trigger-Art `triggerMode` mit den Werten `exclamation`, `literal` und `wildcard` (B11, Entscheidung des Projektinhabers): So gibt es keine Kombination ohne Wirkung, und die Art ist ein Pflichtfeld ohne Standard über einen leeren Wert (Code-ADR-0017). Die Oberfläche kann sie weiter als zwei Schalter zeigen. Gespeicherte Chat-Commands werden zu `wildcard` oder `exclamation` (Migration 0009). Nur mit `exclamation` verliert ein Trigger bei der Eingabe ein führendes `!`; wörtliche und Platzhalter-Trigger behalten es (B11, B13). Eindeutig ist ein Trigger so, wie er im Chat steht (B14): `!hallo` ohne Schalter kollidiert mit `hallo` mit Schalter. Innerhalb eines Commands gilt dasselbe, er darf also `Hug` und `hug` zugleich haben. |
+| 2026-10-03 | B7 und Randfall B68 neu (Entscheidung des Projektinhabers, `commands-as-code.md`, B22): Command-Namen sind ohne Rücksicht auf die Schreibweise eindeutig. Festlegungen dabei: Verglichen wird in Kleinbuchstaben nach Unicode, Zeichen für Zeichen (`command.NameKey`); die Spalte `name_key` mit eindeutigem Index hält den Schlüssel. SQLite kann Kleinbuchstaben nur für ASCII bilden, deshalb füllt eine Migration in Go (Nummer 14, nach der SQL-Migration 0013 mit der Spalte) den Schlüssel und benennt doppelte Namen um. |

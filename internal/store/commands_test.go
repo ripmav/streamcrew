@@ -167,6 +167,34 @@ func TestTriggerUniqueAmongEnabledChatCommands(t *testing.T) {
 	assert.Equal(t, []string{"hug"}, all[1].Triggers)
 }
 
+// TestCommandNamesUnique covers B7 (commands-as-code.md, B22): names of
+// commands are unique regardless of case, also beyond ASCII; a command may
+// change the case of its own name.
+func TestCommandNamesUnique(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc, _ := commandService(t)
+
+	hug, err := svc.Save(ctx, chatCommand("hug", true, "hug"))
+	require.NoError(t, err)
+	_, err = svc.Save(ctx, chatCommand("HUG", true, "umarmen"))
+	require.ErrorIs(t, err, store.ErrConflict)
+	_, err = svc.Save(ctx, command.Command{Name: "Hug", Kind: command.KindTimer, ErrorPolicy: command.ErrorContinue})
+	require.ErrorIs(t, err, store.ErrConflict, "across kinds")
+	_, err = svc.Save(ctx, chatCommand("Ärger", true, "a"))
+	require.NoError(t, err)
+	_, err = svc.Save(ctx, chatCommand("ärger", true, "b"))
+	require.ErrorIs(t, err, store.ErrConflict, "beyond ASCII")
+
+	hug.Name = "Hug"
+	renamed, err := svc.Save(ctx, hug)
+	require.NoError(t, err, "its own name in another case")
+	assert.Equal(t, "Hug", renamed.Name)
+	require.NoError(t, svc.Delete(ctx, hug.ID))
+	_, err = svc.Save(ctx, chatCommand("HUG", true, "hug"))
+	require.NoError(t, err, "free once deleted")
+}
+
 // TestTriggerSpellings covers B11, B13, B14 and B67: a trigger is unique as
 // a user writes it, in exactly this spelling; wildcard triggers are unique
 // among themselves regardless of case.
@@ -181,7 +209,7 @@ func TestTriggerSpellings(t *testing.T) {
 
 	_, err := svc.Save(ctx, chatCommand("hallo", true, "hallo"))
 	require.NoError(t, err)
-	_, err = svc.Save(ctx, chatCommand("Hallo", true, "Hallo"))
+	_, err = svc.Save(ctx, chatCommand("Hallo 2", true, "Hallo"))
 	require.NoError(t, err, "B14: another spelling is another trigger")
 	_, err = svc.Save(ctx, mode(chatCommand("literal", true, "!hallo"), command.TriggerLiteral))
 	require.ErrorIs(t, err, store.ErrConflict, "B11: a literal !hallo is the trigger hallo with \"!\"")

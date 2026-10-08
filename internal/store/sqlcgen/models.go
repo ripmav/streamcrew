@@ -22,6 +22,7 @@ type Command struct {
 	UpdatedAt    int64
 	ErrorPolicy  string
 	TriggerMode  sql.NullString
+	NameKey      string
 }
 
 type CommandGroup struct {

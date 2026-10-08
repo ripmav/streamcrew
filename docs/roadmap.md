@@ -466,6 +466,7 @@ Zuerst die Änderungen an Datenmodell und Engine aus den geklärten Fragen vom 2
 
 - [x] Prüfen, ob die YAML-Bibliothek aus [Code-ADR-0005](adr/code/0005-konfiguration.md) (`go.yaml.in/yaml/v3`) für Commands als Code genügt, etwa bei Fehlermeldungen mit Zeile und Spalte; sonst ein neues Code-ADR (S), erledigt 2026-10-03: v3 genügt (Entscheidung des Projektinhabers); inhaltliche Fehler bekommen Zeile und Spalte über `yaml.Node`, nur Syntaxfehler allein die Zeile; Befund in Code-ADR-0005, Punkt 3
 - [ ] Typkatalog als JSON-Schema exportieren (`schema export` → `schemas/`) (S)
+- [x] Eindeutige Command-Namen ohne Rücksicht auf die Schreibweise, damit Commands als Code einen Command an seinem Namen erkennen ([`commands.md`](spec/commands.md), B7; `commands-as-code.md`, B22) (S), Entscheidung des Projektinhabers vom 2026-10-03, erledigt 2026-10-03: Spalte `name_key` (Migration 0013) und Go-Migration 14, die doppelte Namen umbenennt
 - [ ] YAML/JSON-Format (`apiVersion`, `kind`, `metadata`, `spec`) mit Import, Export und Validierung: `command validate|import|export` (M)
 
 ### 3.6 Mock-Plattform und Event-Grundlagen
@@ -1337,3 +1338,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-03 | Hexadezimale Zahlen nach `0x` und Unterstriche zwischen Ziffern (Entscheidung des Projektinhabers): `decimal.Parse`, die Zahlen in Ausdrücken und die Argumente vom Typ `number` und `integer` lesen sie und rechnen sie in Dezimalzahlen um. |
 | 2026-10-03 | Namen mit Unicode-Buchstaben: Tokens der Template-Engine und Counter-Namen mit Buchstaben aller Schriften, ohne Beachtung der Schreibweise nach Unicode; Counter über den Schlüssel `name_key` (Migration 0012); Textfunktionen beginnen nicht mitten in einem Wort einer beliebigen Schrift. |
 | 2026-10-03 | YAML-Bibliothek für Commands als Code geprüft: `go.yaml.in/yaml/v3` genügt (Entscheidung des Projektinhabers). Der Wechsel auf v4, das auch bei Syntaxfehlern die Spalte nennt, steht im Backlog, bis v4 stabil ist. |
+| 2026-10-03 | Eindeutige Command-Namen (`commands.md`, B7): Schlüssel in Kleinbuchstaben nach Unicode mit eindeutigem Index; die erste Go-Migration des Stores (14) füllt ihn und benennt doppelte Namen um. |

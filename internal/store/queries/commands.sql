@@ -6,11 +6,12 @@ SELECT * FROM commands ORDER BY name, id;
 
 -- name: PutCommand :exec
 INSERT INTO commands (
-    id, name, kind, enabled, unlocked, group_id, trigger_mode, event_type,
+    id, name, name_key, kind, enabled, unlocked, group_id, trigger_mode, event_type,
     error_policy, requirements, actions, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE SET
     name = excluded.name,
+    name_key = excluded.name_key,
     kind = excluded.kind,
     enabled = excluded.enabled,
     unlocked = excluded.unlocked,

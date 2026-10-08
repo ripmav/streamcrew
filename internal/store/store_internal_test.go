@@ -9,7 +9,6 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -30,7 +29,7 @@ func TestMigrationsUpDownUp(t *testing.T) {
 
 	fsys, err := fs.Sub(migrations, "migrations")
 	require.NoError(t, err)
-	p, err := goose.NewProvider(goose.DialectSQLite3, s.write, fsys, goose.WithDisableGlobalRegistry(true))
+	p, err := newProvider(s.write, fsys, goMigrations(), s.logger)
 	require.NoError(t, err)
 
 	_, err = p.DownTo(ctx, 0)
@@ -57,7 +56,7 @@ func TestCounterStepMigration(t *testing.T) {
 	defer s.Close()
 	fsys, err := fs.Sub(migrations, "migrations")
 	require.NoError(t, err)
-	p, err := goose.NewProvider(goose.DialectSQLite3, s.write, fsys, goose.WithDisableGlobalRegistry(true))
+	p, err := newProvider(s.write, fsys, goMigrations(), s.logger)
 	require.NoError(t, err)
 
 	const beforeStep = 5
@@ -87,7 +86,7 @@ func TestCounterDecimalMigration(t *testing.T) {
 	defer s.Close()
 	fsys, err := fs.Sub(migrations, "migrations")
 	require.NoError(t, err)
-	p, err := goose.NewProvider(goose.DialectSQLite3, s.write, fsys, goose.WithDisableGlobalRegistry(true))
+	p, err := newProvider(s.write, fsys, goMigrations(), s.logger)
 	require.NoError(t, err)
 
 	const beforeDecimals = 10
@@ -125,7 +124,7 @@ func TestTriggerModeMigration(t *testing.T) {
 	defer s.Close()
 	fsys, err := fs.Sub(migrations, "migrations")
 	require.NoError(t, err)
-	p, err := goose.NewProvider(goose.DialectSQLite3, s.write, fsys, goose.WithDisableGlobalRegistry(true))
+	p, err := newProvider(s.write, fsys, goMigrations(), s.logger)
 	require.NoError(t, err)
 
 	const beforeMode = 8
@@ -213,7 +212,7 @@ func TestFineRolesMigration(t *testing.T) {
 	defer s.Close()
 	fsys, err := fs.Sub(migrations, "migrations")
 	require.NoError(t, err)
-	p, err := goose.NewProvider(goose.DialectSQLite3, s.write, fsys, goose.WithDisableGlobalRegistry(true))
+	p, err := newProvider(s.write, fsys, goMigrations(), s.logger)
 	require.NoError(t, err)
 
 	const beforeRoles = 9
@@ -273,7 +272,7 @@ func TestCounterNameKeyMigration(t *testing.T) {
 	defer s.Close()
 	fsys, err := fs.Sub(migrations, "migrations")
 	require.NoError(t, err)
-	p, err := goose.NewProvider(goose.DialectSQLite3, s.write, fsys, goose.WithDisableGlobalRegistry(true))
+	p, err := newProvider(s.write, fsys, goMigrations(), s.logger)
 	require.NoError(t, err)
 
 	const beforeKey = 11
@@ -292,6 +291,49 @@ func TestCounterNameKeyMigration(t *testing.T) {
 	require.Error(t, err, "the key is unique")
 	_, err = p.DownTo(ctx, beforeKey)
 	require.NoError(t, err)
+}
+
+// TestCommandNameKeyMigration covers commands.md, B7: stored commands get
+// their name key; of names that differ in case only the oldest stays, the
+// others get the first free suffix, and the key is unique afterwards.
+func TestCommandNameKeyMigration(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, err := Open(ctx, filepath.Join(t.TempDir(), "p.db"))
+	require.NoError(t, err)
+	defer s.Close()
+	fsys, err := fs.Sub(migrations, "migrations")
+	require.NoError(t, err)
+	p, err := newProvider(s.write, fsys, goMigrations(), s.logger)
+	require.NoError(t, err)
+
+	const beforeKeys = 12
+	_, err = p.DownTo(ctx, beforeKeys)
+	require.NoError(t, err)
+	for i, name := range []string{"hug", "HUG", "hug (2)", "Ärger", "ärger", "Hug"} {
+		_, err = s.write.ExecContext(ctx, `INSERT INTO commands (id, name, kind, enabled, unlocked, trigger_mode, requirements, actions, created_at, updated_at)
+			VALUES (?, ?, 'timer', 1, 0, NULL, '[]', '[]', ?, 0)`, id.New().String(), name, i)
+		require.NoError(t, err)
+	}
+	_, err = p.Up(ctx)
+	require.NoError(t, err)
+
+	recs, err := s.Commands(ctx)
+	require.NoError(t, err)
+	var names []string
+	for _, rec := range recs {
+		names = append(names, rec.Name)
+	}
+	assert.ElementsMatch(t, []string{"hug", "HUG (3)", "hug (2)", "Ärger", "ärger (2)", "Hug (4)"}, names)
+	_, err = s.write.ExecContext(ctx, `INSERT INTO commands (id, name, name_key, kind, enabled, unlocked, requirements, actions, created_at, updated_at)
+		VALUES (?, 'ÄRGER', 'ärger', 'timer', 1, 0, '[]', '[]', 0, 0)`, id.New().String())
+	require.Error(t, err, "the key is unique")
+
+	_, err = p.DownTo(ctx, beforeKeys)
+	require.NoError(t, err)
+	var columns int
+	require.NoError(t, s.write.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info('commands') WHERE name = 'name_key'").Scan(&columns))
+	assert.Zero(t, columns, "the way down drops the column")
 }
 
 func TestLatestVersionMatchesFiles(t *testing.T) {
@@ -328,18 +370,18 @@ func TestBeforeMigrateRunsForExistingDatabases(t *testing.T) {
 		return nil
 	})
 
-	s, err := open(ctx, path, v1, hook)
+	s, err := open(ctx, path, v1, nil, hook)
 	require.NoError(t, err)
 	require.NoError(t, s.Close())
 	assert.Empty(t, calls, "not for a new database")
 
-	s, err = open(ctx, path, v2, hook)
+	s, err = open(ctx, path, v2, nil, hook)
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), s.SchemaVersion())
 	require.NoError(t, s.Close())
 	assert.Equal(t, []call{{1, 2}}, calls)
 
-	s, err = open(ctx, path, v2, hook)
+	s, err = open(ctx, path, v2, nil, hook)
 	require.NoError(t, err)
 	require.NoError(t, s.Close())
 	assert.Len(t, calls, 1, "not when nothing is migrated")
@@ -350,11 +392,11 @@ func TestBeforeMigrateErrorAborts(t *testing.T) {
 	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "p.db")
 	v1, v2 := twoMigrations()
-	s, err := open(ctx, path, v1)
+	s, err := open(ctx, path, v1, nil)
 	require.NoError(t, err)
 	require.NoError(t, s.Close())
 
-	_, err = open(ctx, path, v2, WithBeforeMigrate(func(context.Context, *Store, int64, int64) error {
+	_, err = open(ctx, path, v2, nil, WithBeforeMigrate(func(context.Context, *Store, int64, int64) error {
 		return assert.AnError
 	}))
 	require.ErrorIs(t, err, assert.AnError)
@@ -368,11 +410,11 @@ func TestNewerSchemaIsRejected(t *testing.T) {
 	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "p.db")
 	v1, v2 := twoMigrations()
-	s, err := open(ctx, path, v2)
+	s, err := open(ctx, path, v2, nil)
 	require.NoError(t, err)
 	require.NoError(t, s.Close())
 
-	_, err = open(ctx, path, v1)
+	_, err = open(ctx, path, v1, nil)
 	require.ErrorIs(t, err, ErrSchemaTooNew)
 
 	info, err := Inspect(ctx, path)
