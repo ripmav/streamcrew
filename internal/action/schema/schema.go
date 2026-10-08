@@ -41,13 +41,14 @@ const (
 	UIActions    UI = "actions"     // a list of child actions
 	UISwitch     UI = "switch"      // a yes or no choice
 	UIChoice     UI = "choice"      // one of fixed values
+	UIList       UI = "list"        // a list of entries, each with the fields of its schema
 )
 
 // UIs returns every UI hint, in a fixed order.
 func UIs() []UI {
 	return []UI{
 		UIText, UIMultiline, UITemplate, UIAmount, UIExpression, UIUser, UIPlatform,
-		UICommand, UIGroup, UICounter, UIFileRoot, UIResultName, UIActions, UISwitch, UIChoice,
+		UICommand, UIGroup, UICounter, UIFileRoot, UIResultName, UIActions, UISwitch, UIChoice, UIList,
 	}
 }
 
@@ -82,6 +83,8 @@ type Schema struct {
 	AdditionalProperties *bool `json:"additionalProperties,omitempty"`
 	// Items is the schema of the entries of an array.
 	Items *Schema `json:"items,omitempty"`
+	// MinItems is the least number of entries of an array.
+	MinItems *int `json:"minItems,omitempty"`
 	// Enum lists the allowed texts.
 	Enum []string `json:"enum,omitempty"`
 	// Const is the only allowed value, as JSON.
@@ -195,19 +198,51 @@ type Variant struct {
 // variants (Code-ADR-0013, point 4): each variant has the members of all
 // variants in common and its own; members of other kinds are not allowed.
 func Kinds(common []Property, variants ...Variant) *Schema {
-	kinds := make([]string, len(variants))
+	alts := make([]Alternative, len(variants))
 	for i, v := range variants {
-		kinds[i] = v.Kind
+		alts[i] = Alternative{Values: []string{v.Kind}, Props: v.Props}
 	}
-	kind := Property{Name: "kind", Schema: Choice(kinds...), Required: true}
-	s := Document(append([]Property{kind}, common...)...)
-	for _, v := range variants {
-		alt := Object(append(append(append(header(), Property{Name: "kind", Schema: &Schema{Const: quote(v.Kind)}, Required: true}), common...), v.Props...)...)
-		s.OneOf = append(s.OneOf, alt)
-		// The members of all variants, for editors that read the top level.
-		for _, p := range v.Props {
+	s := pick(header(), "kind", common, alts)
+	s.Dialect = Draft
+	return s
+}
+
+// Alternative is an alternative of Pick: the values of the key that choose
+// it, and its own members.
+type Alternative struct {
+	Values []string
+	Props  []Property
+}
+
+// Pick returns a closed object whose member key chooses one of alts by its
+// value, e.g. the comparison of a clause of the conditional action: each
+// alternative has the members in common, the key and its own members;
+// members of other alternatives are not allowed. So the value of the key
+// decides which members exist, and no member is there that it does not use
+// (Code-ADR-0017). The members in common come first.
+func Pick(key string, common []Property, alts ...Alternative) *Schema {
+	return pick(common, key, nil, alts)
+}
+
+// pick returns a closed object with the members before, the required
+// member key, the members after and those of the alternative that the
+// value of key chooses. The top level lists key with all values and the
+// members of all alternatives, for editors that read it; a member that
+// several alternatives have is listed with the schema of the first.
+func pick(before []Property, key string, after []Property, alts []Alternative) *Schema {
+	var values []string
+	for _, a := range alts {
+		values = append(values, a.Values...)
+	}
+	s := Object(slices.Concat(before, []Property{{Name: key, Schema: Choice(values...), Required: true}}, after)...)
+	for _, a := range alts {
+		k := &Schema{Enum: slices.Clone(a.Values)}
+		if len(a.Values) == 1 {
+			k = &Schema{Const: quote(a.Values[0])}
+		}
+		s.OneOf = append(s.OneOf, Object(slices.Concat(before, []Property{{Name: key, Schema: k, Required: true}}, after, a.Props)...))
+		for _, p := range a.Props {
 			if _, dup := s.Properties.Lookup(p.Name); !dup {
-				p.Required = false
 				s.Properties = append(s.Properties, Property{Name: p.Name, Schema: p.Schema.Clone()})
 			}
 		}
@@ -242,6 +277,18 @@ func Choice(values ...string) *Schema {
 	return &Schema{Type: "string", Enum: slices.Clone(values), UI: UIChoice}
 }
 
+// Expression returns the field of an expression (spec template.md,
+// B50–B52); it is not empty.
+func Expression() *Schema {
+	return &Schema{Type: "string", MinLength: new(1), UI: UIExpression}
+}
+
+// List returns the field of a list of entries of items, at least minItems
+// of them.
+func List(items *Schema, minItems int) *Schema {
+	return &Schema{Type: "array", Items: items.Clone(), MinItems: new(minItems), UI: UIList}
+}
+
 // ResultName returns the field of the name of a result value
 // (actions.md B5).
 func ResultName() *Schema {
@@ -256,7 +303,7 @@ func Amount(minimum, maximum float64, integer bool) *Schema {
 		number.Type = "integer"
 	}
 	return &Schema{
-		OneOf: []*Schema{number, {Type: "string", MinLength: new(1), UI: UIExpression}},
+		OneOf: []*Schema{number, Expression()},
 		UI:    UIAmount,
 	}
 }

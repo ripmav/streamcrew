@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12); Phase 2 abgeschlossen (PR #36) |
-| **Stand** | 2026-09-30 |
+| **Stand** | 2026-10-01 |
 | **Grundlage** | [`plan.md`](plan.md) (Architektur, Prioritäten, Risiken), [`starting.md`](starting.md), [`adr/`](adr/README.md) |
 | **Aktuelle Phase** | Phase 3: Engine, Templates, Actions, Mock (in Arbeit) |
 
@@ -409,7 +409,7 @@ Reihenfolge: erst die Bereinigung nach Code-ADR-0017, dann die Doku als unterste
 - [ ] Plattform-Ports nach Plan §6.11 in `internal/platform` (S): `Chat` (senden, antworten, flüstern, löschen), `Moderation`, Kanalinformation, Nutzer nachschlagen; die Actions nutzen sie, die Mock-Plattform (3.6) und Twitch (Phase 4) setzen sie um
 - [ ] Capability-Prüfung je Betriebsmodus nach [ADR-0013](adr/0013-sicherheitsmodell.md): Warnung beim Speichern, Verweigerung bei Ausführung (S)
 - [x] `wait`, `random`, `group`, `repeat` mit der Grenze aus B74 (S), erledigt 2026-10-01: `internal/action/flow`
-- [ ] `conditional`: Vergleiche, Und/Oder, `expr`-Ausdrücke (`internal/expr`), Verzweigungen (M)
+- [x] `conditional`: Vergleiche, Und/Oder, `expr`-Ausdrücke (`internal/expr`), Verzweigungen (M), erledigt 2026-10-01: `internal/action/flow`, Klauseln nach Vergleich aufgeteilt (`schema.Pick`)
 - [ ] `command`: ausführen mit oder ohne Warten über `engine.Run.Call`, aktivieren/deaktivieren, Gruppe schalten (S)
 - [ ] `counter`: setzen, addieren, zurücksetzen (S)
 - [ ] `special_identifier`: lokale und globale Werte setzen, Ausdrücke; globale Werte als Quelle der Template-Engine (S)
@@ -1245,3 +1245,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-01 | Typ-Registry `internal/action` nach Code-ADR-0013: Descriptor mit Kategorie, Capabilities und eigenem JSON-Schema (`internal/action/schema`), dessen `default`-Werte aus `New` kommen; Dekodieren ab den Voreinstellungen mit Pflichtfeldern; Feldtypen `Template`, `Amount` (Zahl oder Ausdruck, mit Bereich) und `ResultName`; Konformitätstest `internal/action/actiontest` mit `santhosh-tekuri/jsonschema/v6` (nur in Tests, nicht im Binary). `command.Action` hat jetzt `Validate`, und `Command.Validate` prüft Kind-Actions mit Pfad. |
 | 2026-10-01 | Speichern nach Code-ADR-0013, Punkt 7: `command.Service.Save` prüft die Verweise der Actions auf Commands und Gruppen, die Namen ihrer Ergebniswerte, legt fehlende Counter an und gibt Warnungen zu fehlenden Capabilities und unbekannten Wurzeln zurück (`command.Saved`). Das Action-Framework ist damit fertig; als Nächstes die einzelnen Action-Typen. |
 | 2026-10-01 | Erste Action-Typen: `wait`, `random`, `group` und `repeat` in `internal/action/flow` ([`actions.md`](spec/actions.md), B10–B15), mit Konformitätstest, Golden Files und Verhaltenstests gegen die Engine (`actiontest.Harness`). Die Optionen „ohne Wiederholung“ und „über Ausführungen merken“ sind beim Zufall ein Auswahlfeld `draw` (`free`, `unique`, `unique_remembered`), damit es keine ungültige Kombination gibt (Entscheidung des Projektinhabers). |
+| 2026-10-01 | Action-Typ `conditional` in `internal/action/flow` ([`actions.md`](spec/actions.md), B20–B29): Vergleiche zweier Werte, `between`, `replaced`/`not_replaced` und Ausdrücke, Verknüpfung mit `and`, `or` oder `xor`, Zweige für „wahr“ und „falsch“, „wiederholen, solange wahr“ bis 1 000 Durchgänge. Welche Felder eine Klausel hat, bestimmt ihr Vergleich (`schema.Pick`, Entscheidung des Projektinhabers). Alle Werte einer Bedingung entstehen in einem Rendervorgang; dafür meldet `template.Engine.RenderEach`, ob jedes Token ersetzt wurde, und `expr` wertet mit vorher gerenderten Texten aus. |

@@ -1,0 +1,40 @@
+{
+  "type": "conditional",
+  "schemaVersion": 1,
+  "enabled": true,
+  "clauses": [
+    {
+      "left": "$arg1text",
+      "compare": "greater_or_equal",
+      "right": "5"
+    },
+    {
+      "left": "$arg1text",
+      "compare": "between",
+      "min": "1",
+      "max": "$arg2text"
+    },
+    {
+      "left": "$arg3text",
+      "compare": "not_replaced"
+    },
+    {
+      "left": "$arg1text * 2 > 3",
+      "compare": "expression"
+    }
+  ],
+  "combine": "xor",
+  "caseSensitive": true,
+  "actions": [
+    {
+      "type": "wait",
+      "seconds": 1
+    }
+  ],
+  "else": [
+    {
+      "type": "obs_scene"
+    }
+  ],
+  "repeatWhileTrue": true
+}

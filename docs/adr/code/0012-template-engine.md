@@ -52,6 +52,8 @@
    - Das Ergebnis ist eine Zahl, ein Wahrheitswert oder Text; Fehler gehen an die Action.
 
    *Präzisiert am 2026-09-30: Ein Prüfer auf dem Syntaxbaum lässt nur zu, was die Spezifikation in B50 nennt, und lehnt etwa Arrays, Zugriffe auf Felder, Bereiche und weitere Funktionen ab. Alle Zahlen sind `float64`, auch die Zahlen im Ausdruck selbst; `%` ersetzt ein Patch durch `math.Mod`, weil `expr` den Rest nur für ganze Zahlen kennt. Die Variablen sind beim Kompilieren nicht typisiert (`AllowUndefinedVariables`), ihre Namen prüft der Prüfer. Text in Anführungszeichen mit Identifiern wird als Ganzes zu einer Text-Variablen. Alle Identifier eines Ausdrucks löst ein Rendervorgang auf (`template.Engine.RenderEach`, B21). Ergebnisse, die keine endliche Zahl sind, gelten als Fehler.*
+
+   *Ergänzt am 2026-10-01 für die Bedingung ([`actions.md`](../../spec/actions.md), B22, B24, B27): `Expression.Templates` und `Expression.EvalWithTexts` lassen einen Aufrufer die Identifier eines Ausdrucks zusammen mit anderen Templates in einem Rendervorgang auflösen. `template.Engine.RenderEach` meldet je Template, ob jedes Token einen Wert bekommen hat (`template.Rendered.Replaced`), für den Vergleich `replaced`. `expr.ParseNumber` stellt die Regel aus B51, was als Zahl gilt, auch dem Vergleich der Bedingung bereit.*
 9. **Tests** ([Code-ADR-0006](0006-teststrategie.md)): Golden Files mit Template, Kontext und Ausgabe je Familie in `internal/template/testdata`; tabellengetriebene Tests für Rangfolge, Kodierung und Randfälle; `testing/synctest` für Datum, Zeit und Uptime; Fuzz-Tests für `Parse` und `Render` (keine Panics, ohne bekannte Identifier gleich der Eingabe) und für Ausdrücke; ein Benchmark für das Rendern.
 
 ## Betrachtete Alternativen

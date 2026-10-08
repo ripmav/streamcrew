@@ -41,11 +41,12 @@ func numbers(values ...int) func(n int) int {
 	}
 }
 
-// registry returns the flow types with the template engine of the tests
-// and the random numbers of intN.
-func registry(t *testing.T, intN func(int) int) *action.Registry {
+// registry returns the flow types with the template engine of the tests,
+// which knows the argument and run families and extra, and the random
+// numbers of intN.
+func registry(t *testing.T, intN func(int) int, extra ...template.Family) *action.Registry {
 	t.Helper()
-	identifiers, err := template.NewRegistry(template.ArgumentFamily(), template.RunFamily())
+	identifiers, err := template.NewRegistry(append([]template.Family{template.ArgumentFamily(), template.RunFamily()}, extra...)...)
 	require.NoError(t, err)
 	ds, err := flow.Descriptors(flow.Ports{Templates: template.New(identifiers), IntN: intN})
 	require.NoError(t, err)
@@ -106,6 +107,35 @@ func TestConformance(t *testing.T) {
 			{Name: "count missing", Doc: `{"type":"repeat","actions":[]}`},
 			{Name: "count 1001", Doc: `{"type":"repeat","count":1001}`},
 			{Name: "count fraction", Doc: `{"type":"repeat","count":2.5}`},
+		},
+		flow.TypeConditional: {
+			{Name: "full", Doc: `{"type":"conditional","clauses":[` +
+				`{"left":"$arg1text","compare":"greater_or_equal","right":"5"},` +
+				`{"left":"$arg1text","compare":"between","min":"1","max":"$arg2text"},` +
+				`{"left":"$arg3text","compare":"not_replaced"},` +
+				`{"left":"$arg1text * 2 > 3","compare":"expression"}],` +
+				`"combine":"xor","caseSensitive":true,` +
+				`"actions":[{"type":"wait","seconds":1}],"else":[{"type":"obs_scene"}],"repeatWhileTrue":true}`, Valid: true},
+			{Name: "one clause", Doc: `{"type":"conditional","clauses":[{"left":"$arg1text","compare":"in","right":"a|b"}]}`, Valid: true},
+			{Name: "empty values", Doc: `{"type":"conditional","clauses":[{"left":"","compare":"contains","right":""}]}`, Valid: true},
+			{Name: "regex", Doc: `{"type":"conditional","combine":"or","clauses":[{"left":"$message","compare":"regex","right":"^!(hi|hello)$"}]}`, Valid: true},
+			{Name: "clauses missing", Doc: `{"type":"conditional"}`},
+			{Name: "no clause", Doc: `{"type":"conditional","clauses":[]}`},
+			{Name: "clause not an object", Doc: `{"type":"conditional","clauses":[7]}`},
+			{Name: "unknown comparison", Doc: `{"type":"conditional","clauses":[{"left":"a","compare":"like","right":"b"}]}`},
+			{Name: "comparison missing", Doc: `{"type":"conditional","clauses":[{"left":"a","right":"b"}]}`},
+			{Name: "left missing", Doc: `{"type":"conditional","clauses":[{"compare":"equals","right":"b"}]}`},
+			{Name: "right missing", Doc: `{"type":"conditional","clauses":[{"left":"a","compare":"equals"}]}`},
+			{Name: "right of replaced", Doc: `{"type":"conditional","clauses":[{"left":"a","compare":"replaced","right":"b"}]}`},
+			{Name: "right of expression", Doc: `{"type":"conditional","clauses":[{"left":"1 > 0","compare":"expression","right":""}]}`},
+			{Name: "max missing", Doc: `{"type":"conditional","clauses":[{"left":"5","compare":"between","min":"1"}]}`},
+			{Name: "right of between", Doc: `{"type":"conditional","clauses":[{"left":"5","compare":"between","min":"1","max":"9","right":"x"}]}`},
+			{Name: "bounds of equals", Doc: `{"type":"conditional","clauses":[{"left":"5","compare":"equals","right":"5","min":"1"}]}`},
+			{Name: "unknown member", Doc: `{"type":"conditional","clauses":[{"left":"a","compare":"equals","rigth":"b"}]}`},
+			{Name: "value not a text", Doc: `{"type":"conditional","clauses":[{"left":5,"compare":"equals","right":"5"}]}`},
+			{Name: "unknown way to combine", Doc: `{"type":"conditional","combine":"nand","clauses":[{"left":"a","compare":"equals","right":"a"}]}`},
+			{Name: "empty way to combine", Doc: `{"type":"conditional","combine":"","clauses":[{"left":"a","compare":"equals","right":"a"}]}`},
+			{Name: "switch not a bool", Doc: `{"type":"conditional","caseSensitive":"yes","clauses":[{"left":"a","compare":"equals","right":"a"}]}`},
 		},
 	}
 	for typ, examples := range suites {

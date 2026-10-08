@@ -159,13 +159,35 @@ func (x *Expression) String() string {
 // x cannot be evaluated or its result is not a finite number, a truth value
 // or text (B52), and the error of the context when it is done.
 func (x *Expression) Eval(ctx context.Context, e *template.Engine, s *template.Scope) (Result, error) {
+	rendered, err := e.RenderEach(ctx, x.Templates(), s)
+	if err != nil {
+		return Result{}, fmt.Errorf("evaluate %q: %w", x.src, err)
+	}
+	texts := make([]string, len(rendered))
+	for i, r := range rendered {
+		texts[i] = r.Text
+	}
+	return x.EvalWithTexts(texts)
+}
+
+// Templates returns the templates of the identifiers of x, in the order
+// EvalWithTexts takes their texts. A caller that renders them together with
+// other templates, in one render, uses them, e.g. the conditional action
+// (spec actions.md, B27).
+func (x *Expression) Templates() []template.Template {
 	ts := make([]template.Template, len(x.vars))
 	for i, v := range x.vars {
 		ts[i] = v.tmpl
 	}
-	texts, err := e.RenderEach(ctx, ts, s)
-	if err != nil {
-		return Result{}, fmt.Errorf("evaluate %q: %w", x.src, err)
+	return ts
+}
+
+// EvalWithTexts evaluates x with texts, the rendered templates of
+// Templates, as Eval does after its render. It returns an error wrapping
+// ErrEvaluation if the number of texts is not that of the templates.
+func (x *Expression) EvalWithTexts(texts []string) (Result, error) {
+	if len(texts) != len(x.vars) {
+		return Result{}, fmt.Errorf("%w: %q: %d texts for %d identifiers", ErrEvaluation, x.src, len(texts), len(x.vars))
 	}
 	env := make(map[string]any, len(texts))
 	for i, text := range texts {
@@ -259,18 +281,28 @@ func variable(prefix string, i int) string {
 }
 
 // typed returns a decimal number as float64 and anything else as text
-// (B51). Hexadecimal numbers, infinity and NaN are text.
+// (B51).
 func typed(text string) any {
-	if text == "" || strings.ContainsFunc(text, func(r rune) bool {
-		return !strings.ContainsRune("0123456789+-.eE", r)
-	}) {
-		return text
-	}
-	// ParseFloat reports numbers beyond float64 as an error.
-	if f, err := strconv.ParseFloat(text, 64); err == nil {
+	if f, ok := ParseNumber(text); ok {
 		return f
 	}
 	return text
+}
+
+// ParseNumber returns the number text stands for if it counts as a number
+// (B51): a decimal number in the range of float64, with an optional sign,
+// fraction and exponent. Hexadecimal numbers, infinity, NaN and text with
+// spaces count as text. The conditional action compares by this rule
+// (spec actions.md, B22).
+func ParseNumber(text string) (float64, bool) {
+	if text == "" || strings.ContainsFunc(text, func(r rune) bool {
+		return !strings.ContainsRune("0123456789+-.eE", r)
+	}) {
+		return 0, false
+	}
+	// ParseFloat reports numbers beyond float64 as an error.
+	f, err := strconv.ParseFloat(text, 64)
+	return f, err == nil
 }
 
 // checker rejects the parts of expr that B50 does not name.

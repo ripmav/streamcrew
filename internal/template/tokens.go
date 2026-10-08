@@ -25,23 +25,33 @@ func (t Template) Segments() iter.Seq2[string, bool] {
 	}
 }
 
+// Rendered is a template after a render.
+type Rendered struct {
+	Text string
+	// Replaced reports whether every token got a value (B3, B4); a text
+	// without tokens counts as replaced. The comparison "replaced" of the
+	// conditional action reads it (spec actions.md, B24).
+	Replaced bool
+}
+
 // RenderEach renders each template of ts with the encoding Text, all in one
 // render, so each identifier is resolved at most once across them (B21).
-// Expressions use it to get the values of their identifiers (B51). Like
-// Render, it fails only for a scope that lacks what a render needs and when
-// ctx is done.
-func (e *Engine) RenderEach(ctx context.Context, ts []Template, s *Scope) ([]string, error) {
+// Expressions use it to get the values of their identifiers (B51), the
+// conditional action to get all values of its clauses (actions.md, B27).
+// Like Render, it fails only for a scope that lacks what a render needs and
+// when ctx is done.
+func (e *Engine) RenderEach(ctx context.Context, ts []Template, s *Scope) ([]Rendered, error) {
 	if err := s.check(); err != nil {
 		return nil, fmt.Errorf("render templates: %w", err)
 	}
 	s = s.forRender()
-	texts := make([]string, len(ts))
+	out := make([]Rendered, len(ts))
 	for i, t := range ts {
-		text, err := e.render(ctx, t, s, Text)
+		r, err := e.render(ctx, t, s, Text)
 		if err != nil {
 			return nil, err
 		}
-		texts[i] = text
+		out[i] = r
 	}
-	return texts, nil
+	return out, nil
 }

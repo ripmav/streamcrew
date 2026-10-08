@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 // Package flow has the action types that order other actions (spec
-// actions.md, B10 to B15): wait, random, group and repeat. They belong to
-// the category "flow" (Code-ADR-0013); the conditional follows on its own.
+// actions.md, B10 to B29): wait, random, group, repeat and conditional.
+// They belong to the category "flow" (Code-ADR-0013).
 //
 // Child actions run through engine.Run.PerformChild, so the engine applies
 // the switch "active", the capabilities, the time limits and the error
@@ -24,18 +24,23 @@ import (
 
 // Type IDs (Code-ADR-0013, point 1).
 const (
-	TypeWait   = "wait"
-	TypeRandom = "random"
-	TypeGroup  = "group"
-	TypeRepeat = "repeat"
+	TypeWait        = "wait"
+	TypeRandom      = "random"
+	TypeGroup       = "group"
+	TypeRepeat      = "repeat"
+	TypeConditional = "conditional"
 )
 
 // waitRange is the duration of a wait in seconds (actions.md B10).
 func waitRange() action.Range { return action.Range{Min: 0, Max: 3600} }
 
-// countRange is the count of random and repeat (actions.md B11, B15;
-// command-engine.md B74).
-func countRange() action.Range { return action.Range{Min: 0, Max: 1000, Integer: true} }
+// maxRepeats is how often an action may repeat other actions
+// (command-engine.md B74): the count of random and repeat, the passes of a
+// conditional that repeats while it is true (actions.md B29).
+const maxRepeats = 1000
+
+// countRange is the count of random and repeat (actions.md B11, B15).
+func countRange() action.Range { return action.Range{Min: 0, Max: maxRepeats, Integer: true} }
 
 // waitSlack is how much longer than its duration a wait may take before it
 // fails (actions.md B8).
@@ -91,20 +96,35 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 				schema.Property{Name: "actions", Schema: schema.Actions()},
 			),
 		}.WithNew(func() Repeat { return Repeat{Common: action.On(), Actions: []command.Action{}, ports: ports} }),
+		action.Descriptor{
+			Type:     TypeConditional,
+			Version:  1,
+			Category: action.CategoryFlow,
+			Schema:   conditionalSchema(),
+		}.WithNew(func() Conditional {
+			return Conditional{
+				Common: action.On(), Combine: CombineAnd, Actions: []command.Action{}, Else: []command.Action{}, ports: ports,
+			}
+		}),
 	}, nil
 }
 
 // randomSchema returns the schema of random.
 func randomSchema() *schema.Schema {
-	draws := make([]string, 0, len(Draws()))
-	for _, d := range Draws() {
-		draws = append(draws, string(d))
-	}
 	return schema.Document(
 		schema.Property{Name: "count", Schema: countRange().Schema()},
-		schema.Property{Name: "draw", Schema: schema.Choice(draws...)},
+		schema.Property{Name: "draw", Schema: schema.Choice(texts(Draws())...)},
 		schema.Property{Name: "actions", Schema: schema.Actions()},
 	)
+}
+
+// texts returns the values of an enum as texts, for schema.Choice.
+func texts[E ~string](values []E) []string {
+	out := make([]string, len(values))
+	for i, v := range values {
+		out[i] = string(v)
+	}
+	return out
 }
 
 // ports are the ports of the flow types and the memory of random.
@@ -171,7 +191,7 @@ func (g Group) Children() []command.Action { return g.Actions }
 
 // Perform implements engine.Performer.
 func (g Group) Perform(ctx context.Context, run *engine.Run) error {
-	_, err := runAll(ctx, run, len(g.Actions))
+	_, err := runRange(ctx, run, 0, len(g.Actions))
 	return err
 }
 
@@ -203,7 +223,7 @@ func (r Repeat) Perform(ctx context.Context, run *engine.Run) error {
 		return field("count", err)
 	}
 	for range int(count) {
-		next, err := runAll(ctx, run, len(r.Actions))
+		next, err := runRange(ctx, run, 0, len(r.Actions))
 		if err != nil || next == engine.ChildEnd {
 			return err
 		}
@@ -211,10 +231,10 @@ func (r Repeat) Perform(ctx context.Context, run *engine.Run) error {
 	return nil
 }
 
-// runAll runs the child actions 0 to n-1 of the running action in order
-// and says whether the instance goes on.
-func runAll(ctx context.Context, run *engine.Run, n int) (engine.ChildOutcome, error) {
-	for i := range n {
+// runRange runs the child actions from to to-1 of the running action in
+// order and says whether the instance goes on.
+func runRange(ctx context.Context, run *engine.Run, from, to int) (engine.ChildOutcome, error) {
+	for i := from; i < to; i++ {
 		next, err := run.PerformChild(ctx, i)
 		if err != nil || next == engine.ChildEnd {
 			return next, err
