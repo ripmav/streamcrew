@@ -12,6 +12,12 @@
       "name": "amount",
       "type": "number",
       "required": false
+    },
+    {
+      "name": "times",
+      "type": "integer",
+      "required": false,
+      "identifier": "times"
     }
   ]
 }
