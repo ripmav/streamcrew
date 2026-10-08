@@ -43,6 +43,35 @@ func TestMigrationsUpDownUp(t *testing.T) {
 	assert.Equal(t, LatestVersion(), v)
 }
 
+// TestCounterStepMigration covers counters-and-quotes.md B8: counters from
+// before the step have the step 1.
+func TestCounterStepMigration(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, err := Open(ctx, filepath.Join(t.TempDir(), "p.db"))
+	require.NoError(t, err)
+	defer s.Close()
+	fsys, err := fs.Sub(migrations, "migrations")
+	require.NoError(t, err)
+	p, err := goose.NewProvider(goose.DialectSQLite3, s.write, fsys, goose.WithDisableGlobalRegistry(true))
+	require.NoError(t, err)
+
+	const beforeStep = 5
+	_, err = p.DownTo(ctx, beforeStep)
+	require.NoError(t, err)
+	_, err = s.write.ExecContext(ctx, `INSERT INTO counters (id, name, value, reset_on_start, created_at, updated_at)
+		VALUES ('0190a5e0-0000-7000-8000-000000000001', 'deaths', 4, 0, 0, 0)`)
+	require.NoError(t, err)
+	_, err = p.Up(ctx)
+	require.NoError(t, err)
+
+	c, err := s.Counter(ctx, "deaths")
+	require.NoError(t, err)
+	assert.Equal(t, int64(4), c.Value)
+	assert.Equal(t, int64(1), c.Step)
+	require.NoError(t, c.Validate())
+}
+
 func TestLatestVersionMatchesFiles(t *testing.T) {
 	t.Parallel()
 	versions := knownVersions()

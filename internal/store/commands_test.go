@@ -314,7 +314,7 @@ func TestSaveChecksActions(t *testing.T) {
 	require.NoError(t, err)
 	group, err := svc.SaveGroup(ctx, command.Group{Name: "fun"})
 	require.NoError(t, err)
-	_, err = s.CreateCounter(ctx, counter.Counter{Name: "Deaths"})
+	_, err = s.CreateCounter(ctx, counter.New("Deaths"))
 	require.NoError(t, err)
 
 	caller := chatCommand("caller", true, "caller")
@@ -340,6 +340,7 @@ func TestSaveChecksActions(t *testing.T) {
 	for _, c := range counters {
 		names = append(names, c.Name)
 		assert.Zero(t, c.Value)
+		assert.Equal(t, int64(counter.DefaultStep), c.Step, "counters-and-quotes.md B8")
 	}
 	assert.ElementsMatch(t, []string{"Deaths", "wins", "losses"}, names, "B41: missing counters are created once, regardless of case")
 

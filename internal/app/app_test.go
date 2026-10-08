@@ -204,9 +204,9 @@ func TestNewResetsCounters(t *testing.T) {
 
 	s, err := store.Open(ctx, path)
 	require.NoError(t, err)
-	_, err = s.CreateCounter(ctx, counter.Counter{Name: "session", Value: 5, ResetOnStart: true})
+	_, err = s.CreateCounter(ctx, counter.Counter{Name: "session", Value: 5, Step: counter.DefaultStep, ResetOnStart: true})
 	require.NoError(t, err)
-	_, err = s.CreateCounter(ctx, counter.Counter{Name: "total", Value: 5})
+	_, err = s.CreateCounter(ctx, counter.Counter{Name: "total", Value: 5, Step: counter.DefaultStep})
 	require.NoError(t, err)
 	require.NoError(t, s.Close())
 

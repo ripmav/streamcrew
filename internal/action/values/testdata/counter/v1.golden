@@ -1,0 +1,8 @@
+{
+  "type": "counter",
+  "schemaVersion": 1,
+  "enabled": true,
+  "kind": "add",
+  "counter": "deaths",
+  "amount": -2
+}

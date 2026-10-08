@@ -55,6 +55,7 @@ func (s *Store) CreateCounter(ctx context.Context, c counter.Counter) (counter.C
 			ID:           c.ID.String(),
 			Name:         c.Name,
 			Value:        c.Value,
+			Step:         c.Step,
 			ResetOnStart: flag(c.ResetOnStart),
 			CreatedAt:    c.CreatedAt.UnixMilli(),
 			UpdatedAt:    c.UpdatedAt.UnixMilli(),
@@ -90,6 +91,7 @@ func (s *Store) UpdateCounter(ctx context.Context, name string, fn func(*counter
 		return q.UpdateCounter(ctx, sqlcgen.UpdateCounterParams{
 			Name:         c.Name,
 			Value:        c.Value,
+			Step:         c.Step,
 			ResetOnStart: flag(c.ResetOnStart),
 			UpdatedAt:    c.UpdatedAt.UnixMilli(),
 			ID:           c.ID.String(),
@@ -135,6 +137,7 @@ func toCounter(row sqlcgen.Counter) (counter.Counter, error) {
 		ID:           cid,
 		Name:         row.Name,
 		Value:        row.Value,
+		Step:         row.Step,
 		ResetOnStart: row.ResetOnStart != 0,
 		CreatedAt:    fromMillis(row.CreatedAt),
 		UpdatedAt:    fromMillis(row.UpdatedAt),

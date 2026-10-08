@@ -22,7 +22,7 @@ func (q *Queries) DeleteCounter(ctx context.Context, name string) (int64, error)
 }
 
 const getCounter = `-- name: GetCounter :one
-SELECT id, name, value, reset_on_start, created_at, updated_at FROM counters WHERE name = ?
+SELECT id, name, value, reset_on_start, created_at, updated_at, step FROM counters WHERE name = ?
 `
 
 func (q *Queries) GetCounter(ctx context.Context, name string) (Counter, error) {
@@ -35,19 +35,21 @@ func (q *Queries) GetCounter(ctx context.Context, name string) (Counter, error) 
 		&i.ResetOnStart,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Step,
 	)
 	return i, err
 }
 
 const insertCounter = `-- name: InsertCounter :exec
-INSERT INTO counters (id, name, value, reset_on_start, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO counters (id, name, value, step, reset_on_start, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertCounterParams struct {
 	ID           string
 	Name         string
 	Value        int64
+	Step         int64
 	ResetOnStart int64
 	CreatedAt    int64
 	UpdatedAt    int64
@@ -58,6 +60,7 @@ func (q *Queries) InsertCounter(ctx context.Context, arg InsertCounterParams) er
 		arg.ID,
 		arg.Name,
 		arg.Value,
+		arg.Step,
 		arg.ResetOnStart,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -66,7 +69,7 @@ func (q *Queries) InsertCounter(ctx context.Context, arg InsertCounterParams) er
 }
 
 const listCounters = `-- name: ListCounters :many
-SELECT id, name, value, reset_on_start, created_at, updated_at FROM counters ORDER BY name
+SELECT id, name, value, reset_on_start, created_at, updated_at, step FROM counters ORDER BY name
 `
 
 func (q *Queries) ListCounters(ctx context.Context) ([]Counter, error) {
@@ -85,6 +88,7 @@ func (q *Queries) ListCounters(ctx context.Context) ([]Counter, error) {
 			&i.ResetOnStart,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Step,
 		); err != nil {
 			return nil, err
 		}
@@ -112,12 +116,13 @@ func (q *Queries) ResetCountersOnStart(ctx context.Context, updatedAt int64) (in
 }
 
 const updateCounter = `-- name: UpdateCounter :exec
-UPDATE counters SET name = ?, value = ?, reset_on_start = ?, updated_at = ? WHERE id = ?
+UPDATE counters SET name = ?, value = ?, step = ?, reset_on_start = ?, updated_at = ? WHERE id = ?
 `
 
 type UpdateCounterParams struct {
 	Name         string
 	Value        int64
+	Step         int64
 	ResetOnStart int64
 	UpdatedAt    int64
 	ID           string
@@ -127,6 +132,7 @@ func (q *Queries) UpdateCounter(ctx context.Context, arg UpdateCounterParams) er
 	_, err := q.db.ExecContext(ctx, updateCounter,
 		arg.Name,
 		arg.Value,
+		arg.Step,
 		arg.ResetOnStart,
 		arg.UpdatedAt,
 		arg.ID,

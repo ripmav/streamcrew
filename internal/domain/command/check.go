@@ -231,8 +231,9 @@ func (s *Service) known(ctx context.Context) (*knownObjects, error) {
 
 // checkReference checks one reference: unknown commands and groups are
 // errors (actions.md, B31), and missing counters are created with the
-// value 0 (B41). unknownRoot reports a root that the start configuration
-// does not release, which is a warning (B102).
+// value 0 and the default step (B41; counters-and-quotes.md, B8).
+// unknownRoot reports a root that the start configuration does not release,
+// which is a warning (B102).
 func (s *Service) checkReference(ctx context.Context, k *knownObjects, ref Reference) (unknownRoot bool, err error) {
 	switch ref.Kind {
 	case RefCommand:
@@ -247,7 +248,7 @@ func (s *Service) checkReference(ctx context.Context, k *knownObjects, ref Refer
 		if slices.ContainsFunc(k.counters, func(name string) bool { return strings.EqualFold(name, ref.Name) }) {
 			return false, nil
 		}
-		c := counter.Counter{Name: ref.Name}
+		c := counter.New(ref.Name)
 		if err := c.Validate(); err != nil {
 			return false, err
 		}
