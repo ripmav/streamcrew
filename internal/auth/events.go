@@ -12,18 +12,21 @@ import (
 	"github.com/ripmav/streamcrew/internal/event"
 )
 
-// ActionRequired is the payload of auth.action_required (ADR-0014): a
-// login needs the user to complete it, so the frontends show the URL and
-// the code.
+// ActionRequired is the payload of auth.action_required (ADR-0014,
+// ADR-0023): a login needs the user to complete it, so the frontends show
+// the URL and, for the device code flow, the code.
 type ActionRequired struct {
 	// Platform and Role name the login.
 	Platform platform.Name     `json:"platform"`
 	Role     connector.Account `json:"role"`
-	// URL is where the user enters the code.
+	// URL is where the user completes the login; for the device code flow
+	// they enter the code there, for the authorization code flow they
+	// authorize (ADR-0023).
 	URL string `json:"url"`
-	// Code is the code the user enters at the URL.
+	// Code is the code the user enters at the URL; it is empty for the
+	// authorization code flow (ADR-0023).
 	Code string `json:"code"`
-	// Expires is when the code expires.
+	// Expires is when the login expires.
 	Expires time.Time `json:"expires_at"`
 }
 

@@ -11,10 +11,11 @@ import (
 	"github.com/ripmav/streamcrew/internal/store"
 )
 
-// Account is the state of a platform login (ADR-0014): which account
-// belongs to which role of the platform, with which scopes, and with which
-// client ID it was made. The token of the login is stored encrypted in the
-// vault under the name of authName, next to the account row.
+// Account is the state of a platform login (ADR-0014, ADR-0023): which
+// account belongs to which role of the platform, with which scopes, with
+// which app and which flow it was made. The token of the login is stored
+// encrypted in the vault under the name of authName, next to the account
+// row.
 type Account struct {
 	// Platform is the platform the login belongs to.
 	Platform platform.Name
@@ -29,6 +30,9 @@ type Account struct {
 	// ClientID is the client ID of the app the login was made with; a
 	// refresh must use the same client ID.
 	ClientID string
+	// Flow is how the login was made (ADR-0023); a refresh and a revoke
+	// must use the same flow and client.
+	Flow string
 	// UpdatedAt is the time the account was last changed.
 	UpdatedAt time.Time
 }
@@ -42,6 +46,7 @@ func FromStore(a store.Account) Account {
 		UserID:    a.UserID,
 		Scopes:    splitScopes(a.Scopes),
 		ClientID:  a.ClientID,
+		Flow:      a.Flow,
 		UpdatedAt: a.UpdatedAt,
 	}
 }
@@ -55,6 +60,7 @@ func (a Account) ToStore() store.Account {
 		UserID:    a.UserID,
 		Scopes:    joinScopes(a.Scopes),
 		ClientID:  a.ClientID,
+		Flow:      a.Flow,
 		UpdatedAt: a.UpdatedAt,
 	}
 }
@@ -80,6 +86,24 @@ func (t Token) expired(now time.Time) bool {
 // authName is the vault entry of a login (ADR-0014).
 func authName(p platform.Name, r connector.Account) string {
 	return "auth/" + string(p) + "/" + string(r)
+}
+
+// ClientRecord is what the vault keeps for the app of a platform
+// (ADR-0023): the client ID and secret of the confidential app the last
+// login used. The vault stores it as JSON, so the secret never leaves the
+// vault in the clear.
+type ClientRecord struct {
+	// ID is the client ID of the app.
+	ID string `json:"id"`
+	// Secret is the client secret of the app.
+	Secret string `json:"secret"`
+}
+
+// clientName is the vault entry of the app credentials of a platform
+// (ADR-0023); one entry per platform, shared by the streamer and the bot
+// account.
+func clientName(p platform.Name) string {
+	return "auth/" + string(p) + "/client"
 }
 
 func splitScopes(s string) []string {

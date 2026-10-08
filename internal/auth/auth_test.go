@@ -24,6 +24,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/event"
+	"github.com/ripmav/streamcrew/internal/logging"
 	"github.com/ripmav/streamcrew/internal/store"
 	"github.com/ripmav/streamcrew/internal/vault"
 )
@@ -37,19 +38,18 @@ type fakeFlow struct {
 	waitExpiry    time.Time
 	refreshExpiry time.Time
 	revoked       []string
+	revokeErr     error
 }
 
-func (f *fakeFlow) Start(_ context.Context) (*oauth2.DeviceAuthResponse, error) {
-	return &oauth2.DeviceAuthResponse{
-		DeviceCode:      "dc-1",
-		UserCode:        "ABCD-EFGH",
-		VerificationURI: "https://login.fake/activate",
-		Interval:        5,
-		Expiry:          time.Now().UTC().Add(15 * time.Minute),
+func (f *fakeFlow) Start(_ context.Context) (*Login, *Prompt, error) {
+	return &Login{}, &Prompt{
+		URL:    "https://login.fake/activate",
+		Code:   "ABCD-EFGH",
+		Expiry: time.Now().UTC().Add(15 * time.Minute),
 	}, nil
 }
 
-func (f *fakeFlow) Wait(_ context.Context, _ *oauth2.DeviceAuthResponse) (*oauth2.Token, error) {
+func (f *fakeFlow) Wait(_ context.Context, _ *Login) (*oauth2.Token, error) {
 	expiry := f.waitExpiry
 	if expiry.IsZero() {
 		expiry = time.Now().UTC().Add(time.Hour)
@@ -75,6 +75,9 @@ func (f *fakeFlow) Refresh(_ context.Context, _ string) (*oauth2.Token, error) {
 }
 
 func (f *fakeFlow) Revoke(_ context.Context, token string) error {
+	if f.revokeErr != nil {
+		return f.revokeErr
+	}
 	f.revoked = append(f.revoked, token)
 	return nil
 }
@@ -90,17 +93,15 @@ type failingFlow struct {
 	revokeErr  error
 }
 
-func (f *failingFlow) Start(context.Context) (*oauth2.DeviceAuthResponse, error) {
-	return &oauth2.DeviceAuthResponse{
-		DeviceCode:      "dc-1",
-		UserCode:        "ABCD-EFGH",
-		VerificationURI: "https://login.fake/activate",
-		Interval:        5,
-		Expiry:          time.Now().UTC().Add(15 * time.Minute),
+func (f *failingFlow) Start(context.Context) (*Login, *Prompt, error) {
+	return &Login{}, &Prompt{
+		URL:    "https://login.fake/activate",
+		Code:   "ABCD-EFGH",
+		Expiry: time.Now().UTC().Add(15 * time.Minute),
 	}, nil
 }
 
-func (f *failingFlow) Wait(context.Context, *oauth2.DeviceAuthResponse) (*oauth2.Token, error) {
+func (f *failingFlow) Wait(context.Context, *Login) (*oauth2.Token, error) {
 	return nil, f.waitErr
 }
 
@@ -162,16 +163,16 @@ func (c *fakeClock) Set(t time.Time) {
 // flowCalls records what the Flows port was asked for.
 type flowCalls struct {
 	mu  sync.Mutex
-	all []string
+	all []Credentials
 }
 
-func (c *flowCalls) add(p platform.Name, clientID string) {
+func (c *flowCalls) add(_ platform.Name, cr Credentials) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.all = append(c.all, string(p)+"/"+clientID)
+	c.all = append(c.all, cr)
 }
 
-func (c *flowCalls) list() []string {
+func (c *flowCalls) list() []Credentials {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return slices.Clone(c.all)
@@ -216,8 +217,8 @@ func newTestAuth(t *testing.T, flow Flow) *testAuth {
 	s, err := New(Ports{
 		Store: st,
 		Vault: vaultOf,
-		Flows: func(p platform.Name, clientID string) (Flow, error) {
-			calls.add(p, clientID)
+		Flows: func(p platform.Name, cr Credentials) (Flow, error) {
+			calls.add(p, cr)
 			return flow, nil
 		},
 		Publisher: pub,
@@ -238,10 +239,16 @@ func newTestFlow(t *testing.T) *fakeFlow {
 }
 
 // login stores an account and its token directly, the way a finished login
-// does.
+// does, by the device code flow.
 func (a *testAuth) login(acc Account, tok Token) {
+	a.loginWith(acc, tok, Credentials{DeviceFlow: true})
+}
+
+// loginWith stores an account and its token directly with the given
+// credentials, the way a finished login does.
+func (a *testAuth) loginWith(acc Account, tok Token, c Credentials) {
 	a.t.Helper()
-	require.NoError(a.t, a.Service.save(a.t.Context(), acc, tok))
+	require.NoError(a.t, a.Service.save(a.t.Context(), acc, tok, c))
 }
 
 // storedToken reads the token record of the twitch streamer from the vault.
@@ -257,7 +264,29 @@ func (a *testAuth) storedToken() (Token, bool) {
 	return tok, true
 }
 
-// streamerAccount is a streamer account for the tests.
+// storedClient reads the app credentials of twitch from the vault.
+func (a *testAuth) storedClient() (ClientRecord, bool) {
+	a.t.Helper()
+	data, err := a.Vault.Get(a.t.Context(), clientName(platform.Twitch))
+	if errors.Is(err, vault.ErrNotFound) {
+		return ClientRecord{}, false
+	}
+	require.NoError(a.t, err)
+	var rec ClientRecord
+	require.NoError(a.t, json.Unmarshal([]byte(data.Reveal()), &rec))
+	return rec, true
+}
+
+// secretJSON encodes v for a vault entry.
+func secretJSON(t *testing.T, v any) logging.Secret {
+	t.Helper()
+	data, err := json.Marshal(v)
+	require.NoError(t, err)
+	return logging.Secret(data)
+}
+
+// streamerAccount is a streamer account for the tests, logged in by the
+// device code flow.
 func streamerAccount(scopes ...string) Account {
 	return Account{
 		Platform: platform.Twitch,
@@ -266,33 +295,75 @@ func streamerAccount(scopes ...string) Account {
 		UserID:   "1001",
 		Scopes:   scopes,
 		ClientID: "test-client",
+		Flow:     FlowDeviceCode,
 	}
 }
 
-// TestStartLogin covers the prompt and its event.
+// TestStartLogin covers the prompt, its event, and the resolution of the
+// app of the login.
 func TestStartLogin(t *testing.T) {
 	t.Parallel()
-	a := newTestAuth(t, newTestFlow(t))
-	ctx := t.Context()
 
-	pr, err := a.Service.StartLogin(ctx, platform.Twitch, connector.AccountStreamer, "")
-	require.NoError(t, err)
-	assert.Equal(t, "https://login.fake/activate", pr.URL)
-	assert.Equal(t, "ABCD-EFGH", pr.Code)
-	assert.False(t, pr.Expiry.IsZero())
-	// The default client ID of the platform is used.
-	assert.Equal(t, []string{string(platform.Twitch) + "/" + ClientID}, a.FlowIDs.list())
+	t.Run("the device code flow uses the project app by default", func(t *testing.T) {
+		t.Parallel()
+		a := newTestAuth(t, newTestFlow(t))
+		ctx := t.Context()
 
-	events := a.Events.of(eventtype.AuthActionRequired)
-	require.Len(t, events, 1)
-	assert.Equal(t, event.Source{Kind: event.SourceSystem, Name: "auth"}, events[0].Source)
-	payload, ok := event.Payload[ActionRequired](events[0])
-	require.True(t, ok)
-	assert.Equal(t, platform.Twitch, payload.Platform)
-	assert.Equal(t, connector.AccountStreamer, payload.Role)
-	assert.Equal(t, "https://login.fake/activate", payload.URL)
-	assert.Equal(t, "ABCD-EFGH", payload.Code)
-	assert.False(t, payload.Expires.IsZero())
+		l, pr, err := a.Service.StartLogin(ctx, platform.Twitch, connector.AccountStreamer, Credentials{DeviceFlow: true})
+		require.NoError(t, err)
+		require.NotNil(t, l)
+		assert.Equal(t, "https://login.fake/activate", pr.URL)
+		assert.Equal(t, "ABCD-EFGH", pr.Code)
+		assert.False(t, pr.Expiry.IsZero())
+		// The default client ID of the platform is used.
+		assert.Equal(t, []Credentials{{ID: ClientID, DeviceFlow: true}}, a.FlowIDs.list())
+
+		events := a.Events.of(eventtype.AuthActionRequired)
+		require.Len(t, events, 1)
+		assert.Equal(t, event.Source{Kind: event.SourceSystem, Name: "auth"}, events[0].Source)
+		payload, ok := event.Payload[ActionRequired](events[0])
+		require.True(t, ok)
+		assert.Equal(t, platform.Twitch, payload.Platform)
+		assert.Equal(t, connector.AccountStreamer, payload.Role)
+		assert.Equal(t, "https://login.fake/activate", payload.URL)
+		assert.Equal(t, "ABCD-EFGH", payload.Code)
+		assert.False(t, payload.Expires.IsZero())
+	})
+
+	t.Run("the authorization code flow uses the given app", func(t *testing.T) {
+		t.Parallel()
+		a := newTestAuth(t, newTestFlow(t))
+		ctx := t.Context()
+
+		l, _, err := a.Service.StartLogin(ctx, platform.Twitch, connector.AccountStreamer, Credentials{ID: "app-1", Secret: "secret-1"})
+		require.NoError(t, err)
+		require.NotNil(t, l)
+		assert.Equal(t, []Credentials{{ID: "app-1", Secret: "secret-1"}}, a.FlowIDs.list())
+	})
+
+	t.Run("the authorization code flow resolves the app of the last login", func(t *testing.T) {
+		t.Parallel()
+		a := newTestAuth(t, newTestFlow(t))
+		ctx := t.Context()
+		require.NoError(t, a.Vault.Put(ctx, clientName(platform.Twitch), secretJSON(t, ClientRecord{ID: "app-1", Secret: "secret-1"})))
+
+		l, _, err := a.Service.StartLogin(ctx, platform.Twitch, connector.AccountStreamer, Credentials{})
+		require.NoError(t, err)
+		require.NotNil(t, l)
+		assert.Equal(t, []Credentials{{ID: "app-1", Secret: "secret-1"}}, a.FlowIDs.list())
+	})
+
+	t.Run("the authorization code flow without an app fails", func(t *testing.T) {
+		t.Parallel()
+		a := newTestAuth(t, newTestFlow(t))
+		ctx := t.Context()
+
+		l, pr, err := a.Service.StartLogin(ctx, platform.Twitch, connector.AccountStreamer, Credentials{})
+		assert.Error(t, err)
+		assert.Nil(t, l)
+		assert.Nil(t, pr)
+		assert.Empty(t, a.Events.of(eventtype.AuthActionRequired))
+	})
 }
 
 // TestWaitLogin covers the end of a login: the account and the token are
@@ -302,14 +373,15 @@ func TestWaitLogin(t *testing.T) {
 	flow := newTestFlow(t)
 	a := newTestAuth(t, flow)
 	ctx := t.Context()
-	da, err := flow.Start(ctx)
+	c := Credentials{ID: "app-1", Secret: "secret-1"}
+	l, _, err := flow.Start(ctx)
 	require.NoError(t, err)
 
 	// A failed login publishes login_failed and stores nothing.
-	a.Service.ports.Flows = func(platform.Name, string) (Flow, error) {
+	a.Service.ports.Flows = func(platform.Name, Credentials) (Flow, error) {
 		return &failingFlow{waitErr: ErrAccessDenied}, nil
 	}
-	_, err = a.Service.WaitLogin(ctx, da, platform.Twitch, connector.AccountStreamer, "")
+	_, err = a.Service.WaitLogin(ctx, l, platform.Twitch, connector.AccountStreamer, c)
 	assert.Error(t, err)
 	require.Len(t, a.Events.of(eventtype.AuthLoginFailed), 1)
 	failed, _ := event.Payload[LoginFailed](a.Events.of(eventtype.AuthLoginFailed)[0])
@@ -319,10 +391,10 @@ func TestWaitLogin(t *testing.T) {
 	assert.False(t, found)
 
 	// An aborted login is a failed one, too.
-	a.Service.ports.Flows = func(platform.Name, string) (Flow, error) {
+	a.Service.ports.Flows = func(platform.Name, Credentials) (Flow, error) {
 		return &failingFlow{waitErr: context.Canceled}, nil
 	}
-	_, err = a.Service.WaitLogin(ctx, da, platform.Twitch, connector.AccountStreamer, "")
+	_, err = a.Service.WaitLogin(ctx, l, platform.Twitch, connector.AccountStreamer, c)
 	assert.Error(t, err)
 	require.Len(t, a.Events.of(eventtype.AuthLoginFailed), 2)
 	failed, _ = event.Payload[LoginFailed](a.Events.of(eventtype.AuthLoginFailed)[1])
@@ -330,12 +402,13 @@ func TestWaitLogin(t *testing.T) {
 
 	// A finished login stores the account and the token, and publishes
 	// login_completed.
-	a.Service.ports.Flows = func(platform.Name, string) (Flow, error) { return flow, nil }
-	acc, err := a.Service.WaitLogin(ctx, da, platform.Twitch, connector.AccountStreamer, "")
+	a.Service.ports.Flows = func(platform.Name, Credentials) (Flow, error) { return flow, nil }
+	acc, err := a.Service.WaitLogin(ctx, l, platform.Twitch, connector.AccountStreamer, c)
 	require.NoError(t, err)
 	assert.Equal(t, "ada", acc.Login)
 	assert.Equal(t, "1001", acc.UserID)
-	assert.Equal(t, ClientID, acc.ClientID, "the default client ID is stored")
+	assert.Equal(t, "app-1", acc.ClientID)
+	assert.Equal(t, FlowAuthorizationCode, acc.Flow)
 	assert.Equal(t, []string{"user:read:chat", "bits:read"}, acc.Scopes)
 
 	row, found, err := a.Store.Account(ctx, "twitch", "streamer")
@@ -343,7 +416,8 @@ func TestWaitLogin(t *testing.T) {
 	require.True(t, found)
 	assert.Equal(t, "ada", row.Login)
 	assert.Equal(t, "user:read:chat bits:read", row.Scopes)
-	assert.Equal(t, ClientID, row.ClientID)
+	assert.Equal(t, "app-1", row.ClientID)
+	assert.Equal(t, FlowAuthorizationCode, row.Flow)
 
 	tok, found := a.storedToken()
 	require.True(t, found)
@@ -359,25 +433,90 @@ func TestWaitLogin(t *testing.T) {
 	assert.Equal(t, "ada", completed.Login)
 }
 
-// TestWaitLoginStoresClientID covers the client ID a login is made with.
-func TestWaitLoginStoresClientID(t *testing.T) {
+// TestWaitLoginDeviceFlow covers the fallback of the device code flow:
+// the project app is used by default and no app credentials are stored
+// (ADR-0023).
+func TestWaitLoginDeviceFlow(t *testing.T) {
 	t.Parallel()
 	flow := newTestFlow(t)
 	a := newTestAuth(t, flow)
 	ctx := t.Context()
-	da, err := flow.Start(ctx)
+	l, _, err := flow.Start(ctx)
 	require.NoError(t, err)
 
-	_, err = a.Service.WaitLogin(ctx, da, platform.Twitch, connector.AccountBot, "byo-client")
+	acc, err := a.Service.WaitLogin(ctx, l, platform.Twitch, connector.AccountBot, Credentials{DeviceFlow: true})
+	require.NoError(t, err)
+	assert.Equal(t, ClientID, acc.ClientID, "the project app is used by default")
+	assert.Equal(t, FlowDeviceCode, acc.Flow)
+	_, found := a.storedClient()
+	assert.False(t, found, "a device code login stores no app credentials")
+}
+
+// TestWaitLoginStoresClient covers the app a login is made with: the client
+// ID goes to the account row, the credentials to the vault (ADR-0023).
+func TestWaitLoginStoresClient(t *testing.T) {
+	t.Parallel()
+	flow := newTestFlow(t)
+	a := newTestAuth(t, flow)
+	ctx := t.Context()
+	l, _, err := flow.Start(ctx)
+	require.NoError(t, err)
+
+	_, err = a.Service.WaitLogin(ctx, l, platform.Twitch, connector.AccountBot, Credentials{ID: "byo-client", Secret: "byo-secret"})
 	require.NoError(t, err)
 	row, found, err := a.Store.Account(ctx, "twitch", "bot")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, "byo-client", row.ClientID, "the given client ID is stored")
+	assert.Equal(t, FlowAuthorizationCode, row.Flow)
+
+	rec, found := a.storedClient()
+	require.True(t, found, "the app credentials are stored")
+	assert.Equal(t, "byo-client", rec.ID)
+	assert.Equal(t, "byo-secret", rec.Secret)
+}
+
+// TestWaitLoginRevokesPrevious covers the re-login of an account: the
+// previous login is revoked before the new one is stored, best effort
+// (ADR-0023).
+func TestWaitLoginRevokesPrevious(t *testing.T) {
+	t.Parallel()
+	flow := newTestFlow(t)
+	a := newTestAuth(t, flow)
+	ctx := t.Context()
+
+	// A first login.
+	l, _, err := flow.Start(ctx)
+	require.NoError(t, err)
+	_, err = a.Service.WaitLogin(ctx, l, platform.Twitch, connector.AccountStreamer, Credentials{ID: "app-1", Secret: "secret-1"})
+	require.NoError(t, err)
+
+	// A re-login revokes the previous login and stores the new one.
+	l, _, err = flow.Start(ctx)
+	require.NoError(t, err)
+	_, err = a.Service.WaitLogin(ctx, l, platform.Twitch, connector.AccountStreamer, Credentials{ID: "app-2", Secret: "secret-2"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"rt-1"}, flow.revoked, "the refresh token of the previous login is revoked")
+	row, found, err := a.Store.Account(ctx, "twitch", "streamer")
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, "app-2", row.ClientID)
+
+	// A failed revoke does not fail the re-login.
+	flow.revokeErr = errors.New("the server is unreachable")
+	l, _, err = flow.Start(ctx)
+	require.NoError(t, err)
+	_, err = a.Service.WaitLogin(ctx, l, platform.Twitch, connector.AccountStreamer, Credentials{ID: "app-3", Secret: "secret-3"})
+	require.NoError(t, err, "the re-login is kept")
+	assert.Empty(t, a.Events.of(eventtype.AuthLoginFailed))
+	row, found, err = a.Store.Account(ctx, "twitch", "streamer")
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, "app-3", row.ClientID)
 }
 
 // TestSaveIsAtomic covers Code-ADR-0008: a save that fails stores neither
-// the account nor the token.
+// the account, the token, nor the app credentials.
 func TestSaveIsAtomic(t *testing.T) {
 	t.Parallel()
 	a := newTestAuth(t, newTestFlow(t))
@@ -388,13 +527,15 @@ func TestSaveIsAtomic(t *testing.T) {
 	// transaction rolls back.
 	acc := streamerAccount(Scopes...)
 	acc.Role = connector.Account("admin")
-	assert.Error(t, a.Service.save(ctx, acc, tok))
+	assert.Error(t, a.Service.save(ctx, acc, tok, Credentials{ID: "app-1", Secret: "secret-1"}))
 
 	_, found, err := a.Store.Account(ctx, "twitch", "streamer")
 	require.NoError(t, err)
 	assert.False(t, found, "the account is rolled back")
 	_, found = a.storedToken()
 	assert.False(t, found, "the vault entry is rolled back")
+	_, found = a.storedClient()
+	assert.False(t, found, "the client entry is rolled back")
 }
 
 // TestStatus covers the state of the accounts.
@@ -462,6 +603,40 @@ func TestStatus(t *testing.T) {
 		}
 		assert.Equal(t, StateLoginRequired, st.State)
 	}
+
+	// A login of the authorization code flow with its stored app is ok.
+	code := streamerAccount(Scopes...)
+	code.Role = connector.AccountBot
+	code.Login = "codeacc"
+	code.Flow = FlowAuthorizationCode
+	code.ClientID = "app-1"
+	require.NoError(t, a.Vault.Put(ctx, clientName(platform.Twitch), secretJSON(t, ClientRecord{ID: "app-1", Secret: "secret-1"})))
+	a.login(code, Token{AccessToken: "at-4", RefreshToken: "rt-4", ExpiresAt: now.Add(time.Hour)})
+	out, err = a.Service.Status(ctx)
+	require.NoError(t, err)
+	for _, st := range out {
+		if st.Login != "codeacc" {
+			continue
+		}
+		assert.Equal(t, StateOK, st.State)
+	}
+
+	// A login of the authorization code flow without its stored app is
+	// login_required (ADR-0023).
+	other := streamerAccount(Scopes...)
+	other.Role = connector.AccountBot
+	other.Login = "nosecret"
+	other.Flow = FlowAuthorizationCode
+	other.ClientID = "other-app"
+	a.login(other, Token{AccessToken: "at-5", RefreshToken: "rt-5", ExpiresAt: now.Add(time.Hour)})
+	out, err = a.Service.Status(ctx)
+	require.NoError(t, err)
+	for _, st := range out {
+		if st.Login != "nosecret" {
+			continue
+		}
+		assert.Equal(t, StateLoginRequired, st.State)
+	}
 }
 
 // TestToken covers the token port of the platform adapters.
@@ -496,14 +671,14 @@ func TestToken(t *testing.T) {
 
 	// An expired refresh token is a login_required.
 	a.Clock.Set(now.Add(4 * time.Hour))
-	a.Service.ports.Flows = func(platform.Name, string) (Flow, error) {
+	a.Service.ports.Flows = func(platform.Name, Credentials) (Flow, error) {
 		return &failingFlow{refreshErr: fmt.Errorf("%w: invalid_grant: expired", ErrTokenExpired)}, nil
 	}
 	_, err = a.Service.Token(ctx, platform.Twitch, connector.AccountStreamer)
 	assert.ErrorIs(t, err, ErrLoginRequired)
 
 	// Another refresh error stays an error.
-	a.Service.ports.Flows = func(platform.Name, string) (Flow, error) {
+	a.Service.ports.Flows = func(platform.Name, Credentials) (Flow, error) {
 		return &failingFlow{refreshErr: errors.New("the server is unreachable")}, nil
 	}
 	_, err = a.Service.Token(ctx, platform.Twitch, connector.AccountStreamer)
@@ -516,40 +691,90 @@ func TestToken(t *testing.T) {
 	require.NoError(t, a.Store.UpsertAccount(ctx, noTok.ToStore()))
 	_, err = a.Service.Token(ctx, platform.Twitch, connector.AccountBot)
 	assert.ErrorIs(t, err, ErrLoginRequired)
+
+	// An expired token of the authorization code flow without its stored
+	// app secret is a login_required (ADR-0023).
+	codeAcc := streamerAccount(Scopes...)
+	codeAcc.Role = connector.AccountBot
+	codeAcc.Login = "codebot"
+	codeAcc.Flow = FlowAuthorizationCode
+	codeAcc.ClientID = "app-x"
+	require.NoError(t, a.Store.UpsertAccount(ctx, codeAcc.ToStore()))
+	require.NoError(t, a.Vault.Put(ctx, authName(platform.Twitch, connector.AccountBot),
+		secretJSON(t, Token{AccessToken: "at-x", RefreshToken: "rt-x", ExpiresAt: now.Add(3 * time.Hour)})))
+	_, err = a.Service.Token(ctx, platform.Twitch, connector.AccountBot)
+	assert.ErrorIs(t, err, ErrLoginRequired)
+
+	// An expired token of the authorization code flow is refreshed with
+	// the stored app secret (ADR-0023).
+	cf := streamerAccount(Scopes...)
+	cf.Role = connector.AccountBot
+	cf.Login = "cfbot"
+	cf.Flow = FlowAuthorizationCode
+	cf.ClientID = "app-1"
+	require.NoError(t, a.Store.UpsertAccount(ctx, cf.ToStore()))
+	require.NoError(t, a.Vault.Put(ctx, clientName(platform.Twitch), secretJSON(t, ClientRecord{ID: "app-1", Secret: "secret-1"})))
+	require.NoError(t, a.Vault.Put(ctx, authName(platform.Twitch, connector.AccountBot),
+		secretJSON(t, Token{AccessToken: "at-cf", RefreshToken: "rt-cf", ExpiresAt: now.Add(3 * time.Hour)})))
+	flow.refreshExpiry = now.Add(5 * time.Hour)
+	a.Service.ports.Flows = func(p platform.Name, cr Credentials) (Flow, error) {
+		a.FlowIDs.add(p, cr)
+		return flow, nil
+	}
+	tok, err = a.Service.Token(ctx, platform.Twitch, connector.AccountBot)
+	require.NoError(t, err)
+	assert.Equal(t, "at-2", tok)
+	calls := a.FlowIDs.list()
+	require.NotEmpty(t, calls)
+	last := calls[len(calls)-1]
+	assert.Equal(t, "app-1", last.ID, "the stored client ID is used")
+	assert.Equal(t, "secret-1", last.Secret, "the stored secret is used")
+	assert.False(t, last.DeviceFlow)
 }
 
-// TestLogout covers the revoke and the deletion.
+// TestLogout covers the revoke, the deletion, and the kept app
+// credentials.
 func TestLogout(t *testing.T) {
 	t.Parallel()
-	a := newTestAuth(t, newTestFlow(t))
+	flow := newTestFlow(t)
+	a := newTestAuth(t, flow)
 	ctx := t.Context()
-	now := a.Clock.Now()
-	a.login(streamerAccount(Scopes...), Token{AccessToken: "at-1", RefreshToken: "rt-1", ExpiresAt: now.Add(time.Hour)})
+
+	// A code flow login, so that there are app credentials to keep.
+	l, _, err := flow.Start(ctx)
+	require.NoError(t, err)
+	_, err = a.Service.WaitLogin(ctx, l, platform.Twitch, connector.AccountStreamer, Credentials{ID: "app-1", Secret: "secret-1"})
+	require.NoError(t, err)
 
 	// Without an account, no logout.
-	err := a.Service.Logout(ctx, platform.Twitch, connector.AccountBot, "")
+	err = a.Service.Logout(ctx, platform.Twitch, connector.AccountBot)
 	assert.ErrorIs(t, err, ErrNoAccount)
 
 	// A failed revoke keeps the account and the token.
-	a.Service.ports.Flows = func(platform.Name, string) (Flow, error) {
+	a.Service.ports.Flows = func(platform.Name, Credentials) (Flow, error) {
 		return &failingFlow{revokeErr: errors.New("the server is unreachable")}, nil
 	}
-	assert.Error(t, a.Service.Logout(ctx, platform.Twitch, connector.AccountStreamer, ""))
+	assert.Error(t, a.Service.Logout(ctx, platform.Twitch, connector.AccountStreamer))
 	_, found, err := a.Store.Account(ctx, "twitch", "streamer")
 	require.NoError(t, err)
 	assert.True(t, found)
 	_, found = a.storedToken()
 	assert.True(t, found)
 
-	// A successful logout revokes the refresh token and removes both.
-	a.Service.ports.Flows = func(platform.Name, string) (Flow, error) { return a.Flow, nil }
-	require.NoError(t, a.Service.Logout(ctx, platform.Twitch, connector.AccountStreamer, ""))
+	// A successful logout revokes the refresh token and removes both,
+	// keeping the app credentials for the next login (ADR-0023).
+	a.Service.ports.Flows = func(platform.Name, Credentials) (Flow, error) { return flow, nil }
+	require.NoError(t, a.Service.Logout(ctx, platform.Twitch, connector.AccountStreamer))
 	_, found, err = a.Store.Account(ctx, "twitch", "streamer")
 	require.NoError(t, err)
 	assert.False(t, found)
 	_, found = a.storedToken()
 	assert.False(t, found)
-	assert.Equal(t, []string{"rt-1"}, a.Flow.revoked, "the refresh token is revoked")
+	assert.Equal(t, []string{"rt-1"}, flow.revoked, "the refresh token is revoked")
+
+	rec, found := a.storedClient()
+	assert.True(t, found, "the app credentials stay for the next login")
+	assert.Equal(t, "app-1", rec.ID)
 }
 
 // TestRun covers the refresh loop.
@@ -592,7 +817,7 @@ func TestRun(t *testing.T) {
 		a := newTestAuth(t, newTestFlow(t))
 		now := a.Clock.Now()
 		a.login(streamerAccount(Scopes...), Token{AccessToken: "at-1", RefreshToken: "rt-1", ExpiresAt: now.Add(10 * time.Minute)})
-		a.Service.ports.Flows = func(platform.Name, string) (Flow, error) {
+		a.Service.ports.Flows = func(platform.Name, Credentials) (Flow, error) {
 			return &failingFlow{refreshErr: fmt.Errorf("%w: invalid_grant: expired", ErrTokenExpired)}, nil
 		}
 
@@ -637,6 +862,7 @@ func TestAccountMapping(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "auth/twitch/streamer", authName(platform.Twitch, connector.AccountStreamer))
 	assert.Equal(t, "auth/twitch/bot", authName(platform.Twitch, connector.AccountBot))
+	assert.Equal(t, "auth/twitch/client", clientName(platform.Twitch))
 
 	row := store.Account{
 		Platform:  "twitch",
@@ -645,12 +871,15 @@ func TestAccountMapping(t *testing.T) {
 		UserID:    "1001",
 		Scopes:    "user:read:chat bits:read",
 		ClientID:  "test-client",
+		Flow:      FlowAuthorizationCode,
 		UpdatedAt: time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC),
 	}
 	acc := FromStore(row)
 	assert.Equal(t, platform.Twitch, acc.Platform)
 	assert.Equal(t, connector.AccountStreamer, acc.Role)
 	assert.Equal(t, []string{"user:read:chat", "bits:read"}, acc.Scopes)
+	assert.Equal(t, "test-client", acc.ClientID)
+	assert.Equal(t, FlowAuthorizationCode, acc.Flow)
 	assert.Equal(t, row, acc.ToStore())
 
 	// An empty scope list stays a list, not null.

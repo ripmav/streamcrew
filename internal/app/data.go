@@ -56,11 +56,11 @@ func newCatalog() (*event.Catalog, error) {
 
 // authFlows returns the login flows of the platforms (roadmap 4.1); only
 // Twitch has one so far.
-func authFlows(client *http.Client) func(p platform.Name, clientID string) (auth.Flow, error) {
-	return func(p platform.Name, clientID string) (auth.Flow, error) {
+func authFlows(client *http.Client) func(p platform.Name, c auth.Credentials) (auth.Flow, error) {
+	return func(p platform.Name, c auth.Credentials) (auth.Flow, error) {
 		switch p {
 		case platform.Twitch:
-			return auth.NewTwitch(clientID, client), nil
+			return auth.NewTwitch(c, client)
 		default:
 			return nil, fmt.Errorf("no login flow for platform %q", p)
 		}

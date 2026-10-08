@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package auth keeps the platform accounts of a profile (ADR-0014): it
-// starts and follows logins, stores the tokens encrypted in the vault,
-// refreshes them before they expire, and reports which accounts need a new
-// login.
+// Package auth keeps the platform accounts of a profile (ADR-0014,
+// ADR-0023): it starts and follows logins, stores the tokens encrypted in
+// the vault, refreshes them before they expire, and reports which accounts
+// need a new login.
 //
 // The Service is the single entry for everything token related: the CLI
 // and the frontends start and follow logins, the platform adapters ask it
@@ -77,8 +77,9 @@ type Ports struct {
 	// Vault returns a vault over repo, so that the token records join the
 	// transactions of Store (ADR-0012).
 	Vault func(repo vault.Repository) *vault.Vault
-	// Flows returns the login flow of a platform for a client ID.
-	Flows func(p platform.Name, clientID string) (Flow, error)
+	// Flows returns the login flow of a platform for its credentials
+	// (ADR-0023).
+	Flows func(p platform.Name, c Credentials) (Flow, error)
 	// Publisher takes the auth events; a nil publisher discards them.
 	Publisher Publisher
 	// Logger records the service; a nil logger discards.
@@ -165,17 +166,21 @@ type Status struct {
 
 // StartLogin begins a login of the platform and role and publishes the
 // prompt for the frontends (auth.action_required). The returned prompt is
-// the same the event carries.
-func (s *Service) StartLogin(ctx context.Context, p platform.Name, r connector.Account, clientID string) (Prompt, error) {
-	flow, _, err := s.flowFor(p, clientID)
+// the same the event carries. Without a client ID in the credentials, the
+// app of the last login of the platform is used (ADR-0023).
+func (s *Service) StartLogin(ctx context.Context, p platform.Name, r connector.Account, c Credentials) (*Login, *Prompt, error) {
+	c, err := s.resolveApp(ctx, p, c)
 	if err != nil {
-		return Prompt{}, err
+		return nil, nil, err
 	}
-	da, err := flow.Start(ctx)
+	flow, err := s.ports.Flows(p, c)
 	if err != nil {
-		return Prompt{}, err
+		return nil, nil, fmt.Errorf("login flow %s %s: %w", p, c.ID, err)
 	}
-	pr := PromptFrom(da)
+	l, pr, err := flow.Start(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	s.publish(ctx, eventtype.AuthActionRequired, ActionRequired{
 		Platform: p,
 		Role:     r,
@@ -183,23 +188,29 @@ func (s *Service) StartLogin(ctx context.Context, p platform.Name, r connector.A
 		Code:     pr.Code,
 		Expires:  pr.Expiry,
 	})
-	return pr, nil
+	return l, pr, nil
 }
 
 // WaitLogin follows a login started by StartLogin until the user completes
-// it. On success it stores the account and its token in one transaction and
-// publishes auth.login_completed; on failure it publishes
-// auth.login_failed with the reason.
-func (s *Service) WaitLogin(ctx context.Context, da *oauth2.DeviceAuthResponse, p platform.Name, r connector.Account, clientID string) (Account, error) {
-	flow, clientID, err := s.flowFor(p, clientID)
+// it. On success it revokes the previous login of the account best effort
+// (ADR-0023), stores the account and its token in one transaction and
+// publishes auth.login_completed; on failure it publishes auth.login_failed
+// with the reason.
+func (s *Service) WaitLogin(ctx context.Context, l *Login, p platform.Name, r connector.Account, c Credentials) (Account, error) {
+	c, err := s.resolveApp(ctx, p, c)
 	if err != nil {
 		return Account{}, err
 	}
-	tok, err := flow.Wait(ctx, da)
+	flow, err := s.ports.Flows(p, c)
+	if err != nil {
+		return Account{}, fmt.Errorf("login flow %s %s: %w", p, c.ID, err)
+	}
+	tok, err := flow.Wait(ctx, l)
 	if err != nil {
 		s.publishLoginFailed(ctx, p, r, failureReason(err))
 		return Account{}, err
 	}
+	s.revokePrevious(ctx, p, r)
 	userID, login, err := flow.User(ctx, tok.AccessToken)
 	if err != nil {
 		s.publishLoginFailed(ctx, p, r, "the platform did not return the account: "+err.Error())
@@ -211,7 +222,8 @@ func (s *Service) WaitLogin(ctx context.Context, da *oauth2.DeviceAuthResponse, 
 		Login:     login,
 		UserID:    userID,
 		Scopes:    scopeList(tok),
-		ClientID:  clientID,
+		ClientID:  c.ID,
+		Flow:      flowKind(c),
 		UpdatedAt: s.now().UTC(),
 	}
 	token := Token{
@@ -219,7 +231,7 @@ func (s *Service) WaitLogin(ctx context.Context, da *oauth2.DeviceAuthResponse, 
 		RefreshToken: tok.RefreshToken,
 		ExpiresAt:    tok.Expiry.UTC(),
 	}
-	if err := s.save(ctx, acc, token); err != nil {
+	if err := s.save(ctx, acc, token, c); err != nil {
 		s.publishLoginFailed(ctx, p, r, "the login could not be stored: "+err.Error())
 		return Account{}, err
 	}
@@ -249,6 +261,12 @@ func (s *Service) Status(ctx context.Context) ([]Status, error) {
 		// user logs in again (ADR-0014).
 		if missing := Missing(joinScopes(acc.Scopes), requiredScopes(acc.Platform)); len(missing) > 0 {
 			st.Missing = missing
+			st.State = StateLoginRequired
+		}
+		// A login of the authorization code flow without its stored app
+		// secret is login_required: a refresh could not be made
+		// (ADR-0023).
+		if acc.Flow == FlowAuthorizationCode && s.clientSecret(ctx, acc.Platform, acc.ClientID) == "" {
 			st.State = StateLoginRequired
 		}
 		token, found, err := s.token(ctx, acc.Platform, acc.Role)
@@ -291,7 +309,13 @@ func (s *Service) Token(ctx context.Context, p platform.Name, r connector.Accoun
 	if !tok.expired(s.now()) {
 		return tok.AccessToken, nil
 	}
-	flow, _, err := s.flowFor(p, row.ClientID)
+	// A login of the authorization code flow without its stored app
+	// secret cannot be refreshed: the login is required (ADR-0023).
+	acc := FromStore(row)
+	if acc.Flow == FlowAuthorizationCode && s.clientSecret(ctx, p, acc.ClientID) == "" {
+		return "", fmt.Errorf("%s %s: %w", p, r, ErrLoginRequired)
+	}
+	flow, err := s.flowForAccount(ctx, acc)
 	if err != nil {
 		return "", err
 	}
@@ -302,13 +326,14 @@ func (s *Service) Token(ctx context.Context, p platform.Name, r connector.Accoun
 		}
 		return "", fmt.Errorf("token %s %s: %w", p, r, err)
 	}
-	return s.saveRefreshed(ctx, FromStore(row), tok, newTok)
+	return s.saveRefreshed(ctx, acc, tok, newTok)
 }
 
 // Logout revokes the token of an account and removes the account and its
 // token (ADR-0014). A failed revoke keeps both, so that the user can try
-// again.
-func (s *Service) Logout(ctx context.Context, p platform.Name, r connector.Account, clientID string) error {
+// again. The app credentials of the platform stay, for the next login
+// (ADR-0023).
+func (s *Service) Logout(ctx context.Context, p platform.Name, r connector.Account) error {
 	row, found, err := s.ports.Store.Account(ctx, string(p), string(r))
 	if err != nil {
 		return fmt.Errorf("logout %s %s: %w", p, r, err)
@@ -322,19 +347,14 @@ func (s *Service) Logout(ctx context.Context, p platform.Name, r connector.Accou
 	}
 	if found {
 		// Revoke the refresh token: the platform revokes the whole login
-		// with it, not only the access token (ADR-0014).
+		// with it, not only the access token (ADR-0014). The token was
+		// made with the client of the account row (ADR-0023).
 		target := tok.RefreshToken
 		if target == "" {
 			target = tok.AccessToken
 		}
 		if target != "" {
-			// The token was made with the client ID of the account; a
-			// missing one falls back to the one the caller gives.
-			id := row.ClientID
-			if id == "" {
-				id = clientID
-			}
-			flow, _, err := s.flowFor(p, id)
+			flow, err := s.flowForAccount(ctx, FromStore(row))
 			if err != nil {
 				return err
 			}
@@ -388,7 +408,7 @@ func (s *Service) refresh(ctx context.Context, acc Account) {
 	if tok.ExpiresAt.IsZero() || tok.ExpiresAt.Sub(s.now()) > refreshWindow {
 		return
 	}
-	flow, _, err := s.flowFor(acc.Platform, acc.ClientID)
+	flow, err := s.flowForAccount(ctx, acc)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "refresh: the login flow", "platform", acc.Platform, "role", acc.Role, "error", err)
 		return
@@ -409,8 +429,11 @@ func (s *Service) refresh(ctx context.Context, acc Account) {
 }
 
 // save stores the account and its token in one transaction, so that a
-// crash never leaves one without the other (Code-ADR-0008).
-func (s *Service) save(ctx context.Context, acc Account, tok Token) error {
+// crash never leaves one without the other (Code-ADR-0008). For a login of
+// the authorization code flow it stores the app credentials of the
+// platform next to them, so that a later refresh or revoke can rebuild the
+// client (ADR-0023).
+func (s *Service) save(ctx context.Context, acc Account, tok Token, c Credentials) error {
 	name := authName(acc.Platform, acc.Role)
 	return s.ports.Store.Atomically(ctx, func(tx *store.Store) error {
 		if err := tx.UpsertAccount(ctx, acc.ToStore()); err != nil {
@@ -418,6 +441,11 @@ func (s *Service) save(ctx context.Context, acc Account, tok Token) error {
 		}
 		if err := putToken(ctx, s.ports.Vault(tx), name, tok); err != nil {
 			return fmt.Errorf("token %s %s: %w", acc.Platform, acc.Role, err)
+		}
+		if !c.DeviceFlow {
+			if err := putClient(ctx, s.ports.Vault(tx), acc.Platform, c); err != nil {
+				return fmt.Errorf("client %s: %w", acc.Platform, err)
+			}
 		}
 		return nil
 	})
@@ -450,6 +478,126 @@ func putToken(ctx context.Context, v *vault.Vault, name string, tok Token) error
 	return v.Put(ctx, name, logging.Secret(data))
 }
 
+// putClient stores the app credentials of a login in the vault under
+// clientName (ADR-0023).
+func putClient(ctx context.Context, v *vault.Vault, p platform.Name, c Credentials) error {
+	data, err := json.Marshal(ClientRecord{ID: c.ID, Secret: c.Secret})
+	if err != nil {
+		return fmt.Errorf("encode client: %w", err)
+	}
+	return v.Put(ctx, clientName(p), logging.Secret(data))
+}
+
+// resolveApp fills in the app of a login (ADR-0023): for the
+// authorization code flow it uses the app of the last login of the
+// platform when the caller gives none, for a device code login the project
+// app. StartLogin and WaitLogin resolve the same way, so that a login the
+// caller started flagless can be followed flagless.
+func (s *Service) resolveApp(ctx context.Context, p platform.Name, c Credentials) (Credentials, error) {
+	if !c.DeviceFlow && c.ID == "" {
+		rec, found, err := s.client(ctx, p)
+		if err != nil {
+			return Credentials{}, err
+		}
+		if !found {
+			return Credentials{}, fmt.Errorf("%s: no app for the login: give a client ID and secret, or use the device code flow", p)
+		}
+		c = Credentials{ID: rec.ID, Secret: rec.Secret}
+	}
+	if c.ID == "" {
+		c.ID = defaultClientID(p, "")
+	}
+	return c, nil
+}
+
+// client returns the app credentials stored for the platform; found is
+// false if the platform has no entry (ADR-0023).
+func (s *Service) client(ctx context.Context, p platform.Name) (ClientRecord, bool, error) {
+	data, err := s.ports.Vault(s.ports.Store).Get(ctx, clientName(p))
+	if err != nil {
+		if errors.Is(err, vault.ErrNotFound) {
+			return ClientRecord{}, false, nil
+		}
+		return ClientRecord{}, false, fmt.Errorf("client %s: %w", p, err)
+	}
+	var rec ClientRecord
+	if err := json.Unmarshal([]byte(data.Reveal()), &rec); err != nil {
+		return ClientRecord{}, false, fmt.Errorf("client %s: %w", p, err)
+	}
+	return rec, true, nil
+}
+
+// clientSecret returns the stored secret of the app with the client ID id
+// of the platform; it is empty if the platform has no entry or the entry
+// is for another app, so that a refresh never guesses (ADR-0023).
+func (s *Service) clientSecret(ctx context.Context, p platform.Name, id string) string {
+	rec, found, err := s.client(ctx, p)
+	if err != nil || !found || rec.ID != id {
+		return ""
+	}
+	return rec.Secret
+}
+
+// flowForAccount returns the flow of a stored account: the flow and the
+// client ID of the account row, with the stored secret of the app for the
+// authorization code flow (ADR-0023).
+func (s *Service) flowForAccount(ctx context.Context, acc Account) (Flow, error) {
+	c := Credentials{ID: acc.ClientID, DeviceFlow: acc.Flow == FlowDeviceCode}
+	if !c.DeviceFlow {
+		c.Secret = s.clientSecret(ctx, acc.Platform, c.ID)
+	}
+	flow, err := s.ports.Flows(acc.Platform, c)
+	if err != nil {
+		return nil, fmt.Errorf("login flow %s %s: %w", acc.Platform, acc.ClientID, err)
+	}
+	return flow, nil
+}
+
+// flowKind is the value of the flow column of the account row for the
+// credentials of a login (ADR-0023).
+func flowKind(c Credentials) string {
+	if c.DeviceFlow {
+		return FlowDeviceCode
+	}
+	return FlowAuthorizationCode
+}
+
+// revokePrevious revokes the login the account had before a re-login, best
+// effort (ADR-0023): a failure is logged, the new login is kept.
+func (s *Service) revokePrevious(ctx context.Context, p platform.Name, r connector.Account) {
+	row, found, err := s.ports.Store.Account(ctx, string(p), string(r))
+	if err != nil {
+		s.logger.WarnContext(ctx, "revoke the previous login: read the account", "platform", p, "role", r, "error", err)
+		return
+	}
+	if !found {
+		return
+	}
+	tok, found, err := s.token(ctx, p, r)
+	if err != nil {
+		s.logger.WarnContext(ctx, "revoke the previous login: read the token", "platform", p, "role", r, "error", err)
+		return
+	}
+	if !found {
+		return
+	}
+	target := tok.RefreshToken
+	if target == "" {
+		target = tok.AccessToken
+	}
+	if target == "" {
+		return
+	}
+	oldFlow, err := s.flowForAccount(ctx, FromStore(row))
+	if err != nil {
+		s.logger.WarnContext(ctx, "revoke the previous login: the login flow", "platform", p, "role", r, "error", err)
+		return
+	}
+	if err := oldFlow.Revoke(ctx, target); err != nil {
+		s.logger.WarnContext(ctx, "revoke the previous login", "platform", p, "role", r, "error", err)
+	}
+}
+
 // delete removes the account and its token in one transaction.
 func (s *Service) delete(ctx context.Context, p platform.Name, r connector.Account) error {
 	name := authName(p, r)
@@ -479,17 +627,6 @@ func (s *Service) token(ctx context.Context, p platform.Name, r connector.Accoun
 		return Token{}, false, fmt.Errorf("token %s %s: %w", p, r, err)
 	}
 	return tok, true, nil
-}
-
-// flowFor returns the flow of the platform and the client ID it uses, the
-// project app when the caller gives none (ADR-0014).
-func (s *Service) flowFor(p platform.Name, clientID string) (Flow, string, error) {
-	clientID = defaultClientID(p, clientID)
-	flow, err := s.ports.Flows(p, clientID)
-	if err != nil {
-		return nil, clientID, fmt.Errorf("login flow %s %s: %w", p, clientID, err)
-	}
-	return flow, clientID, nil
 }
 
 // publish sends an auth event to the frontends; a publish error never
@@ -547,6 +684,8 @@ func failureReason(err error) string {
 	switch {
 	case errors.Is(err, ErrCodeExpired):
 		return "the device code expired"
+	case errors.Is(err, ErrLoginWindow):
+		return "the login window expired"
 	case errors.Is(err, ErrAccessDenied):
 		return "the user denied the login"
 	case errors.Is(err, context.Canceled):

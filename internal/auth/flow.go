@@ -26,6 +26,15 @@ var (
 	ErrTokenExpired = errors.New("the token expired")
 )
 
+const (
+	// FlowAuthorizationCode is the flow column of an account that was
+	// logged in by the authorization code flow (ADR-0023).
+	FlowAuthorizationCode = "authorization_code"
+	// FlowDeviceCode is the flow column of an account that was logged in
+	// by the device code flow (ADR-0023).
+	FlowDeviceCode = "device_code"
+)
+
 // Flow is the OAuth flow of a platform: start a login, wait for the user
 // to finish it, refresh and revoke tokens, and look up the account behind
 // a token. Each platform has one implementation (twitchFlow and
