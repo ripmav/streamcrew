@@ -108,7 +108,7 @@ func (r *Run) Call(ctx context.Context, commandID id.ID, opts CallOptions) (Resu
 		e.mu.Lock()
 		tn = e.takeTurnLocked()
 		e.mu.Unlock()
-		_, decide, err := e.prepare(ctx, cmd, p, false)
+		_, decide, err := e.prepare(ctx, cmd, p, caller.lookup, false)
 		if err != nil {
 			return Result{}, fmt.Errorf("call command %q: %w", cmd.Name, err)
 		}
@@ -130,7 +130,7 @@ func (r *Run) Call(ctx context.Context, commandID id.ID, opts CallOptions) (Resu
 		e.resetErrorCooldowns(cmd.ID) // B13
 	}
 
-	org := origin{parent: caller.id, chain: caller.chain}
+	org := origin{parent: caller.id, chain: caller.chain, lookup: caller.lookup}
 	if opts.Wait {
 		// A call with waiting runs as part of its caller, not in the queue.
 		tn.done()

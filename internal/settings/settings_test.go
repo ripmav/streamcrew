@@ -5,6 +5,7 @@ package settings_test
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,6 +54,8 @@ func TestDefaultsWhenNeverSaved(t *testing.T) {
 		ArgDelimiter:          "|",
 		EntranceMediaGap:      polydoc.Duration(5 * time.Second),
 		QueueSize:             1000,
+		UserLookupAttempts:    3,
+		UserLookupTimeout:     polydoc.Duration(2 * time.Second),
 	}, c, "B90")
 }
 
@@ -93,6 +96,8 @@ func TestSaveAndLoad(t *testing.T) {
 		ArgDelimiter:          ";",
 		EntranceMediaGap:      polydoc.Duration(1500 * time.Millisecond),
 		QueueSize:             50,
+		UserLookupAttempts:    5,
+		UserLookupTimeout:     polydoc.Duration(500 * time.Millisecond),
 	}
 	require.NoError(t, settings.Save(ctx, svc, cmds))
 	gotCmds, err := settings.Load(ctx, svc, settings.DefaultCommands())
@@ -100,7 +105,7 @@ func TestSaveAndLoad(t *testing.T) {
 	assert.Equal(t, cmds, gotCmds)
 	doc, _, err = s.Settings(ctx, "commands")
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"type":"commands","schemaVersion":3,"lockMode":"visual_audio","errorCooldown":"global","errorCooldownDuration":"1m0s","argDelimiter":";","entranceMediaGap":"1.5s","queueSize":50}`, string(doc))
+	assert.JSONEq(t, `{"type":"commands","schemaVersion":4,"lockMode":"visual_audio","errorCooldown":"global","errorCooldownDuration":"1m0s","argDelimiter":";","entranceMediaGap":"1.5s","queueSize":50,"userLookupAttempts":5,"userLookupTimeout":"500ms"}`, string(doc))
 }
 
 func TestValidation(t *testing.T) {
@@ -125,6 +130,10 @@ func TestValidation(t *testing.T) {
 		withCommands(func(c *settings.Commands) { c.EntranceMediaGap = polydoc.Duration(time.Minute + time.Millisecond) }),
 		withCommands(func(c *settings.Commands) { c.QueueSize = 0 }),
 		withCommands(func(c *settings.Commands) { c.QueueSize = 10_001 }),
+		withCommands(func(c *settings.Commands) { c.UserLookupAttempts = 0 }),
+		withCommands(func(c *settings.Commands) { c.UserLookupAttempts = 11 }),
+		withCommands(func(c *settings.Commands) { c.UserLookupTimeout = polydoc.Duration(99 * time.Millisecond) }),
+		withCommands(func(c *settings.Commands) { c.UserLookupTimeout = polydoc.Duration(30*time.Second + time.Millisecond) }),
 	} {
 		assert.Error(t, settings.Save(ctx, svc, s), "%+v", s)
 	}
@@ -154,6 +163,12 @@ func TestCommandsModes(t *testing.T) {
 	for _, size := range []int{settings.MinQueueSize, settings.MaxQueueSize} {
 		assert.NoError(t, settings.Save(ctx, svc, withCommands(func(c *settings.Commands) { c.QueueSize = size })), "B15: %d", size)
 	}
+	for _, n := range []int{settings.MinUserLookupAttempts, settings.MaxUserLookupAttempts} {
+		assert.NoError(t, settings.Save(ctx, svc, withCommands(func(c *settings.Commands) { c.UserLookupAttempts = n })), "B17: %d", n)
+	}
+	for _, d := range []time.Duration{settings.MinUserLookupTimeout, settings.MaxUserLookupTimeout} {
+		assert.NoError(t, settings.Save(ctx, svc, withCommands(func(c *settings.Commands) { c.UserLookupTimeout = polydoc.Duration(d) })), "B17: %s", d)
+	}
 }
 
 // TestCommandsVersion1: stored version 1 documents are migrated; they get
@@ -172,6 +187,8 @@ func TestCommandsVersion1(t *testing.T) {
 		ArgDelimiter:          ";",
 		EntranceMediaGap:      polydoc.Duration(settings.DefaultEntranceMediaGap),
 		QueueSize:             settings.DefaultQueueSize,
+		UserLookupAttempts:    settings.DefaultUserLookupAttempts,
+		UserLookupTimeout:     polydoc.Duration(settings.DefaultUserLookupTimeout),
 	}, got)
 
 	withGap := `{"type":"commands","schemaVersion":1,"lockMode":"singular","errorCooldown":"off","errorCooldownDuration":"0s","argDelimiter":";","entranceMediaGap":"2s"}`
@@ -197,6 +214,8 @@ func TestCommandsVersion2(t *testing.T) {
 		ArgDelimiter:          ";",
 		EntranceMediaGap:      polydoc.Duration(2 * time.Second),
 		QueueSize:             settings.DefaultQueueSize,
+		UserLookupAttempts:    settings.DefaultUserLookupAttempts,
+		UserLookupTimeout:     polydoc.Duration(settings.DefaultUserLookupTimeout),
 	}, got)
 
 	withSize := `{"type":"commands","schemaVersion":2,"lockMode":"singular","errorCooldown":"off","errorCooldownDuration":"0s","argDelimiter":";","entranceMediaGap":"2s","queueSize":5}`
@@ -204,6 +223,28 @@ func TestCommandsVersion2(t *testing.T) {
 	require.NoError(t, err)
 	_, err = settings.Load(t.Context(), svc, settings.DefaultCommands())
 	require.Error(t, err, "version 2 never had the queue size")
+}
+
+// TestCommandsVersion3: stored version 3 documents are migrated; they get
+// the defaults of the user lookups of B17.
+func TestCommandsVersion3(t *testing.T) {
+	t.Parallel()
+	v3 := `{"type":"commands","schemaVersion":3,"lockMode":"singular","errorCooldown":"off","errorCooldownDuration":"0s","argDelimiter":";","entranceMediaGap":"2s","queueSize":7}`
+	svc, err := settings.New(fakeRepo{doc: []byte(v3)})
+	require.NoError(t, err)
+	got, err := settings.Load(t.Context(), svc, settings.DefaultCommands())
+	require.NoError(t, err)
+	assert.Equal(t, 7, got.QueueSize)
+	assert.Equal(t, settings.DefaultUserLookupAttempts, got.UserLookupAttempts)
+	assert.Equal(t, polydoc.Duration(settings.DefaultUserLookupTimeout), got.UserLookupTimeout)
+
+	for _, field := range []string{`"userLookupAttempts":2`, `"userLookupTimeout":"1s"`} {
+		doc := strings.Replace(v3, `"queueSize":7`, `"queueSize":7,`+field, 1)
+		svc, err := settings.New(fakeRepo{doc: []byte(doc)})
+		require.NoError(t, err)
+		_, err = settings.Load(t.Context(), svc, settings.DefaultCommands())
+		require.Error(t, err, "version 3 never had %s", field)
+	}
 }
 
 // withCommands returns the default commands section changed by edit.

@@ -57,7 +57,7 @@ type requirements struct {
 	revertErr  error
 }
 
-func (r *requirements) Prepare(_ context.Context, cmd command.Command, p engine.Params) (engine.Decide, error) {
+func (r *requirements) Prepare(_ context.Context, cmd command.Command, p engine.Params, _ engine.Users) (engine.Decide, error) {
 	r.mu.Lock()
 	gate, hold := r.gate, r.holds[cmd.Name]
 	r.applied = append(r.applied, cmd.Name)

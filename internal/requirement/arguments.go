@@ -23,7 +23,7 @@ import (
 // it is text, and each value must fit its type. It returns p with the
 // values of the arguments that have an identifier name, or the rejection.
 // An empty word counts as missing.
-func (s *Service) checkArguments(ctx context.Context, cmd command.Command, r command.ArgumentsRequirement, p engine.Params) (run engine.Params, rej engine.Rejection, rejected bool, err error) {
+func (s *Service) checkArguments(ctx context.Context, cmd command.Command, r command.ArgumentsRequirement, p engine.Params, users engine.Users) (run engine.Params, rej engine.Rejection, rejected bool, err error) {
 	values := make(map[string]template.Value, len(r.Arguments))
 	for i, a := range r.Arguments {
 		word := ""
@@ -40,7 +40,7 @@ func (s *Service) checkArguments(ctx context.Context, cmd command.Command, r com
 			}
 			continue
 		}
-		v, why, fits, verr := s.argumentValue(ctx, a, word, p)
+		v, why, fits, verr := argumentValue(ctx, a, word, p, users)
 		if verr != nil || !fits {
 			return p, why, verr == nil, verr
 		}
@@ -61,7 +61,7 @@ func (s *Service) checkArguments(ctx context.Context, cmd command.Command, r com
 
 // argumentValue returns the value of word for the argument a (B33, B35); ok
 // is false with the rejection if word does not fit the type of a.
-func (s *Service) argumentValue(ctx context.Context, a command.Argument, word string, p engine.Params) (v template.Value, rej engine.Rejection, ok bool, err error) {
+func argumentValue(ctx context.Context, a command.Argument, word string, p engine.Params, users engine.Users) (v template.Value, rej engine.Rejection, ok bool, err error) {
 	switch a.Type {
 	case command.ArgumentText:
 		return template.TextValue(word), engine.Rejection{}, true, nil
@@ -78,7 +78,7 @@ func (s *Service) argumentValue(ctx context.Context, a command.Argument, word st
 		}
 		return template.Value{Text: word, Number: float64(n), IsNumber: true}, engine.Rejection{}, true, nil
 	case command.ArgumentUser:
-		return s.userValue(ctx, a, word, p)
+		return userValue(ctx, a, word, p, users)
 	default:
 		return template.Value{}, engine.Rejection{}, false, fmt.Errorf("argument %q: unknown type %q", a.Name, a.Type)
 	}
@@ -95,13 +95,16 @@ func parseInteger(word string) (int64, bool) {
 // of the run, with or without "@", without a platform on the default
 // platform (B33, B35, B105). A name with "@" that the core does not know
 // stands for itself (B113); "@" alone is no user.
-func (s *Service) userValue(ctx context.Context, a command.Argument, word string, p engine.Params) (template.Value, engine.Rejection, bool, error) {
+func userValue(ctx context.Context, a command.Argument, word string, p engine.Params, users engine.Users) (template.Value, engine.Rejection, bool, error) {
 	name, at := strings.CutPrefix(word, "@")
 	if name == "" {
 		return template.Value{}, typeRejection(a, p), false, nil
 	}
+	if users == nil {
+		return template.Value{}, engine.Rejection{}, false, fmt.Errorf("argument %q: no lookup of users", a.Name)
+	}
 	on := cmp.Or(p.Platform, platform.Default)
-	u, found, err := s.ports.Users.UserByName(ctx, on, name)
+	u, found, err := users.UserByName(ctx, on, name)
 	if err != nil {
 		return template.Value{}, engine.Rejection{}, false, fmt.Errorf("argument %q: find user %q on %s: %w", a.Name, name, on, err)
 	}

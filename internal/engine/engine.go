@@ -309,7 +309,7 @@ func (e *Engine) Run(ctx context.Context) error {
 // also a disabled command, and without its requirements, costs and
 // cooldowns. It returns the ID of the instance.
 func (e *Engine) Start(ctx context.Context, cmd command.Command, p Params) (id.ID, error) {
-	return e.queue(ctx, cmd, SourceManual, e.lookupTarget(ctx, p))
+	return e.queue(ctx, cmd, SourceManual, p, true)
 }
 
 // Replayed is the result of replaying one instance (B54).
@@ -350,7 +350,7 @@ func (e *Engine) replay(ctx context.Context, instanceID id.ID) (id.ID, error) {
 	if err != nil {
 		return id.ID{}, fmt.Errorf("replay %s: %w", instanceID, err)
 	}
-	replay, err := e.queue(ctx, cmd, SourceReplay, in.params)
+	replay, err := e.queue(ctx, cmd, SourceReplay, in.params, false)
 	if err != nil {
 		return id.ID{}, fmt.Errorf("replay %s: %w", instanceID, err)
 	}
@@ -459,8 +459,9 @@ func (e *Engine) Instance(instanceID id.ID) (Instance, bool) {
 	return in.snapshot(), true
 }
 
-// queue queues an instance of cmd.
-func (e *Engine) queue(ctx context.Context, cmd command.Command, src Source, p Params) (id.ID, error) {
+// queue queues an instance of cmd with a lookup of its own (B17), with
+// findTarget after looking up its target (B81).
+func (e *Engine) queue(ctx context.Context, cmd command.Command, src Source, p Params, findTarget bool) (id.ID, error) {
 	if err := checkRun(cmd, p); err != nil {
 		return id.ID{}, fmt.Errorf("queue command %q: %w", cmd.Name, err)
 	}
@@ -468,7 +469,11 @@ func (e *Engine) queue(ctx context.Context, cmd command.Command, src Source, p P
 	if err != nil {
 		return id.ID{}, fmt.Errorf("queue command %q: %w", cmd.Name, err)
 	}
-	return e.enqueue(ctx, cmd, src, p, cfg, admission{}, origin{})
+	lookup := e.newLookup(cfg)
+	if findTarget {
+		p = e.lookupTarget(ctx, lookup, p)
+	}
+	return e.enqueue(ctx, cmd, src, p, cfg, admission{}, origin{lookup: lookup})
 }
 
 // admission says how an instance enters the queue.
