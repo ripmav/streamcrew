@@ -274,13 +274,15 @@ func (s *Service) Status(ctx context.Context) ([]Status, error) {
 			return nil, err
 		}
 		if !found {
+			// A login without its token record needs a new login
+			// (ADR-0014).
 			st.State = StateLoginRequired
-			continue
-		}
-		expires := token.ExpiresAt.UTC()
-		st.Expires = &expires
-		if token.RefreshToken == "" {
-			st.State = StateLoginRequired
+		} else {
+			expires := token.ExpiresAt.UTC()
+			st.Expires = &expires
+			if token.RefreshToken == "" {
+				st.State = StateLoginRequired
+			}
 		}
 		out = append(out, st)
 	}

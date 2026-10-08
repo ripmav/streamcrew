@@ -198,6 +198,7 @@ func TestUsageErrors(t *testing.T) {
 	}{
 		{name: "unknown flag", args: []string{"--no-such-flag", "version"}, wantStderr: "unknown flag"},
 		{name: "invalid enum", args: []string{"--mode=kiosk", "config", "show"}, wantStderr: "--mode"},
+		{name: "invalid platform", args: []string{"auth", "login", "youtube"}, wantStderr: `must be one of "twitch" but got "youtube"`},
 		{name: "invalid listen address", args: []string{"--listen=nowhere", "config", "show"}, wantStderr: "--listen"},
 		{name: "unknown key in config file", file: "lg_level: debug\n", args: []string{"config", "show"}, wantStderr: `unknown key "lg_level"`},
 		{name: "missing config file", args: []string{"--config=/does/not/exist.yaml", "config", "show"}, wantStderr: "read config file"},

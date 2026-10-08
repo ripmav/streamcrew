@@ -11,6 +11,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"github.com/ripmav/streamcrew/internal/store/sqlcgen"
+	"github.com/ripmav/streamcrew/internal/vault"
 )
 
 // ReadOnly is a profile database opened read-only and without migrations,
@@ -51,6 +54,33 @@ func (r *ReadOnly) SchemaVersion() int64 {
 // Meta returns a metadata value, or "" if it is not set.
 func (r *ReadOnly) Meta(key string) string {
 	return r.info.Meta[key]
+}
+
+// Accounts returns the metadata of all platform logins, by platform and
+// role.
+func (r *ReadOnly) Accounts(ctx context.Context) ([]Account, error) {
+	rows, err := sqlcgen.New(r.db).ListAccounts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list accounts: %w", translate(err))
+	}
+	out := make([]Account, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, accountFrom(row))
+	}
+	return out, nil
+}
+
+// GetSecret returns a vault record; found is false if there is no record
+// with the name.
+func (r *ReadOnly) GetSecret(ctx context.Context, name string) (vault.Record, bool, error) {
+	row, err := sqlcgen.New(r.db).GetSecret(ctx, name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return vault.Record{}, false, nil
+	}
+	if err != nil {
+		return vault.Record{}, false, fmt.Errorf("get vault entry: %w", translate(err))
+	}
+	return toRecord(row), true, nil
 }
 
 // VacuumInto writes a consistent, compact copy of the database to dest,
