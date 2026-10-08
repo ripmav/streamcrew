@@ -307,7 +307,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [x] Spezifikationen für das Domänenmodell: [`users-and-roles.md`](spec/users-and-roles.md), [`commands.md`](spec/commands.md), [`counters-and-quotes.md`](spec/counters-and-quotes.md), [`events.md`](spec/events.md) (M), vom Projektinhaber geprüft und akzeptiert 2026-09-29; die offenen Fragen darin werden am Original geprüft
 - [ ] Nutzer: Nutzer, Plattform-Identitäten, Statistiken, Titel, Notizen, Ausschlüsse (M)
 - [x] Rollenmodell: plattformneutrale Rollen mit Rangordnung plus plattformspezifische Rollen; Semantik „erfüllt Mindestrolle“ (Plan Anhang A.7) (M), erledigt 2026-09-29 (`internal/domain/role`; plattformspezifische Rollen zählen auf der Stufe, auf der sie stehen)
-- [ ] Commands (M):
+- [x] Commands (M), erledigt 2026-09-29 (`internal/domain/command`; Golden Files für alle Anforderungsarten):
   - Arten, Trigger
   - Gruppen inkl. Gruppen-Timer-Intervall
   - aktiv/unlocked

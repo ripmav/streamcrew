@@ -1,0 +1,6 @@
+{
+  "type": "cooldown",
+  "schemaVersion": 1,
+  "scope": "per_user_group",
+  "duration": "1m30s"
+}
