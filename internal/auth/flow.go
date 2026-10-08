@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package auth keeps the platform accounts of a profile (ADR-0014,
-// ADR-0023): it starts and follows logins, stores the tokens encrypted
-// in the vault, refreshes them before they expire, and reports which
-// accounts need a new login.
 package auth
 
 import (
@@ -28,6 +24,15 @@ var (
 	// ErrTokenExpired is the refresh token is no longer valid: the login
 	// must be started again (ADR-0014).
 	ErrTokenExpired = errors.New("the token expired")
+)
+
+const (
+	// FlowAuthorizationCode is the flow column of an account that was
+	// logged in by the authorization code flow (ADR-0023).
+	FlowAuthorizationCode = "authorization_code"
+	// FlowDeviceCode is the flow column of an account that was logged in
+	// by the device code flow (ADR-0023).
+	FlowDeviceCode = "device_code"
 )
 
 // Flow is the OAuth flow of a platform: start a login, wait for the user
