@@ -685,6 +685,7 @@ Woher die App-Credentials kommen:
   - `overlay_endpoints`, `overlay_widgets`
   - `integrations` (Konfiguration + Secret-Referenz), `webhooks`
   - `event_log` (Statistik und Verlauf mit Aufbewahrungsfrist), `api_tokens`
+  - `stream_sessions`, `session_events`, `user_events` (Stream-Sitzungen und Ereignisse, die einmal auslösen; seit Roadmap 3.6)
 - **Ranglisten und `$top…`:** laufen per SQL, statt alle Nutzer zu laden.
 - **Backups:** konsistente Snapshots per `VACUUM INTO`, verpackt als ZIP mit Manifest (App- und Schemaversion). Es gibt einen Zeitplan (täglich, wöchentlich, monatlich) mit Aufbewahrungsregeln. Beim Restore wird die Version geprüft, ein neueres Schema wird abgelehnt.
 - **Profile:** Es kann mehrere Profile geben, genau eines ist aktiv. Gewechselt wird über die API, und eine Sperrdatei verhindert einen Doppelstart.
