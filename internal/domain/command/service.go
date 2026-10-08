@@ -13,11 +13,15 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/id"
 )
 
-// Service validates, encodes and stores commands and groups.
+// Service validates, encodes and stores commands and groups. It keeps what
+// it derives from the commands for chat messages and events (Recognize,
+// EventCommand) until a change through it; the running core therefore
+// changes commands through one Service only.
 type Service struct {
-	repo   Repository
-	codec  *Codec
-	checks Checks
+	repo    Repository
+	codec   *Codec
+	checks  Checks
+	derived derived
 }
 
 // NewService returns a service on repo that checks the actions of commands
@@ -93,7 +97,9 @@ func (s *Service) Save(ctx context.Context, cmd Command) (Saved, error) {
 	if err != nil {
 		return Saved{}, err
 	}
-	if err := s.repo.PutCommand(ctx, rec); err != nil {
+	err = s.repo.PutCommand(ctx, rec)
+	s.changed()
+	if err != nil {
 		return Saved{}, fmt.Errorf("save command %q: %w", cmd.Name, err)
 	}
 	stored, err := s.Command(ctx, cmd.ID)
@@ -123,6 +129,7 @@ func (s *Service) Delete(ctx context.Context, commandID id.ID) error {
 	if len(users) > 0 {
 		return &InUseError{What: fmt.Sprintf("command %q", rec.Name), Users: users, Switch: true}
 	}
+	defer s.changed()
 	return s.repo.DeleteCommand(ctx, commandID)
 }
 
@@ -169,6 +176,7 @@ func (s *Service) DeleteGroup(ctx context.Context, groupID id.ID) error {
 	if len(users) > 0 {
 		return &InUseError{What: fmt.Sprintf("command group %q", g.Name), Users: users}
 	}
+	defer s.changed()
 	return s.repo.DeleteGroup(ctx, groupID)
 }
 

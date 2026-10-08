@@ -161,7 +161,7 @@ func MatchTrigger(message, trigger string, m TriggerMode) TriggerMatch {
 		}
 		return NoMatch
 	case TriggerWildcard:
-		if containsWords(strings.ToLower(message), strings.ToLower(trigger)) {
+		if _, _, ok := findWords(message, trigger); ok {
 			return MatchIgnoringCase
 		}
 		return NoMatch
@@ -188,30 +188,6 @@ func cutPrefixFold(s, prefix string) (string, bool) {
 		s = s[size:]
 	}
 	return s, true
-}
-
-// containsWords reports whether trig occurs in msg as whole words (B13).
-func containsWords(msg, trig string) bool {
-	first, _ := utf8.DecodeRuneInString(trig)
-	last, _ := utf8.DecodeLastRuneInString(trig)
-	for offset := 0; offset < len(msg); {
-		i := strings.Index(msg[offset:], trig)
-		if i < 0 {
-			return false
-		}
-		start := offset + i
-		end := start + len(trig)
-		before, _ := utf8.DecodeLastRuneInString(msg[:start])
-		after, _ := utf8.DecodeRuneInString(msg[end:])
-		startsInWord := isWord(first) && start > 0 && isWord(before)
-		endsInWord := isWord(last) && end < len(msg) && isWord(after)
-		if !startsInWord && !endsInWord {
-			return true
-		}
-		_, size := utf8.DecodeRuneInString(msg[start:])
-		offset = start + size
-	}
-	return false
 }
 
 // isWord reports whether r belongs to a word: a letter or a digit.

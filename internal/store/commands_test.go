@@ -793,3 +793,53 @@ func mustFind(t *testing.T, svc *commandSaver, name string) id.ID {
 	t.Fatalf("no command %q", name)
 	return id.ID{}
 }
+
+// TestRecognizeAfterChanges covers what the command service derives for
+// chat messages and events (commands.md, B16, B20): it follows every
+// change through the service.
+func TestRecognizeAfterChanges(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc, _ := commandService(t)
+
+	recognized := func(message string) string {
+		t.Helper()
+		r, err := svc.Recognize(ctx, message)
+		require.NoError(t, err)
+		if r.Outcome != command.RecognitionTriggered {
+			return string(r.Outcome)
+		}
+		return r.Command.Name
+	}
+	assert.Equal(t, "none", recognized("!hug"))
+
+	hug, err := svc.Save(ctx, chatCommand("hug", true, "hug"))
+	require.NoError(t, err)
+	assert.Equal(t, "hug", recognized("!hug bob"), "after saving")
+
+	_, err = svc.SwitchCommand(ctx, hug.ID, command.SwitchOff)
+	require.NoError(t, err)
+	assert.Equal(t, "none", recognized("!hug"), "after switching off")
+
+	fun, err := svc.SaveGroup(ctx, command.Group{Name: "fun"})
+	require.NoError(t, err)
+	hug.GroupID, hug.Enabled = fun.ID, false
+	_, err = svc.Save(ctx, hug)
+	require.NoError(t, err)
+	require.NoError(t, svc.SwitchGroup(ctx, fun.ID, command.SwitchOn))
+	assert.Equal(t, "hug", recognized("!hug"), "after switching the group on")
+
+	require.NoError(t, svc.Delete(ctx, hug.ID))
+	assert.Equal(t, "none", recognized("!hug"), "after deleting")
+
+	_, ok, err := svc.EventCommand(ctx, eventtype.ChannelFollow)
+	require.NoError(t, err)
+	assert.False(t, ok)
+	follow := command.Command{Name: "follow alert", Kind: command.KindEvent, Event: eventtype.ChannelFollow, ErrorPolicy: command.ErrorContinue}
+	_, err = svc.Save(ctx, follow)
+	require.NoError(t, err)
+	got, ok, err := svc.EventCommand(ctx, eventtype.ChannelFollow)
+	require.NoError(t, err)
+	require.True(t, ok, "also a disabled one")
+	assert.Equal(t, "follow alert", got.Name)
+}
