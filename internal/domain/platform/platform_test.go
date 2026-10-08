@@ -20,3 +20,16 @@ func TestValidate(t *testing.T) {
 		assert.Error(t, n.Validate(), n)
 	}
 }
+
+func TestDisplayName(t *testing.T) {
+	t.Parallel()
+	for name, want := range map[platform.Name]string{
+		platform.Twitch:  "Twitch",
+		platform.YouTube: "YouTube",
+		platform.Kick:    "Kick",
+		"velora":         "velora",
+		"":               "",
+	} {
+		assert.Equal(t, want, name.DisplayName())
+	}
+}

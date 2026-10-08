@@ -1,0 +1,11 @@
+# DateTimeFamily on Monday, 15 June 2009, 13:45:20 in the time zone of the
+# profile (UTC-4), with the formats of the original (B40, B41).
+in:  "$datetime"
+out: "6/15/2009 1:45 PM"
+
+in:  "$date / $dateyear-$datemonth-$dateday / $datemonthname / $dayoftheweek"
+out: "6/15/2009 / 2009-06-15 / June / Monday"
+
+in:  "$time / $timehour:$timeminute:$timesecond / $timedigits"
+out: "1:45 PM / 13:45:20 / 1345"
+

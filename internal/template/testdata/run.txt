@@ -1,0 +1,3 @@
+# RunFamily for the command "shoutout" on Twitch.
+
+$commandname on $streamingplatform

@@ -35,6 +35,8 @@
 4. **Scope je Rendervorgang:** Der `Scope` hält den Kontext des Durchlaufs (Nutzer, Ziel, Argumente, Ereigniswerte, lokale Werte), die Ports zu den Daten (Nutzer, Stream-Zustand, Counter, Zeitzone und Locale des Profils) als kleine Interfaces der Konsumentenseite und einen Cache.
    - Jeder Identifier wird je Rendervorgang höchstens einmal aufgelöst (B21); Ausnahmen, etwa `randomnumber`, markiert ihr Eintrag als nicht zwischenspeicherbar.
    - Ein Zufallsnutzer wird je Subjekt einmal gewählt und im Scope gehalten (B22).
+
+   *Präzisiert am 2026-09-30: Ports zu Daten, die für das ganze Profil gelten (Stream-Zustand, Nutzer), bekommen die Familien als Parameter beim Aufbau der Registry, etwa `template.StreamFamily(states)`. Der Scope hält die Daten des Durchlaufs und die Zeitzone; `Scope.Memo` hält, was mehrere Identifier eines Rendervorgangs teilen. Counter sind eine dynamische Quelle (`template.CounterSource`).*
    - Gerendert wird der Reihe nach in einer Goroutine; ein Resolver bekommt den `context.Context` des Durchlaufs und muss Abbruch und Zeitlimit beachten (B24). Gleichzeitiges Vorladen teurer Werte ist eine spätere Optimierung, wenn Messungen sie begründen.
 5. **Fehler:** Liefert ein Resolver einen Fehler, bleibt der Identifier stehen, und die Engine loggt eine Warnung mit Identifier und Fehler, ohne Werte aus dem Kontext ([Code-ADR-0003](0003-fehler-und-logging.md)). Nur ein abgebrochener Kontext beendet das Rendern mit Fehler.
 6. **Kodierung:** `Render` bekommt eine Kodierung (`Text`, `URL`, `HTML`, `JSON`) und wendet sie nur auf eingesetzte Werte an (B30, B31):
@@ -85,7 +87,8 @@
 
 - [x] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) und das ADR-Backlog in Plan §12.2 anpassen, erledigt 2026-09-29
 - [x] Kern von `internal/template` umsetzen (Roadmap 3.1), erledigt 2026-09-30
-- [ ] Identifier-Familien des MVP in `internal/template` (Roadmap 3.1)
+- [x] Familien für Argumente, Nachricht, Datum und Zeit, Zufallszahlen, Stream, Counter, Ereigniswerte, Command-Name und Plattform, erledigt 2026-09-30
+- [ ] Nutzer-Familien mit Zufallsnutzer (Roadmap 3.1)
 - [ ] `internal/expr` umsetzen (Roadmap 3.1); `expr-lang/expr` in `go.mod` aufnehmen und die Lizenzprüfung der CI laufen lassen
 - [ ] Die Special-Identifier-Action (Roadmap 3.3) setzt lokale und globale Werte über die Quellen aus Punkt 2
 - [ ] Namen und Eigenschaften nach der rechtlichen Einschätzung (Gate O, O.1) bestätigen oder austauschen

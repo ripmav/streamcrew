@@ -4,8 +4,8 @@
 // to B7): named whole numbers of a profile, e.g. deaths in a game, that
 // actions change and identifiers print.
 //
-// The formatted output (B4) and the check against built-in identifiers (B7)
-// follow with the template engine (roadmap phase 3).
+// The identifiers $<name> and $<name>display (B1, B4) come from the counter
+// source of the template engine (internal/template).
 package counter
 
 import (
@@ -52,6 +52,29 @@ func (c Counter) Validate() error {
 	for _, r := range c.Name {
 		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
 			return fmt.Errorf("%w: name %q: only ASCII letters and digits are allowed", ErrInvalid, c.Name)
+		}
+	}
+	return nil
+}
+
+// ErrReserved is wrapped when the name of a counter collides with a
+// built-in identifier (B7).
+var ErrReserved = errors.New("counter name collides with a built-in identifier")
+
+// Reserver reports whether a name collides with a built-in identifier and
+// with which one; *template.Registry implements it.
+type Reserver interface {
+	Reserved(name string) (builtIn string, reserved bool)
+}
+
+// CheckReserved checks that neither $<name> nor $<name>display collides with
+// a built-in identifier (B7; spec template.md, B12, B74). Whoever creates or
+// renames a counter calls it after Validate; counters from an import keep
+// their names, and the rules of the template engine decide (B74).
+func (c Counter) CheckReserved(r Reserver) error {
+	for _, name := range []string{c.Name, c.Name + "display"} {
+		if builtIn, reserved := r.Reserved(name); reserved {
+			return fmt.Errorf("%w: name %q collides with $%s", ErrReserved, c.Name, builtIn)
 		}
 	}
 	return nil

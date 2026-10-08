@@ -1,0 +1,28 @@
+# ArgumentFamily with the arguments of "!quote add "Best stream ever" | Alice":
+# add, Best stream ever, |, Alice.
+# all arguments and their number
+in:  "$allargs"
+out: "add \"Best stream ever\" | Alice"
+
+in:  "$argcount arguments: $arg1text, $arg2text, $arg4text"
+out: "4 arguments: add, Best stream ever, Alice"
+
+# ranges n to m, both included; a range beyond the last argument ends there
+in:  "$arg2:3text / $arg1:99text / $arg2:2text"
+out: "Best stream ever | / add Best stream ever | Alice / Best stream ever"
+
+# the longest prefix, the rest of the token stays (B2)
+in:  "$arg1texts $arg1:2textual"
+out: "adds add Best stream everual"
+
+# B4: arguments that do not exist; B6: invalid numbers
+in:  "$arg5text $arg5:6text $arg0text $arg2:1text $arg1:text $argtext"
+out: "$arg5text $arg5:6text $arg0text $arg2:1text $arg1:text $argtext"
+
+# delimited arguments, split at "|" with white space removed
+in:  "$argdelimitedcount parts: [$argdelimited1text] [$argdelimited2text] [$argdelimited3text]"
+out: "2 parts: [add \"Best stream ever\"] [Alice] [$argdelimited3text]"
+
+in:  "$argdelimited0text"
+out: "$argdelimited0text"
+

@@ -2,16 +2,44 @@
 
 package template
 
-import "strings"
+import (
+	"strings"
+	"time"
 
-// Scope holds what a render needs besides the template: the values of the
-// run, such as local values of actions and event values (B10), and, during a
-// render, the state of that render.
+	"github.com/ripmav/streamcrew/internal/domain/platform"
+)
+
+// Scope holds what a render needs besides the template: the data of the run
+// that the families read, the values of the run, such as local values of
+// actions and event values (B10), and, during a render, the state of that
+// render. Data that holds for the whole profile, such as the stream state,
+// reaches the families through the ports they get in the composition root.
 //
 // The zero value is an empty scope. Render works on a copy with fresh state,
 // so a scope can serve all renders of a run; it must not be changed while a
 // render uses it.
 type Scope struct {
+	// Platform is the platform the run was triggered on; empty if none.
+	Platform platform.Name
+	// CommandName is the name of the running command.
+	CommandName string
+	// Message is the triggering chat message, with the trigger (spec
+	// commands.md, B15); empty if there is none.
+	Message string
+	// Emotes are the emote codes in Message as the platform marks them, one
+	// entry per occurrence.
+	Emotes []string
+	// Args are the arguments of the run: the words after the trigger, with
+	// quoted text as one argument.
+	Args []string
+	// ArgsText is the text after the trigger as written; empty means the
+	// arguments joined by spaces.
+	ArgsText string
+	// ArgDelimiter separates the delimited arguments; empty means "|".
+	ArgDelimiter string
+	// Location is the time zone of the profile (B40); nil means UTC.
+	Location *time.Location
+
 	values map[string]Value
 	render *renderState
 }

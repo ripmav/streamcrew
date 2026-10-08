@@ -3,11 +3,6 @@
 package template_test
 
 import (
-	"bufio"
-	"bytes"
-	"os"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,26 +16,7 @@ import (
 // B70–B73, B78).
 func TestRender_Golden(t *testing.T) {
 	t.Parallel()
-	e := template.New(newRegistry(t))
-	in, err := os.ReadFile("testdata/syntax.txt")
-	require.NoError(t, err)
-
-	var got bytes.Buffer
-	lines := bufio.NewScanner(bytes.NewReader(in))
-	for lines.Scan() {
-		line := lines.Text()
-		switch {
-		case line == "":
-			continue
-		case strings.HasPrefix(line, "#"):
-			got.WriteString(line + "\n")
-		default:
-			got.WriteString("in:  " + strconv.Quote(line) + "\n")
-			got.WriteString("out: " + strconv.Quote(render(t, e, line, nil)) + "\n\n")
-		}
-	}
-	require.NoError(t, lines.Err())
-	golden(t, "syntax", got.Bytes())
+	renderGolden(t, template.New(newRegistry(t)), nil, "syntax")
 }
 
 func TestParse_String(t *testing.T) {

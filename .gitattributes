@@ -3,3 +3,7 @@
 # Golden files are compared byte for byte (Code-ADR-0006). Git must not
 # convert their line endings, e.g. with core.autocrlf on Windows.
 *.golden -text
+
+# The inputs of the golden files of the template engine are copied into the
+# golden files; they need the same line endings.
+internal/template/testdata/*.txt -text

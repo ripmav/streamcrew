@@ -1,0 +1,11 @@
+# StreamFamily for a live stream that started 2 hours, 21 minutes and 43
+# seconds ago, at 11:23:37 on 15 June 2009 in the time zone of the profile
+# (UTC-4). The platform does not report the number of followers.
+
+$streamtitle ($streamgamename)
+$streamislive with $streamviewercount viewers and $streamchattercount chatters
+# B4: a value the platform does not report
+$streamfollowercount followers
+$streamstartdatetime / $streamstartdate / $streamstarttime
+# B43: the uptime parts are the places of a clock
+$streamuptimetotal = $streamuptimehours h $streamuptimeminutes min $streamuptimeseconds s

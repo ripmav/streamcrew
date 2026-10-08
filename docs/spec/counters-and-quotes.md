@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-09-29 |
 | **Bezug** | Roadmap Phase 2.2 (Counter und Quotes), 5.6, 8.3; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md); Plan §5.5, §6.13, Anhang A.3, A.6 |
-| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/counter`, `internal/domain/quote`, Repositories in `internal/store`; Rücksetzen beim Start in `internal/app`. Offen: formatierte Ausgabe (B4), Abgleich mit eingebauten Identifiern (B7), Abruf und Format per Identifier (B23, B24) mit Phase 3; vorgefertigte Quote-Commands (B22) mit Phase 5.6; Import (B25) |
+| **Umsetzung** | Datenmodell umgesetzt: `internal/domain/counter`, `internal/domain/quote`, Repositories in `internal/store`; Rücksetzen beim Start in `internal/app`. Identifier `$<name>` und `$<name>display` (B1, B4) als Quelle `template.CounterSource`; Abgleich mit eingebauten Identifiern (B7) in `Counter.CheckReserved`, aufgerufen, sobald sich Counter anlegen lassen (Actions 3.3, API Phase 6). Offen: Abruf und Format der Quotes per Identifier (B23, B24) mit Phase 3; vorgefertigte Quote-Commands (B22) mit Phase 5.6; Import (B25) |
 
 ## Zweck und Umfang
 
@@ -93,3 +93,4 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
 | 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
 | 2026-09-29 | Datenmodell umgesetzt. Festlegungen dabei: Counter-Namen bestehen aus 1 bis 64 ASCII-Buchstaben und -Ziffern, weil die Template-Engine Identifier nur aus diesen Zeichen liest, und sind unabhängig von der Schreibweise eindeutig (B1, B7). Bei einem Überlauf bleibt der Wert am Grenzwert; ob er gespeichert wird, entscheidet der Aufrufer (B43). Die neueste Quote ist die mit der höchsten Nummer (B23). Quotes haben zusätzlich eine UUID wie jede Entität (Code-ADR-0009); Nutzer sprechen sie über die Nummer an. |
+| 2026-09-30 | Identifier der Counter umgesetzt (`internal/template`, `internal/domain/counter`). Festlegungen dabei: Tausendertrennzeichen nach Englisch (USA), bis das Profil eine Locale hat (B4; Spezifikation Templates, B41). Ein Name kollidiert (B7), wenn `$<name>` oder `$<name>display` mit einem eingebauten Identifier kollidiert (Spezifikation Templates, B12, B74). |
