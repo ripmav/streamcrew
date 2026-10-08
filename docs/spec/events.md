@@ -3,13 +3,13 @@
 | | |
 |---|---|
 | **Status** | Geprüft |
-| **Stand** | 2026-10-02 |
-| **Bezug** | Roadmap Phase 2.2 (Event-Modell), 3.6, 4.4, 5.1; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0011](../adr/code/0011-event-bus.md); Plan §6.7, Anhang A.1, A.2; [`commands.md`](commands.md) |
-| **Umsetzung** | teilweise: Katalog mit Namen, plattformneutraler Entsprechung und Häufigkeit je Typ in `internal/domain/eventtype`; Umschlag und Bus in `internal/event`; die Namen der Ereigniswerte (B7) als Konstanten in `internal/template`. Die Auslöseregeln (B2 bis B6, B8, B20 bis B26) folgen mit den Quellen: Engine und Event-Service (Phase 3.6), Twitch (Phase 4), Chat (Phase 5) |
+| **Stand** | 2026-10-04 |
+| **Bezug** | Roadmap Phase 2.2 (Event-Modell), 3.6, 4.4, 5.1; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0011](../adr/code/0011-event-bus.md); Plan §6.7, Anhang A.1, A.2; [`commands.md`](commands.md), [`command-engine.md`](command-engine.md) |
+| **Umsetzung** | teilweise: Katalog mit Namen, plattformneutraler Entsprechung und Häufigkeit je Typ in `internal/domain/eventtype`; Umschlag und Bus in `internal/event`; die Namen der Ereigniswerte (B7) als Konstanten in `internal/template`. Die Auslöseregeln (B2 bis B6, B8 bis B14, B20 bis B28) folgen mit den Quellen: Event-Service und Mock-Plattform (Phase 3.6), Twitch (Phase 4), Chat (Phase 5) |
 
 ## Zweck und Umfang
 
-Legt die stabilen Namen der Ereignistypen fest, die Ereignis-Commands auslösen können, und die Regeln, wann ein Ereignis ausgelöst oder unterdrückt wird. Die Nutzlast jedes Typs wird mit der Phase festgelegt, in der seine Quelle entsteht (Chat in Phase 5, Twitch in Phase 4), zusammen mit der Spezifikation `twitch-events.md`.
+Legt die stabilen Namen der Ereignistypen fest, die Ereignis-Commands auslösen können, die Regeln, wann ein Ereignis ausgelöst oder unterdrückt wird, und was die plattformneutralen Ereignisse tragen (B9). Die Nutzlast der plattformspezifischen Typen wird mit der Phase festgelegt, in der ihre Quelle entsteht, für Twitch in Phase 4 mit der Spezifikation `twitch-events.md`.
 
 Nicht Teil dieser Spezifikation: die Zuordnung zu den numerischen Ereignis-IDs des Originals für den Import. Sie wartet auf die rechtliche Einschätzung (Roadmap Gate O, O.1).
 
@@ -20,7 +20,8 @@ Nicht Teil dieser Spezifikation: die Zuordnung zu den numerischen Ereignis-IDs d
 | Ereignistyp | stabiler Name eines Ereignisses, z. B. `channel.follow`; Namensregel nach Code-ADR-0011 |
 | plattformneutrales Ereignis | Ereignis, das auf mehreren Plattformen vorkommt, etwa ein Follow |
 | plattformspezifisches Ereignis | Ereignis einer Plattform, etwa ein Twitch-Hype-Train, oder die plattformspezifische Fassung eines neutralen Ereignisses |
-| Stream-Sitzung | Zeitraum von einem Stream-Start bis zum nächsten Stream-Start desselben Kanals; eine kurze Unterbrechung innerhalb der Karenzzeit beendet sie nicht (B8) |
+| Stream-Sitzung | Zeitraum von einem Stream-Start bis zum nächsten Stream-Start desselben Kanals; eine kurze Unterbrechung innerhalb der Karenzzeit beendet sie nicht (B8). Jede Plattform hat ihre eigene (B11). |
+| Adapter | Teil des Cores, der eine Plattform anbindet, etwa die Mock-Plattform oder Twitch; er übergibt, was er empfängt, dem Event-Service |
 
 ## Verhalten
 
@@ -36,6 +37,33 @@ Nicht Teil dieser Spezifikation: die Zuordnung zu den numerischen Ereignis-IDs d
 | B6 | Ereignisse, die ein Nutzer auslöst, tragen den Nutzer; Ereignisse mit einem Ziel (etwa Beschenkter, Geraidete) tragen zusätzlich den Zielnutzer. | Q8 („User“ und „Target User“ Identifier) |
 | B7 | Ereignisspezifische Werte, die Commands verwenden können: Plattform, Zahl der Raid-Zuschauer, Abo-Nachricht, Abo-Stufe und ihr Name, anonym ja/nein, Zahl geschenkter Abos. **[Interop]** `$streamingplatform`, `$raidviewercount`, `$message`, `$usersubplan`, `$usersubplanname`, `$isanonymous`, `$subsgiftedamount` | Q8 |
 | B8 | Geht der Stream offline, endet die Stream-Sitzung erst, wenn er nicht innerhalb der Karenzzeit wieder online geht: Standard 10 Minuten, einstellbar von 0 bis 60 Minuten, 0 heißt ohne Karenzzeit. Erst dann wird `channel.stream.stop` ausgelöst, samt der plattformspezifischen Fassung. Geht er innerhalb der Karenzzeit wieder online, läuft die Sitzung weiter: kein neues `channel.stream.start`, und die Sperren nach B3 und die Begrüßungen ([`command-engine.md`](command-engine.md), B41) gelten weiter. Laufende Begrüßungen bricht der Core trotzdem ab, sobald der Stream offline geht. | A1 |
+| B9 | Jedes plattformneutrale Ereignis trägt die Plattform, auf der es geschah, und je nach Typ einen Nutzer, einen Zielnutzer und Werte nach B7, wie die Tabelle „Nutzlast der plattformneutralen Ereignisse“ sagt. Ein Wert, den die Plattform nicht nennt, fehlt; kein Ersatzwert steht für ihn. | Q8, QP |
+| B10 | Die Settings-Sektion `events` hält die Schwelle der Sammelgeschenke (B5, `massGiftThreshold`, ganze Zahl von 2 bis 1 000, Standard 2) und die Karenzzeit (B8, `streamGracePeriod`, von 0 bis 60 Minuten, Standard 10 Minuten). Eine geänderte Schwelle gilt ab der nächsten Sammelaktion, eine geänderte Karenzzeit ab dem nächsten Offline-Gehen. | A1, A3 |
+| B11 | Jede Plattform hat ihre eigene Stream-Sitzung. Ihr Adapter meldet, wenn der Stream online oder offline geht, und nach jedem Verbinden, ob er gerade live ist; daraus entstehen `channel.stream.start` und `channel.stream.stop` nach B3 und B8. Vor dem ersten Stream-Start einer Plattform gilt eine Sitzung ohne Start. Die Sperren nach B3 und die für `chat.user.join` und `chat.user.entrance` gelten je Plattform und Sitzung, die für `chat.user.new` und `chat.user.first_message` je Nutzer über alle Plattformen. | A1, QP |
+| B12 | Jedes veröffentlichte Ereignis löst den Ereignis-Command seines Typs aus ([`commands.md`](commands.md), B20), mit der Plattform, dem Nutzer, dem Zielnutzer und den Werten des Ereignisses; Ereignisse mit einer Chatnachricht (`chat.message`, `chat.user.entrance`, `chat.user.first_message`) geben sie als auslösende Nachricht mit. Ein unterdrücktes Ereignis (B3, B5, B22) wird weder veröffentlicht, noch löst es etwas aus. Die Ereignis-Commands werden in der Reihenfolge der Ereignisse ausgelöst; der Eingang wartet nicht auf ihre Entscheidungen ([`command-engine.md`](command-engine.md), B16). | Q8, QP |
+| B13 | Eine Chatnachricht löst in dieser Reihenfolge aus: `chat.user.new`, wenn streamcrew den Nutzer zum ersten Mal im Chat erkennt; `chat.user.join`, wenn er in der Sitzung zum ersten Mal erkannt wird; `chat.message`; den Chat-Command, dessen Trigger passt ([`commands.md`](commands.md), B16); `chat.user.first_message`, wenn es seine erste Nachricht überhaupt ist; zuletzt die Begrüßung, also `chat.user.entrance` und den Entrance-Command des Nutzers ([`command-engine.md`](command-engine.md), B41). Nachrichten des Bot-Kontos lösen weder Ereignisse noch Commands aus. | Q9, QP |
+| B14 | Meldet die Plattform, dass ein Nutzer dem Chat beitritt, löst das `chat.user.new` und `chat.user.join` aus wie eine Nachricht (B13), aber keine Begrüßung. | Q9 |
+
+### Nutzlast der plattformneutralen Ereignisse
+
+Nutzer und Zielnutzer nach B6, Werte nach B7 (B9). „–“ heißt: Das Ereignis hat keinen. Die Anwendungsereignisse `app.started` und `app.stopping` tragen weder Plattform noch Nutzer.
+
+| Typ | Nutzer | Zielnutzer | Werte |
+|---|---|---|---|
+| `channel.stream.start`, `channel.stream.stop` | – | – | – |
+| `channel.follow` | der Follower | – | – |
+| `channel.raid` | der raidende Kanal | – | Zahl der Raid-Zuschauer |
+| `channel.subscribe` | der Abonnent | – | Abo-Stufe und ihr Name |
+| `channel.resubscribe` | der Abonnent | – | Abo-Stufe und ihr Name, Abo-Nachricht |
+| `channel.subscription.gift` | der Schenkende, – bei einem anonymen Geschenk | der Beschenkte | Abo-Stufe und ihr Name, anonym ja/nein |
+| `channel.subscription.mass_gift` | der Schenkende, – bei einem anonymen Geschenk | – | Abo-Stufe und ihr Name, anonym ja/nein, Zahl geschenkter Abos |
+| `chat.message`, `chat.whisper` | der Absender | – | die Nachricht |
+| `chat.message.delete` | der Absender der gelöschten Nachricht | – | die Nachricht, wenn die Plattform sie nennt |
+| `chat.user.join`, `chat.user.leave`, `chat.user.new` | der Nutzer | – | – |
+| `chat.user.entrance`, `chat.user.first_message` | der Nutzer | – | die Nachricht |
+| `chat.user.timeout`, `chat.user.ban` | der gesperrte Nutzer | – | – |
+
+Abo-Stufe und ihr Name stehen so da, wie die Plattform sie nennt; für Twitch legt sie `twitch-events.md` fest (Phase 4). „Anonym“ ist `true` oder `false` wie die anderen Ja-Nein-Werte der Templates ([`template.md`](template.md)).
 
 ### Katalog
 
@@ -118,6 +146,9 @@ Nicht Teil dieser Spezifikation: die Zuordnung zu den numerischen Ereignis-IDs d
 | B24 | Der Stream bricht für 2 Minuten ab und geht wieder online (Karenzzeit 10 Minuten) | kein `channel.stream.stop`, kein zweites `channel.stream.start`; ein zweiter Follow desselben Nutzers löst weiter nichts aus, und wer schon begrüßt wurde, wird nicht erneut begrüßt | B3, B8 |
 | B25 | Der Stream bleibt 11 Minuten offline (Karenzzeit 10 Minuten) | `channel.stream.stop` 10 Minuten nach dem Offline-Gehen; der nächste Start beginnt eine neue Sitzung | B8 |
 | B26 | Eine Sammelaktion mit einem Abo, Schwelle 2 | nur das Einzelereignis | B5 |
+| B27 | Der Core lief nicht, als die Karenzzeit ablief: Er war gestoppt, oder er findet den Stream beim Start offline und hat ihn zuletzt vor mehr als der Karenzzeit live gesehen | Die Sitzung endet ohne `channel.stream.stop`, mit einem Eintrag im Log; der nächste Start beginnt eine neue Sitzung. Ein verspätetes Stream-Ende löste Commands lange nach dem Stream aus. | B8, B21 |
+| B28 | Der Bot schreibt `!hug` in den Chat | kein Command, keine Ereignisse | B13 |
+| B29 | Ein anonymes Geschenk-Abo | `channel.subscription.gift` ohne Nutzer, mit dem Beschenkten als Zielnutzer und „anonym“ `true` | B9 |
 
 ## Abweichungen vom Original
 
@@ -136,6 +167,13 @@ Nicht Teil dieser Spezifikation: die Zuordnung zu den numerischen Ereignis-IDs d
 - [ ] B5, B26: Unter, an und über der Schwelle entstehen die richtigen Geschenk-Ereignisse, nie beide Arten.
 - [ ] B8, B24, B25: Karenzzeit mit `testing/synctest`: kurze Unterbrechung ohne neue Sitzung, lange mit `channel.stream.stop` nach Ablauf, Karenzzeit 0.
 - [ ] B21: Nach einem Neustart während des Streams entsteht kein zweiter Stream-Start.
+- [ ] B9, B29: Jedes plattformneutrale Ereignis trägt Plattform, Nutzer, Zielnutzer und Werte nach der Tabelle, als Tabellentest.
+- [ ] B10: Die Settings-Sektion `events` hat die Standardwerte und lehnt Werte außerhalb der Grenzen ab.
+- [ ] B11: Die Sperren gelten je Plattform und Sitzung, die Einmal-Ereignisse je Nutzer über alle Plattformen.
+- [ ] B12: Ein Ereignis löst seinen Ereignis-Command mit den Daten des Ereignisses aus; ein spezifisches und sein neutrales Ereignis lösen beide aus; ein unterdrücktes keines.
+- [ ] B13, B14, B28: Reihenfolge der Ereignisse und Commands einer Chatnachricht und eines Beitritts; Nachrichten des Bots lösen nichts aus.
+- [ ] B22: Eine doppelt gemeldete Plattformnachricht wird einmal veröffentlicht.
+- [ ] B27: Nach einem Neustart mit abgelaufener Karenzzeit endet die Sitzung ohne `channel.stream.stop`.
 
 ## Offene Fragen
 
@@ -160,3 +198,4 @@ Keine.
 | 2026-09-29 | Katalog umgesetzt (`internal/domain/eventtype`). Festlegungen dabei: `chat.user.join` und `chat.user.entrance` gelten wie B3 einmal je Nutzer und Stream-Sitzung, `chat.user.new` und `chat.user.first_message` einmal je Nutzer überhaupt; plattformspezifische Typen haben die Häufigkeit ihrer neutralen Entsprechung. |
 | 2026-10-02 | `chat.user.entrance` zählt nur Nachrichten, während der Stream live ist; Nachrichten offline lösen die Begrüßung nicht aus und zählen nicht als erste (Entscheidung des Projektinhabers, [`command-engine.md`](command-engine.md), B41). |
 | 2026-10-02 | Offene Fragen am Original geklärt (Q11) und entschieden (Entscheidungen des Projektinhabers). Neu: Karenzzeit für kurze Unterbrechungen des Streams (B8, Randfälle B24, B25), Ereignistypen für Twitch-Umfragen und -Vorhersagen (A4). Geändert: Die Schwelle der Sammelgeschenke hat den Standard 2 und das Minimum 2, nie laufen beide Arten (B5, A3, B26). A1 nennt das Verhalten des Originals. Übereinstimmend: ein spezifisches und ein neutrales Ereignis, in dieser Reihenfolge (B2). |
+| 2026-10-04 | Für den Event-Service und die Mock-Plattform als erste Quelle (Roadmap 3.6) ergänzt: Nutzlast der plattformneutralen Ereignisse (B9), Settings-Sektion `events` (B10), eine Stream-Sitzung je Plattform (B11), Auslösen der Ereignis-Commands (B12), Reihenfolge bei einer Chatnachricht und einem Beitritt (B13, B14), Randfälle B27–B29. Entscheidung des Projektinhabers: Adapter übergeben, was sie empfangen, über einen Port an den Event-Service; er wendet die Regeln an, veröffentlicht die Ereignisse und löst die Ereignis-Commands aus, statt sie vom Bus zu lesen ([Code-ADR-0011](../adr/code/0011-event-bus.md), Punkt 4). So wird ein unterdrücktes Ereignis gar nicht erst veröffentlicht, und kein Eingang geht bei vollem Puffer verloren. Doppelte Nachrichten verwirft weiter der Adapter (B22, Code-ADR-0011, Punkt 5). Festlegungen dabei: Die Schwelle reicht bis 1 000 (B10). Vor dem ersten Stream-Start gilt eine Sitzung ohne Start (B11). Ereignisse mit einer Chatnachricht geben sie dem Ereignis-Command als auslösende Nachricht mit, etwa für eine Antwort (B12). Die Erkennung des Nutzers (`chat.user.new`, `chat.user.join`) kommt vor der Nachricht, `chat.user.first_message` und die Begrüßung nach dem Chat-Command (B13), wie in der Chat-Pipeline der Roadmap (5.1). Nachrichten des Bot-Kontos lösen nichts aus, damit sich der Bot nicht selbst antwortet (B13). Bei `chat.user.timeout` und `chat.user.ban` ist der gesperrte Nutzer der Nutzer, weil Plattformen den Moderator nicht immer nennen. Ein Stream-Ende, dessen Karenzzeit ablief, während der Core nicht lief, wird nicht nachgeholt (B27). |
