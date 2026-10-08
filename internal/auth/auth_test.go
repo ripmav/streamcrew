@@ -578,10 +578,12 @@ func TestStatus(t *testing.T) {
 		assert.NotContains(t, st.Missing, "user:read:chat", "a granted scope is not missing")
 	}
 
-	// An account without a token record is login_required.
+	// An account without a token record is login_required and stays in
+	// the list.
 	require.NoError(t, a.Vault.Delete(ctx, authName(platform.Twitch, connector.AccountBot)))
 	out, err = a.Service.Status(ctx)
 	require.NoError(t, err)
+	require.Len(t, out, 2)
 	for _, st := range out {
 		if st.Role != connector.AccountBot {
 			continue
@@ -597,6 +599,7 @@ func TestStatus(t *testing.T) {
 	a.login(noRefresh, Token{AccessToken: "at-3", RefreshToken: "", ExpiresAt: now.Add(time.Hour)})
 	out, err = a.Service.Status(ctx)
 	require.NoError(t, err)
+	require.Len(t, out, 2)
 	for _, st := range out {
 		if st.Login != "nor" {
 			continue
