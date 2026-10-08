@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -415,6 +416,75 @@ func TestSaveChecksActions(t *testing.T) {
 	all, err := svc.Commands(ctx)
 	require.NoError(t, err)
 	assert.Len(t, all, 2, "a command that fails the checks is not stored")
+}
+
+// TestSaveChecksRequirements covers requirements.md B36, B80 and B81:
+// identifiers of arguments that hide a built-in identifier are rejected;
+// currencies, ranks and items, which do not exist before roadmap phase 8
+// (B40), are warnings, before those of the actions, and the command is
+// stored.
+func TestSaveChecksRequirements(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+	codec, err := command.NewCodec(polydoc.Entry[command.Action]{
+		Type: "ref", Version: 1,
+		Decode: func(data []byte, opts json.Options) (command.Action, error) {
+			return polydoc.Strict[refAction](data, opts)
+		},
+	})
+	require.NoError(t, err)
+	fake := fakeChecks{
+		reserved: map[string]string{"username": "username", "webrequestresult": "webrequestresult"},
+		missing:  map[string][]capability.Capability{"ref": {capability.HostFS}},
+	}
+	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: fake, Types: fake, Roots: fake})
+	require.NoError(t, err)
+
+	args := func(identifiers ...string) command.ArgumentsRequirement {
+		r := command.ArgumentsRequirement{}
+		for i, identifier := range identifiers {
+			r.Arguments = append(r.Arguments, command.Argument{Name: fmt.Sprint("arg", i), Type: command.ArgumentText, Identifier: identifier})
+		}
+		return r
+	}
+	for name, identifier := range map[string]string{"built-in": "username", "fixed result name": "webrequestresult"} {
+		cmd := chatCommand("hidden "+name, true, "hidden")
+		cmd.Requirements = []command.Requirement{args("reason", identifier)}
+		_, err := svc.Save(ctx, cmd)
+		require.ErrorIs(t, err, command.ErrInvalid, name)
+		assert.ErrorContains(t, err, fmt.Sprintf(`requirement "arguments": identifier %q hides $%s`, identifier, identifier), name)
+	}
+
+	currency, rank, item := id.New(), id.New(), id.New()
+	shop := chatCommand("shop", true, "buy")
+	shop.Requirements = []command.Requirement{
+		args("what", ""),
+		command.CurrencyRequirement{Currency: currency, Mode: command.CurrencyRequired, Amount: 10},
+		command.RankRequirement{Rank: rank, Match: command.RankAtLeast},
+		command.InventoryRequirement{Item: item, Amount: 1},
+		command.SettingsRequirement{DeleteTriggerMessage: true},
+	}
+	saved, err := svc.Save(ctx, shop)
+	require.NoError(t, err)
+	assert.Equal(t, []command.Warning{
+		{Kind: command.WarnUnknownReference, Requirement: command.TypeCurrency, Subject: currency.String()},
+		{Kind: command.WarnUnknownReference, Requirement: command.TypeRank, Subject: rank.String()},
+		{Kind: command.WarnUnknownReference, Requirement: command.TypeInventory, Subject: item.String()},
+	}, saved.Warnings)
+	stored, err := svc.Command(ctx, saved.Command.ID)
+	require.NoError(t, err, "B81: warnings do not stop the save")
+	assert.Equal(t, shop.Requirements, stored.Requirements)
+
+	both := chatCommand("both", true, "both")
+	both.Actions = []command.Action{refAction{}}
+	both.Requirements = []command.Requirement{command.RankRequirement{Rank: rank, Match: command.RankExactly}}
+	saved, err = svc.Save(ctx, both)
+	require.NoError(t, err)
+	assert.Equal(t, []command.Warning{
+		{Kind: command.WarnUnknownReference, Requirement: command.TypeRank, Subject: rank.String()},
+		{Kind: command.WarnCapability, Path: []int{1}, ActionType: "ref", Subject: "host:fs"},
+	}, saved.Warnings, "the requirements first")
 }
 
 func TestNewServiceNeedsChecks(t *testing.T) {
