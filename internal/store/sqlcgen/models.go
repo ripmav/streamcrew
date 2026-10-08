@@ -58,3 +58,45 @@ type Setting struct {
 	Document  string
 	UpdatedAt int64
 }
+
+type User struct {
+	ID                string
+	Title             string
+	Notes             string
+	Excluded          int64
+	Regular           int64
+	EntranceCommandID sql.NullString
+	CreatedAt         int64
+	UpdatedAt         int64
+}
+
+type UserIdentity struct {
+	Platform         string
+	PlatformUserID   string
+	UserID           string
+	Login            string
+	DisplayName      string
+	Color            string
+	AvatarUrl        string
+	Roles            string
+	FollowedAt       sql.NullInt64
+	SubscribedAt     sql.NullInt64
+	SubTier          int64
+	AccountCreatedAt sql.NullInt64
+	DataUpdatedAt    sql.NullInt64
+	CreatedAt        int64
+	UpdatedAt        int64
+}
+
+type UserStat struct {
+	UserID         string
+	WatchMinutes   int64
+	Messages       int64
+	CommandsRun    int64
+	Mentions       int64
+	StreamsWatched int64
+	FirstSeen      sql.NullInt64
+	LastSeen       sql.NullInt64
+	DonatedCents   int64
+	Strikes        int64
+}
