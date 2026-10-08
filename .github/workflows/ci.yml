@@ -1,0 +1,129 @@
+# SPDX-License-Identifier: MIT
+#
+# Quality pipeline for the Go code (Roadmap Phase 1.1, Code-ADR-0001).
+#
+# To save Actions minutes in the private repository, everything runs on
+# ubuntu-latest, cross-compiles instead of using macOS or Windows runners,
+# groups the checks into few jobs and only starts when Go-related files change.
+# The weekly schedule only repeats the checks job, so that newly published
+# vulnerabilities show up without code changes.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.go"
+      - "**/testdata/**"
+      - "go.mod"
+      - "go.sum"
+      - ".golangci.yml"
+      - "scripts/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "**.go"
+      - "**/testdata/**"
+      - "go.mod"
+      - "go.sum"
+      - ".golangci.yml"
+      - "scripts/**"
+      - ".github/workflows/ci.yml"
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Checks (go fix, vet, lint, vulnerabilities, licenses)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+
+      - name: go fix (no pending rewrites)
+        run: go fix -diff ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.14.0
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      # Allowlist of MIT-compatible licenses; extending it needs an
+      # update of Code-ADR-0001.
+      - name: Dependency licenses
+        run: >-
+          go run github.com/google/go-licenses/v2@v2.0.1 check ./...
+          --allowed_licenses=MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,0BSD,Zlib
+
+  test:
+    name: Tests (race detector, short fuzz runs)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+
+      - name: go test -race
+        run: go test -race -shuffle=on ./...
+
+      - name: Short fuzz runs
+        env:
+          FUZZTIME: 20s
+        run: scripts/fuzz.sh
+
+  build:
+    name: Cross-build (linux, windows, darwin × amd64, arm64)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+
+      # One job with a loop instead of a job matrix: every job is billed at
+      # least one minute, and the cross builds share the module cache.
+      - name: go build
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          for target in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+            echo "::group::${target}"
+            GOOS=${target%/*} GOARCH=${target#*/} go build -o "${RUNNER_TEMP}/build/${target}/" ./...
+            echo "::endgroup::"
+          done

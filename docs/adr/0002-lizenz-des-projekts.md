@@ -6,6 +6,7 @@
 | **Datum** | 2026-09-27 |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Plan §3 und §8, Roadmap Phasen 0, 1 und Gate O; [ADR-0001](0001-neuimplementierung-und-nutzung-des-originals.md) |
+| **Ergänzt durch** | [Code-ADR-0001](code/0001-go-toolchain-und-linting.md): SPDX-Prüfung mit `goheader`, Lizenzprüfung der Abhängigkeiten mit `go-licenses` und einer Allowlist |
 
 ## Kontext
 
