@@ -145,6 +145,13 @@ type Requirements interface {
 	// Notify tells the user of p the reason of r (B11). The engine calls it
 	// only for a rejection with Tell, outside the error cooldown (B12).
 	Notify(ctx context.Context, cmd command.Command, p Params, r Rejection) error
+	// Decided does what the requirements do once the decision about a
+	// triggered cmd for the run p is final (requirements.md, B61), e.g.
+	// deleting the triggering chat message: for VerdictMet after the runs
+	// were queued, for a rejection after the user was told. The engine
+	// calls it after its turn in the order of the decisions (B16), not for
+	// calls, and logs an error as a warning; the run goes on.
+	Decided(ctx context.Context, cmd command.Command, p Params) error
 	// StartCooldown starts the cooldown of cmd as if cmd had just been
 	// queued for the run p, by the kind of its cooldown requirement; for the
 	// kinds per user for the user of p (actions.md B37). Without a cooldown
@@ -341,11 +348,14 @@ func (t *trigger) finish(ctx context.Context) (Result, error) {
 	switch d.Verdict {
 	case VerdictWaiting:
 		t.release()
+		t.turn.done()
+		e.decided(ctx, cmd, p)
 		return Result{Outcome: OutcomeWaiting}, nil
 	case VerdictRejected:
 		t.release()
 		t.turn.done()
 		e.reject(ctx, cmd, p, d.Rejection, cfg.Commands)
+		e.decided(ctx, cmd, p)
 		return Result{Outcome: OutcomeRejected, Rejection: d.Rejection}, nil
 	case VerdictMet:
 	}
@@ -366,13 +376,30 @@ func (t *trigger) finish(ctx context.Context) (Result, error) {
 	}
 	if len(res.Instances) == 0 {
 		e.revert(ctx, cmd, d)
+		t.turn.done()
+		e.decided(ctx, cmd, p)
 		return Result{}, dropErr
 	}
+	t.turn.done()
 	if res.Dropped > 0 {
 		e.logger.WarnContext(ctx, "runs of a threshold dropped",
 			"command", cmd.Name, "dropped", res.Dropped, "error", dropErr)
 	}
+	e.decided(ctx, cmd, p)
 	return res, nil
+}
+
+// decided tells the requirements that the decision about the triggered
+// cmd for p is final (requirements.md, B61); a failure is logged as a
+// warning and changes nothing for the run.
+func (e *Engine) decided(ctx context.Context, cmd command.Command, p Params) {
+	if e.requirements == nil {
+		return
+	}
+	if err := e.requirements.Decided(ctx, cmd, p); err != nil {
+		e.logger.WarnContext(ctx, "finishing the requirements after the decision failed",
+			"command", cmd.Name, "error", err)
+	}
 }
 
 // revert takes back what the requirements applied for d, after none of its

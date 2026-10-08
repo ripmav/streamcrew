@@ -213,6 +213,10 @@ func (*requirements) Notify(context.Context, command.Command, engine.Params, eng
 	return nil
 }
 
+func (*requirements) Decided(context.Context, command.Command, engine.Params) error {
+	return nil
+}
+
 func (r *requirements) StartCooldown(_ context.Context, cmd command.Command, p engine.Params) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -42,6 +42,11 @@ type requirements struct {
 	decided []string
 	// notifyHold, if set, holds Notify back until it is closed.
 	notifyHold chan struct{}
+	// trail records the calls of Notify and Decided; onDecided, if set,
+	// runs in Decided, and decidedErr is its error.
+	trail      []string
+	onDecided  func(command.Command)
+	decidedErr error
 	err        error
 	notifyErr  error
 	applied    []string
@@ -143,7 +148,26 @@ func (r *requirements) Notify(_ context.Context, cmd command.Command, _ engine.P
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.notified = append(r.notified, cmd.Name+" "+rej.Requirement)
+	r.trail = append(r.trail, "notified "+cmd.Name)
 	return r.notifyErr
+}
+
+func (r *requirements) Decided(_ context.Context, cmd command.Command, _ engine.Params) error {
+	r.mu.Lock()
+	hook, err := r.onDecided, r.decidedErr
+	r.trail = append(r.trail, "decided "+cmd.Name)
+	r.mu.Unlock()
+	if hook != nil {
+		hook(cmd)
+	}
+	return err
+}
+
+// trailed returns what Notify and Decided were called for, in order.
+func (r *requirements) trailed() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.trail)
 }
 
 func (r *requirements) StartCooldown(_ context.Context, cmd command.Command, p engine.Params) error {
