@@ -91,7 +91,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 |---|---|
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); offen bleibt nur der Cache, der in Phase 2 neu bewertet wird |
-| Phase 2: Domäne und Persistenz | in Arbeit: Speicher, Profile, Backups, Event-Bus und Vault erledigt (2.1, 2.3, 2.4); das Domänenmodell (2.2) wartet auf Spezifikationen |
+| Phase 2: Domäne und Persistenz | in Arbeit: Speicher, Profile, Backups, Event-Bus und Vault erledigt (2.1, 2.3, 2.4); das Domänenmodell (2.2) ist spezifiziert und geprüft |
 | Phase 3: Engine, Templates, Actions, Mock | offen |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
@@ -304,7 +304,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 ### 2.2 Domänenmodell
 
 - [x] [Code-ADR-0009](adr/code/0009-ids-und-zeit.md) IDs und Zeit: UUIDv7 aus der Standardbibliothek, keine injizierbare Uhr (`testing/synctest`), akzeptiert 2026-09-29 (S)
-- [ ] Spezifikationen für das Domänenmodell, Entwürfe vom 2026-09-29, warten auf die Prüfung durch den Projektinhaber: [`users-and-roles.md`](spec/users-and-roles.md), [`commands.md`](spec/commands.md), [`counters-and-quotes.md`](spec/counters-and-quotes.md), [`events.md`](spec/events.md) (M)
+- [x] Spezifikationen für das Domänenmodell: [`users-and-roles.md`](spec/users-and-roles.md), [`commands.md`](spec/commands.md), [`counters-and-quotes.md`](spec/counters-and-quotes.md), [`events.md`](spec/events.md) (M), vom Projektinhaber geprüft und akzeptiert 2026-09-29; die offenen Fragen darin werden am Original geprüft
 - [ ] Nutzer: Nutzer, Plattform-Identitäten, Statistiken, Titel, Notizen, Ausschlüsse (M)
 - [ ] Rollenmodell: plattformneutrale Rollen mit Rangordnung plus plattformspezifische Rollen; Semantik „erfüllt Mindestrolle“ (Plan Anhang A.7) (M)
 - [ ] Commands (M):
@@ -1206,3 +1206,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-29 | Phase 2.1, 2.3 und 2.4 umgesetzt: `internal/domain/id`, `internal/event`, `internal/polydoc`, `internal/store` (SQLite, goose, sqlc), `internal/lockfile`, `internal/profile`, `internal/settings`, `internal/backup`, `internal/vault`; Einbindung in App und CLI (`profile`, `backup`, `secret rotate`). Das Secret-Paket heißt `internal/vault`, weil die Berechtigungsregeln des Projektinhabers Pfade mit „secret“ sperren. Settings-Sektionen und Event-Modell in einen technischen und einen fachlichen Teil geteilt; der fachliche Teil von 2.2 braucht Spezifikationen nach ADR-0001. |
 | 2026-09-29 | Entwürfe der Spezifikationen für das Domänenmodell (Nutzer und Rollen, Commands, Counter und Quotes, Ereigniskatalog) aus der offiziellen Doku und dem Plan, ohne Code des Originals; die Umsetzung wartet auf die Prüfung. Zeitzone: Systemzone zur Laufzeit, Rückfall UTC; `forbidigo` erlaubt Umgebungsvariablen in Tests (Entscheidungen des Projektinhabers). |
 | 2026-09-29 | Kommandozeile aufgeteilt (Entscheidung des Projektinhabers): `cmd/streamcrew` enthält nur noch `main.go` mit Signalen, Umgebung, kong-Initialisierung und Parsen; Definition und Unterkommandos liegen in `internal/cli`. Code-ADR-0002, 0003 und 0005 mit Präzisierungsvermerk, Plan §6.3 und §9.2 angepasst. |
+| 2026-09-29 | Spezifikationen des Domänenmodells vom Projektinhaber geprüft und akzeptiert; offene Fragen werden am Original geprüft, bis dahin gilt das beschriebene Verhalten. |

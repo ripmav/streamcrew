@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
+| **Status** | Geprüft |
 | **Stand** | 2026-09-29 |
 | **Bezug** | Roadmap Phase 2.2 (Event-Modell), 3.6, 4.4, 5.1; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0011](../adr/code/0011-event-bus.md); Plan §6.7, Anhang A.1, A.2; [`commands.md`](commands.md) |
 | **Umsetzung** | teilweise: Umschlag und Katalog-Mechanismus in `internal/event`; die Typen dieses Katalogs folgen mit ihren Quellen (Chat, Twitch …) |
@@ -149,3 +149,4 @@ Nicht Teil dieser Spezifikation: die Zuordnung zu den numerischen Ereignis-IDs d
 | Datum | Änderung |
 |---|---|
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
+| 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
