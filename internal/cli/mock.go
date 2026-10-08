@@ -36,6 +36,9 @@ type mockCmd struct {
 	// appOpts are further options of the core; the tests use them, e.g. to
 	// skip the system keyring.
 	appOpts []app.Option
+	// stdin overrides the standard input for the console commands; the
+	// tests use it to drive the console.
+	stdin io.Reader
 }
 
 // consoleHelp is the text of the "help" command of the console.
@@ -160,7 +163,7 @@ func (c mockCmd) Run(ctx context.Context, e *Env) (err error) {
 	fmt.Fprintf(e.Stdout, "profile %s (copy in %s)\n", id, dir)
 	fmt.Fprintf(e.Stdout, "mock platform: streamer %s, bot %s\n", streamer, bot)
 
-	in, err := consoleInput(c.Script)
+	in, err := consoleInput(c.Script, c.stdin)
 	if err != nil {
 		cancel()
 		return errors.Join(err, <-done)
@@ -187,10 +190,13 @@ func (c mockCmd) Run(ctx context.Context, e *Env) (err error) {
 }
 
 // consoleInput returns the reader of the console commands: the file of
-// --script or the standard input.
-func consoleInput(script string) (io.ReadCloser, error) {
+// --script or, without one, the standard input (or stdin, if set).
+func consoleInput(script string, stdin io.Reader) (io.ReadCloser, error) {
 	if script == "" {
-		return os.Stdin, nil
+		if stdin == nil {
+			stdin = os.Stdin
+		}
+		return io.NopCloser(stdin), nil
 	}
 	return os.Open(script)
 }

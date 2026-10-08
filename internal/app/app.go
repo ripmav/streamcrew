@@ -19,6 +19,7 @@ import (
 	"io"
 	"log/slog"
 	"math/rand/v2"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -33,6 +34,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/network"
 	"github.com/ripmav/streamcrew/internal/action/users"
 	"github.com/ripmav/streamcrew/internal/action/values"
+	"github.com/ripmav/streamcrew/internal/auth"
 	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/buildinfo"
 	"github.com/ripmav/streamcrew/internal/config"
@@ -106,6 +108,7 @@ type App struct {
 	store    *store.Store
 	settings *settings.Service
 	vault    *vault.Vault
+	auth     *auth.Service
 	bus      *event.Bus
 	sup      *supervisor.Supervisor
 	http     *httpserver.Server
@@ -202,6 +205,27 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	}
 	a.catalog = catalog
 	a.bus = event.NewBus(component(logger, "event"), event.WithCatalog(catalog))
+
+	// The auth service keeps the platform logins and their tokens
+	// (roadmap 4.1, ADR-0014); in server mode its requests go through the
+	// outbound allow list (Code-ADR-0019).
+	authClient := &http.Client{Timeout: 30 * time.Second}
+	if cfg.Mode == config.ModeServer {
+		dialer := netguard.Dialer{
+			Protect:   true,
+			Allowlist: a.rights.Outbound,
+		}
+		authClient.Transport = &http.Transport{DialContext: dialer.DialContext}
+	}
+	if a.auth, err = auth.New(auth.Ports{
+		Store:     a.store,
+		Vault:     func(repo vault.Repository) *vault.Vault { return vault.New(repo, ks) },
+		Flows:     authFlows(authClient),
+		Publisher: a.bus,
+		Logger:    component(logger, "auth"),
+	}); err != nil {
+		return a, err
+	}
 
 	// The platforms of the profile are built after the event service,
 	// which is their receiver; until then the set is empty.
@@ -308,6 +332,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		a.backupSchedule, component(logger, "backup"))
 
 	err = errors.Join(
+		a.sup.Add("auth", a.auth),
 		a.sup.Add("backup", scheduler),
 		a.sup.Add("http", a.http, supervisor.WithCritical()),
 		a.sup.Add("events", a.events),

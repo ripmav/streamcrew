@@ -226,6 +226,7 @@ func TestEventsDuringLifecycle(t *testing.T) {
 	assert.Less(t, engineRunning, started, "app.started after the engine runs: %v", seen)
 	assert.Less(t, started, stopping, "app.started before app.stopping: %v", seen)
 	assert.Contains(t, seen, "supervisor.status:http:running")
+	assert.Contains(t, seen, "supervisor.status:auth:running")
 	assert.Contains(t, seen, "supervisor.status:backup:running")
 	assert.Contains(t, seen, "supervisor.status:events:running")
 	assert.Contains(t, seen, "supervisor.status:http:stopped")
