@@ -5,7 +5,7 @@ package store
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"strings"
 	"time"
@@ -191,7 +191,7 @@ func (s *Store) DeleteGroup(ctx context.Context, groupID id.ID) error {
 }
 
 // documents stores a JSON array of documents; nil is the empty array.
-func documents(raw json.RawMessage) string {
+func documents(raw jsontext.Value) string {
 	if len(raw) == 0 {
 		return "[]"
 	}
@@ -223,8 +223,8 @@ func toCommandRecord(row sqlcgen.Command, triggers []string) (command.Record, er
 		ErrorPolicy:  command.ErrorPolicy(row.ErrorPolicy),
 		CreatedAt:    fromMillis(row.CreatedAt),
 		UpdatedAt:    fromMillis(row.UpdatedAt),
-		Requirements: json.RawMessage(row.Requirements),
-		Actions:      json.RawMessage(row.Actions),
+		Requirements: jsontext.Value(row.Requirements),
+		Actions:      jsontext.Value(row.Actions),
 	}, nil
 }
 

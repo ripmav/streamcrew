@@ -3,7 +3,7 @@
 package command
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 
@@ -334,7 +334,7 @@ type UnknownRequirement struct{ polydoc.Unknown }
 func (u UnknownRequirement) DocType() string { return u.Type }
 
 // RawJSON implements polydoc.Raw.
-func (u UnknownRequirement) RawJSON() json.RawMessage { return u.Raw }
+func (u UnknownRequirement) RawJSON() jsontext.Value { return u.Raw }
 
 // Validate implements Requirement: unknown requirements are kept as they
 // are.

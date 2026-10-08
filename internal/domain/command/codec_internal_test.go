@@ -3,8 +3,7 @@
 package command
 
 import (
-	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"os"
 	"path/filepath"
 	"slices"
@@ -66,10 +65,9 @@ func TestRequirementGoldenFiles(t *testing.T) {
 			require.NoError(t, r.Validate())
 			doc, err := c.requirements.Encode(r)
 			require.NoError(t, err)
-			var pretty bytes.Buffer
-			require.NoError(t, json.Indent(&pretty, doc, "", "  "))
-			pretty.WriteByte('\n')
-			golden(t, filepath.Join("requirement", name), pretty.Bytes())
+			pretty := jsontext.Value(doc)
+			require.NoError(t, pretty.Indent(jsontext.WithIndent("  ")))
+			golden(t, filepath.Join("requirement", name), append(pretty, '\n'))
 
 			stored, err := os.ReadFile(filepath.Clean(filepath.Join("testdata", "requirement", name+".golden")))
 			require.NoError(t, err)
@@ -91,8 +89,8 @@ func TestUnknownPartsSurvive(t *testing.T) {
 	require.NoError(t, err)
 	rec := Record{
 		Name: "future", Kind: KindActionGroup, ErrorPolicy: ErrorContinue,
-		Requirements: json.RawMessage(`[{"type":"role","schemaVersion":1,"role":"vip"},{"type":"streak","schemaVersion":3,"days":7}]`),
-		Actions:      json.RawMessage(`[{"type":"chat.send","schemaVersion":1,"message":"hi"},{"type":"obs.scene","schemaVersion":9,"scene":"Main"}]`),
+		Requirements: jsontext.Value(`[{"type":"role","schemaVersion":1,"role":"vip"},{"type":"streak","schemaVersion":3,"days":7}]`),
+		Actions:      jsontext.Value(`[{"type":"chat.send","schemaVersion":1,"message":"hi"},{"type":"obs.scene","schemaVersion":9,"scene":"Main"}]`),
 	}
 	cmd, err := c.Command(rec)
 	require.NoError(t, err)
@@ -123,9 +121,9 @@ func TestCodecEdgeCases(t *testing.T) {
 	assert.JSONEq(t, `[]`, string(rec.Requirements))
 	assert.JSONEq(t, `[]`, string(rec.Actions))
 
-	_, err = c.Command(Record{Requirements: json.RawMessage(`{"type":"role"}`)})
+	_, err = c.Command(Record{Requirements: jsontext.Value(`{"type":"role"}`)})
 	require.Error(t, err, "not an array")
-	_, err = c.Command(Record{Actions: json.RawMessage(`[{"schemaVersion":1}]`)})
+	_, err = c.Command(Record{Actions: jsontext.Value(`[{"schemaVersion":1}]`)})
 	require.Error(t, err, "document without type")
 	_, err = c.Record(Command{Actions: []Action{nil}})
 	require.ErrorIs(t, err, ErrInvalid)

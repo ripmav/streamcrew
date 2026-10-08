@@ -5,7 +5,7 @@ package store
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"time"
@@ -117,7 +117,7 @@ func (s *Store) SetRoles(ctx context.Context, p platform.Name, platformUserID st
 	if roles.Has(role.Regular) {
 		return fmt.Errorf("%w: regular is granted by streamcrew, not by a platform", user.ErrInvalid)
 	}
-	doc, err := json.Marshal(roles)
+	doc, err := json.Marshal(roles, json.Deterministic(true))
 	if err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func insertUser(ctx context.Context, q *sqlcgen.Queries, userID string, t time.T
 }
 
 func insertIdentity(ctx context.Context, q *sqlcgen.Queries, userID string, ident user.Identity, t time.Time) error {
-	roles, err := json.Marshal(ident.Roles)
+	roles, err := json.Marshal(ident.Roles, json.Deterministic(true))
 	if err != nil {
 		return err
 	}

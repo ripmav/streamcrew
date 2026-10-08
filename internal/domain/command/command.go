@@ -10,7 +10,7 @@ package command
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"strings"
@@ -112,8 +112,8 @@ type Command struct {
 // are JSON arrays of documents, which Codec converts.
 type Record struct {
 	Header
-	Requirements json.RawMessage
-	Actions      json.RawMessage
+	Requirements jsontext.Value
+	Actions      jsontext.Value
 }
 
 // Group is a named collection of commands (B30 to B32).

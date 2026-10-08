@@ -6,7 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	json "encoding/json/v2"
 	"net"
 	"net/http"
 	"os"

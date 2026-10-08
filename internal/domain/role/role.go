@@ -10,7 +10,7 @@
 package role
 
 import (
-	"encoding/json"
+	json "encoding/json/v2"
 	"fmt"
 	"strings"
 )
@@ -188,7 +188,7 @@ func (s Set) MarshalJSON() ([]byte, error) {
 	if roles == nil {
 		roles = []Role{}
 	}
-	return json.Marshal(roles)
+	return json.Marshal(roles, json.Deterministic(true))
 }
 
 // UnmarshalJSON reads an array of role IDs; an unknown ID is an error.

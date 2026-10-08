@@ -4,7 +4,7 @@ package id_test
 
 import (
 	"database/sql/driver"
-	"encoding/json"
+	json "encoding/json/v2"
 	"testing"
 	"testing/synctest"
 	"time"
