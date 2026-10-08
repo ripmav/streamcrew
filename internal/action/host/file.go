@@ -331,7 +331,11 @@ func (f File) render(ctx context.Context, s *template.Scope) (inputs, error) {
 		if err != nil {
 			return inputs{}, field("line", err)
 		}
-		in.line = int(n)
+		line, err := action.Whole(n)
+		if err != nil {
+			return inputs{}, field("line", err)
+		}
+		in.line = int(line)
 	}
 	return in, nil
 }

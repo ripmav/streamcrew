@@ -338,7 +338,9 @@ func (m Moderation) render(ctx context.Context, s *template.Scope) (inputs, erro
 		if err != nil {
 			return inputs{}, field("seconds", err)
 		}
-		in.duration = time.Duration(v) * time.Second
+		if in.duration, err = action.Seconds(v); err != nil {
+			return inputs{}, field("seconds", err)
+		}
 	}
 	return in, nil
 }

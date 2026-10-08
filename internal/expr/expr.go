@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MIT
 
 // Package expr evaluates expressions with $ identifiers (spec template.md,
-// B50 to B52; Code-ADR-0012, point 8): the calculations of the special
-// identifier action, amounts and the conditions of the conditional action.
+// B50 to B52): the calculations of the special identifier action, amounts
+// and the conditions of the conditional action.
 //
-// Compile replaces each $ token with a variable and compiles the resulting
-// text once with github.com/expr-lang/expr. Eval resolves the identifiers
-// and passes their values as variables, so a value never becomes part of
-// the expression text (B51): an argument like "1)+(2" stays text.
+// Its own parser reads the language that B50 names: numbers, text in quotes
+// for comparisons and joining, true and false, + - * / % and the powers ^
+// and **, parentheses, comparisons, and, or, not (also &&, || and !), and
+// the functions abs, ceil, floor, round, min and max. Numbers are exact
+// decimals of internal/decimal (Code-ADR-0020): 0.1 + 0.2 == 0.3 holds.
 //
-// The language is the part of expr that B50 names: numbers, text in quotes
-// for comparisons, + - * / % and the powers ^ and **, parentheses,
-// comparisons, and, or, not, and the functions abs, ceil, floor, round, min
-// and max. All numbers are float64. Everything else, such as arrays, member
-// access, ranges or other functions, is rejected when compiling.
+// Compile turns each $ token into a variable. Eval resolves the identifiers
+// and passes their values, so a value never becomes part of the expression
+// (B51): an argument like "1)+(2" stays text.
 package expr
 
 import (
@@ -21,30 +20,15 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"math"
-	"slices"
-	"strconv"
 	"strings"
 
-	exprlang "github.com/expr-lang/expr"
-	"github.com/expr-lang/expr/ast"
-	"github.com/expr-lang/expr/parser"
-	"github.com/expr-lang/expr/vm"
-
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/template"
 )
 
-// Limits of an expression (B52).
-const (
-	// maxNodes is the largest syntax tree an expression may have.
-	maxNodes = 500
-	// memoryBudget limits the allocations of an evaluation.
-	memoryBudget = 10_000
-)
-
 var (
-	// ErrInvalid is wrapped by the errors of Compile: a syntax error, an
-	// unsupported part of the language or an expression beyond the limits.
+	// ErrInvalid is wrapped by the errors of Compile: a syntax error, a
+	// part outside the language or an expression beyond the limits.
 	ErrInvalid = errors.New("invalid expression")
 	// ErrEvaluation is wrapped by the errors of Eval when an expression
 	// cannot be evaluated, e.g. text times a number or a division by zero
@@ -52,21 +36,13 @@ var (
 	ErrEvaluation = errors.New("expression cannot be evaluated")
 )
 
-// builtins are the functions of expr that expressions may call.
-func builtins() []string {
-	return []string{"abs", "ceil", "floor", "round", "min", "max"}
-}
-
 // Expression is a compiled expression. It is immutable and safe for
 // concurrent use; actions compile their expressions when a command is
 // loaded.
 type Expression struct {
-	src string
-	// prefix starts the names of the variables; it does not occur in src,
-	// so no name in the text can be taken for a variable.
-	prefix  string
-	vars    []variableDef
-	program *vm.Program
+	src  string
+	vars []variableDef
+	tree node
 }
 
 // variableDef is a variable of an expression: a $ token, or text in quotes
@@ -83,68 +59,52 @@ type variableDef struct {
 // the rendered text, e.g. "$arg1text" or "Hi $username"; it must not contain
 // escape sequences. A "$" that starts no token outside quotes is an error.
 func Compile(text string) (*Expression, error) {
-	var src strings.Builder
-	var vars []variableDef
-	names := make(map[string]bool)
-	prefix := variablePrefix(text)
+	invalid := func(err error) error {
+		return fmt.Errorf("%w: %q: %w", ErrInvalid, text, err)
+	}
+	var (
+		tokens []token
+		vars   []variableDef
+		err    error
+	)
 	add := func(v variableDef) {
-		name := variable(prefix, len(vars))
+		tokens = append(tokens, token{kind: tokVariable, text: v.tmpl.String(), variable: len(vars)})
 		vars = append(vars, v)
-		names[name] = true
-		src.WriteString(" " + name + " ")
 	}
 	for chunk, quoted := range chunks(text) {
 		if quoted {
 			content := chunk[1 : len(chunk)-1]
 			tmpl := template.Parse(content)
 			if !hasTokens(tmpl) {
-				src.WriteString(chunk)
+				if tokens, err = lex(chunk, tokens); err != nil {
+					return nil, invalid(err)
+				}
 				continue
 			}
 			if strings.ContainsRune(content, '\\') {
-				return nil, fmt.Errorf("%w: %q: escape sequences in quotes with identifiers are not supported", ErrInvalid, text)
+				return nil, invalid(errors.New("escape sequences in quotes with identifiers are not supported"))
 			}
 			add(variableDef{tmpl: tmpl, quoted: true})
 			continue
 		}
-		for segment, token := range template.Parse(chunk).Segments() {
+		for segment, isToken := range template.Parse(chunk).Segments() {
 			switch {
-			case token:
+			case isToken:
 				add(variableDef{tmpl: template.Parse(segment)})
 			case strings.Contains(segment, "$"):
-				return nil, fmt.Errorf("%w: %q: a $ without an identifier name", ErrInvalid, text)
+				return nil, invalid(errors.New("a $ without an identifier name"))
 			default:
-				src.WriteString(segment)
+				if tokens, err = lex(segment, tokens); err != nil {
+					return nil, invalid(err)
+				}
 			}
 		}
 	}
-
-	tree, err := parser.Parse(src.String())
+	tree, err := parse(tokens)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %q: %w", ErrInvalid, text, err)
+		return nil, invalid(err)
 	}
-	check := checker{vars: names}
-	ast.Walk(&tree.Node, &check)
-	if check.err != nil {
-		return nil, fmt.Errorf("%w: %q: %w", ErrInvalid, text, check.err)
-	}
-
-	opts := []exprlang.Option{
-		exprlang.AllowUndefinedVariables(), // variables are typed when evaluated (B51)
-		exprlang.DisableAllBuiltins(),
-		exprlang.DisableIfOperator(),
-		exprlang.MaxNodes(maxNodes),
-		exprlang.Patch(floats{}),
-		exprlang.Function(modFunction, mod),
-	}
-	for _, name := range builtins() {
-		opts = append(opts, exprlang.EnableBuiltin(name))
-	}
-	program, err := exprlang.Compile(src.String(), opts...)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %q: %w", ErrInvalid, text, err)
-	}
-	return &Expression{src: text, prefix: prefix, vars: vars, program: program}, nil
+	return &Expression{src: text, vars: vars, tree: tree}, nil
 }
 
 // String returns the text x was compiled from.
@@ -156,8 +116,8 @@ func (x *Expression) String() string {
 // render, and evaluates x (B50, B51). The value of a $ token that is a
 // decimal number counts as a number, anything else as text; a token without
 // value is its own text (B4). Eval returns an error wrapping ErrEvaluation if
-// x cannot be evaluated or its result is not a finite number, a truth value
-// or text (B52), and the error of the context when it is done.
+// x cannot be evaluated (B52), and the error of the context when it is
+// done.
 func (x *Expression) Eval(ctx context.Context, e *template.Engine, s *template.Scope) (Result, error) {
 	rendered, err := e.RenderEach(ctx, x.Templates(), s)
 	if err != nil {
@@ -189,24 +149,28 @@ func (x *Expression) EvalWithTexts(texts []string) (Result, error) {
 	if len(texts) != len(x.vars) {
 		return Result{}, fmt.Errorf("%w: %q: %d texts for %d identifiers", ErrEvaluation, x.src, len(texts), len(x.vars))
 	}
-	env := make(map[string]any, len(texts))
+	e := evaluator{vars: make([]value, len(texts))}
 	for i, text := range texts {
-		if x.vars[i].quoted {
-			env[variable(x.prefix, i)] = text
-		} else {
-			env[variable(x.prefix, i)] = typed(text)
+		e.vars[i] = value{kind: Text, text: text}
+		if n, ok := ParseNumber(text); ok && !x.vars[i].quoted {
+			e.vars[i] = value{kind: Number, number: n}
 		}
 	}
-	machine := vm.VM{MemoryBudget: memoryBudget}
-	out, err := machine.Run(x.program, env)
+	v, err := e.eval(x.tree)
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %q: %w", ErrEvaluation, x.src, err)
 	}
-	r, err := result(out)
-	if err != nil {
-		return Result{}, fmt.Errorf("%w: %q: %w", ErrEvaluation, x.src, err)
-	}
-	return r, nil
+	return Result{Kind: v.kind, Number: v.number, Bool: v.bool, Text: v.text}, nil
+}
+
+// ParseNumber returns the number text stands for if it counts as a number
+// (B51): a decimal number with an optional sign, decimal places and
+// exponent, whose absolute value is below 10^34 (Code-ADR-0020).
+// Hexadecimal numbers, infinity, NaN and text with spaces count as text.
+// The conditional action compares by this rule (spec actions.md, B22).
+func ParseNumber(text string) (decimal.Decimal, bool) {
+	d, err := decimal.Parse(text)
+	return d, err == nil
 }
 
 // chunks splits text into code and literals in quotes, with their quotes.
@@ -261,135 +225,4 @@ func hasTokens(t template.Template) bool {
 		}
 	}
 	return false
-}
-
-// variablePrefix returns the start of the variable names for text: "v",
-// followed by as many underscores as it takes so that it occurs nowhere in
-// text. A name in the text, such as v0, is then never taken for a variable
-// and stays an unknown name, which the checker rejects (B50).
-func variablePrefix(text string) string {
-	prefix := "v"
-	for strings.Contains(text, prefix) {
-		prefix += "_"
-	}
-	return prefix
-}
-
-// variable returns the name of the variable for the i-th token.
-func variable(prefix string, i int) string {
-	return prefix + strconv.Itoa(i)
-}
-
-// typed returns a decimal number as float64 and anything else as text
-// (B51).
-func typed(text string) any {
-	if f, ok := ParseNumber(text); ok {
-		return f
-	}
-	return text
-}
-
-// ParseNumber returns the number text stands for if it counts as a number
-// (B51): a decimal number in the range of float64, with an optional sign,
-// fraction and exponent. Hexadecimal numbers, infinity, NaN and text with
-// spaces count as text. The conditional action compares by this rule
-// (spec actions.md, B22).
-func ParseNumber(text string) (float64, bool) {
-	if text == "" || strings.ContainsFunc(text, func(r rune) bool {
-		return !strings.ContainsRune("0123456789+-.eE", r)
-	}) {
-		return 0, false
-	}
-	// ParseFloat reports numbers beyond float64 as an error.
-	f, err := strconv.ParseFloat(text, 64)
-	return f, err == nil
-}
-
-// checker rejects the parts of expr that B50 does not name.
-type checker struct {
-	vars map[string]bool
-	err  error
-}
-
-// Visit implements ast.Visitor.
-func (c *checker) Visit(node *ast.Node) {
-	if c.err != nil {
-		return
-	}
-	switch n := (*node).(type) {
-	case *ast.IntegerNode, *ast.FloatNode, *ast.StringNode, *ast.BoolNode:
-	case *ast.IdentifierNode:
-		if !c.vars[n.Value] {
-			c.err = fmt.Errorf("unknown name %q", n.Value)
-		}
-	case *ast.UnaryNode:
-		switch n.Operator {
-		case "-", "+", "!", "not":
-		default:
-			c.err = fmt.Errorf("operator %q is not supported", n.Operator)
-		}
-	case *ast.BinaryNode:
-		switch n.Operator {
-		case "+", "-", "*", "/", "%", "^", "**", "==", "!=", "<", ">", "<=", ">=", "&&", "||", "and", "or":
-		default:
-			c.err = fmt.Errorf("operator %q is not supported", n.Operator)
-		}
-	case *ast.BuiltinNode:
-		if !slices.Contains(builtins(), n.Name) {
-			c.err = fmt.Errorf("function %q is not supported", n.Name)
-		}
-	default:
-		kind := strings.TrimSuffix(strings.TrimPrefix(fmt.Sprintf("%T", n), "*ast."), "Node")
-		c.err = fmt.Errorf("%s syntax is not supported", strings.ToLower(kind))
-	}
-}
-
-// modFunction is the function that replaces the operator %.
-const modFunction = "mod"
-
-// floats makes every number a float64 and replaces % with math.Mod, which
-// expr only provides for whole numbers.
-type floats struct{}
-
-// Visit implements ast.Visitor.
-func (floats) Visit(node *ast.Node) {
-	switch n := (*node).(type) {
-	case *ast.IntegerNode:
-		ast.Patch(node, &ast.FloatNode{Value: float64(n.Value)})
-	case *ast.BinaryNode:
-		if n.Operator == "%" {
-			ast.Patch(node, &ast.CallNode{
-				Callee:    &ast.IdentifierNode{Value: modFunction},
-				Arguments: []ast.Node{n.Left, n.Right},
-			})
-		}
-	}
-}
-
-// mod is the remainder of a division of two numbers, with the sign of the
-// dividend.
-func mod(params ...any) (any, error) {
-	a, aOK := params[0].(float64)
-	b, bOK := params[1].(float64)
-	if !aOK || !bOK {
-		return nil, fmt.Errorf("invalid operation: %T %% %T", params[0], params[1])
-	}
-	return math.Mod(a, b), nil
-}
-
-// result converts the value of an expression.
-func result(v any) (Result, error) {
-	switch v := v.(type) {
-	case float64:
-		if math.IsInf(v, 0) || math.IsNaN(v) {
-			return Result{}, errors.New("result is not a finite number")
-		}
-		return Result{Kind: Number, Number: v}, nil
-	case bool:
-		return Result{Kind: Bool, Bool: v}, nil
-	case string:
-		return Result{Kind: Text, Text: v}, nil
-	default:
-		return Result{}, fmt.Errorf("result of type %T is not supported", v)
-	}
 }

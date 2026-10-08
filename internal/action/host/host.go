@@ -14,6 +14,7 @@ import (
 
 	"github.com/ripmav/streamcrew/internal/action"
 	"github.com/ripmav/streamcrew/internal/capability"
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/template"
 )
 
@@ -106,7 +107,7 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 				p.Launch = &LaunchOptions{}
 			case ProgramRun:
 				p.Launch = &LaunchOptions{}
-				p.Wait = &WaitOptions{Timeout: action.Fixed(DefaultTimeout)}
+				p.Wait = &WaitOptions{Timeout: action.Fixed(decimal.New(DefaultTimeout))}
 			case ProgramOpen:
 				p.Open = &OpenOptions{}
 			default:

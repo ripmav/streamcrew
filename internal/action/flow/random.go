@@ -80,7 +80,11 @@ func (r Random) Perform(ctx context.Context, run *engine.Run) error {
 	if err != nil {
 		return field("count", err)
 	}
-	drawn := r.draw(run, int(count))
+	n, err := action.Whole(count)
+	if err != nil {
+		return field("count", err)
+	}
+	drawn := r.draw(run, int(n))
 	for _, i := range drawn {
 		next, err := run.PerformChild(ctx, i)
 		if err != nil || next == engine.ChildEnd {

@@ -459,8 +459,7 @@ Zuerst die Änderungen an Datenmodell und Engine aus den geklärten Fragen vom 2
 - [ ] Exakte Dezimalzahlen für alle Zahlen, zuerst für Counter mit Nachkommastellen ([`counters-and-quotes.md`](spec/counters-and-quotes.md), B4, B5, B8; Code-ADR-0020) (L), begonnen 2026-10-03; die Ausdrücke rechnen ebenfalls dezimal (Entscheidung des Projektinhabers):
   - [x] Code-ADR-0020: `cockroachdb/apd/v3`, 34 gültige Stellen, sonst gerundet, eigener Auswerter für Ausdrücke (PR #112, direkt auf `main`), erledigt 2026-10-03
   - [x] Paket `internal/decimal`: Grenzen, Rundung, Text, Grundrechenarten und die Funktionen aus [`template.md`](spec/template.md), B53, samt Winkelfunktionen in Dezimal, erledigt 2026-10-03
-  - [ ] Eigener Auswerter in `internal/expr` auf Dezimalzahlen, Zahlen in `internal/template`; `expr-lang/expr` entfällt
-  - [ ] Mengenangaben der Actions, Bedingung, Argumente vom Typ `number` und `integer`
+  - [x] Eigener Auswerter in `internal/expr` auf Dezimalzahlen, Zahlen in `internal/template`, Mengenangaben der Actions, Bedingung und Argumente vom Typ `number` und `integer`; `expr-lang/expr` entfällt, erledigt 2026-10-03 (zwei Teilschritte in einem PR, weil der Zahlentyp der Templates alle Nutzer zugleich umstellt)
   - [ ] Counter: Werte und Schrittweiten, Migration nach `TEXT`, Counter-Action, Ausgabe
 - [ ] Namen mit Unicode-Buchstaben: Tokens der Template-Engine und Counter-Namen ([`template.md`](spec/template.md), B1; [`counters-and-quotes.md`](spec/counters-and-quotes.md), B7) (S)
 
@@ -1328,3 +1327,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-03 | Feine Stufen der Rangordnung (`users-and-roles.md`, B20): 21 Stufen statt 11, gespeicherte Rollen und Rollen-Anforderungen auf die Stufe ihrer Plattform oder die niedrigste ihrer bisherigen Kennung (Migration 0010, Version 2 der Rollen-Anforderung), Meldung und Template-Identifier mit allen Stufen. |
 | 2026-10-03 | Sperrmenge mit Aufrufen mit Warten (`command-engine.md`, B22, B23): Die Actions der Commands, die eine Instanz mit Warten aufruft, zählen bei `per_action_type` und `visual_audio`, auch verschachtelt und im Zyklus; Aufrufe ohne Warten und inaktive Aufrufe nicht. |
 | 2026-10-03 | Dezimalzahlen nach Code-ADR-0020 (Entscheidungen des Projektinhabers): `cockroachdb/apd/v3` für alle Zahlen, nicht nur für Counter, damit Beträge aus Ausdrücken nicht schon vor dem Counter ungenau sind; Ausdrücke mit eigenem Auswerter statt `expr-lang/expr`; Rundung auf 34 Stellen statt eines Fehlers; Winkelfunktionen in Dezimal. Die Aufgabe in 3.5 ist in fünf Teilschritte aufgeteilt, der Umfang wächst von M auf L. Das Paket `internal/decimal` ist umgesetzt. |
+| 2026-10-03 | Ausdrücke rechnen dezimal mit eigenem Auswerter in `internal/expr`; `expr-lang/expr` entfällt. Zahlen der Templates, Mengenangaben der Actions, die Bedingung und die Argumente vom Typ `number` und `integer` nutzen `internal/decimal`. |

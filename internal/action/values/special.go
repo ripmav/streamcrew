@@ -185,11 +185,7 @@ func (s SpecialIdentifier) calculate(ctx context.Context, sc *template.Scope) (t
 	if res.Kind != expr.Number {
 		return template.Value{}, fmt.Errorf("%w: %q is not a number", action.ErrInvalid, res.String())
 	}
-	n := res.Number
-	if n == 0 {
-		n = 0 // -0 equals 0; it is written as 0
-	}
-	return template.FloatValue(n), nil
+	return template.NumberValue(res.Number), nil
 }
 
 // invalid wraps err with action.ErrInvalid; nil stays nil.

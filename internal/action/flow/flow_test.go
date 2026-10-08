@@ -17,6 +17,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/actiontest"
 	"github.com/ripmav/streamcrew/internal/action/flow"
 	"github.com/ripmav/streamcrew/internal/capability"
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/template"
@@ -158,9 +159,9 @@ func TestWait(t *testing.T) {
 		want     time.Duration
 		wantErrs []string
 	}{
-		{name: "fraction", seconds: action.Fixed(1.5), want: 1500 * time.Millisecond},
-		{name: "zero", seconds: action.Fixed(0), want: 0},
-		{name: "longer than the default limit", seconds: action.Fixed(600), want: 10 * time.Minute},
+		{name: "fraction", seconds: action.Fixed(oneAndAHalf(t)), want: 1500 * time.Millisecond},
+		{name: "zero", seconds: action.Fixed(decimal.New(0)), want: 0},
+		{name: "longer than the default limit", seconds: action.Fixed(decimal.New(600)), want: 10 * time.Minute},
 		{name: "from an argument", seconds: action.Expression("$arg1text * 2"), args: []string{"3"}, want: 6 * time.Second},
 		{name: "B200 not a number", seconds: action.Expression("$arg1text"), args: []string{"abc"}, wantErrs: []string{"seconds", `"abc" is not a number`}},
 		{name: "out of range", seconds: action.Expression("$arg1text"), args: []string{"3601"}, wantErrs: []string{"seconds", "3601 is not between 0 and 3600"}},
@@ -207,7 +208,7 @@ func TestWaitCancel(t *testing.T) {
 		reg := registry(t, numbers(0))
 		h := actiontest.NewHarness(t, reg)
 		w := newAction[flow.Wait](t, reg, flow.TypeWait)
-		w.Seconds = action.Fixed(3600)
+		w.Seconds = action.Fixed(decimal.New(3600))
 
 		in := h.Start(h.Command("x", w), engine.Params{})
 		time.Sleep(time.Minute)
@@ -255,12 +256,12 @@ func TestRepeat(t *testing.T) {
 			return r
 		}
 
-		in := h.Start(h.Command("three", repeat(action.Fixed(3), j.Note("a"), j.Note("b"))), engine.Params{})
+		in := h.Start(h.Command("three", repeat(action.Fixed(decimal.New(3)), j.Note("a"), j.Note("b"))), engine.Params{})
 		assert.Empty(t, in.Errors)
 		assert.Equal(t, []string{"a", "b", "a", "b", "a", "b"}, j.Lines())
 
 		j = &actiontest.Journal{}
-		in = h.Start(h.Command("zero", repeat(action.Fixed(0), j.Note("a")), j.Note("after")), engine.Params{})
+		in = h.Start(h.Command("zero", repeat(action.Fixed(decimal.New(0)), j.Note("a")), j.Note("after")), engine.Params{})
 		assert.Empty(t, in.Errors)
 		assert.Equal(t, []string{"after"}, j.Lines())
 
@@ -273,19 +274,19 @@ func TestRepeat(t *testing.T) {
 		assert.Empty(t, j.Lines(), "B201: no pass before the limit is checked")
 
 		j = &actiontest.Journal{}
-		in = h.Start(h.Command("B202", repeat(action.Fixed(1000), repeat(action.Fixed(2), j.Note("n")))), engine.Params{})
+		in = h.Start(h.Command("B202", repeat(action.Fixed(decimal.New(1000)), repeat(action.Fixed(decimal.New(2)), j.Note("n")))), engine.Params{})
 		assert.Empty(t, in.Errors)
 		assert.Len(t, j.Lines(), 2000, "B202: the limit holds per action")
 
 		j = &actiontest.Journal{}
-		in = h.Start(h.Command("failing", repeat(action.Fixed(2), j.Fail("f"))), engine.Params{})
+		in = h.Start(h.Command("failing", repeat(action.Fixed(decimal.New(2)), j.Fail("f"))), engine.Params{})
 		assert.Equal(t, engine.StateCompleted, in.State)
 		assert.Equal(t, []string{"f", "f"}, j.Lines(), "B9: under continue the next pass runs")
 		require.Len(t, in.Errors, 2)
 		assert.Equal(t, []int{1, 1}, in.Errors[1].Path)
 
 		j = &actiontest.Journal{}
-		aborting := h.Command("aborting", repeat(action.Fixed(2), j.Fail("f")), j.Note("not reached"))
+		aborting := h.Command("aborting", repeat(action.Fixed(decimal.New(2)), j.Fail("f")), j.Note("not reached"))
 		aborting.ErrorPolicy = command.ErrorAbort
 		h.Put(aborting)
 		in = h.Start(aborting, engine.Params{})
@@ -343,7 +344,7 @@ func TestRandom(t *testing.T) {
 				h := actiontest.NewHarness(t, reg)
 				j := &actiontest.Journal{}
 				r := newAction[flow.Random](t, reg, flow.TypeRandom)
-				r.Count, r.Draw, r.Actions = action.Fixed(float64(tc.count)), tc.draw, tc.children(j)
+				r.Count, r.Draw, r.Actions = action.Fixed(decimal.New(int64(tc.count))), tc.draw, tc.children(j)
 
 				in := h.Start(h.Command("x", r), engine.Params{})
 				assert.Empty(t, in.Errors)
@@ -369,7 +370,7 @@ func TestRandomRemember(t *testing.T) {
 		j := &actiontest.Journal{}
 		remember := func(count int, children ...command.Action) flow.Random {
 			r := newAction[flow.Random](t, reg, flow.TypeRandom)
-			r.Count, r.Draw, r.Actions = action.Fixed(float64(count)), flow.DrawUniqueRemembered, children
+			r.Count, r.Draw, r.Actions = action.Fixed(decimal.New(int64(count))), flow.DrawUniqueRemembered, children
 			return r
 		}
 		run := func(cmd command.Command) []string {
@@ -412,7 +413,7 @@ func TestRandomWithStop(t *testing.T) {
 		h := actiontest.NewHarness(t, reg)
 		j := &actiontest.Journal{}
 		r := newAction[flow.Random](t, reg, flow.TypeRandom)
-		r.Count, r.Actions = action.Fixed(3), []command.Action{stop{}}
+		r.Count, r.Actions = action.Fixed(decimal.New(3)), []command.Action{stop{}}
 
 		in := h.Start(h.Command("x", r, j.Note("not reached")), engine.Params{})
 		assert.Equal(t, engine.StateCompleted, in.State)
@@ -447,4 +448,12 @@ func TestValidate(t *testing.T) {
 	require.ErrorContains(t, w.Validate(), "seconds", "a new wait has no duration yet")
 	rep := newAction[flow.Repeat](t, reg, flow.TypeRepeat)
 	require.ErrorContains(t, rep.Validate(), "count")
+}
+
+// oneAndAHalf returns the decimal 1.5.
+func oneAndAHalf(t testing.TB) decimal.Decimal {
+	t.Helper()
+	d, err := decimal.Parse("1.5")
+	require.NoError(t, err)
+	return d
 }

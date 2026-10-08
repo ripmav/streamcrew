@@ -17,6 +17,7 @@ import (
 
 	"github.com/ripmav/streamcrew/internal/action"
 	"github.com/ripmav/streamcrew/internal/action/schema"
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/template"
@@ -79,7 +80,7 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 			Category: action.CategoryFlow,
 			Schema:   randomSchema(),
 		}.WithNew(func() Random {
-			return Random{Common: action.On(), Count: action.Fixed(1), Draw: DrawFree, Actions: []command.Action{}, ports: ports}
+			return Random{Common: action.On(), Count: action.Fixed(decimal.New(1)), Draw: DrawFree, Actions: []command.Action{}, ports: ports}
 		}),
 		action.Descriptor{
 			Type:     TypeGroup,
@@ -157,7 +158,10 @@ func (w Wait) Perform(ctx context.Context, run *engine.Run) error {
 	if err != nil {
 		return field("seconds", err)
 	}
-	d := time.Duration(seconds * float64(time.Second))
+	d, err := action.Seconds(seconds)
+	if err != nil {
+		return field("seconds", err)
+	}
 	if err := run.LimitTo(d + waitSlack); err != nil {
 		return err
 	}
@@ -222,7 +226,11 @@ func (r Repeat) Perform(ctx context.Context, run *engine.Run) error {
 	if err != nil {
 		return field("count", err)
 	}
-	for range int(count) {
+	n, err := action.Whole(count)
+	if err != nil {
+		return field("count", err)
+	}
+	for range n {
 		next, err := runRange(ctx, run, 0, len(r.Actions))
 		if err != nil || next == engine.ChildEnd {
 			return err

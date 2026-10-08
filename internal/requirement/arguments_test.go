@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ripmav/streamcrew/internal/action/actiontest"
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/engine"
@@ -80,7 +81,8 @@ func wrongType(argument string, typ command.ArgumentType) engine.Rejection {
 }
 
 // number returns the value of a number argument as typed.
-func number(text string, n float64) template.Value {
+func number(text string) template.Value {
+	n, _ := decimal.Parse(text) // the tests pass numbers
 	return template.Value{Text: text, Number: n, IsNumber: true}
 }
 
@@ -139,11 +141,11 @@ func TestArguments(t *testing.T) {
 		},
 		"extra words": {
 			cmd: hug(arg("!n", command.ArgumentInteger)), p: said("!hug 5 more words"),
-			values: map[string]template.Value{"n": number("5", 5)},
+			values: map[string]template.Value{"n": number("5")},
 		},
 		"number": {
 			cmd: hug(arg("!n", command.ArgumentNumber)), p: said("!hug -1.5e2"),
-			values: map[string]template.Value{"n": number("-1.5e2", -150)},
+			values: map[string]template.Value{"n": number("-1.5e2")},
 		},
 		"B106 number with comma": {
 			cmd: hug(arg("!n", command.ArgumentNumber)), p: said("!hug 1,5"),
@@ -151,11 +153,11 @@ func TestArguments(t *testing.T) {
 		},
 		"integer": {
 			cmd: hug(arg("!n", command.ArgumentInteger)), p: said("!hug -42"),
-			values: map[string]template.Value{"n": number("-42", -42)},
+			values: map[string]template.Value{"n": number("-42")},
 		},
 		"integer beyond 32 bits": {
 			cmd: hug(arg("!n", command.ArgumentInteger)), p: said("!hug 9223372036854775807"),
-			values: map[string]template.Value{"n": number("9223372036854775807", 9223372036854775807)},
+			values: map[string]template.Value{"n": number("9223372036854775807")},
 		},
 		"B112 integer with fraction": {
 			cmd: hug(arg("!n", command.ArgumentInteger)), p: said("!hug 1.5"),
