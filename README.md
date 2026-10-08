@@ -8,7 +8,7 @@
 
 ## Status
 
-Phase 1 (Fundament) ist abgeschlossen. In Phase 2 stehen Speicher, Profile, Backups, Event-Bus und die Verschlüsselung der Secrets; das Domänenmodell (Nutzer, Rollen, Commands) folgt nach seinen Spezifikationen. `streamcrew serve` startet mit dem aktiven Profil, meldet sich über `/healthz` und `/readyz` gesund und beendet sich sauber. Den Stand zeigt die [Roadmap](docs/roadmap.md).
+Phase 1 (Fundament) und Phase 2 (Domäne und Persistenz) sind abgeschlossen. In Phase 3 stehen die Template-Engine, die Command-Engine und das Action-Framework mit allen 15 plattformneutralen P0-Actions; es folgen Anforderungen, Commands als Code, die Mock-Plattform und die Verdrahtung im Core. `streamcrew serve` startet mit dem aktiven Profil, meldet sich über `/healthz` und `/readyz` gesund und beendet sich sauber. Den Stand zeigt die [Roadmap](docs/roadmap.md).
 
 Das Repository ist privat. Nur der Projektinhaber schaltet es öffentlich.
 
