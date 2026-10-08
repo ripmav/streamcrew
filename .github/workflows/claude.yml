@@ -74,20 +74,44 @@ jobs:
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*)"
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
 
+      - name: Show tool usage (names only)
+        # Diagnostics: which tools the review used and which were denied.
+        # Prints tool names (and for denied Bash calls a short command prefix), no contents.
+        if: always()
+        env:
+          EXECUTION_FILE: ${{ steps.claude-review.outputs.execution_file }}
+        run: |
+          if [ -z "$EXECUTION_FILE" ] || [ ! -f "$EXECUTION_FILE" ]; then
+            echo "No execution file available."
+            exit 0
+          fi
+          msgs=$(jq -c -s 'if (.[0] | type) == "array" then .[0] else . end' "$EXECUTION_FILE")
+          echo "Tools used:"
+          echo "$msgs" | jq -r '.[] | select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | .name' | sort | uniq -c
+          echo "Denied tool calls:"
+          echo "$msgs" | jq -r '.[] | select(.type == "result") | .permission_denials[]? | "\(.tool_name) \((.tool_input.command // "") | .[0:60])"' | sort | uniq -c
+
       - name: Update progress comment with result
         if: always()
         env:
           SINCE: ${{ github.event.comment.created_at || github.event.review.submitted_at }}
           OUTCOME: ${{ steps.claude-review.outcome }}
           COMMENT_ID: ${{ steps.progress.outputs.comment_id }}
+          EXECUTION_FILE: ${{ steps.claude-review.outputs.execution_file }}
         run: |
           # Count what the review posted after the request: bot comments except this
           # workflow's own github-actions[bot] comments.
           filter='.[] | select(.user.type == "Bot" and .user.login != "github-actions[bot]" and .created_at >= $ENV.SINCE) | .id'
           summary=$(gh api --paginate "repos/$REPO/issues/$PR/comments" --jq "$filter" | wc -l)
           inline=$(gh api --paginate "repos/$REPO/pulls/$PR/comments" --jq "$filter" | wc -l)
+          denied=0
+          if [ -n "$EXECUTION_FILE" ] && [ -f "$EXECUTION_FILE" ]; then
+            denied=$(jq -s 'if (.[0] | type) == "array" then .[0] else . end | [.[] | select(.type == "result") | .permission_denials[]?] | length' "$EXECUTION_FILE")
+          fi
           if [ "$OUTCOME" != "success" ]; then
             body="❌ **Review fehlgeschlagen** (Status: $OUTCOME). Details im [Workflow-Log]($RUN_URL)."
+          elif [ "$denied" -gt 0 ]; then
+            body="⚠️ **Review unvollständig:** $denied Werkzeugaufruf(e) wurden verweigert, das Ergebnis ist nicht aussagekräftig ($inline Inline-Befund(e)). Details im [Workflow-Log]($RUN_URL)."
           elif [ "$inline" -gt 0 ]; then
             body="✅ **Review abgeschlossen:** $inline Befund(e) als Inline-Kommentare. [Workflow-Log]($RUN_URL)"
           elif [ "$summary" -gt 0 ]; then
