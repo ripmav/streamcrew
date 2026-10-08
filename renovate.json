@@ -1,0 +1,58 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "timezone": "Europe/Berlin",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 0,
+  "prHourlyLimit": 0,
+  "labels": ["dependencies"],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "description": "Security fixes skip the weekly schedule and come one by one, outside the ecosystem groups: the app checks the OSV database on every run, several times a day, and opens a fix as soon as one exists. No PR limit applies above, so none can hold one back.",
+    "schedule": ["at any time"],
+    "labels": ["dependencies", "security"]
+  },
+  "packageRules": [
+    {
+      "description": "One pull request per ecosystem, so Go, Docker images and actions can each be taken or held back on their own. go mod tidy after the update, so go.sum matches what the PR changed instead of failing CI on the first run.",
+      "matchManagers": ["gomod"],
+      "postUpdateOptions": ["gomodTidy"],
+      "groupName": "go modules",
+      "semanticCommitScope": "go",
+      "addLabels": ["go"]
+    },
+    {
+      "description": "The go directive in go.mod follows the latest stable Go release (Code-ADR-0001), as part of the go modules pull request. CI reads the Go version from go.mod, so it moves along.",
+      "matchManagers": ["gomod"],
+      "matchDatasources": ["golang-version"],
+      "rangeStrategy": "bump"
+    },
+    {
+      "description": "Base images by digest, like the actions. The tag stays in front of the digest, so the file still says which version it means.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "pinDigests": true,
+      "groupName": "docker images",
+      "semanticCommitScope": "docker",
+      "addLabels": ["docker"]
+    },
+    {
+      "description": "Action updates arrive as one pull request, together with the tool versions in the workflows: golangci-lint (github-actions manager) and tools run with go run <module>@<version> (custom manager below). One pull request a week is reviewable, a dozen is not.",
+      "matchManagers": ["github-actions", "custom.regex"],
+      "groupName": "github actions",
+      "semanticCommitScope": "actions",
+      "addLabels": ["github-actions"]
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Go tools pinned with go run <module>@<version> in workflows and scripts, such as go-licenses.",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/", "/^scripts/[^/]+\\.sh$/"],
+      "matchStrings": ["go run (?<depName>[\\w./-]+)@(?<currentValue>v\\d\\S*)"],
+      "datasourceTemplate": "go"
+    }
+  ]
+}

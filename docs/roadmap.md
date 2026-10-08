@@ -31,7 +31,7 @@
   - KI-Assistenten bekommen keinen C#-Code und keine Übersetzungsaufträge.
 - **Lizenz (ADR-0002):** Jede neue Quelldatei trägt `// SPDX-License-Identifier: MIT`.
 - **ADR-Nummern:** ADR-0001 bis ADR-0011 existieren (siehe [`adr/`](adr/README.md)). Höhere Nummern sind vorläufige Backlog-Nummern aus Plan §12.1. Wer ein geplantes ADR anlegt, vergibt die nächste freie Nummer und passt die Verweise hier und im Plan an.
-- **Pre-Commit-Checkliste:** gilt für jede Aufgabe mit Code (Plan §11.1):
+- **Pre-Commit-Checkliste:** gilt für jede Aufgabe mit Code (Plan §11.1); `scripts/check.sh` führt sie aus:
   1. `go fix ./...`
   2. `gofmt -w .`
   3. `go vet ./...`
@@ -183,19 +183,31 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### 1.1 Toolchain und Qualität
 
-- [ ] `go.mod` mit `go 1.27` (installiert: go1.27.1) und Modulpfad `github.com/ripmav/streamcrew` anlegen (S)
-- [ ] `.golangci.yml` im v2-Format anlegen (installiert: 2.13.2); die Linter-Auswahl in Code-ADR-0001 festhalten (S)
-- [ ] `goheader`-Linter für den SPDX-Header `// SPDX-License-Identifier: MIT` konfigurieren (ADR-0002) (S)
-- [ ] Pre-Commit-Checkliste als Skript oder Taskfile umsetzen (S)
-- [ ] CI-Pipeline mit GitHub Actions aufsetzen (M):
-  - Lint, `go test -race`, `govulncheck`
-  - Lizenzprüfung der Abhängigkeiten (`github.com/google/go-licenses`): nur MIT-kompatible Lizenzen
-  - Linkprüfung für Markdown in `docs/` (z. B. `lychee`), damit Verweise zwischen Dokumenten und ADRs nicht ins Leere zeigen
-  - kurze Fuzz-Läufe
-  - Build-Matrix linux/windows/darwin × amd64/arm64
-- [ ] Dependency-Updates automatisieren (Renovate oder Dependabot) (S)
+- [x] `go.mod` mit `go 1.27.1` und Modulpfad `github.com/ripmav/streamcrew` anlegen (S), erledigt 2026-09-28
+- [x] `.golangci.yml` im v2-Format anlegen (installiert: 2.14.0); die Linter-Auswahl in [Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md) festhalten (S), erledigt 2026-09-28
+- [x] `goheader`-Linter für den SPDX-Header `// SPDX-License-Identifier: MIT` konfigurieren (ADR-0002) (S), erledigt 2026-09-28
+- [x] Pre-Commit-Checkliste als Skript umsetzen: `scripts/check.sh` (S), erledigt 2026-09-28
+- [x] CI-Pipeline mit GitHub Actions aufsetzen: `.github/workflows/ci.yml` und `docs.yml` (M), erledigt 2026-09-28
+  - `go fix -diff`, `go vet`, Lint, `go test -race`, `govulncheck`
+  - Lizenzprüfung der Abhängigkeiten (`github.com/google/go-licenses`) mit einer Allowlist MIT-kompatibler Lizenzen
+  - Linkprüfung für alle Markdown-Dateien mit `lychee` (Dateien und Überschriften-Anker, offline), damit Verweise zwischen Dokumenten und ADRs nicht ins Leere zeigen
+  - kurze Fuzz-Läufe über `scripts/fuzz.sh` (findet alle Fuzz-Ziele automatisch)
+  - Cross-Build linux/windows/darwin × amd64/arm64 in einem Job auf ubuntu
+  - Actions auf Commit-SHAs gepinnt; wöchentlicher `govulncheck`-Lauf per Zeitplan
+- [x] Dependency-Updates mit Renovate automatisieren, kein Dependabot (`renovate.json` nach Vorbild von `recipe-reader`: je Ökosystem ein Pull Request, Go-Module samt `go`-Direktive, Actions samt Werkzeugversionen, später Docker-Images; montags, Sicherheitsupdates sofort) (S), erledigt 2026-09-28
+- [ ] Renovate-GitHub-App für `ripmav/streamcrew` installieren; danach das Dependency Dashboard und die ersten Renovate-PRs prüfen (Projektinhaber) (S)
+- [x] Die CI-Läufe des ersten Pull Requests prüfen: Laufzeit, Minutenverbrauch, Cache (S), erledigt 2026-09-28
+  - Laufzeit (PR #8): Checks 70 s, Tests 36 s, Cross-Build 55 s, Linkprüfung 7 s; Gesamtdauer der CI 74 s
+  - Minuten: pro Push mit Go- und Markdown-Änderungen etwa 5 abgerechnete Minuten, weil jeder Job auf volle Minuten aufgerundet wird
+  - Cache: Die drei CI-Jobs teilen sich einen setup-go-Schlüssel. Gespeichert wird nur der Stand des zuerst fertigen Jobs, die anderen melden „Unable to reserve cache“. Ohne Abhängigkeiten ist das unerheblich.
+- [ ] setup-go-Cache mit den ersten Abhängigkeiten neu bewerten, z. B. Cache nur in einem Job speichern (Phase 2) (S)
 - [x] Claude-Code-Review nur auf `@claude`-Erwähnung in Pull Requests, mit Fortschritts- und Ergebniskommentar (`.github/workflows/claude.yml`; kein automatisches Review, keine Issues) (S), erledigt 2026-09-28
-- [ ] Claude-Review so korrigieren, dass das Review tatsächlich läuft. Ursache laut Diagnose: Das Werkzeug `Skill` wurde verweigert, über das Claude Code den Plugin-Befehl ausführt. Es ist jetzt gezielt für `code-review:code-review` freigegeben; der Nachweis im nächsten Review-Lauf steht aus (S)
+- [ ] Claude-Review so korrigieren, dass das Review tatsächlich läuft (S):
+  - Erste Ursache: Das Werkzeug `Skill`, über das Claude Code den Plugin-Befehl ausführt, wurde verweigert. Seit PR #7 ist es gezielt für `code-review:code-review` freigegeben. Im Lauf zu PR #8 wirkt die Freigabe: keine Verweigerung.
+  - Zweite Ursache, noch offen: Der Befehl brach in PR #8 nach 12 s in seiner Vorprüfung ab (2 Haiku-Agents, kein eigener Kommentar). Bei einem vollständigen Lauf ohne Befunde hätte er einen Kommentar „No issues found“ gepostet.
+  - Wahrscheinlicher Grund: Die Vorprüfung stoppt, wenn Claude den PR schon kommentiert hat. Dafür hält sie vermutlich den vorab geposteten Fortschrittskommentar. Wiederholte `@claude`-Anfragen würden aus demselben Grund übersprungen.
+  - Der Ergebniskommentar meldet einen solchen Abbruch fälschlich als „keine Befunde“.
+- [ ] `claude.yml` auf Commit-SHAs pinnen: Renovate schlägt das selbst vor; erst nach dem Review-Nachweis mergen ([Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md)) (S)
 - [ ] `GOPRIVATE=github.com/ripmav/*` und CI-Token für den Zugriff auf private Repositories und Release-Artefakte einrichten ([ADR-0009](adr/0009-repositories-und-hosting.md)) (S)
 
 ### 1.2 Architekturentscheidungen
@@ -204,7 +216,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 - [x] [ADR-0010](adr/0010-api-protokoll.md) API-Protokoll: ConnectRPC mit Protobuf, inklusive lokalem Transport zum Core-Prozess; vorgezogen, erledigt 2026-09-28
 - [x] [ADR-0011](adr/0011-keine-telemetrie.md) Keine Telemetrie; Fehlersuche über lokale Logs und Diagnose-Paket; vorgezogen, erledigt 2026-09-28
 - [ ] Code-ADRs schreiben (M):
-  - 0001 Toolchain und Linting
+  - 0001 Toolchain und Linting: [Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md), akzeptiert 2026-09-28
   - 0002 Dependency Injection
   - 0003 Fehler und Logging
   - 0004 Nebenläufigkeit und Supervisor
@@ -231,7 +243,8 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### 1.4 Dokumentation und Container
 
-- [ ] `README.md` (Ziel, Status, Build, Lizenzhinweis MIT) und `CONTRIBUTING.md` (Konventionen, Pre-Commit, ADR-Prozess, Herkunftsregeln aus ADR-0001) (S)
+- [x] `README.md` (Ziel, Status, Build, Lizenzhinweis MIT) (S), erledigt 2026-09-28
+- [ ] `CONTRIBUTING.md` (Konventionen, Pre-Commit, ADR-Prozess, Herkunftsregeln aus ADR-0001) (S)
 - [ ] Dockerfile: Multi-Stage, CGO-frei, non-root, minimales Laufzeit-Image, aktuelle Basis-Images (S)
 - [ ] Docker-Smoke-Test: `docker build`, `docker run … version`, `serve` mit Healthcheck (S)
 
@@ -1139,3 +1152,6 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-28 | Claude-Review nachgebessert (PR #5): `gh`-Werkzeuge für den Review-Befehl freigegeben; jede `@claude`-Anfrage bekommt einen Fortschrittskommentar, der mit dem Ergebnis aktualisiert wird, auch ohne Befunde. |
 | 2026-09-28 | Claude-Review-Diagnose (PR #6): Im zweiten Test wurde erneut ein Werkzeugaufruf verweigert, das Review lief also nicht wirklich. Das Log zeigt jetzt die Namen der benutzten und verweigerten Werkzeuge; der Ergebniskommentar meldet dann „unvollständig“ statt „keine Befunde“. |
 | 2026-09-28 | Ursache gefunden (Diagnose in PR #7): Claude Code führt den Plugin-Befehl über das Werkzeug `Skill` aus, und genau dieses war nicht freigegeben. Freigabe gezielt nur für `Skill(code-review:code-review)`; die Diagnose zeigt jetzt auch Skill-Namen. |
+| 2026-09-28 | Phase 1.1 umgesetzt: `go.mod` (Go 1.27.1), `.golangci.yml` (golangci-lint 2.14.0 inkl. `goheader`), `scripts/check.sh` und `scripts/fuzz.sh`, CI (`ci.yml`, `docs.yml`), Renovate, `README.md`, Platzhalter `cmd/streamcrew`. Code-ADR-0001 vorgeschlagen. Auf Vorgabe des Projektinhabers Renovate statt Dependabot (kein Dependabot in Go-Projekten); die Renovate-App muss noch installiert werden. CI-Läufe ausgewertet (Laufzeit, Minuten, Cache). `CONTRIBUTING.md` als eigene Aufgabe abgetrennt; Nacharbeiten ergänzt: Renovate-App, `claude.yml` auf Commit-SHAs pinnen, Cache neu bewerten. |
+| 2026-09-28 | Code-ADR-0001 akzeptiert; Vermerk „Ergänzt durch“ in ADR-0002 und ADR-0009. Claude-Review in PR #8 getestet: Die `Skill`-Freigabe wirkt, der Plugin-Befehl bricht aber in seiner Vorprüfung ab, vermutlich wegen des Fortschrittskommentars. Befund in Phase 1.1 festgehalten, Lösung offen. |
+| 2026-09-28 | Renovate-Konfiguration nach Vorbild von `recipe-reader` neu gefasst: `renovate.json` im Repository-Root statt `.github/renovate.json5`, ein Pull Request je Ökosystem mit Scope und Label, keine PR-Limits, Commit-Typen nach `config:recommended`, Sicherheitsupdates mit Label `security`. Ergänzt um `go`-Direktive, Werkzeugversionen in Workflows und die Docker-Regel. Code-ADR-0001, Plan und README angepasst. |
