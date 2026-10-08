@@ -19,5 +19,6 @@ Es gelten dieselben Konventionen und dieselbe Vorlage ([`../TEMPLATE.md`](../TEM
 | [0009](0009-ids-und-zeit.md) | IDs und Zeit | Akzeptiert | 2026-09-29 |
 | [0010](0010-polymorphe-serialisierung.md) | Polymorphe Serialisierung | Akzeptiert | 2026-09-29 |
 | [0011](0011-event-bus.md) | Event-Bus | Akzeptiert | 2026-09-29 |
+| [0012](0012-template-engine.md) | Template-Engine | Akzeptiert | 2026-09-29 |
 
 Die geplanten Code-ADRs stehen im ADR-Backlog von [`plan.md`](../../plan.md) (§12.2).
