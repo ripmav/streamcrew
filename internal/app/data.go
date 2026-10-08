@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ripmav/streamcrew/internal/backup"
+	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/lockfile"
 	"github.com/ripmav/streamcrew/internal/profile"
@@ -21,12 +22,10 @@ import (
 // LockFileName is the lock file in the data directory (ADR-0012).
 const LockFileName = "streamcrew.lock"
 
-// Event types of the core itself.
-const (
-	TypeAppStarted       event.Type = "app.started"
-	TypeAppStopping      event.Type = "app.stopping"
-	TypeSupervisorStatus event.Type = "supervisor.status"
-)
+// TypeSupervisorStatus is the event type of the supervisor's state changes.
+// The application events app.started and app.stopping are in the domain
+// catalog (internal/domain/eventtype), because event commands react to them.
+const TypeSupervisorStatus event.Type = "supervisor.status"
 
 // Started is the payload of "app.started".
 type Started struct {
@@ -41,8 +40,8 @@ type Stopping struct{}
 func newCatalog() (*event.Catalog, error) {
 	c := event.NewCatalog()
 	return c, errors.Join(
-		event.Register[Started](c, TypeAppStarted),
-		event.Register[Stopping](c, TypeAppStopping),
+		event.Register[Started](c, eventtype.AppStarted),
+		event.Register[Stopping](c, eventtype.AppStopping),
 		event.Register[supervisor.Status](c, TypeSupervisorStatus),
 	)
 }
