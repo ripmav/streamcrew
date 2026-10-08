@@ -5,6 +5,7 @@
 | **Status** | Akzeptiert |
 | **Datum** | 2026-09-29 |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
+| **Ergänzt durch** | [Code-ADR-0018](0018-json-v2.md): JSON mit `encoding/json/v2` (Punkt 7); [Code-ADR-0013](0013-typ-registry.md): Typ-Registry für Actions, Kind-Actions als verschachtelte Dokumente derselben Familie |
 | **Bezug** | Plan §6.8, §6.9, §8, §10; Roadmap Phase 2.2, 3.3 bis 3.5; [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0005](0005-konfiguration.md), [Code-ADR-0006](0006-teststrategie.md), [Code-ADR-0008](0008-datenbankzugriff.md) |
 
 ## Kontext
