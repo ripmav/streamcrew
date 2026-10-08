@@ -464,7 +464,7 @@ Zuerst die Änderungen an Datenmodell und Engine aus den geklärten Fragen vom 2
   - [x] Hexadezimale Zahlen und Ziffern mit `_` in `internal/decimal`, in Ausdrücken und Argumenten (Entscheidung des Projektinhabers), erledigt 2026-10-03
 - [x] Namen mit Unicode-Buchstaben: Tokens der Template-Engine und Counter-Namen ([`template.md`](spec/template.md), B1; [`counters-and-quotes.md`](spec/counters-and-quotes.md), B7) (S), erledigt 2026-10-03: Tokens und Counter-Namen mit Buchstaben, Zeichen und Ziffern aller Schriften, Schlüssel `name_key` für Counter (Migration 0012)
 
-- [ ] Prüfen, ob die YAML-Bibliothek aus [Code-ADR-0005](adr/code/0005-konfiguration.md) (`go.yaml.in/yaml/v3`) für Commands als Code genügt, etwa bei Fehlermeldungen mit Zeile und Spalte; sonst ein neues Code-ADR (S)
+- [x] Prüfen, ob die YAML-Bibliothek aus [Code-ADR-0005](adr/code/0005-konfiguration.md) (`go.yaml.in/yaml/v3`) für Commands als Code genügt, etwa bei Fehlermeldungen mit Zeile und Spalte; sonst ein neues Code-ADR (S), erledigt 2026-10-03: v3 genügt (Entscheidung des Projektinhabers); inhaltliche Fehler bekommen Zeile und Spalte über `yaml.Node`, nur Syntaxfehler allein die Zeile; Befund in Code-ADR-0005, Punkt 3
 - [ ] Typkatalog als JSON-Schema exportieren (`schema export` → `schemas/`) (S)
 - [ ] YAML/JSON-Format (`apiVersion`, `kind`, `metadata`, `spec`) mit Import, Export und Validierung: `command validate|import|export` (M)
 
@@ -1180,6 +1180,10 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 - Velora und VPZone (P3): offizielle API-Dokumentation sichten, Aufwand schätzen, Go/No-Go (S); Adapter umsetzen (je L), falls Go
 - Exit-Kriterien, wenn die Plattformen eingeplant werden: Ein gleichzeitiger Stream auf Twitch, YouTube und Kick läuft mit gemeinsamen Commands und gemeinsamer Währung; plattformübergreifend verknüpfte Nutzer werden korrekt zusammengeführt.
 
+**Abhängigkeiten:**
+
+- Auf `go.yaml.in/yaml/v4` wechseln, sobald es stabil ist: Syntaxfehler in YAML nennen dann auch die Spalte ([Code-ADR-0005](adr/code/0005-konfiguration.md), Punkt 3; Entscheidung des Projektinhabers vom 2026-10-03) (S)
+
 **Anforderungen** (in Roadmap 3.4 zurückgestellt, Entscheidung des Projektinhabers vom 2026-10-02):
 
 - Rollen-Anforderung wie im Original: mehrere Rollen (eine davon genau), Beschränkung auf eine Plattform, Stufen bei Abonnenten (mit den Twitch-Stufen aus Phase 4), global „exakte Rollen“ ([`requirements.md`](spec/requirements.md), A12) (S)
@@ -1332,3 +1336,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-03 | Counter mit Dezimalzahlen: Werte und Schrittweiten als Text (Migration 0011), Counter-Action mit Dezimalbeträgen, `$<name>display` mit zwei Nachkommastellen. Die Aufgabe „Exakte Dezimalzahlen“ in 3.5 ist erledigt. |
 | 2026-10-03 | Hexadezimale Zahlen nach `0x` und Unterstriche zwischen Ziffern (Entscheidung des Projektinhabers): `decimal.Parse`, die Zahlen in Ausdrücken und die Argumente vom Typ `number` und `integer` lesen sie und rechnen sie in Dezimalzahlen um. |
 | 2026-10-03 | Namen mit Unicode-Buchstaben: Tokens der Template-Engine und Counter-Namen mit Buchstaben aller Schriften, ohne Beachtung der Schreibweise nach Unicode; Counter über den Schlüssel `name_key` (Migration 0012); Textfunktionen beginnen nicht mitten in einem Wort einer beliebigen Schrift. |
+| 2026-10-03 | YAML-Bibliothek für Commands als Code geprüft: `go.yaml.in/yaml/v3` genügt (Entscheidung des Projektinhabers). Der Wechsel auf v4, das auch bei Syntaxfehlern die Spalte nennt, steht im Backlog, bis v4 stabil ist. |
