@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/ripmav/streamcrew/internal/capability"
 	"github.com/ripmav/streamcrew/internal/commandfile"
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/domain/command"
@@ -40,28 +41,68 @@ func CheckCommandFiles(ctx context.Context, profilePath string, rights config.Ri
 	if err != nil {
 		return report, err
 	}
-	dir, err := os.MkdirTemp("", "streamcrew-validate-")
+	err = withProfileCopy(ctx, profilePath, func(st *store.Store) error {
+		_, problems, err := checkInto(ctx, st, rights, docs)
+		report.Problems = append(report.Problems, problems...)
+		return err
+	})
 	if err != nil {
 		return report, err
+	}
+	report.finish(files)
+	return report, nil
+}
+
+// ExportCommands returns the documents of the commands named, with the
+// groups and cooldown groups they refer to, or of all objects without
+// names (commands-as-code.md, B35, B36). It reads a copy of the profile at
+// profilePath, made as for a backup, so the core may run meanwhile.
+func ExportCommands(ctx context.Context, profilePath string, names []string) ([]commandfile.Exported, error) {
+	actions, err := ActionCatalog(capability.Set{})
+	if err != nil {
+		return nil, err
+	}
+	codec, err := command.NewCodec(actions.Entries()...)
+	if err != nil {
+		return nil, err
+	}
+	var docs []commandfile.Exported
+	err = withProfileCopy(ctx, profilePath, func(st *store.Store) error {
+		var src commandfile.Source
+		var err error
+		if src.Commands, err = st.Commands(ctx); err != nil {
+			return err
+		}
+		if src.Groups, err = st.Groups(ctx); err != nil {
+			return err
+		}
+		if src.CooldownGroups, err = st.CooldownGroups(ctx); err != nil {
+			return err
+		}
+		docs, err = commandfile.Export(src, names, commandfile.Types{Actions: actions.Descriptors(), Codec: codec})
+		return err
+	})
+	return docs, err
+}
+
+// withProfileCopy runs fn with a copy of the profile at profilePath, made
+// as for a backup and migrated to the current schema; the copy is deleted
+// afterwards.
+func withProfileCopy(ctx context.Context, profilePath string, fn func(st *store.Store) error) error {
+	dir, err := os.MkdirTemp("", "streamcrew-profile-")
+	if err != nil {
+		return err
 	}
 	defer os.RemoveAll(dir)
 	copyPath := filepath.Join(dir, "profile.db")
 	if err := snapshotProfile(ctx, profilePath, copyPath); err != nil {
-		return report, err
+		return err
 	}
 	st, err := store.Open(ctx, copyPath, store.WithLogger(slog.New(slog.DiscardHandler)))
 	if err != nil {
-		return report, fmt.Errorf("open the copy of the profile: %w", err)
+		return fmt.Errorf("open the copy of the profile: %w", err)
 	}
-	defer st.Close()
-
-	_, problems, err := checkInto(ctx, st, rights, docs)
-	if err != nil {
-		return report, err
-	}
-	report.Problems = append(report.Problems, problems...)
-	report.finish(files)
-	return report, nil
+	return errors.Join(fn(st), st.Close())
 }
 
 // CommandImportReport is the result of an import of files of commands as
