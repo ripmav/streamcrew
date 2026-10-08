@@ -16,7 +16,7 @@ Die Namen der Identifier folgen dem Original, damit bestehende Commands und Impo
 Nicht Teil dieser Spezifikation:
 
 - die Textfunktionen der Special-Identifier-Action (etwa Groß- und Kleinschreibung, Ersetzen, Datumsrechnung) und die Vergleiche der Conditional-Action; sie kommen mit den Actions (Roadmap 3.3)
-- Identifier, deren Quelle erst später entsteht: plattformspezifische Werte (Twitch Phase 4, weitere Plattformen Phase 9), Währungen, Ränge und Inventare (Phase 8), Spenden und Integrationen (Phase 10). Sie folgen denselben Regeln und werden mit ihrer Phase ergänzt.
+- Identifier, deren Quelle erst später entsteht: plattformspezifische Werte (Twitch Phase 4, weitere Plattformen im Backlog der Roadmap), Währungen, Ränge und Inventare (Phase 8), Spenden und Integrationen (Phase 9). Sie folgen denselben Regeln und werden mit ihrer Phase ergänzt.
 - die Übersetzung von Texten der Oberfläche (ADR-0022, Roadmap 3.6)
 
 ## Begriffe
@@ -145,7 +145,7 @@ Die Tabellen nennen die Namen, die das MVP (Roadmap 3.1) auflöst. Alle Namen si
 |---|---|---|---|
 | A1 | Identifier werden per Textersetzung nacheinander ersetzt; eingesetzte Werte, auch Zuschauertext, können von späteren Ersetzungen erneut erfasst werden. | Tokenizer mit einmaliger Auswertung; eingesetzte Werte bleiben unverändert (B5). | Template-Injection durch Zuschauertext (Plan §6.10) |
 | A2 | Keine dokumentierte Maskierung je Ausgabeort | Kodierung für Text, URL, HTML und JSON (B30) | Sicherheit in Overlays und Web-Requests |
-| A3 | Rechnen über die Bibliothek Jace; Identifier werden vorher als Text eingesetzt. | Ausdrücke mit `expr-lang/expr`; Identifier liefern Werte, keinen Ausdruckstext (B51); Größe und Laufzeit begrenzt (B52) | Sicherheit; Jace gibt es für Go nicht. Funktionsnamen, die Jace anders nennt, bildet der Import ab (Roadmap 11.2). |
+| A3 | Rechnen über die Bibliothek Jace; Identifier werden vorher als Text eingesetzt. | Ausdrücke mit `expr-lang/expr`; Identifier liefern Werte, keinen Ausdruckstext (B51); Größe und Laufzeit begrenzt (B52) | Sicherheit; Jace gibt es für Go nicht. Funktionsnamen, die Jace anders nennt, bildet der Import ab (Roadmap 10.2). |
 | A4 | Datum und Uhrzeit in der Zeitzone des Rechners | Zeitzone des Profils (B40) | Server-Modus (ADR-0003); der Host kann in einer anderen Zone stehen als der Streamer |
 | A5 | Zufallsnutzer: nicht dokumentiert, ob mehrere Eigenschaften zum selben Nutzer gehören | einmal je Rendervorgang (B22) | Name und Anzeigename müssen zusammenpassen; zu prüfen (offene Frage) |
 | A6 | Fehler einer Datenquelle: nicht dokumentiert | Identifier bleibt stehen, Warnung im Log (B23) | Ein Ausfall soll keinen Command abbrechen; wie B4 erkennbar |

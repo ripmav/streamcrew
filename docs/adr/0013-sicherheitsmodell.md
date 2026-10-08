@@ -7,7 +7,7 @@
 | **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | [ADR-0003](0003-betriebsmodi.md), [ADR-0010](0010-api-protokoll.md), [ADR-0011](0011-keine-telemetrie.md), [ADR-0012](0012-persistenz.md); Plan §6.5, §6.9, §6.15, §13 (R10); Roadmap Phase 2.4, 6.2, 12 |
 
-*Entwurf nach Roadmap Phase 2.4. Das endgültige Sicherheitsmodell mit Bedrohungsanalyse folgt in Phase 12 und bestätigt oder ersetzt dieses ADR.*
+*Entwurf nach Roadmap Phase 2.4. Das endgültige Sicherheitsmodell mit Bedrohungsanalyse folgt in Phase 11 und bestätigt oder ersetzt dieses ADR.*
 
 ## Kontext
 
@@ -50,7 +50,7 @@
 | Capabilities in der Profildatenbank, über die API änderbar | ein gestohlener API-Token reichte, um Host-Rechte freizuschalten |
 | SSRF-Prüfung nur anhand des Hostnamens | per DNS-Rebinding umgehbar |
 | Tokens im Klartext speichern | ein Datenbank- oder Backup-Leck gäbe gültige Zugänge preis |
-| mTLS für die API | stark, aber für Streamer im Alltag zu umständlich; bleibt eine Option für Phase 12 |
+| mTLS für die API | stark, aber für Streamer im Alltag zu umständlich; bleibt eine Option für Phase 11 |
 
 ## Konsequenzen
 
@@ -64,7 +64,7 @@
 
 - Die Prüfung vor jeder Action kostet etwas Laufzeit und muss lückenlos sein; Tests prüfen, dass jeder Typ seine Capabilities nennt.
 - Der SSRF-Schutz braucht einen eigenen Dialer und kann legitime interne Ziele sperren, bis sie in der Allowlist stehen.
-- Ein Entwurf: Bedrohungsanalyse, Penetrationstest und die endgültige Liste der Capabilities fehlen noch (Phase 12).
+- Ein Entwurf: Bedrohungsanalyse, Penetrationstest und die endgültige Liste der Capabilities fehlen noch (Phase 11).
 
 **Folgearbeiten:**
 
@@ -72,4 +72,4 @@
 - [ ] Capabilities in Descriptors und Engine-Prüfung (Roadmap Phase 3)
 - [ ] Startkonfiguration für abweichende Capabilities und die SSRF-Allowlist (Roadmap Phase 3 bzw. mit der WebRequest-Action)
 - [ ] API-Tokens mit Scopes, lokaler Admin-Token, Bremse für Fehlversuche (Roadmap Phase 6.2)
-- [ ] Bedrohungsanalyse und endgültiges Sicherheitsmodell (Roadmap Phase 12)
+- [ ] Bedrohungsanalyse und endgültiges Sicherheitsmodell (Roadmap Phase 11)

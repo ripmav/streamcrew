@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 // Package platform names the streaming platforms streamcrew connects to
-// (ADR-0004: Twitch at the start, more platforms in roadmap phase 9).
+// (ADR-0004: Twitch at the start, more platforms in the roadmap backlog).
 package platform
 
 import "fmt"

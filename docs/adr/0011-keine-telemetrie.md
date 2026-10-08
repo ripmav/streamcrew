@@ -46,4 +46,4 @@
 
 - [x] Maskierung von Secrets in Logs (Roadmap Phase 1), erledigt 2026-09-29 in `internal/logging` ([Code-ADR-0003](code/0003-fehler-und-logging.md))
 - [ ] `streamcrew diag bundle` umsetzen (Roadmap Phase 6)
-- [ ] Update-Hinweis nur als Opt-in umsetzen (Roadmap Phase 12)
+- [ ] Update-Hinweis nur als Opt-in umsetzen (Roadmap Phase 11)

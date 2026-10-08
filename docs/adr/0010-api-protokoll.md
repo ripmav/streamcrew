@@ -38,7 +38,7 @@
    - Ab `v1` blockiert `buf breaking` in der CI inkompatible Änderungen.
    - Größere Brüche kommen als neues Paket (`v2`), parallel zum alten.
 7. **Abgrenzung:**
-   - Eine REST-Schnittstelle für Drittanbieter (Developer-API) kann später per Transcoding auf dieselben Dienste folgen (Phase 11).
+   - Eine REST-Schnittstelle für Drittanbieter (Developer-API) kann später per Transcoding auf dieselben Dienste folgen (Phase 10).
    - Der MCP-Server bleibt eigenständig.
    - Der Overlay-Server für OBS-Browserquellen ist nicht Teil dieser API.
 
