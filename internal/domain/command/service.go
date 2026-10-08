@@ -4,6 +4,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,13 +13,24 @@ import (
 
 // Service validates, encodes and stores commands and groups.
 type Service struct {
-	repo  Repository
-	codec *Codec
+	repo   Repository
+	codec  *Codec
+	checks Checks
 }
 
-// NewService returns a service on repo.
-func NewService(repo Repository, codec *Codec) *Service {
-	return &Service{repo: repo, codec: codec}
+// NewService returns a service on repo that checks the actions of commands
+// with checks when it saves them (Code-ADR-0013, point 7).
+func NewService(repo Repository, codec *Codec, checks Checks) (*Service, error) {
+	switch {
+	case repo == nil:
+		return nil, errors.New("new command service: no repository")
+	case codec == nil:
+		return nil, errors.New("new command service: no codec")
+	}
+	if err := checks.validate(); err != nil {
+		return nil, fmt.Errorf("new command service: %w", err)
+	}
+	return &Service{repo: repo, codec: codec, checks: checks}, nil
 }
 
 // Command returns a command.
@@ -47,24 +59,38 @@ func (s *Service) Commands(ctx context.Context) ([]Command, error) {
 	return cmds, nil
 }
 
-// Save validates and stores a command and returns it as stored. A command
-// without an ID is new and gets one.
-func (s *Service) Save(ctx context.Context, cmd Command) (Command, error) {
+// Save validates and stores a command and returns it as stored, with the
+// warnings about it. A command without an ID is new and gets one.
+//
+// Besides the command itself, Save checks its actions (Code-ADR-0013,
+// point 7): commands and groups they refer to must exist, the names of
+// their result values must not hide built-in identifiers, and counters they
+// name are created if missing. Missing capabilities and unknown roots for
+// files do not stop the save; they come back as warnings.
+func (s *Service) Save(ctx context.Context, cmd Command) (Saved, error) {
 	if err := cmd.Validate(); err != nil {
-		return Command{}, err
+		return Saved{}, err
 	}
 	if cmd.ID.IsZero() {
 		cmd.ID = id.New()
 	}
+	warnings, err := s.checkActions(ctx, cmd)
+	if err != nil {
+		return Saved{}, err
+	}
 	cmd.CreatedAt, cmd.UpdatedAt = stamps(cmd.CreatedAt)
 	rec, err := s.codec.Record(cmd)
 	if err != nil {
-		return Command{}, err
+		return Saved{}, err
 	}
 	if err := s.repo.PutCommand(ctx, rec); err != nil {
-		return Command{}, fmt.Errorf("save command %q: %w", cmd.Name, err)
+		return Saved{}, fmt.Errorf("save command %q: %w", cmd.Name, err)
 	}
-	return s.Command(ctx, cmd.ID)
+	stored, err := s.Command(ctx, cmd.ID)
+	if err != nil {
+		return Saved{}, err
+	}
+	return Saved{Command: stored, Warnings: warnings}, nil
 }
 
 // Delete deletes a command.
