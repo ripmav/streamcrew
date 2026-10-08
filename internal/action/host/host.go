@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 // Package host has the action types that act on the computer of the core
-// (spec actions.md, B100 to B117): external_program starts programs. They
+// (spec actions.md, B100 to B117): file reads and changes files under the
+// roots the configuration releases, external_program starts programs. They
 // belong to the category "host" (Code-ADR-0013) and need a host capability
 // (ADR-0013), which the engine checks before every action (B7).
 package host
@@ -25,6 +26,14 @@ type Opener interface {
 	Open(ctx context.Context, path string, env []string) error
 }
 
+// Roots are the roots the configuration releases now (Code-ADR-0019,
+// point 3); config.Live implements it.
+type Roots interface {
+	// Root returns the directory of the root name; ok is false if no such
+	// root is released.
+	Root(name string) (dir string, ok bool)
+}
+
 // Ports are what the host types need.
 type Ports struct {
 	// Templates renders paths and arguments.
@@ -36,13 +45,21 @@ type Ports struct {
 	Env []string
 	// Opener opens paths with the program the system assigns to them.
 	Opener Opener
+	// Roots are the released roots of the file action.
+	Roots Roots
+	// IntN returns a random number from 0 to n-1 and is safe for
+	// concurrent use; math/rand/v2.IntN in production. The file action
+	// draws random lines with it.
+	IntN func(n int) int
 	// Logger records programs that were started and output that was cut.
 	Logger *slog.Logger
 }
 
-// ports are the ports of the host types.
+// ports are the ports of the host types, with the locks of the files
+// that all file actions share (B109).
 type ports struct {
 	Ports
+	files fileLocks
 }
 
 // env returns a copy of the environment of programs; it is never nil.
@@ -59,11 +76,22 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("host action types: no environment for programs")
 	case p.Opener == nil:
 		return nil, errors.New("host action types: no opener")
+	case p.Roots == nil:
+		return nil, errors.New("host action types: no roots")
+	case p.IntN == nil:
+		return nil, errors.New("host action types: no random numbers")
 	case p.Logger == nil:
 		return nil, errors.New("host action types: no logger")
 	}
 	ports := &ports{Ports: p}
 	return []action.Descriptor{
+		action.Descriptor{
+			Type:         TypeFile,
+			Version:      1,
+			Category:     action.CategoryHost,
+			Capabilities: []capability.Capability{capability.HostFS},
+			Schema:       fileSchema(),
+		}.WithKinds(FileWrite, func(k FileKind) (File, bool) { return newFile(ports, k) }),
 		action.Descriptor{
 			Type:         TypeExternalProgram,
 			Version:      1,

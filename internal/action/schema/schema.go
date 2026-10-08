@@ -74,6 +74,10 @@ const (
 	// lowercase ASCII letters and digits, as platform.Name.Validate checks
 	// them.
 	PatternPlatform = "^[a-z0-9]{1,32}$"
+	// PatternFileRoot is the form of the names of released roots: 1 to 32
+	// lowercase ASCII letters, digits and "_", as --file-root takes them
+	// (Code-ADR-0019, point 3).
+	PatternFileRoot = "^[a-z0-9_]{1,32}$"
 )
 
 // KeyKind is the member that picks the kind of an action document (Kinds).
@@ -340,6 +344,12 @@ func CounterName() *Schema {
 // "twitch" (actions.md B67, B90).
 func Platform() *Schema {
 	return &Schema{Type: "string", Pattern: PatternPlatform, UI: UIPlatform}
+}
+
+// FileRoot returns the field of the name of a released root for files
+// (actions.md B100).
+func FileRoot() *Schema {
+	return &Schema{Type: "string", Pattern: PatternFileRoot, UI: UIFileRoot}
 }
 
 // ResultName returns the field of the name of a result value
