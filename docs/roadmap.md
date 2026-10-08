@@ -92,7 +92,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
-| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); 3.2 in Arbeit: Spezifikation `command-engine.md` akzeptiert, Settings-Sektion „commands“ umgesetzt; als Nächstes Warteschlange und Ausführung (`internal/engine`) |
+| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); 3.2 in Arbeit: Spezifikation `command-engine.md` akzeptiert, Settings-Sektion „commands“, Warteschlange und Ausführung (`internal/engine`) umgesetzt; als Nächstes Auslösen mit Anforderungen und Aufrufe |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
@@ -377,11 +377,11 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 ### 3.2 Command-Engine
 
 - [x] Spezifikation [`docs/spec/command-engine.md`](spec/command-engine.md): Zustände, Sperrmodi, Pause, Verlauf (S), vom Projektinhaber geprüft und akzeptiert 2026-09-30; enthält auch die Settings-Sektion `commands`
-- [ ] Instanzen mit Zustandsmaschine (Pending → Running → Completed/Failed/Canceled) (S)
-- [ ] Warteschlange mit fünf Sperrmodi, Unlocked-Commands, Pause/Fortsetzen, eigene Pause für Entrance-Commands (L)
-- [ ] Abbrechen über `context`, Replay, Verlauf als Ringpuffer, Ereignisse `command.instance.*` (M)
-- [ ] Runner-Parameter pro Nutzer, Auflösung des Ziel-Nutzers, Rekursions- und Zyklenschutz, Zeitlimits je Action (M)
-- [ ] Nebenläufigkeitstests mit `testing/synctest` und `-race` (M)
+- [x] Instanzen mit Zustandsmaschine (Pending → Running → Completed/Failed/Canceled) (S), erledigt 2026-09-30: `internal/engine`
+- [ ] Warteschlange mit fünf Sperrmodi, Unlocked-Commands, Pause/Fortsetzen, eigene Pause für Entrance-Commands (L); erledigt bis auf die Pause der Entrance-Commands, die mit dem Auslösen kommt
+- [x] Abbrechen über `context`, Replay, Verlauf als Ringpuffer, Ereignisse `command.instance.*` (M), erledigt 2026-09-30
+- [ ] Runner-Parameter pro Nutzer, Auflösung des Ziel-Nutzers, Rekursions- und Zyklenschutz, Zeitlimits je Action (M); Zeitlimits erledigt 2026-09-30
+- [ ] Nebenläufigkeitstests mit `testing/synctest` und `-race` (M); Lasttest je Sperrmodus erledigt 2026-09-30, Tests der Aufrufe folgen
 - [x] Settings-Sektionen mit ihren Funktionen, aus 2.2 übertragen: „commands“ (Sperrmodus, Fehler-Cooldowns) hier (S), erledigt 2026-09-30: `internal/settings`, dazu die Fehlerpolitik je Command (Migration 0005). Die übrigen stehen als eigene Punkte bei ihren Phasen: „locale“ mit ADR-0022 in 3.6 (Entscheidung des Projektinhabers vom 2026-09-30), „general“ und „chat“ in 5.1, „moderation“ in 5.5, „overlay“ in 7.1
 
 ### 3.3 Action-Framework und P0-Actions
@@ -426,6 +426,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - Deduplizierung
 - [ ] Trigger-Erkennung: `!`-Präfix, Wildcards, längster Treffer, Argumente inkl. Anführungszeichen (M)
 - [ ] ADR-0022 Internationalisierung; Grundgerüst mit EN und DE (S)
+- [ ] Command-Engine und Template-Engine in der Composition Root verdrahten: Engine als Runnable beim Supervisor, ihre Ereignistypen im Katalog, Settings, Ports (S)
 - [ ] Settings-Sektion „locale“ (Sprache und Formate des Profils), aus 3.2 verschoben; danach Datums-, Zeit- und Zahlenformate der Templates nach der Locale ([`template.md`](spec/template.md), B41) (S)
 
 **Exit-Kriterien (M1):**
@@ -1200,3 +1201,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Settings-Sektion „locale“ von 3.2 nach 3.6 verschoben, weil sie an ADR-0022 hängt (Entscheidung des Projektinhabers). |
 | 2026-09-30 | Spezifikation `command-engine.md` vom Projektinhaber geprüft und akzeptiert; offene Fragen werden am Original geprüft, bis dahin gilt das beschriebene Verhalten. |
 | 2026-09-30 | Umsetzung von 3.2 begonnen: Settings-Sektion „commands“ (`internal/settings`) und Fehlerpolitik je Command (Migration 0005). Die übrigen Settings-Sektionen aus 2.2 stehen jetzt als eigene Punkte in 5.1, 5.5 und 7.1, damit sie beim Abhaken von 3.2 nicht verloren gehen. |
+| 2026-09-30 | Warteschlange und Ausführung der Command-Engine umgesetzt (`internal/engine`): Instanzen und Zustände, fünf Sperrmodi ohne Überholen, Pause, Abbrechen, Wiederholen, Verlauf, Ereignisse `command.instance.*` und `command.queue.*`, Fehlerpolitik, Zeitlimits, geordnetes Herunterfahren; Lasttest je Sperrmodus mit `-race`. Das Verdrahten in der Composition Root steht als eigener Punkt in 3.6, wenn es Auslöser gibt. |

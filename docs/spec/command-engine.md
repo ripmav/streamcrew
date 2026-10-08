@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-09-30 |
 | **Bezug** | Roadmap Phase 3.2; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0004](../adr/code/0004-nebenlaeufigkeit-und-supervisor.md), [Code-ADR-0011](../adr/code/0011-event-bus.md), [Code-ADR-0012](../adr/code/0012-template-engine.md); Plan §5, §6.8, §6.9; [`commands.md`](commands.md), [`template.md`](template.md), [`events.md`](events.md), [`users-and-roles.md`](users-and-roles.md) |
-| **Umsetzung** | Settings-Sektion `commands` in `internal/settings` (B90); Fehlerpolitik im Datenmodell der Commands (B71, `internal/domain/command`, Migration 0005). Die Engine folgt in `internal/engine`. |
+| **Umsetzung** | Settings-Sektion `commands` in `internal/settings` (B90); Fehlerpolitik im Datenmodell der Commands (B71, `internal/domain/command`, Migration 0005). `internal/engine`: Instanzen und Zustände (B1–B4), Start von Hand und Grenze der Warteschlange (B14, B15), Sperren (B20–B29), Pause (B40, B42), Abbrechen, Wiederholen und Herunterfahren (B50, B51, B53–B55), Verlauf und Ereignisse (B60–B62), Ausführung mit Fehlerpolitik und Zeitlimit (B70–B72). Es folgen: Auslösen mit Anforderungen (B10–B13), Pause der Entrance-Commands (B41), Aufrufe (B30–B36, B52, B73), Zielnutzer und Runner-Parameter (B81, B82). |
 
 ## Zweck und Umfang
 
@@ -171,17 +171,17 @@ Nicht Teil dieser Spezifikation:
 
 ## Akzeptanzkriterien
 
-- [ ] B1–B4: Zustandsautomat mit allen erlaubten Übergängen; ein Endzustand ändert sich nicht; Tests für Ändern und Löschen während des Wartens.
+- [x] B1–B4: Zustandsautomat mit allen erlaubten Übergängen; ein Endzustand ändert sich nicht; Tests für Ändern und Löschen während des Wartens.
 - [ ] B10–B15: Anforderungen vor dem Einreihen, Cooldown ab dem Einreihen, Fehler-Cooldown in allen drei Arten und sein Zurücksetzen, Start von Hand ohne Anforderungen, volle Warteschlange; Zeit mit `testing/synctest`.
-- [ ] B20–B29, B104: je Sperrmodus ein Test mit mehreren Instanzen und der Reihenfolge ihrer Starts; kein Überholen; freigegebene Commands; Wechsel des Modus.
+- [x] B20–B29, B104: je Sperrmodus ein Test mit mehreren Instanzen und der Reihenfolge ihrer Starts; kein Überholen; freigegebene Commands; Wechsel des Modus.
 - [ ] B30–B36, B105, B106: Aufrufe mit und ohne Warten, Sperren, Pause, geteilte und kopierte Werte, Fehler des Aufgerufenen.
 - [ ] B40–B42: Pause und Fortsetzen, eigene Pause für Entrance-Commands.
 - [ ] B50–B55, B109: Abbrechen eingereihter und laufender Instanzen samt wartender Aufrufe, alle abbrechen, Wiederholen, Herunterfahren.
-- [ ] B60–B62: Verlauf als Ringpuffer; Ereignisse je Zustandswechsel in der richtigen Reihenfolge.
+- [x] B60–B62: Verlauf als Ringpuffer; Ereignisse je Zustandswechsel in der richtigen Reihenfolge.
 - [ ] B70–B74: Fehlerpolitik, Zeitlimit, Tiefe und Zyklen von Aufrufen.
 - [ ] B80–B82: Parameter und Zielnutzer im Scope der Templates.
 - [x] B90: Settings-Sektion mit Standardwerten, Prüfung und Migration nach Code-ADR-0010.
-- [ ] Nebenläufigkeit: alle Tests der Engine mit `-race`; ein Lasttest mit vielen gleichzeitig ausgelösten Commands in jedem Sperrmodus.
+- [x] Nebenläufigkeit: alle Tests der Engine mit `-race`; ein Lasttest mit vielen gleichzeitig ausgelösten Commands in jedem Sperrmodus.
 
 ## Offene Fragen
 
@@ -213,3 +213,4 @@ Nicht Teil dieser Spezifikation:
 | 2026-09-30 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
 | 2026-09-30 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
 | 2026-09-30 | Settings-Sektion `commands` und Fehlerpolitik im Datenmodell umgesetzt. Festlegungen dabei: Die Sektion hat die Felder `lockMode`, `errorCooldown`, `errorCooldownDuration` (Go-Dauer, Code-ADR-0009) und `argDelimiter`. Eine Dauer von 0 hält keine Fehlermeldung zurück; negative Dauern sind ungültig. Das Trennzeichen darf nicht leer sein und keine Steuerzeichen enthalten, sonst ist es frei. Die Fehlerpolitik ist ein Pflichtfeld ohne leeren Wert (keine magischen Werte, Code-ADR-0017 vorgeschlagen); bestehende Commands bekommen mit Migration 0005 `continue`. |
+| 2026-09-30 | Warteschlange und Ausführung umgesetzt (`internal/engine`). Festlegungen dabei: Die Engine nimmt Instanzen nur an, solange sie als Runnable läuft; davor und nach dem Herunterfahren lehnt sie ab. Die Einstellungen liest sie bei jedem Einreihen; sind sie nicht lesbar oder ungültig, etwa ohne Sperrmodus oder Zeitzone, wird nicht eingereiht. Ebenso lehnt sie einen Command mit unbekannter Art oder Fehlerpolitik ab und Parameter, die sich widersprechen: Argumente ohne den Text, aus dem sie stammen, oder Emotes ohne Nachricht. Kein Wert fällt still auf einen Standard (Vorgabe des Projektinhabers: keine magischen Werte, Code-ADR-0017 vorgeschlagen). Bei `per_action_type` bekommt jeder Action-Typ eine Sperre, auch ein unbekannter; welche Typen zu `visual_audio` gehören, sagt eine Funktion, die die Typ-Registry (Code-ADR-0013) liefern wird. Ein Command ohne Actions wartet während der Pause wie ein freigegebener. Eine Action ohne eigenes Zeitlimit hat 60 s; ein eigenes muss positiv sein, sonst scheitert die Action, ohne zu laufen. Eine Action, die ihr Zeitlimit überschreitet, gilt als gescheitert, auch wenn sie danach ohne Fehler zurückkehrt; eine Panic in einer Action ist deren Fehler. Ohne Zielnutzer vom Aufrufer setzt die Engine den auslösenden Nutzer ausdrücklich als Ziel (B81). Im Verlauf zählt die Position einer Action ab 1; der Nutzer steht dort mit ID und dem Anzeigenamen auf der Plattform des Durchlaufs, ohne Identität dort mit dem der ersten. Ereignisse zur Pause gibt es nur beim Wechsel; erneutes Pausieren oder Fortsetzen wirkt nicht. Beim Wiederholen mehrerer Instanzen läuft jede für sich, mit einem Ergebnis je Instanz; eine, die nicht wiederholt werden kann, hält die anderen nicht auf. In den Ereignissen sind Listen nie `null`, sondern leer; Felder, die nicht gelten, fehlen. Abbrechen einer Instanz, die weder wartet, läuft noch im Verlauf steht, ist ein Fehler. Laufende Instanzen bekommen beim Herunterfahren standardmäßig 10 s; die Composition Root leitet den Wert aus dem Shutdown-Timeout ab. |
