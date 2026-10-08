@@ -34,6 +34,18 @@ func (q *Queries) DeleteCommandGroup(ctx context.Context, id string) (int64, err
 	return result.RowsAffected()
 }
 
+const deleteCooldownGroup = `-- name: DeleteCooldownGroup :execrows
+DELETE FROM cooldown_groups WHERE id = ?
+`
+
+func (q *Queries) DeleteCooldownGroup(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteCooldownGroup, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteTriggers = `-- name: DeleteTriggers :exec
 DELETE FROM command_triggers WHERE command_id = ?
 `
@@ -80,6 +92,26 @@ func (q *Queries) GetCommandGroup(ctx context.Context, id string) (CommandGroup,
 		&i.Name,
 		&i.NameKey,
 		&i.TimerInterval,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getCooldownGroup = `-- name: GetCooldownGroup :one
+
+SELECT id, name, name_key, duration, created_at, updated_at FROM cooldown_groups WHERE id = ?
+`
+
+// SPDX-License-Identifier: MIT
+func (q *Queries) GetCooldownGroup(ctx context.Context, id string) (CooldownGroup, error) {
+	row := q.db.QueryRowContext(ctx, getCooldownGroup, id)
+	var i CooldownGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.NameKey,
+		&i.Duration,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -217,6 +249,40 @@ func (q *Queries) ListCommands(ctx context.Context) ([]Command, error) {
 	return items, nil
 }
 
+const listCooldownGroups = `-- name: ListCooldownGroups :many
+SELECT id, name, name_key, duration, created_at, updated_at FROM cooldown_groups ORDER BY name_key, id
+`
+
+func (q *Queries) ListCooldownGroups(ctx context.Context) ([]CooldownGroup, error) {
+	rows, err := q.db.QueryContext(ctx, listCooldownGroups)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CooldownGroup{}
+	for rows.Next() {
+		var i CooldownGroup
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.NameKey,
+			&i.Duration,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTriggers = `-- name: ListTriggers :many
 SELECT trigger_text FROM command_triggers WHERE command_id = ? ORDER BY position
 `
@@ -323,6 +389,37 @@ func (q *Queries) PutCommandGroup(ctx context.Context, arg PutCommandGroupParams
 		arg.Name,
 		arg.NameKey,
 		arg.TimerInterval,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const putCooldownGroup = `-- name: PutCooldownGroup :exec
+INSERT INTO cooldown_groups (id, name, name_key, duration, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (id) DO UPDATE SET
+    name = excluded.name,
+    name_key = excluded.name_key,
+    duration = excluded.duration,
+    updated_at = excluded.updated_at
+`
+
+type PutCooldownGroupParams struct {
+	ID        string
+	Name      string
+	NameKey   string
+	Duration  int64
+	CreatedAt int64
+	UpdatedAt int64
+}
+
+func (q *Queries) PutCooldownGroup(ctx context.Context, arg PutCooldownGroupParams) error {
+	_, err := q.db.ExecContext(ctx, putCooldownGroup,
+		arg.ID,
+		arg.Name,
+		arg.NameKey,
+		arg.Duration,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)

@@ -37,7 +37,7 @@ const (
 func requirementTypes() []polydoc.Entry[Requirement] {
 	return []polydoc.Entry[Requirement]{
 		{Type: TypeRole, Version: 1, Decode: decodeRequirement[RoleRequirement]},
-		{Type: TypeCooldown, Version: 1, Decode: decodeRequirement[CooldownRequirement]},
+		{Type: TypeCooldown, Version: 2, Decode: decodeRequirement[CooldownRequirement], Migrations: []polydoc.Migration{migrateCooldownV1}},
 		{Type: TypeCurrency, Version: 1, Decode: decodeRequirement[CurrencyRequirement]},
 		{Type: TypeRank, Version: 1, Decode: decodeRequirement[RankRequirement]},
 		{Type: TypeInventory, Version: 1, Decode: decodeRequirement[InventoryRequirement]},
@@ -82,18 +82,38 @@ type CooldownScope string
 const (
 	// CooldownStandard applies to everyone.
 	CooldownStandard CooldownScope = "standard"
-	// CooldownGroup applies to everyone and all commands of the group.
-	CooldownGroup CooldownScope = "group"
+	// CooldownGrouped applies to everyone and all commands of the cooldown
+	// group (B33).
+	CooldownGrouped CooldownScope = "group"
 	// CooldownPerUser applies to each user separately.
 	CooldownPerUser CooldownScope = "per_user"
-	// CooldownPerUserGroup applies to each user separately, across the group.
-	CooldownPerUserGroup CooldownScope = "per_user_group"
+	// CooldownPerUserGrouped applies to each user separately, across the
+	// cooldown group.
+	CooldownPerUserGrouped CooldownScope = "per_user_group"
 )
 
-// CooldownRequirement blocks a command for a duration after it ran (B41).
+// Grouped reports whether the scope shares its cooldown through a cooldown
+// group (B33).
+func (s CooldownScope) Grouped() bool {
+	return s == CooldownGrouped || s == CooldownPerUserGrouped
+}
+
+// CooldownRequirement blocks a command for a duration after it was queued
+// (B41). The scopes standard and per_user have their own Duration; the
+// grouped scopes name a cooldown group and take its duration (B33).
+//
+// Version 1 had a duration for every scope and shared the grouped scopes
+// through the command group. Its migration drops that duration; such a
+// requirement names no cooldown group until the streamer picks one, and
+// the command is faulty until then (requirements.md, B7).
 type CooldownRequirement struct {
-	Scope    CooldownScope    `json:"scope"`
-	Duration polydoc.Duration `json:"duration"`
+	Scope CooldownScope `json:"scope"`
+	// Duration is the duration of the scopes standard and per_user; zero
+	// for the grouped scopes.
+	Duration polydoc.Duration `json:"duration,omitzero"`
+	// Group is the cooldown group of the grouped scopes; zero for the
+	// others.
+	Group id.ID `json:"group,omitzero"`
 }
 
 // DocType implements polydoc.Document.
@@ -102,12 +122,39 @@ func (CooldownRequirement) DocType() string { return TypeCooldown }
 // Validate implements Requirement.
 func (r CooldownRequirement) Validate() error {
 	switch r.Scope {
-	case CooldownStandard, CooldownGroup, CooldownPerUser, CooldownPerUserGroup:
+	case CooldownStandard, CooldownPerUser:
+		if r.Duration <= 0 {
+			return errors.New("the cooldown duration must be positive")
+		}
+		if !r.Group.IsZero() {
+			return fmt.Errorf("scope %q has no cooldown group", r.Scope)
+		}
+	case CooldownGrouped, CooldownPerUserGrouped:
+		if r.Group.IsZero() {
+			return fmt.Errorf("scope %q needs a cooldown group", r.Scope)
+		}
+		if r.Duration != 0 {
+			return fmt.Errorf("scope %q takes the duration of its cooldown group", r.Scope)
+		}
 	default:
 		return fmt.Errorf("unknown cooldown scope %q", r.Scope)
 	}
-	if r.Duration <= 0 {
-		return errors.New("the cooldown duration must be positive")
+	return nil
+}
+
+// migrateCooldownV1 drops the duration of the grouped scopes of version 1;
+// version 2 takes it from the cooldown group.
+func migrateCooldownV1(doc map[string]jsontext.Value) error {
+	raw, ok := doc["scope"]
+	if !ok {
+		return errors.New("cooldown scope missing")
+	}
+	var scope CooldownScope
+	if err := json.Unmarshal(raw, &scope); err != nil {
+		return fmt.Errorf("cooldown scope: %w", err)
+	}
+	if scope.Grouped() {
+		delete(doc, "duration")
 	}
 	return nil
 }
