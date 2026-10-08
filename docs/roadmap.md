@@ -403,7 +403,7 @@ Reihenfolge: erst die Bereinigung nach Code-ADR-0017, dann die Doku als unterste
   - Anschluss an die Engine (seit 3.2): Actions setzen `engine.Performer` um, verschachtelte zusätzlich `engine.Container` (B22); die Registry setzt den Port für Bild und Ton (B23) und die Capabilities um; „aktuellen Command beenden“ gibt `engine.ErrStop` zurück, die Command-Action nutzt `engine.Run.Call`
 - [ ] Action-Framework nach [Code-ADR-0013](adr/code/0013-typ-registry.md), vor den einzelnen Typen (M):
   - `internal/capability`; `internal/action` mit Registry und Feldtypen (`Template`, `Amount`, `ResultName`); `internal/action/schema` mit eigenem Schema-Typ und Bausteinen; Konformitätstest mit `github.com/santhosh-tekuri/jsonschema/v6`, nur in Tests
-  - `internal/polydoc`: Kind-Actions als Dokumente derselben Familie, höchstens 16 Ebenen tief
+  - `internal/polydoc`: Kind-Actions als Dokumente derselben Familie, höchstens 16 Ebenen tief; erledigt 2026-10-01 (`polydoc.MaxDepth`, `polydoc.ErrTooDeep`)
   - Engine: Schalter „aktiv“, Kind-Actions über `Run.PerformChild` mit Fehlerpolitik und Pfad im Verlauf, Zeitlimit als anhaltbarer Timer mit `Run.LimitTo`, Port `engine.ActionTypes` statt `engine.WithVisualAudio`
   - Speichern: Verweise, Namen der Ergebniswerte, Warnungen bei fehlenden Capabilities
 - [ ] Plattform-Ports nach Plan §6.11 in `internal/platform` (S): `Chat` (senden, antworten, flüstern, löschen), `Moderation`, Kanalinformation, Nutzer nachschlagen; die Actions nutzen sie, die Mock-Plattform (3.6) und Twitch (Phase 4) setzen sie um
@@ -1240,3 +1240,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-01 | Spezifikationen `actions.md` und `requirements.md` vom Projektinhaber geprüft und akzeptiert. |
 | 2026-10-01 | Code-ADR-0013 „Typ-Registry für Actions“ vorgeschlagen: Typ-IDs der P0-Actions, Descriptor mit eigenem Schema-Typ (geprüft in Tests mit `github.com/santhosh-tekuri/jsonschema/v6`, das als einzige der geprüften Bibliotheken den Pflichtteil der offiziellen Test-Suite ganz besteht), Kind-Actions als verschachtelte Dokumente, Prüfen beim Speichern und die Erweiterungen der Engine für Schalter „aktiv“, Kind-Actions mit eigenem Zeitlimit, Pfade im Verlauf und Capabilities. Neue Aufgabe „Action-Framework“ in 3.3. |
 | 2026-10-01 | Code-ADR-0013 vom Projektinhaber angenommen. Plan §2.4, §6.9, §8 und §12.2 angepasst, Code-ADR-0010 als ergänzt vermerkt, die Typ-IDs in `actions.md` und in den Aufgaben von 3.3 eingetragen. Als Nächstes das Action-Framework. |
+| 2026-10-01 | `internal/polydoc` liest und schreibt verschachtelte Dokumente derselben Familie über die Registry, höchstens 16 Ebenen tief (Code-ADR-0013, Punkt 5); `Entry.Decode` und `polydoc.Strict` bekommen dafür die Optionen der Registry. |

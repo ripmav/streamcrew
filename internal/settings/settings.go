@@ -56,8 +56,8 @@ func New(repo Repository) (*Service, error) {
 	return &Service{repo: repo, registry: r}, nil
 }
 
-func decode[S Section](data []byte) (Section, error) {
-	s, err := polydoc.Strict[S](data)
+func decode[S Section](data []byte, opts json.Options) (Section, error) {
+	s, err := polydoc.Strict[S](data, opts)
 	if err != nil {
 		return nil, err
 	}
