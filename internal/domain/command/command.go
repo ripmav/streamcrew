@@ -87,11 +87,13 @@ type Header struct {
 	Unlocked bool
 	// GroupID is the group of the command; zero for none (B30).
 	GroupID id.ID
-	// Triggers of a chat command, without "!", as entered (B10 to B12).
+	// Triggers of a chat command, as entered, by the rules of TriggerMode
+	// (B10 to B12).
 	Triggers []string
-	// Wildcard lets the triggers of a chat command match anywhere in a
-	// message as whole words (B13).
-	Wildcard bool
+	// TriggerMode says how a chat message names the triggers of a chat
+	// command (B11, B13); it must be set for chat commands and empty for
+	// the other kinds.
+	TriggerMode TriggerMode
 	// Event is the event type of an event command (B20).
 	Event event.Type
 	// ErrorPolicy says what happens after an action fails (spec
@@ -159,7 +161,10 @@ func (c Command) Validate() error {
 	}
 	switch c.Kind {
 	case KindChat:
-		if err := validTriggers(c.Triggers); err != nil {
+		if !c.TriggerMode.Valid() {
+			return invalid("unknown trigger mode %q", c.TriggerMode)
+		}
+		if err := validTriggers(c.Triggers, c.TriggerMode); err != nil {
 			return err
 		}
 		if c.Event != "" {
@@ -247,8 +252,8 @@ func position(path []int) string {
 }
 
 func noTriggers(h Header) error {
-	if len(h.Triggers) > 0 || h.Wildcard {
-		return invalid("only chat commands have triggers")
+	if len(h.Triggers) > 0 || h.TriggerMode != "" {
+		return invalid("only chat commands have triggers and a trigger mode")
 	}
 	return nil
 }

@@ -6,7 +6,7 @@ SELECT * FROM commands ORDER BY name, id;
 
 -- name: PutCommand :exec
 INSERT INTO commands (
-    id, name, kind, enabled, unlocked, group_id, wildcard, event_type,
+    id, name, kind, enabled, unlocked, group_id, trigger_mode, event_type,
     error_policy, requirements, actions, created_at, updated_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE SET
@@ -15,7 +15,7 @@ ON CONFLICT (id) DO UPDATE SET
     enabled = excluded.enabled,
     unlocked = excluded.unlocked,
     group_id = excluded.group_id,
-    wildcard = excluded.wildcard,
+    trigger_mode = excluded.trigger_mode,
     event_type = excluded.event_type,
     error_policy = excluded.error_policy,
     requirements = excluded.requirements,
@@ -38,8 +38,8 @@ SELECT command_id, trigger_text FROM command_triggers ORDER BY command_id, posit
 DELETE FROM command_triggers WHERE command_id = ?;
 
 -- name: InsertTrigger :exec
-INSERT INTO command_triggers (command_id, position, trigger_text, trigger_key, active)
-VALUES (?, ?, ?, ?, ?);
+INSERT INTO command_triggers (command_id, position, trigger_text, trigger_key, wildcard, active)
+VALUES (?, ?, ?, ?, ?, ?);
 
 -- name: SetTriggersActive :exec
 UPDATE command_triggers SET active = ? WHERE command_id = ?;
