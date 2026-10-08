@@ -353,7 +353,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 | **Ziel** | plattformneutrale Ausführung von Commands, testbar ohne Live-Plattform |
 | **Voraussetzungen** | Phase 2; die `$`-Identifier-Namen gelten als rechtlich unbedenklich, bis die Einschätzung am Ende (Gate O, O.1) etwas anderes ergibt |
 | **Aufwand** | 5–7 PW |
-| **ADRs** | 0022; Code-ADRs 0012, 0013, 0017 |
+| **ADRs** | 0022; Code-ADRs 0012, 0013, 0017, 0018 |
 
 ### 3.1 Template-Engine
 
@@ -403,6 +403,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [ ] `platformmessage`, `userlookup` (S)
 - [ ] `file`: lesen, schreiben, anhängen, Zeile lesen; nur unter freigegebenen Wurzeln via `os.Root` (S)
 - [ ] `externalprogram`: nur mit `host:process`; Timeout; Ausgabe in Identifier (S)
+- [ ] Wechsel auf `encoding/json/v2` nach [Code-ADR-0018](adr/code/0018-json-v2.md) (akzeptiert 2026-09-30), vor der Typ-Registry, weil sie auf `internal/polydoc` aufbaut (M)
 
 ### 3.4 Requirements
 
@@ -1205,3 +1206,5 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Warteschlange und Ausführung der Command-Engine umgesetzt (`internal/engine`): Instanzen und Zustände, fünf Sperrmodi ohne Überholen, Pause, Abbrechen, Wiederholen, Verlauf, Ereignisse `command.instance.*` und `command.queue.*`, Fehlerpolitik, Zeitlimits, geordnetes Herunterfahren; Lasttest je Sperrmodus mit `-race`. Das Verdrahten in der Composition Root steht als eigener Punkt in 3.6, wenn es Auslöser gibt. |
 | 2026-09-30 | Auslösen der Command-Engine umgesetzt: Anforderungen vor dem Einreihen über den Port `engine.Requirements` (Umsetzung in 3.4), Fehler-Cooldowns in allen drei Arten, Platz in der Warteschlange vor der Prüfung, Pause der Entrance-Commands, Zielnutzer aus dem ersten Argument, Runner-Parameter je Nutzer, Event-Commands von `app.stopping` beim Herunterfahren. |
 | 2026-09-30 | Aufrufe anderer Commands umgesetzt (`engine.Run.Call`): mit Warten als Teil des Aufrufers ohne Sperren und Pause, mit geteilten Werten des Durchlaufs (`template.Scope.Share`); ohne Warten eingereiht mit einer Kopie der Werte; Tiefe höchstens 10, keine Zyklen. Phase 3.2 abgeschlossen. |
+| 2026-09-30 | Code-ADR-0018 „JSON mit `encoding/json/v2`“ vorgeschlagen, das ergänzende ADR zu Punkt 7 von Code-ADR-0010: v2 für alles JSON im Core, strenges Lesen nach den Standards von v2, reproduzierbares Schreiben, Migrationen ohne Verlust an Genauigkeit. Die Umsetzung steht in 3.3, vor der Typ-Registry. |
+| 2026-09-30 | Code-ADR-0018 vom Projektinhaber abgenommen, ohne Änderungen. |
