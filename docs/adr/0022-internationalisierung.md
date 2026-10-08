@@ -78,6 +78,8 @@
    - **Logs, CLI und `doctor`** bleiben englisch und ohne Katalog. Sie dienen der Diagnose und sollen in jedem Supportfall gleich lauten.
 6. **Werte in Meldungen:** Text, ganze Zahlen und Zahlen mit Nachkommastellen. Dauern schreibt das Paket selbst aus Katalogmeldungen je Einheit, etwa `{n, plural, one {# minute} other {# minutes}}`. So entstehen „2 minutes 5 seconds“ oder „2 Minuten 5 Sekunden“.
 7. **Sprache des Profils:** Die Settings-Sektion „locale“ beginnt schon in Roadmap 3.4, mit `language` (`en` oder `de`, Standard `en`). Die Formate kommen in 3.6 als neue Version der Sektion. Eine Sprache ohne Katalog lehnt das Speichern ab.
+
+   *Ergänzt am 2026-10-04 (Roadmap 3.6), Entscheidungen des Projektinhabers: Die Formate sind die von Datum und Uhrzeit samt den Namen der Monate und Wochentage, mit eigenen Mustern für eine feste Liste von Locales, weil `golang.org/x/text` keine Formate für Datum und Uhrzeit kennt. Zahlen in Templates folgen der Locale nicht, damit sie in Ausdrücken Zahlen bleiben ([`template.md`](../spec/template.md), B41); Zahlen in Meldungen formatiert weiter dieses Paket nach der Sprache (Punkt 3).*
 8. **Schlüssel im Code** sind Konstanten eines eigenen Typs `i18n.Key`, keine verstreuten Zeichenketten. Tests prüfen:
    - jede Konstante hat in jeder Sprache einen Eintrag
    - jede Sprache hat dieselben Schlüssel

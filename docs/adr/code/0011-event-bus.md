@@ -41,9 +41,11 @@
    - Optionen: Filter nach Typ (genau oder Präfix wie `twitch.`), zusätzlich eine Prädikatfunktion; Puffergröße (Standard 256).
    - Interne Konsumenten, die nichts verlieren dürfen, etwa der Event-Service für Event-Commands, bekommen große Puffer (z. B. 4096). Sie reichen Ereignisse sofort an eigene Warteschlangen weiter, statt im Empfang zu arbeiten.
    - Jeder Konsument läuft als Runnable im Supervisor ([Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md)). Der Bus startet selbst keine Goroutinen.
+
+   *Ergänzt am 2026-10-04 (Roadmap 3.6), Entscheidung des Projektinhabers: Der Event-Service liest Plattform-Ereignisse nicht vom Bus. Adapter übergeben, was sie empfangen, über einen Port in `internal/connector` an den Event-Service: Chatnachrichten, Ereignisse und den Zustand des Streams. Er wendet die Regeln aus [`events.md`](../../spec/events.md) an (Einmal-Ereignisse, Schwelle der Sammelgeschenke, Karenzzeit), veröffentlicht die Ereignisse auf dem Bus und löst die Ereignis-Commands direkt aus. So wird ein unterdrücktes Ereignis gar nicht erst veröffentlicht, und kein Eingang geht bei vollem Puffer verloren. Frontends und andere Konsumenten lesen weiter vom Bus.*
 5. **Nicht Aufgabe des Busses:**
    - Persistenz: Das Ereignisprotokoll (`event_log`) ist ein eigener Abonnent (Phase 5.3).
-   - Deduplizierung von Plattform-Nachrichten: Das übernehmen die Adapter mit einem TTL-Cache vor dem Veröffentlichen.
+   - Deduplizierung von Plattform-Nachrichten: Das übernehmen die Adapter mit einem TTL-Cache vor dem Veröffentlichen, seit Roadmap 3.6 vor der Übergabe an den Event-Service (Punkt 4).
    - Anfrage-Antwort zwischen Komponenten: Dafür gibt es Methodenaufrufe über Interfaces.
 6. **Lebenszyklus:** Die Composition Root erzeugt einen Bus und reicht ihn weiter ([Code-ADR-0002](0002-dependency-injection.md)). `Close` beim Shutdown beendet alle Abonnements; danach verwirft `Publish` still.
 7. **Tests** in `testing/synctest`: Reihenfolge je Abonnement, Filter, voller Puffer mit Lag-Hinweis, Ende über den Kontext, `Publish` blockiert nicht ([Code-ADR-0006](0006-teststrategie.md)).

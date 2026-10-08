@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12); Phase 2 abgeschlossen (PR #36) |
-| **Stand** | 2026-10-01 |
+| **Stand** | 2026-10-04 |
 | **Grundlage** | [`plan.md`](plan.md) (Architektur, Prioritäten, Risiken), [`starting.md`](starting.md), [`adr/`](adr/README.md) |
 | **Aktuelle Phase** | Phase 3: Engine, Templates, Actions, Mock (in Arbeit) |
 
@@ -92,7 +92,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
-| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); 3.2 Command-Engine abgeschlossen (Settings-Sektion „commands“, Warteschlange, Ausführung, Auslösen, Aufrufe); 3.3 Action-Framework und P0-Actions abgeschlossen (Typ-Registry, Rechte je Betriebsmodus, alle 15 P0-Actions); 3.4 in Arbeit (ADR-0022 mit `internal/i18n`, Requirement-Service mit Rolle und Cooldowns) |
+| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); 3.2 Command-Engine abgeschlossen (Settings-Sektion „commands“, Warteschlange, Ausführung, Auslösen, Aufrufe); 3.3 Action-Framework und P0-Actions abgeschlossen (Typ-Registry, Rechte je Betriebsmodus, alle 15 P0-Actions); 3.4 abgeschlossen bis auf die Schwelle (P1); 3.5 abgeschlossen (Commands als Code, Typkatalog); 3.6 in Arbeit (Mock-Plattform, Event-Service, Verdrahtung) |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
@@ -478,19 +478,26 @@ Zuerst die Änderungen an Datenmodell und Engine aus den geklärten Fragen vom 2
 
 ### 3.6 Mock-Plattform und Event-Grundlagen
 
-- [ ] `internal/connector/mock`: simulierte Nutzer, Chat und Events; Ausgaben ins Log und auf den Bus (M)
-- [ ] `event simulate` und `chat send --as <nutzer>`, nur im Mock- bzw. Dev-Modus (S)
-- [ ] Event-Service, Grundlage (M):
-  - Event → Event-Command
-  - generische plattformneutrale Events
-  - Einmal-Events pro Nutzer
-  - Deduplizierung
+Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Event-Service, Trigger-Erkennung, Verdrahtung und Mock-Konsole, zuletzt die Rechenfunktionen und die Locale-Formate.
+
+- [x] Doku (S), Entscheidungen des Projektinhabers vom 2026-10-04, erledigt 2026-10-04:
+  - [`events.md`](spec/events.md): Nutzlast der plattformneutralen Ereignisse (B9), Settings-Sektion `events` (B10), eine Stream-Sitzung je Plattform (B11), Auslösen der Ereignis-Commands (B12), Ablauf einer Chatnachricht und eines Beitritts (B13, B14)
+  - Eingang der Adapter über einen Port an den Event-Service statt über den Bus ([Code-ADR-0011](adr/code/0011-event-bus.md), Punkt 4; Plan §6.7)
+  - Mock-Konsole statt eigener CLI-Befehle bis zur API (Plan §7.2)
+  - Locale-Formate mit eigenen Mustern, Zahlen kanonisch ([`template.md`](spec/template.md), B41; [ADR-0022](adr/0022-internationalisierung.md), Punkt 7)
+- [ ] `internal/connector/mock`: simulierte Nutzer, Chat, Stream und Events; Ausgaben ins Log und auf den Bus; Deduplizierung mit einem TTL-Cache für alle Adapter in `internal/connector` ([`events.md`](spec/events.md), B22; Code-ADR-0011, Punkt 5) (M)
+- [ ] Event-Service, Grundlage, hinter dem Eingangs-Port der Adapter (M):
+  - Event → Event-Command ([`events.md`](spec/events.md), B12)
+  - generische plattformneutrale Events mit ihrer Nutzlast (B2, B9)
+  - Einmal-Events je Sitzung und je Nutzer (B3, B11)
+  - Ablauf einer Chatnachricht und eines Beitritts (B13, B14)
   - Begrüßungen ([`command-engine.md`](spec/command-engine.md), B41): erste Nachricht in der Sitzung nur, solange der Stream live ist; Entrance-Command des Nutzers mit `engine.Request.Entrance`, Ereignis-Commands auf `chat.user.entrance` erkennt die Engine selbst; beim Offline-Gehen `engine.Engine.CancelEntrance`
-  - Stream-Sitzung mit Karenzzeit für kurze Unterbrechungen, gespeichert über einen Neustart ([`events.md`](spec/events.md), B3, B8, B21)
-  - Schwelle der Sammelgeschenke als Einstellung, Standard 2 ([`events.md`](spec/events.md), B5)
+  - Stream-Sitzung je Plattform mit Karenzzeit für kurze Unterbrechungen, gespeichert über einen Neustart ([`events.md`](spec/events.md), B3, B8, B11, B21, B27)
+  - Schwelle der Sammelgeschenke und Karenzzeit in der Settings-Sektion `events` (B5, B10)
 - [ ] Trigger-Erkennung: Schalter für das `!`, exakte Treffer vor eindeutigen ohne Schreibweise, längster Treffer, Platzhalter zuletzt, Argumente inkl. Anführungszeichen ([`commands.md`](spec/commands.md), B11, B13, B16); die Nachrichten in ihrer Reihenfolge über `engine.Engine.Submit` abgeben, ohne auf die Entscheidungen zu warten ([`command-engine.md`](spec/command-engine.md), B16) (M)
-- [ ] Command-Engine und Template-Engine in der Composition Root verdrahten: Engine als Runnable beim Supervisor, ihre Ereignistypen im Katalog, Settings, Ports; die Typ-Registry mit `App.Rights` als Quelle der Capabilities, die Wurzeln für `command.Roots` und die Datei-Action, die Umgebung aus `config.ProgramEnv` für externe Programme, `netguard.Dialer` mit `Protect` im Server-Modus und `App.Rights().Outbound` als Allowlist für den Web-Request (Code-ADR-0019); der Requirement-Service mit dem Katalog aus `internal/i18n`, der Sprache aus der Settings-Sektion „locale“, dem Store für Cooldowns und dem Nutzer des Streamer-Kontos je Plattform (`requirement.Streamer`); die Nutzersuche bekommt die Engine (`engine.WithUsers`) und gibt sie je Durchlauf weiter (S)
-- [ ] Settings-Sektion „locale“: Formate des Profils als neue Version (die Sprache kommt in 3.4, [ADR-0022](adr/0022-internationalisierung.md)), Standard `system` aus der Umgebung des Cores; danach Datums-, Zeit- und Zahlenformate der Templates nach der Locale ([`template.md`](spec/template.md), B41) (S)
+- [ ] Command-Engine und Template-Engine in der Composition Root verdrahten: Engine als Runnable beim Supervisor, ihre Ereignistypen im Katalog, Settings, Ports; die Typ-Registry mit `App.Rights` als Quelle der Capabilities, die Wurzeln für `command.Roots` und die Datei-Action, die Umgebung aus `config.ProgramEnv` für externe Programme, `netguard.Dialer` mit `Protect` im Server-Modus und `App.Rights().Outbound` als Allowlist für den Web-Request (Code-ADR-0019); der Requirement-Service mit dem Katalog aus `internal/i18n`, der Sprache aus der Settings-Sektion „locale“, dem Store für Cooldowns und dem Nutzer des Streamer-Kontos je Plattform (`requirement.Streamer`); die Nutzersuche bekommt die Engine (`engine.WithUsers`) und gibt sie je Durchlauf weiter; eine vorläufige Nutzersuche über den Store (Login-Name, Konten von Streamer und Bot), bis der Nutzer-Service sie in 5.2 ersetzt; Event-Service und Plattformen des Profils (S)
+- [ ] Mock-Konsole `streamcrew mock` statt der CLI-Befehle `event simulate` und `chat send --as <nutzer>`, weil es vor Phase 6 keine API gibt (Entscheidung des Projektinhabers vom 2026-10-04): Core mit Mock-Plattform in einem Prozess, gegen eine Kopie des Profils, die am Ende verworfen wird; Befehle wie `chat send --as <nutzer> <text>`, `event simulate <typ>`, `stream start|stop` und `user add` zeilenweise von der Standardeingabe oder aus `--script`; `--commands` lädt Commands als Code in die Kopie; ein End-to-End-Test mit Beispiel-Commands aus YAML (M)
+- [ ] Settings-Sektion „locale“: Locale der Formate als neue Version, Standard `system` aus der Umgebung des Cores, eigene Muster für `en-US`, `en-GB`, `de-DE`, `de-AT` und `de-CH` (Entscheidung des Projektinhabers vom 2026-10-04); danach Datum und Uhrzeit der Templates samt Monats- und Wochentagsnamen nach der Locale, Zahlen bleiben kanonisch ([`template.md`](spec/template.md), B41) (S)
 - [ ] Rechenfunktionen von Jace in `internal/expr`, die Zufallsfunktionen mit eingeschlossener Obergrenze ([`template.md`](spec/template.md), B53) (S)
 
 **Exit-Kriterien (M1):**
@@ -670,6 +677,7 @@ Zuerst die Änderungen an Datenmodell und Engine aus den geklärten Fragen vom 2
 ### 6.3 CLI
 
 - [ ] Unterkommandos gemäß Plan §7.2 im MVP-Umfang, `--output json`, Remote-Verbindung (`--server`, `--token`) (M)
+- [ ] `chat send --as <nutzer>` und `event simulate` gegen einen laufenden Core mit Mock-Plattform über die API; bis dahin die Mock-Konsole aus 3.6 (S)
 - [ ] Shell-Completion (S)
 - [ ] `streamcrew diag bundle`: Diagnose-Paket mit Logs, Versionen und Konfiguration, Secrets maskiert ([ADR-0011](adr/0011-keine-telemetrie.md)) (S)
 
@@ -1353,3 +1361,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-03 | `streamcrew command import`: übernimmt alle Dokumente in einer Transaktion oder, bei einem Fehler, keines; ersetzt nach Art und Name mit gleicher ID und Erstellungszeit. Neu im Store: `Store.Atomically` für mehrere Speichervorgänge in einer Transaktion (Nachtrag zu Code-ADR-0008, Entscheidung des Projektinhabers). |
 | 2026-10-03 | `streamcrew command export`: schreibt Commands mit ihren Gruppen und Cooldown-Gruppen als YAML oder JSON, auf die Standardausgabe, in eine Datei oder je Dokument eine Datei mit der Version im Namen; Export und erneuter Import ändern nichts außer der Zeit der Änderung. Damit ist Abschnitt 3.5 erledigt. |
 | 2026-10-04 | Neue Aufgabe in 3.5: Commands, Command-Gruppen und Cooldown-Gruppen, auf die ein anderer Command verweist, lassen sich nicht löschen, nur Commands deaktivieren (Entscheidung des Projektinhabers; `commands.md`, B8). Anlass war der Export, der an Verweisen auf gelöschte Commands scheitert. |
+| 2026-10-04 | 3.6 begonnen. Entscheidungen des Projektinhabers: Bis zur API (Phase 6) gibt es die Mock-Konsole `streamcrew mock` statt der CLI-Befehle `event simulate` und `chat send --as`; sie läuft gegen eine Kopie des Profils (Plan §7.2, neue Aufgabe in 6.3 für die Befehle über die API). Adapter übergeben ihre Eingänge über einen Port an den Event-Service, der die Regeln anwendet, veröffentlicht und die Ereignis-Commands auslöst ([Code-ADR-0011](adr/code/0011-event-bus.md), Punkt 4; Plan §6.7). Locale-Formate mit eigenen Mustern für eine feste Liste, Zahlen in Templates kanonisch ([`template.md`](spec/template.md), B41; ADR-0022, Punkt 7). [`events.md`](spec/events.md) um Nutzlast, Settings-Sektion `events`, Sitzung je Plattform und den Ablauf einer Chatnachricht ergänzt (B9–B14, B27–B29). |
