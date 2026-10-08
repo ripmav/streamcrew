@@ -45,6 +45,13 @@ Das Skript führt die Pre-Commit-Checkliste aus Plan §11.1 in der festgelegten 
 - `go fix` und `gofmt` schreiben Dateien um. Den Diff vor dem Commit ansehen.
 - Befunde werden behoben, nicht unterdrückt: kein `//nolint` und keine Lockerung von `.golangci.yml` ohne Freigabe des Projektinhabers.
 - `govulncheck`-Befunde ohne korrigierte Version werden dem Projektinhaber gemeldet.
+- **Tests in der Sandbox:** `go test` läuft über `scripts/sandbox.sh`. Unter Linux mit systemd-Benutzersitzung startet das Skript den Befehl in einem eigenen Scope (cgroup):
+  - höchstens 2048 Prozesse und Threads
+  - die Hälfte des Arbeitsspeichers, ohne Swap
+  - die Hälfte der CPU-Kerne, mit niedriger CPU- und I/O-Gewichtung, damit der Desktop bedienbar bleibt
+  - Nach dem Lauf beendet es alle Prozesse, die im Scope übrig sind, auch losgelöste.
+
+  So kann ein Test, der unkontrolliert Programme startet oder Speicher belegt, den Rechner nicht lahmlegen. Die Grenzen lassen sich mit `STREAMCREW_SANDBOX_TASKS`, `STREAMCREW_SANDBOX_MEMORY` und `STREAMCREW_SANDBOX_CPU` ändern, `STREAMCREW_SANDBOX=off` schaltet die Sandbox ab. Ohne systemd, etwa unter macOS, Windows oder in einem Container, läuft der Befehl ohne Grenzen, und das Skript sagt das. Eigene Testläufe, besonders solche, die Programme starten, lassen sich ebenso einpacken: `scripts/sandbox.sh go test -race ./internal/action/host/`. Die Grafikkarte braucht keine Grenze, die Tests nutzen sie nicht.
 - Wer das Dockerfile ändert, baut und testet das Image vorher: `scripts/docker-smoke.sh`.
 
 ## Werkzeuge
