@@ -7,6 +7,9 @@
 # go fix and gofmt rewrite files. They run first so that the checks after them
 # see the final code; review the resulting diff before committing.
 #
+# go test runs in scripts/sandbox.sh, with limits on processes, memory and CPU,
+# so that a test that gets out of control cannot take the computer down.
+#
 # golangci-lint is taken from $GOLANGCI_LINT, then from PATH, then from
 # ~/.local/bin.
 set -euo pipefail
@@ -51,6 +54,6 @@ step go vet ./...
 step "$golangci_lint" run ./...
 step go install golang.org/x/vuln/cmd/govulncheck@latest
 step "$gobin/govulncheck" ./...
-step go test ./...
+step scripts/sandbox.sh go test ./...
 
 printf '\nAll checks passed.\n'
