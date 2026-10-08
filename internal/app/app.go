@@ -18,23 +18,41 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/ripmav/streamcrew/internal/action"
+	"github.com/ripmav/streamcrew/internal/action/chat"
+	"github.com/ripmav/streamcrew/internal/action/commands"
+	"github.com/ripmav/streamcrew/internal/action/flow"
+	"github.com/ripmav/streamcrew/internal/action/host"
+	"github.com/ripmav/streamcrew/internal/action/moderation"
+	"github.com/ripmav/streamcrew/internal/action/network"
+	"github.com/ripmav/streamcrew/internal/action/users"
+	"github.com/ripmav/streamcrew/internal/action/values"
 	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/buildinfo"
 	"github.com/ripmav/streamcrew/internal/config"
+	"github.com/ripmav/streamcrew/internal/connector"
+	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
+	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
+	"github.com/ripmav/streamcrew/internal/eventservice"
 	"github.com/ripmav/streamcrew/internal/httpserver"
+	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/lockfile"
 	"github.com/ripmav/streamcrew/internal/logging"
+	"github.com/ripmav/streamcrew/internal/netguard"
 	"github.com/ripmav/streamcrew/internal/profile"
+	"github.com/ripmav/streamcrew/internal/requirement"
 	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/store"
 	"github.com/ripmav/streamcrew/internal/supervisor"
+	"github.com/ripmav/streamcrew/internal/template"
 	"github.com/ripmav/streamcrew/internal/vault"
 )
 
@@ -45,10 +63,11 @@ const logFileName = "streamcrew.log"
 type Option func(*options)
 
 type options struct {
-	console io.Writer
-	keyring vault.Keyring
-	envKey  string
-	file    *config.FileResolver
+	console  io.Writer
+	keyring  vault.Keyring
+	envKey   string
+	file     *config.FileResolver
+	platform func(ctx context.Context, b PlatformBuilder) (connector.Platform, error)
 }
 
 // WithConsole sets the destination of the console log; the default is
@@ -92,6 +111,21 @@ type App struct {
 	http     *httpserver.Server
 	ready    *readiness
 	rights   *config.Live
+
+	// The wiring of the command engine (roadmap 3.6): the platforms of the
+	// profile and their lookup of users, the state of the stream, the
+	// muted chat, and the template engine, the action types, the command
+	// service, the engine and the event service.
+	platforms  *platformSet
+	users      *userLookup
+	mute       *chatMute
+	programEnv []string
+	templates  *template.Engine
+	actions    *action.Registry
+	commands   *command.Service
+	engine     *engine.Engine
+	events     *eventservice.Service
+	catalog    *event.Catalog
 }
 
 // New builds the core from a resolved configuration (config.Config.Resolve).
@@ -150,12 +184,111 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		return a, err
 	}
 	a.rights = config.NewLive(rights)
+	// The environment the host action gives the programs it starts: it is
+	// read once at start (actions.md, B117; Code-ADR-0005).
+	a.programEnv = config.ProgramEnv()
+	if a.programEnv == nil {
+		a.programEnv = []string{}
+	}
 
 	catalog, err := newCatalog()
 	if err != nil {
 		return a, err
 	}
+	a.catalog = catalog
 	a.bus = event.NewBus(component(logger, "event"), event.WithCatalog(catalog))
+
+	// The platforms of the profile are built after the event service,
+	// which is their receiver; until then the set is empty.
+	a.platforms = newPlatformSet()
+	a.users = &userLookup{store: a.store, set: a.platforms}
+	a.mute = newChatMute(component(logger, "moderation"))
+
+	messageCatalog, err := i18n.Load()
+	if err != nil {
+		return a, err
+	}
+	requirements, err := requirement.New(requirement.Ports{
+		Catalog:   messageCatalog,
+		Language:  localeLanguage{settings: a.settings},
+		Platforms: a.platforms,
+		Cooldowns: a.store,
+		Streamer:  a.users,
+		Logger:    component(logger, "requirement"),
+	})
+	if err != nil {
+		return a, err
+	}
+
+	// The template engine and its sources, in the order of B10: first the
+	// global values, then the counters.
+	globals := template.NewGlobals()
+	identifiers, err := template.NewRegistry(
+		template.CharacterFamily(),
+		template.RunFamily(),
+		template.UserFamily(a.users),
+		template.DateTimeFamily(),
+		template.MessageFamily(),
+		template.StreamFamily(streamStates{set: a.platforms}),
+		template.ArgumentFamily(),
+		template.RandomFamily(),
+	)
+	if err != nil {
+		return a, err
+	}
+	a.templates = template.New(identifiers,
+		template.WithLogger(component(logger, "template")),
+		template.WithSources(globals, template.CounterSource(a.store)),
+	)
+
+	// The command service decodes commands with the types that have ports,
+	// so that the engine runs the actions it loads (Code-ADR-0013, point 3).
+	// The command action switches through the service, which the late port
+	// names once it is built.
+	late := &lateSwitches{}
+	if a.actions, err = a.actionTypes(globals, late); err != nil {
+		return a, err
+	}
+	codec, err := command.NewCodec(a.actions.Entries()...)
+	if err != nil {
+		return a, err
+	}
+	reserved, err := IdentifierCatalog()
+	if err != nil {
+		return a, err
+	}
+	a.commands, err = command.NewService(a.store, codec, command.Checks{
+		Counters: a.store,
+		Names:    Reserved(reserved, a.actions),
+		Types:    a.actions,
+		Roots:    a.rights,
+	})
+	if err != nil {
+		return a, err
+	}
+	late.set(a.commands)
+	a.engine, err = engine.New(a.commands, a.actions,
+		engine.WithLogger(component(logger, "engine")),
+		engine.WithPublisher(a.bus),
+		engine.WithConfig(a.engineConfig),
+		engine.WithShutdownTimeout(cfg.ShutdownTimeout),
+		engine.WithRequirements(requirements),
+		engine.WithUsers(a.users),
+	)
+	if err != nil {
+		return a, err
+	}
+	a.events, err = eventservice.New(ctx, eventservice.Ports{
+		Store:     a.store,
+		Commands:  a.commands,
+		Engine:    a.engine,
+		Publisher: a.bus,
+		Settings:  a.eventsSettings,
+	}, eventservice.WithLogger(component(logger, "events")))
+	if err != nil {
+		return a, err
+	}
+
 	a.sup = supervisor.New(component(logger, "supervisor"),
 		supervisor.WithStatusFunc(a.onStatus),
 		supervisor.WithShutdownTimeout(cfg.ShutdownTimeout),
@@ -172,12 +305,112 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	err = errors.Join(
 		a.sup.Add("backup", scheduler),
 		a.sup.Add("http", a.http, supervisor.WithCritical()),
+		a.sup.Add("events", a.events),
 	)
+	// The platform stops after the engine on shutdown, so that the engine
+	// can still deliver its pending instances to it; on start the
+	// supervisor runs the runnables at the same time, so the platforms are
+	// connected when the core is ready and "app.started" goes out.
+	if o.platform != nil {
+		err = errors.Join(err, a.addPlatform(ctx, o.platform))
+	}
+	err = errors.Join(err, a.sup.Add("engine", a.engine))
 	if o.file != nil {
 		err = errors.Join(err, a.sup.Add("config",
 			config.NewWatcher(o.file, cfg, a.rights, component(logger, "config"))))
 	}
 	return a, err
+}
+
+// actionTypes returns the registry of the action types with their ports,
+// so that the engine runs them (Code-ADR-0013, point 3); switches is the
+// port of the command action, set once the command service is built.
+func (a *App) actionTypes(globals *template.Globals, switches commands.Switches) (*action.Registry, error) {
+	var descs []action.Descriptor
+	var errs []error
+	add := func(d []action.Descriptor, err error) {
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		descs = append(descs, d...)
+	}
+	add(chat.Descriptors(chat.Ports{
+		Templates: a.templates,
+		Platforms: a.platforms,
+		Logger:    component(a.logger, "action"),
+	}))
+	add(commands.Descriptors(commands.Ports{
+		Templates: a.templates,
+		Switches:  switches,
+		Logger:    component(a.logger, "action"),
+	}))
+	add(flow.Descriptors(flow.Ports{
+		Templates: a.templates,
+		IntN:      rand.IntN,
+	}))
+	add(host.Descriptors(host.Ports{
+		Templates: a.templates,
+		Env:       a.programEnv,
+		Opener:    host.SystemOpener(),
+		Roots:     a.rights,
+		IntN:      rand.IntN,
+		Logger:    component(a.logger, "action"),
+	}))
+	add(moderation.Descriptors(moderation.Ports{
+		Templates: a.templates,
+		Platforms: a.platforms,
+		Users:     a.users,
+		Strikes:   a.store,
+		Mute:      a.mute,
+		Logger:    component(a.logger, "action"),
+	}))
+	add(network.Descriptors(network.Ports{
+		Templates: a.templates,
+		Dialer: netguard.Dialer{
+			Protect:   a.cfg.Mode == config.ModeServer,
+			Allowlist: a.rights.Outbound,
+		},
+		Logger: component(a.logger, "action"),
+	}))
+	add(users.Descriptors(users.Ports{
+		Templates: a.templates,
+		Platforms: a.platforms,
+		Users:     a.users,
+		Logger:    component(a.logger, "action"),
+	}))
+	add(values.Descriptors(values.Ports{
+		Templates: a.templates,
+		Counters:  a.store,
+		Globals:   globals,
+	}))
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
+	}
+	return action.NewRegistry(a.rights, descs...)
+}
+
+// addPlatform builds the platform of the profile, registers its event
+// types in the catalog of the bus, and runs it with the supervisor
+// (Code-ADR-0004).
+func (a *App) addPlatform(ctx context.Context, build func(ctx context.Context, b PlatformBuilder) (connector.Platform, error)) error {
+	p, err := build(ctx, PlatformBuilder{Receiver: a.events, Publisher: a.bus, Logger: a.logger})
+	if err != nil {
+		return fmt.Errorf("build platform: %w", err)
+	}
+	r, ok := any(p).(supervisor.Runnable)
+	if !ok {
+		return fmt.Errorf("platform %s: not a runnable", p.Name())
+	}
+	if reg, ok := any(p).(eventRegistrar); ok {
+		if err := reg.RegisterEvents(a.catalog); err != nil {
+			return fmt.Errorf("event types of platform %s: %w", p.Name(), err)
+		}
+	}
+	if err := a.platforms.fill(p); err != nil {
+		return err
+	}
+	return a.sup.Add(string(p.Name()), r)
 }
 
 // Logger returns the root logger of the core.
@@ -217,12 +450,21 @@ func (a *App) Ready() bool {
 // Run runs the core until ctx ends or a critical component fails, then shuts
 // it down, closes the profile, releases the lock and closes the log file.
 // The returned error has been logged.
+//
+// The application events go through the event service (events.md, B12);
+// "app.started" when the core is ready for the first time, so that its
+// event command runs and its output reaches the connected platforms, and
+// "app.stopping" when the context ends, which the engine still takes for
+// its event command (command-engine.md, B55).
 func (a *App) Run(ctx context.Context) (err error) {
 	defer func() { err = errors.Join(err, a.close()) }()
 
 	stopWatching := context.AfterFunc(ctx, func() {
 		a.ready.stopping()
-		a.publish(context.WithoutCancel(ctx), eventtype.AppStopping, Stopping{})
+		stopCtx := context.WithoutCancel(ctx)
+		if err := a.events.Application(stopCtx, eventtype.AppStopping, Stopping{}); err != nil {
+			a.logger.ErrorContext(stopCtx, "the stopping event failed", "error", err)
+		}
 	})
 	defer stopWatching()
 
@@ -233,9 +475,26 @@ func (a *App) Run(ctx context.Context) (err error) {
 		a.logger.WarnContext(ctx, "developer mode is on: pprof is served under /debug/pprof/")
 	}
 	config.LogRights(ctx, a.logger, a.rights.Rights())
-	a.publish(ctx, eventtype.AppStarted, Started{Version: a.version, Mode: string(a.cfg.Mode), Profile: a.profile.ID})
 
-	if err := a.sup.Run(ctx); err != nil {
+	supErr := make(chan error, 1)
+	go func() { supErr <- a.sup.Run(ctx) }()
+
+	// "app.started" goes through the event service (events.md, B12), when
+	// the core is ready for the first time: the engine takes instances and
+	// the platforms are connected, so its event command runs and its output
+	// reaches the platforms.
+	select {
+	case <-a.ready.Done():
+		if err := a.events.Application(ctx, eventtype.AppStarted, Started{Version: a.version, Mode: string(a.cfg.Mode), Profile: a.profile.ID}); err != nil {
+			a.logger.ErrorContext(ctx, "the started event failed", "error", err)
+		}
+	case err := <-supErr:
+		a.logger.ErrorContext(ctx, "streamcrew stopped with an error", "error", err)
+		return err
+	case <-ctx.Done():
+	}
+
+	if err := <-supErr; err != nil {
 		a.logger.ErrorContext(ctx, "streamcrew stopped with an error", "error", err)
 		return err
 	}
@@ -371,16 +630,41 @@ type readiness struct {
 	mu       sync.Mutex
 	states   map[string]supervisor.State
 	shutdown bool
+	// done closes when every runnable runs for the first time.
+	done   chan struct{}
+	closed bool
 }
 
 func newReadiness() *readiness {
-	return &readiness{states: make(map[string]supervisor.State)}
+	return &readiness{states: make(map[string]supervisor.State), done: make(chan struct{})}
 }
 
 func (r *readiness) update(st supervisor.Status) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.states[st.Name] = st.State
+	r.doneOnce()
+}
+
+// doneOnce closes done when every runnable runs for the first time. r.mu is
+// held.
+func (r *readiness) doneOnce() {
+	if r.closed || r.shutdown || len(r.states) == 0 {
+		return
+	}
+	for _, s := range r.states {
+		if s != supervisor.StateRunning {
+			return
+		}
+	}
+	r.closed = true
+	close(r.done)
+}
+
+// Done returns a channel that closes when every runnable runs for the first
+// time; it stays open if a runnable never reaches running.
+func (r *readiness) Done() <-chan struct{} {
+	return r.done
 }
 
 func (r *readiness) stopping() {

@@ -179,12 +179,15 @@ func TestUnknownProfileFails(t *testing.T) {
 	require.NoError(t, a.Close())
 }
 
+// TestEventsDuringLifecycle covers the application events (events.md,
+// B12): "app.started" only when the engine takes instances, "app.stopping"
+// when the context ends, and the state changes of the supervisor.
 func TestEventsDuringLifecycle(t *testing.T) {
 	t.Parallel()
 	cfg := testConfig(t)
 	a, err := app.New(t.Context(), cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
 	require.NoError(t, err)
-	sub := a.Bus().Subscribe(t.Context(), event.WithPrefixes("app.", "supervisor."), event.WithBuffer(64))
+	sub := a.Bus().Subscribe(t.Context(), event.WithPrefixes("app.", "supervisor.", "command."), event.WithBuffer(64))
 
 	ctx, cancel := context.WithCancel(t.Context())
 	errc := make(chan error, 1)
@@ -201,10 +204,27 @@ func TestEventsDuringLifecycle(t *testing.T) {
 		}
 		seen = append(seen, string(e.Type))
 	}
-	assert.Equal(t, "app.started", seen[0])
+	position := func(s string) int {
+		for i, x := range seen {
+			if x == s {
+				return i
+			}
+		}
+		return -1
+	}
+	// "app.started" after the engine runs and takes instances, and before
+	// "app.stopping".
+	engineRunning := position("supervisor.status:engine:running")
+	started := position("app.started")
+	stopping := position("app.stopping")
+	require.NotEqual(t, -1, engineRunning, "the engine runs: %v", seen)
+	require.NotEqual(t, -1, started, "the core started: %v", seen)
+	require.NotEqual(t, -1, stopping, "the core stopped: %v", seen)
+	assert.Less(t, engineRunning, started, "app.started after the engine runs: %v", seen)
+	assert.Less(t, started, stopping, "app.started before app.stopping: %v", seen)
 	assert.Contains(t, seen, "supervisor.status:http:running")
 	assert.Contains(t, seen, "supervisor.status:backup:running")
-	assert.Contains(t, seen, "app.stopping")
+	assert.Contains(t, seen, "supervisor.status:events:running")
 	assert.Contains(t, seen, "supervisor.status:http:stopped")
 }
 

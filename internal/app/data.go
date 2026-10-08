@@ -12,7 +12,9 @@ import (
 
 	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
+	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
+	"github.com/ripmav/streamcrew/internal/eventservice"
 	"github.com/ripmav/streamcrew/internal/lockfile"
 	"github.com/ripmav/streamcrew/internal/profile"
 	"github.com/ripmav/streamcrew/internal/store"
@@ -43,6 +45,8 @@ func newCatalog() (*event.Catalog, error) {
 		event.Register[Started](c, eventtype.AppStarted),
 		event.Register[Stopping](c, eventtype.AppStopping),
 		event.Register[supervisor.Status](c, TypeSupervisorStatus),
+		engine.RegisterEvents(c),
+		eventservice.RegisterEvents(c),
 	)
 }
 
