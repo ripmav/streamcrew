@@ -65,6 +65,7 @@ func (p *Platform) SayWithID(ctx context.Context, login, text, messageID string)
 		return sent, nil
 	}
 	sent.Delivery = Delivered
+	p.setPresent(author.Login, true)
 	m := connector.Incoming{
 		Platform: platform.Mock,
 		Author:   author,
@@ -88,6 +89,7 @@ func (p *Platform) Join(ctx context.Context, login string) error {
 	if err != nil {
 		return fmt.Errorf("join: %w", err)
 	}
+	p.setPresent(who.Login, true)
 	if err := p.receiver.Join(ctx, platform.Mock, who); err != nil {
 		return fmt.Errorf("join: %w", err)
 	}
@@ -154,6 +156,9 @@ func (p *Platform) SimulateWithID(ctx context.Context, e Event, eventID string) 
 		return sent, nil
 	}
 	sent.Delivery = Delivered
+	if e.Type == eventtype.ChatUserLeave && in.User != nil {
+		p.setPresent(in.User.Login, false)
+	}
 	if err := p.receiver.Event(ctx, in); err != nil {
 		return sent, fmt.Errorf("simulate %s: %w", e.Type, err)
 	}

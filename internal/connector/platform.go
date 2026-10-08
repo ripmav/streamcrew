@@ -107,6 +107,23 @@ type Platform interface {
 	Channel(ctx context.Context) (ChannelInfo, error)
 }
 
+// Identities is the optional capability of a Platform to name the
+// accounts of the channel, e.g. the streamer for runs without a user
+// (requirements.md, B4) and the identifiers of the streamer and the bot
+// (template.md). Adapters know them from connecting.
+type Identities interface {
+	// Identity returns the account a of the channel; ok is false if the
+	// platform has none, e.g. no bot.
+	Identity(a Account) (ident user.Identity, ok bool)
+}
+
+// Chatters is the optional capability of a Platform to list the accounts
+// in the chat, e.g. for the random users of templates (template.md, B22).
+type Chatters interface {
+	// Chatters returns the accounts in the chat now.
+	Chatters(ctx context.Context) ([]user.Identity, error)
+}
+
 // Chat is the chat of the channel on a platform.
 type Chat interface {
 	// Send sends m to the chat. The adapter splits a text that is longer

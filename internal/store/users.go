@@ -50,6 +50,34 @@ func (s *Store) UserByIdentity(ctx context.Context, p platform.Name, platformUse
 	return u, nil
 }
 
+// UserByLogin returns the user of the account with the login name on
+// platform p, regardless of case for ASCII letters, as login names of the
+// platforms are; of several accounts with the name, the one changed last.
+// The error wraps ErrNotFound if there is none.
+func (s *Store) UserByLogin(ctx context.Context, p platform.Name, login string) (user.User, error) {
+	var u user.User
+	err := s.readTx(ctx, func(q *sqlcgen.Queries) error {
+		ident, err := q.GetIdentityByLogin(ctx, sqlcgen.GetIdentityByLoginParams{Platform: string(p), Login: login})
+		if err != nil {
+			return err
+		}
+		u, err = loadUser(ctx, q, ident.UserID)
+		return err
+	})
+	if err != nil {
+		return user.User{}, fmt.Errorf("user of %s login %q: %w", p, login, err)
+	}
+	return u, nil
+}
+
+// ResetStrikes sets the strikes of every user to 0 (actions.md, B84).
+func (s *Store) ResetStrikes(ctx context.Context) error {
+	if err := s.Write(ctx, func(q *sqlcgen.Queries) error { return q.ResetStrikes(ctx) }); err != nil {
+		return fmt.Errorf("reset strikes: %w", err)
+	}
+	return nil
+}
+
 // UpsertIdentity implements user.Repository.
 func (s *Store) UpsertIdentity(ctx context.Context, ident user.Identity) (u user.User, created bool, err error) {
 	if err := ident.Validate(); err != nil {
