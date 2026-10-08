@@ -143,6 +143,57 @@ func TestCounterConcurrentUpdates(t *testing.T) {
 	assert.Equal(t, int64(100), c.Value)
 }
 
+// TestUpdateOrCreateCounter covers actions.md B41 and B42: a missing
+// counter is created with the value 0 and the default step and then
+// changed, in one transaction; concurrent changes of a missing counter all
+// count; if the change fails, nothing is created.
+func TestUpdateOrCreateCounter(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+
+	c, created, err := s.UpdateOrCreateCounter(ctx, "Lives", func(c *counter.Counter) error { return c.Add(3) })
+	require.NoError(t, err)
+	assert.True(t, created)
+	assert.Equal(t, "Lives", c.Name)
+	assert.Equal(t, int64(3), c.Value)
+	assert.Equal(t, int64(counter.DefaultStep), c.Step)
+	assert.False(t, c.ID.IsZero())
+
+	c, created, err = s.UpdateOrCreateCounter(ctx, "lives", func(c *counter.Counter) error { return c.Increment() })
+	require.NoError(t, err)
+	assert.False(t, created, "the name matches regardless of case")
+	assert.Equal(t, int64(4), c.Value)
+	stored, err := s.Counter(ctx, "LIVES")
+	require.NoError(t, err)
+	assert.Equal(t, c, stored)
+
+	_, _, err = s.UpdateOrCreateCounter(ctx, "broken", func(*counter.Counter) error { return counter.ErrOverflow })
+	require.ErrorIs(t, err, counter.ErrOverflow)
+	_, err = s.Counter(ctx, "broken")
+	require.ErrorIs(t, err, store.ErrNotFound, "a failed change creates nothing")
+
+	_, _, err = s.UpdateOrCreateCounter(ctx, "two words", func(*counter.Counter) error { return nil })
+	require.ErrorIs(t, err, counter.ErrInvalid)
+
+	_, err = s.UpdateCounter(ctx, "missing", func(*counter.Counter) error { return nil })
+	require.ErrorIs(t, err, store.ErrNotFound, "UpdateCounter creates nothing")
+
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			for range 25 {
+				_, _, err := s.UpdateOrCreateCounter(ctx, "kisses", func(c *counter.Counter) error { return c.Add(1) })
+				assert.NoError(t, err)
+			}
+		})
+	}
+	wg.Wait()
+	kisses, err := s.Counter(ctx, "kisses")
+	require.NoError(t, err)
+	assert.Equal(t, int64(100), kisses.Value)
+}
+
 // TestResetCountersOnStart covers B3.
 func TestResetCountersOnStart(t *testing.T) {
 	t.Parallel()

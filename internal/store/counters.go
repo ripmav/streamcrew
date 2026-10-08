@@ -4,6 +4,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/ripmav/streamcrew/internal/domain/counter"
@@ -45,21 +47,10 @@ func (s *Store) CreateCounter(ctx context.Context, c counter.Counter) (counter.C
 	if err := c.Validate(); err != nil {
 		return counter.Counter{}, err
 	}
-	if c.ID.IsZero() {
-		c.ID = id.New()
-	}
-	c.CreatedAt = now()
-	c.UpdatedAt = c.CreatedAt
 	err := s.Write(ctx, func(q *sqlcgen.Queries) error {
-		return q.InsertCounter(ctx, sqlcgen.InsertCounterParams{
-			ID:           c.ID.String(),
-			Name:         c.Name,
-			Value:        c.Value,
-			Step:         c.Step,
-			ResetOnStart: flag(c.ResetOnStart),
-			CreatedAt:    c.CreatedAt.UnixMilli(),
-			UpdatedAt:    c.UpdatedAt.UnixMilli(),
-		})
+		var err error
+		c, err = insertCounter(ctx, q, c)
+		return err
 	})
 	if err != nil {
 		return counter.Counter{}, fmt.Errorf("create counter %q: %w", c.Name, err)
@@ -70,14 +61,36 @@ func (s *Store) CreateCounter(ctx context.Context, c counter.Counter) (counter.C
 // UpdateCounter implements counter.Repository. fn may rename the counter;
 // changes to ID and timestamps are ignored.
 func (s *Store) UpdateCounter(ctx context.Context, name string, fn func(*counter.Counter) error) (counter.Counter, error) {
-	var c counter.Counter
+	c, _, err := s.updateCounter(ctx, name, fn, false)
+	return c, err
+}
+
+// UpdateOrCreateCounter changes the counter name with fn as UpdateCounter
+// does. A counter that does not exist is created first, as counter.New
+// makes it, in the same transaction, so that concurrent changes all count
+// (actions.md B41, B42); created reports it. If fn fails, nothing is
+// created.
+func (s *Store) UpdateOrCreateCounter(ctx context.Context, name string, fn func(*counter.Counter) error) (c counter.Counter, created bool, err error) {
+	return s.updateCounter(ctx, name, fn, true)
+}
+
+// updateCounter changes the counter name with fn; with create, it creates
+// a missing one first.
+func (s *Store) updateCounter(ctx context.Context, name string, fn func(*counter.Counter) error, create bool) (counter.Counter, bool, error) {
+	var (
+		c       counter.Counter
+		created bool
+	)
 	err := s.Write(ctx, func(q *sqlcgen.Queries) error {
-		row, err := q.GetCounter(ctx, name)
-		if err != nil {
-			return err
-		}
-		stored, err := toCounter(row)
-		if err != nil {
+		created = false
+		stored, err := readCounter(ctx, q, name)
+		switch {
+		case create && errors.Is(err, sql.ErrNoRows):
+			if stored, err = insertCounter(ctx, q, counter.New(name)); err != nil {
+				return err
+			}
+			created = true
+		case err != nil:
 			return err
 		}
 		c = stored
@@ -98,9 +111,40 @@ func (s *Store) UpdateCounter(ctx context.Context, name string, fn func(*counter
 		})
 	})
 	if err != nil {
-		return counter.Counter{}, fmt.Errorf("update counter %q: %w", name, err)
+		return counter.Counter{}, false, fmt.Errorf("update counter %q: %w", name, err)
 	}
-	return c, nil
+	return c, created, nil
+}
+
+// readCounter reads the counter name within a write transaction.
+func readCounter(ctx context.Context, q *sqlcgen.Queries, name string) (counter.Counter, error) {
+	row, err := q.GetCounter(ctx, name)
+	if err != nil {
+		return counter.Counter{}, err
+	}
+	return toCounter(row)
+}
+
+// insertCounter stores the new counter c within a write transaction and
+// returns it with its timestamps and, if it had none, a new ID.
+func insertCounter(ctx context.Context, q *sqlcgen.Queries, c counter.Counter) (counter.Counter, error) {
+	if err := c.Validate(); err != nil {
+		return counter.Counter{}, err
+	}
+	if c.ID.IsZero() {
+		c.ID = id.New()
+	}
+	c.CreatedAt = now()
+	c.UpdatedAt = c.CreatedAt
+	return c, q.InsertCounter(ctx, sqlcgen.InsertCounterParams{
+		ID:           c.ID.String(),
+		Name:         c.Name,
+		Value:        c.Value,
+		Step:         c.Step,
+		ResetOnStart: flag(c.ResetOnStart),
+		CreatedAt:    c.CreatedAt.UnixMilli(),
+		UpdatedAt:    c.UpdatedAt.UnixMilli(),
+	})
 }
 
 // DeleteCounter implements counter.Repository.
