@@ -92,7 +92,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
-| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); 3.2 in Arbeit: Spezifikation `command-engine.md` akzeptiert, Settings-Sektion „commands“, Warteschlange, Ausführung und Auslösen (`internal/engine`) umgesetzt; als Nächstes die Aufrufe anderer Commands |
+| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); 3.2 Command-Engine abgeschlossen (Settings-Sektion „commands“, Warteschlange, Ausführung, Auslösen, Aufrufe); als Nächstes 3.3 Action-Framework und P0-Actions |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
@@ -380,8 +380,8 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [x] Instanzen mit Zustandsmaschine (Pending → Running → Completed/Failed/Canceled) (S), erledigt 2026-09-30: `internal/engine`
 - [x] Warteschlange mit fünf Sperrmodi, Unlocked-Commands, Pause/Fortsetzen, eigene Pause für Entrance-Commands (L), erledigt 2026-09-30
 - [x] Abbrechen über `context`, Replay, Verlauf als Ringpuffer, Ereignisse `command.instance.*` (M), erledigt 2026-09-30
-- [ ] Runner-Parameter pro Nutzer, Auflösung des Ziel-Nutzers, Rekursions- und Zyklenschutz, Zeitlimits je Action (M); erledigt 2026-09-30 bis auf den Rekursions- und Zyklenschutz, der mit den Aufrufen kommt
-- [ ] Nebenläufigkeitstests mit `testing/synctest` und `-race` (M); Lasttest je Sperrmodus erledigt 2026-09-30, Tests der Aufrufe folgen
+- [x] Runner-Parameter pro Nutzer, Auflösung des Ziel-Nutzers, Rekursions- und Zyklenschutz, Zeitlimits je Action (M), erledigt 2026-09-30
+- [x] Nebenläufigkeitstests mit `testing/synctest` und `-race` (M), erledigt 2026-09-30: alle Tests der Engine in `synctest`, Lasttest je Sperrmodus
 - [x] Settings-Sektionen mit ihren Funktionen, aus 2.2 übertragen: „commands“ (Sperrmodus, Fehler-Cooldowns) hier (S), erledigt 2026-09-30: `internal/settings`, dazu die Fehlerpolitik je Command (Migration 0005). Die übrigen stehen als eigene Punkte bei ihren Phasen: „locale“ mit ADR-0022 in 3.6 (Entscheidung des Projektinhabers vom 2026-09-30), „general“ und „chat“ in 5.1, „moderation“ in 5.5, „overlay“ in 7.1
 
 ### 3.3 Action-Framework und P0-Actions
@@ -390,6 +390,7 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - Typ-ID, Version, Kategorie, i18n-Schlüsseln
   - JSON-Schema und UI-Hinweisen
   - benötigten Capabilities
+  - Anschluss an die Engine (seit 3.2): Actions setzen `engine.Performer` um, optional `engine.TimeLimiter` (B72) und `engine.Container` für verschachtelte Actions (B22); die Registry liefert die Funktion für `engine.WithVisualAudio` (B23); „aktuellen Command beenden“ gibt `engine.ErrStop` zurück, die Command-Action nutzt `engine.Run.Call`
 - [ ] Capability-Prüfung je Betriebsmodus: Warnung beim Speichern, Verweigerung bei Ausführung (S)
 - [ ] `chat`: senden, antworten, flüstern; als Bot oder Streamer (S)
 - [ ] `wait`, `random`, `group`, `repeat` (S)
@@ -1203,3 +1204,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Umsetzung von 3.2 begonnen: Settings-Sektion „commands“ (`internal/settings`) und Fehlerpolitik je Command (Migration 0005). Die übrigen Settings-Sektionen aus 2.2 stehen jetzt als eigene Punkte in 5.1, 5.5 und 7.1, damit sie beim Abhaken von 3.2 nicht verloren gehen. |
 | 2026-09-30 | Warteschlange und Ausführung der Command-Engine umgesetzt (`internal/engine`): Instanzen und Zustände, fünf Sperrmodi ohne Überholen, Pause, Abbrechen, Wiederholen, Verlauf, Ereignisse `command.instance.*` und `command.queue.*`, Fehlerpolitik, Zeitlimits, geordnetes Herunterfahren; Lasttest je Sperrmodus mit `-race`. Das Verdrahten in der Composition Root steht als eigener Punkt in 3.6, wenn es Auslöser gibt. |
 | 2026-09-30 | Auslösen der Command-Engine umgesetzt: Anforderungen vor dem Einreihen über den Port `engine.Requirements` (Umsetzung in 3.4), Fehler-Cooldowns in allen drei Arten, Platz in der Warteschlange vor der Prüfung, Pause der Entrance-Commands, Zielnutzer aus dem ersten Argument, Runner-Parameter je Nutzer, Event-Commands von `app.stopping` beim Herunterfahren. |
+| 2026-09-30 | Aufrufe anderer Commands umgesetzt (`engine.Run.Call`): mit Warten als Teil des Aufrufers ohne Sperren und Pause, mit geteilten Werten des Durchlaufs (`template.Scope.Share`); ohne Warten eingereiht mit einer Kopie der Werte; Tiefe höchstens 10, keine Zyklen. Phase 3.2 abgeschlossen. |

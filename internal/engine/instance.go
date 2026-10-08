@@ -130,17 +130,20 @@ type Instance struct {
 	Platform    platform.Name `json:"platform,omitempty"`
 	// UserID and UserName name the triggering user; UserName is the display
 	// name on Platform.
-	UserID    id.ID         `json:"userId,omitzero"`
-	UserName  string        `json:"userName,omitempty"`
-	Args      []string      `json:"args"`
+	UserID   id.ID    `json:"userId,omitzero"`
+	UserName string   `json:"userName,omitempty"`
+	Args     []string `json:"args"`
+	// Parent is the calling instance if Source is SourceCall; it is left
+	// out for the other sources (B31, B32).
+	Parent    id.ID         `json:"parent,omitzero"`
 	QueuedAt  time.Time     `json:"queuedAt"`
 	StartedAt time.Time     `json:"startedAt,omitzero"`
 	EndedAt   time.Time     `json:"endedAt,omitzero"`
 	Errors    []ActionError `json:"errors"`
 }
 
-// instance is an instance while the engine knows it. The fields below the
-// line are guarded by Engine.mu.
+// instance is an instance while the engine knows it. The fields after the
+// blank line are guarded by Engine.mu.
 type instance struct {
 	id     id.ID
 	cmd    command.Command
@@ -148,6 +151,10 @@ type instance struct {
 	params Params
 	scope  *template.Scope
 	locks  []string
+	// parent is the calling instance; zero for none.
+	parent id.ID
+	// chain has the commands from the first caller to this one (B73).
+	chain []id.ID
 	// start is closed when the instance gets its locks.
 	start chan struct{}
 	// cancel cancels the context of the instance.
@@ -160,9 +167,17 @@ type instance struct {
 	errors    []ActionError
 }
 
+// origin says which instance called an instance, if any.
+type origin struct {
+	// parent is the calling instance.
+	parent id.ID
+	// chain has the commands from the first caller to the calling one.
+	chain []id.ID
+}
+
 // newInstance returns a pending instance of cmd, the version of the command
 // at this moment (B3).
-func newInstance(cmd command.Command, src Source, p Params, cfg Config, locks []string) *instance {
+func newInstance(cmd command.Command, src Source, p Params, cfg Config, locks []string, org origin) *instance {
 	cmd.Actions = slices.Clone(cmd.Actions)
 	cmd.Requirements = slices.Clone(cmd.Requirements)
 	p = p.clone()
@@ -173,6 +188,8 @@ func newInstance(cmd command.Command, src Source, p Params, cfg Config, locks []
 		params:   p,
 		scope:    newScope(cmd, p, cfg),
 		locks:    locks,
+		parent:   org.parent,
+		chain:    append(slices.Clone(org.chain), cmd.ID),
 		start:    make(chan struct{}),
 		state:    StatePending,
 		queuedAt: time.Now(),
@@ -209,6 +226,7 @@ func (in *instance) snapshot() Instance {
 		State:       in.state,
 		Platform:    in.params.Platform,
 		Args:        append([]string{}, in.params.Args...),
+		Parent:      in.parent,
 		QueuedAt:    in.queuedAt,
 		StartedAt:   in.startedAt,
 		EndedAt:     in.endedAt,
