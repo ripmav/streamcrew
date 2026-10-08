@@ -200,7 +200,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `internal/polydoc` | polymorphe JSON-Dokumente mit Typ, Version und Migrationen, auch verschachtelt, auf `encoding/json/v2` ([Code-ADR-0010](docs/adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0018](docs/adr/code/0018-json-v2.md), [Code-ADR-0013](docs/adr/code/0013-typ-registry.md)) |
 | `internal/store` | SQLite je Profil, goose-Migrationen, sqlc-Abfragen und die Repositories der Domänenpakete ([Code-ADR-0008](docs/adr/code/0008-datenbankzugriff.md)) |
 | `internal/profile`, `internal/lockfile` | Profile und die Sperre des Datenverzeichnisses ([ADR-0012](docs/adr/0012-persistenz.md)) |
-| `internal/settings` | typisierte Einstellungen je Profil |
+| `internal/settings` | typisierte Einstellungen je Profil: Backups, Zeitzone, Command-Engine und Sprache des Profils ([ADR-0022](docs/adr/0022-internationalisierung.md)) |
 | `internal/backup` | Backups, Aufbewahrung, Zeitplan, Restore |
 | `internal/vault` | verschlüsselte Secrets und ihr Schlüssel |
 

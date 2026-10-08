@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/polydoc"
 	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/store"
@@ -39,6 +40,10 @@ func TestDefaultsWhenNeverSaved(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, time.Local, loc, "empty means the system time zone")
 
+	l, err := settings.Load(t.Context(), svc, settings.DefaultLocale())
+	require.NoError(t, err)
+	assert.Equal(t, settings.Locale{Language: i18n.English}, l, "ADR-0022, point 7")
+
 	c, err := settings.Load(t.Context(), svc, settings.DefaultCommands())
 	require.NoError(t, err)
 	assert.Equal(t, settings.Commands{
@@ -64,6 +69,14 @@ func TestSaveAndLoad(t *testing.T) {
 	doc, _, err := s.Settings(ctx, "backups")
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"type":"backups","schemaVersion":1,"enabled":false,"at":"23:30","keepDaily":3,"keepWeekly":2,"keepMonthly":1}`, string(doc))
+
+	require.NoError(t, settings.Save(ctx, svc, settings.Locale{Language: i18n.German}))
+	locale, err := settings.Load(ctx, svc, settings.DefaultLocale())
+	require.NoError(t, err)
+	assert.Equal(t, i18n.German, locale.Language)
+	doc, _, err = s.Settings(ctx, "locale")
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"type":"locale","schemaVersion":1,"language":"de"}`, string(doc))
 
 	require.NoError(t, settings.Save(ctx, svc, settings.Time{TimeZone: "Europe/Berlin"}))
 	tz, err := settings.Load(ctx, svc, settings.DefaultTime())
@@ -97,6 +110,8 @@ func TestValidation(t *testing.T) {
 		settings.Backups{At: "4 Uhr"},
 		settings.Backups{At: "04:00", KeepDaily: -1},
 		settings.Time{TimeZone: "Mars/Olympus"},
+		settings.Locale{Language: "fr"},
+		settings.Locale{},
 		withCommands(func(c *settings.Commands) { c.LockMode = "per_user" }),
 		withCommands(func(c *settings.Commands) { c.LockMode = "" }),
 		withCommands(func(c *settings.Commands) { c.ErrorCooldown = "sometimes" }),
