@@ -27,6 +27,7 @@ func TestDisplayName(t *testing.T) {
 		platform.Twitch:  "Twitch",
 		platform.YouTube: "YouTube",
 		platform.Kick:    "Kick",
+		platform.Mock:    "Mock",
 		"velora":         "velora",
 		"":               "",
 	} {
@@ -49,6 +50,7 @@ func TestProfileURL(t *testing.T) {
 		{platform.Twitch, "", "123", ""},
 		{platform.YouTube, "alice", "", ""},
 		{"velora", "alice", "1", ""},
+		{platform.Mock, "alice", "alice", ""},
 	}
 	for _, tc := range tests {
 		assert.Equal(t, tc.want, tc.name.ProfileURL(tc.login, tc.id), tc.name)

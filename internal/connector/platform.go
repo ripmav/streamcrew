@@ -7,6 +7,10 @@
 // platform (roadmap 3.6) and Twitch (phase 4), each in a package below
 // this one. Set holds the platforms of a profile.
 //
+// The other way round, adapters hand what they receive to a Receiver, the
+// event service (Code-ADR-0011, point 4), after dropping repeated messages
+// with a Dedup (spec events.md, B22).
+//
 // The names of the platforms are in internal/domain/platform.
 package connector
 

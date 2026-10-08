@@ -485,7 +485,7 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Eve
   - Eingang der Adapter über einen Port an den Event-Service statt über den Bus ([Code-ADR-0011](adr/code/0011-event-bus.md), Punkt 4; Plan §6.7)
   - Mock-Konsole statt eigener CLI-Befehle bis zur API (Plan §7.2)
   - Locale-Formate mit eigenen Mustern, Zahlen kanonisch ([`template.md`](spec/template.md), B41; [ADR-0022](adr/0022-internationalisierung.md), Punkt 7)
-- [ ] `internal/connector/mock`: simulierte Nutzer, Chat, Stream und Events; Ausgaben ins Log und auf den Bus; Deduplizierung mit einem TTL-Cache für alle Adapter in `internal/connector` ([`events.md`](spec/events.md), B22; Code-ADR-0011, Punkt 5) (M)
+- [x] `internal/connector/mock`: simulierte Nutzer, Chat, Stream und Events; Ausgaben ins Log und auf den Bus; Deduplizierung mit einem TTL-Cache für alle Adapter in `internal/connector` ([`events.md`](spec/events.md), B22; Code-ADR-0011, Punkt 5) (M), erledigt 2026-10-04: Eingangs-Port `connector.Receiver` mit `Incoming` und `Event`, Werte eines Ereignisses als `eventtype.Details`, `connector.Dedup`, Plattformname `mock`; `mock.Platform` mit `Say`, `Join`, `Simulate`, `GoLive` und `GoOffline`, Ausgaben als Ereignis `mock.output`
 - [ ] Event-Service, Grundlage, hinter dem Eingangs-Port der Adapter (M):
   - Event → Event-Command ([`events.md`](spec/events.md), B12)
   - generische plattformneutrale Events mit ihrer Nutzlast (B2, B9)

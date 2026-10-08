@@ -20,6 +20,10 @@ const (
 	Kick    Name = "kick"
 )
 
+// Mock is the simulated platform for tests, demos and development
+// (ADR-0004, roadmap 3.6): the mock console drives it.
+const Mock Name = "mock"
+
 // Default is the default platform (ADR-0004). Where the order of the
 // platforms matters, it comes first, e.g. when moderation without a
 // platform of the run looks for a user (actions.md B82). A setting takes
@@ -27,8 +31,8 @@ const (
 const Default = Twitch
 
 // DisplayName returns the name of the platform as the platform writes it,
-// e.g. "YouTube"; the ID for a platform without an adapter; empty for the
-// empty name.
+// e.g. "YouTube", or "Mock" for the mock platform; the ID for a platform
+// without an adapter; empty for the empty name.
 func (n Name) DisplayName() string {
 	switch n {
 	case Twitch:
@@ -37,6 +41,8 @@ func (n Name) DisplayName() string {
 		return "YouTube"
 	case Kick:
 		return "Kick"
+	case Mock:
+		return "Mock"
 	default:
 		return string(n)
 	}
