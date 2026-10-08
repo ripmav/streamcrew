@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	github.com/alecthomas/kong v1.16.1
+	github.com/cockroachdb/apd/v3 v3.2.3
 	github.com/expr-lang/expr v1.17.8
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
