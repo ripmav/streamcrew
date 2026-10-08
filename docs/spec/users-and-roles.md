@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
+| **Status** | Geprüft |
 | **Stand** | 2026-09-29 |
 | **Bezug** | Roadmap Phase 2.2 (Nutzer, Rollenmodell), 5.2; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0009](../adr/code/0009-ids-und-zeit.md); Plan §5.5, §6.13, Anhang A.6, A.7 |
 | **Umsetzung** | noch offen (geplant: `internal/domain/user`, Repository in `internal/store`) |
@@ -110,3 +110,4 @@ Nicht Teil dieser Spezifikation:
 | Datum | Änderung |
 |---|---|
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
+| 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |

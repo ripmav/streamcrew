@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
+| **Status** | Geprüft |
 | **Stand** | 2026-09-29 |
 | **Bezug** | Roadmap Phase 2.2 (Commands), 3.2–3.5, 5.4; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md); Plan §5.2, §5.4, §6.8, §6.9; [`users-and-roles.md`](users-and-roles.md), [`events.md`](events.md) |
 | **Umsetzung** | noch offen (geplant: `internal/domain/command`, Repository in `internal/store`) |
@@ -135,3 +135,4 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | Datum | Änderung |
 |---|---|
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
+| 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |

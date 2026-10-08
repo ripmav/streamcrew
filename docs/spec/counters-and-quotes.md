@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
+| **Status** | Geprüft |
 | **Stand** | 2026-09-29 |
 | **Bezug** | Roadmap Phase 2.2 (Counter und Quotes), 5.6, 8.3; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md); Plan §5.5, §6.13, Anhang A.3, A.6 |
 | **Umsetzung** | noch offen (geplant: `internal/domain/counter`, `internal/domain/quote`, Repositories in `internal/store`) |
@@ -91,3 +91,4 @@ Beschreibt die Daten von Countern (benannte Zähler, etwa Tode im Spiel) und Quo
 | Datum | Änderung |
 |---|---|
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
+| 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
