@@ -422,6 +422,7 @@ type authLoginCmd struct {
 
 ### Task 6 — Doku: `events.md`, README, Roadmap-Aufräumen (Docs-PR, oberstes PR)
 
+**Status:** erledigt, PR #150
 **Zweig:** `docs/auth-events` (auf `feat/auth-cli`)
 **PR:** `docs: auth events, commands and roadmap 4.1`
 
