@@ -157,6 +157,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
 | `internal/doctor` | Prüfungen für `streamcrew doctor` |
 | `internal/buildinfo` | Version aus den eingebetteten Build-Informationen |
 | `internal/domain/id` | IDs als UUIDv7 aus der Standardbibliothek ([Code-ADR-0009](docs/adr/code/0009-ids-und-zeit.md)) |
+| `internal/domain/eventtype`, `internal/domain/platform` | Katalog der fachlichen Ereignistypen, Namen der Plattformen ([Spezifikation](docs/spec/events.md)) |
 | `internal/event` | Ereignisse, Katalog und nicht blockierender Event-Bus ([Code-ADR-0011](docs/adr/code/0011-event-bus.md)) |
 | `internal/polydoc` | polymorphe JSON-Dokumente mit Typ, Version und Migrationen ([Code-ADR-0010](docs/adr/code/0010-polymorphe-serialisierung.md)) |
 | `internal/store` | SQLite je Profil, goose-Migrationen, sqlc-Abfragen ([Code-ADR-0008](docs/adr/code/0008-datenbankzugriff.md)) |

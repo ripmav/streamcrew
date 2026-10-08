@@ -26,6 +26,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/buildinfo"
 	"github.com/ripmav/streamcrew/internal/config"
+	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/httpserver"
 	"github.com/ripmav/streamcrew/internal/lockfile"
@@ -190,7 +191,7 @@ func (a *App) Run(ctx context.Context) (err error) {
 
 	stopWatching := context.AfterFunc(ctx, func() {
 		a.ready.stopping()
-		a.publish(context.WithoutCancel(ctx), TypeAppStopping, Stopping{})
+		a.publish(context.WithoutCancel(ctx), eventtype.AppStopping, Stopping{})
 	})
 	defer stopWatching()
 
@@ -200,7 +201,7 @@ func (a *App) Run(ctx context.Context) (err error) {
 	if a.cfg.Dev {
 		a.logger.WarnContext(ctx, "developer mode is on: pprof is served under /debug/pprof/")
 	}
-	a.publish(ctx, TypeAppStarted, Started{Version: a.version, Mode: string(a.cfg.Mode), Profile: a.profile.ID})
+	a.publish(ctx, eventtype.AppStarted, Started{Version: a.version, Mode: string(a.cfg.Mode), Profile: a.profile.ID})
 
 	if err := a.sup.Run(ctx); err != nil {
 		a.logger.ErrorContext(ctx, "streamcrew stopped with an error", "error", err)
