@@ -79,6 +79,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, exit func
 		return exitUsage
 	}
 
+	envKey, _ := os.LookupEnv("STREAMCREW_SECRET_KEY")
 	env := &runEnv{
 		stdout:      stdout,
 		stderr:      stderr,
@@ -86,6 +87,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, exit func
 		defaults:    defaults,
 		defaultsErr: defaultsErr,
 		file:        file,
+		envKey:      envKey,
 	}
 	kctx.BindTo(ctx, (*context.Context)(nil))
 	return exitCode(kctx.Run(env), stderr)
