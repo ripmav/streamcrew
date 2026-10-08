@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Akzeptiert |
+| **Status** | Abgelöst durch [ADR-0023](0023-twitch-login-authorization-code-flow.md) |
 | **Datum** | 2026-10-07 |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Plan §6.12, §6.13, §7, §12.1; Roadmap Phase 4 (4.1); [ADR-0003](0003-betriebsmodi.md), [ADR-0004](0004-plattformumfang-zum-start.md), [ADR-0012](0012-persistenz.md), [ADR-0013](0013-sicherheitsmodell.md); [Code-ADR-0003](code/0003-fehler-und-logging.md), [Code-ADR-0009](code/0009-ids-und-zeit.md), [Code-ADR-0011](code/0011-event-bus.md), [Code-ADR-0019](code/0019-host-rechte-in-der-startkonfiguration.md) |
@@ -44,6 +44,14 @@ Wir nutzen für Twitch den Device Code Flow mit `golang.org/x/oauth2`
 ohne Secret, speichern Accounts in SQLite und Tokens im Vault, refreshen
 proaktiv vor Ablauf, weisen fehlende Scopes mit „Anmeldung erforderlich“ aus
 und widerrufen beim Abmelden.
+
+*Abgelöst am 2026-10-08 durch [ADR-0023](0023-twitch-login-authorization-code-flow.md):
+Der Standard-Login ist der Authorization Code Flow mit Loopback-Redirect, den
+der Nutzer im Browser abschließt, mit Client-ID und -Secret, die der Nutzer
+seiner eigenen Confidential-App mitbringt (BYO); der Device Code Flow bleibt
+als Fallback (`auth login twitch --device-flow`). Die Entscheidungen zu
+Speicherung, Scopes, Refresh und Ereignissen gelten weiter, soweit ADR-0023
+sie ausdrücklich übernimmt.*
 
 1. **Flow:** Device Code Flow (RFC 8628) gegen `https://id.twitch.tv/oauth2/device`
    (Start) und `https://id.twitch.tv/oauth2/token` (Polling mit
