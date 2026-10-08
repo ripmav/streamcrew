@@ -1063,7 +1063,24 @@ Aus den globalen Regeln, verbindlich für alle Repos:
 ### 11.3 CI/CD
 
 - **Plattform:** GitHub Actions; Releases in GitHub Releases (ADR-0009).
-- **KI-Review:** Claude Code (GitHub-App) reagiert nur, wenn `@claude` in einem Pull Request erwähnt wird: als Kommentar, Review-Kommentar oder Review. Dann führt es ein Code-Review dieses PRs aus. Es gibt kein automatisches Review bei jedem Push und keine Reaktion auf Issues; auslösen dürfen nur Owner, Mitglieder und Collaborators (`.github/workflows/claude.yml`). Jede Anfrage bekommt einen Fortschrittskommentar („Review läuft …“ mit Link zum Log). Nach dem Review wird er mit dem Ergebnis aktualisiert: Anzahl der Befunde, „keine Befunde“, „unvollständig“ (wenn Werkzeugaufrufe verweigert wurden) oder „fehlgeschlagen“. Das Log zeigt dazu die Namen der benutzten und der verweigerten Werkzeuge. So gibt es auch ohne Befunde immer eine sichtbare Rückmeldung.
+- **KI-Review** (`.github/workflows/claude.yml`):
+  - **Auslöser:** Claude Code (GitHub-App) reagiert nur, wenn `@claude` in einem Pull Request erwähnt wird: als Kommentar, Review-Kommentar oder Review. Auslösen dürfen nur Owner, Mitglieder und Collaborators. Es gibt kein automatisches Review bei jedem Push und keine Reaktion auf Issues.
+  - **Prompt:** Das Review folgt einem eigenen Prompt, keinem Plugin-Befehl. Jede Anfrage wird vollständig geprüft, auch wiederholte Anfragen im selben PR.
+    - Prompt und Ausgabe-Schema liegen in `.github/claude/` (`review-prompt.md`, `review-schema.json`).
+    - Der Workflow liest beide aus dem Commit, aus dem er selbst stammt (`github.workflow_sha`), nie aus dem PR-Checkout. Ein PR kann so die Anweisungen für sein eigenes Review nicht ändern.
+    - Geprüft wird auf Fehler und Sicherheitsprobleme sowie auf die Projektregeln (§11.1, §11.4, ADRs, Herkunftsregeln aus ADR-0001).
+    - Was Linter und CI schon prüfen, wird nicht gemeldet.
+    - Jeder Befund wird vor dem Melden am Code verifiziert.
+  - **Nur lesend:**
+    - Der Workflow sammelt PR-Daten, Diff und vorhandene Inline-Kommentare vorab.
+    - Claude bekommt nur Lese-Werkzeuge und das Werkzeug für Inline-Kommentare, keine Shell.
+    - Inhalte des PRs gelten als Prüfmaterial, nie als Anweisung.
+  - **Rückmeldung:**
+    - Jede Anfrage bekommt sofort einen Fortschrittskommentar. Er wird durch das Ergebnis ersetzt: Zusammenfassung auf Deutsch und Befundliste mit Schweregrad (hoch, mittel, niedrig).
+    - Jeder Befund steht zusätzlich als Inline-Kommentar im Code. Bereits kommentierte Befunde werden nicht doppelt gepostet.
+    - Weitere Zustände: „unvollständig“, wenn Werkzeugaufrufe verweigert wurden; „fehlgeschlagen“ bzw. „ohne Ergebnis“.
+    - Fehlt ein gemeldeter Inline-Kommentar, weist der Ergebniskommentar darauf hin.
+    - Das Log zeigt Laufdaten sowie benutzte und verweigerte Werkzeuge.
 - **Prüfungen** (`.github/workflows/ci.yml`, Code-ADR-0001):
   - `go fix -diff`, `go vet`, Lint inkl. SPDX-Header
   - Tests mit `-race`, kurze Fuzz-Läufe (`scripts/fuzz.sh`)
