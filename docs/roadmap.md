@@ -474,6 +474,7 @@ Zuerst die Änderungen an Datenmodell und Engine aus den geklärten Fragen vom 2
     - [x] CLI mit denselben Prüfungen wie beim Speichern gegen eine Kopie des Profils, Konflikten der Trigger und Ereignistypen und Ausgabe als Text und JSON, erledigt 2026-10-03 (`app.CheckCommandFiles`, `commandfile.Apply`)
   - [x] `command import`: eine Transaktion, Ersetzen nach Namen, gestoppter Core, erledigt 2026-10-03 (`app.ImportCommandFiles`, `Store.Atomically`)
   - [x] `command export`: YAML und JSON, `--file`, `--dir` mit der Version im Dateinamen, Rundlauf, erledigt 2026-10-03 (`commandfile.Export`, `app.ExportCommands`)
+- [ ] Löschen verhindern, solange ein anderer Command auf Command, Command-Gruppe oder Cooldown-Gruppe verweist; Commands nur deaktivieren ([`commands.md`](spec/commands.md), B8) (S), Entscheidung des Projektinhabers vom 2026-10-04
 
 ### 3.6 Mock-Plattform und Event-Grundlagen
 
@@ -1351,3 +1352,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-03 | `streamcrew command validate`: prüft Dateien gegen eine Kopie des Profils mit den Prüfungen beim Speichern, auch während der Core läuft; Fehler und Warnungen mit Datei, Zeile, Spalte und Pfad, als Text oder JSON. Fehler über Actions und Anforderungen tragen jetzt ihren Typ (`command.ActionError`, `command.RequirementError`). |
 | 2026-10-03 | `streamcrew command import`: übernimmt alle Dokumente in einer Transaktion oder, bei einem Fehler, keines; ersetzt nach Art und Name mit gleicher ID und Erstellungszeit. Neu im Store: `Store.Atomically` für mehrere Speichervorgänge in einer Transaktion (Nachtrag zu Code-ADR-0008, Entscheidung des Projektinhabers). |
 | 2026-10-03 | `streamcrew command export`: schreibt Commands mit ihren Gruppen und Cooldown-Gruppen als YAML oder JSON, auf die Standardausgabe, in eine Datei oder je Dokument eine Datei mit der Version im Namen; Export und erneuter Import ändern nichts außer der Zeit der Änderung. Damit ist Abschnitt 3.5 erledigt. |
+| 2026-10-04 | Neue Aufgabe in 3.5: Commands, Command-Gruppen und Cooldown-Gruppen, auf die ein anderer Command verweist, lassen sich nicht löschen, nur Commands deaktivieren (Entscheidung des Projektinhabers; `commands.md`, B8). Anlass war der Export, der an Verweisen auf gelöschte Commands scheitert. |
