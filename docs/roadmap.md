@@ -92,7 +92,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
-| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: Kern der Template-Engine und alle Identifier-Familien umgesetzt (3.1); als Nächstes die Ausdrücke |
+| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: 3.1 Template-Engine abgeschlossen (Kern, Identifier-Familien, Ausdrücke); als Nächstes 3.2 Command-Engine |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
@@ -371,8 +371,8 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - Datum und Zeit in der Profil-Zeitzone
   - Zufall, Stream, Counter, letzte Ereignisse (Ereigniswerte als Werte des Durchlaufs)
   - Command-Name, Plattform
-- [ ] Ausdrücke mit `expr-lang/expr`: Rechnen, Vergleiche (S)
-- [ ] Golden-Tests und Fuzz-Targets (S); für Kern und Familien erledigt (`FuzzRender`, Golden Files je Familie), die Ausdrücke folgen
+- [x] Ausdrücke mit `expr-lang/expr`: Rechnen, Vergleiche (S), erledigt 2026-09-30: `internal/expr`
+- [x] Golden-Tests und Fuzz-Targets (S), erledigt 2026-09-30: Golden Files je Familie, `FuzzRender`, `FuzzExpression`
 
 ### 3.2 Command-Engine
 
@@ -1191,3 +1191,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Code-ADR-0010 und Plan §6.9 und §8 berichtigt: `encoding/json/v2` und `encoding/json/jsontext` sind in go1.27.1 ohne `GOEXPERIMENT` verfügbar; der Wechsel von `internal/polydoc` braucht weiterhin ein ergänzendes Code-ADR (Befund aus dem Review von PR #42). |
 | 2026-09-30 | Identifier-Familien ohne Nutzer umgesetzt: Argumente, Nachricht, Datum und Zeit, Zufallszahlen, Stream (Port `StreamStates`), Counter als Quelle mit Namensprüfung (`Counter.CheckReserved`), Namen der Ereigniswerte, Command-Name und Plattform. |
 | 2026-09-30 | Nutzer-Familien umgesetzt: Subjekt mal Eigenschaft für auslösenden Nutzer, Ziel, Streamer, Bot, `arg<n>user` und Zufallsnutzer über den Port `template.Users`; Zeitspannen in Jahren, Monaten und Tagen; `platform.Name.ProfileURL`. |
+| 2026-09-30 | Ausdrücke umgesetzt (`internal/expr` mit `expr-lang/expr` 1.17.8): Sprache auf B50 begrenzt, Identifier als Variablen, alle Zahlen als `float64`, Grenzen für Größe und Speicher. Phase 3.1 abgeschlossen. |

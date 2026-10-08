@@ -74,7 +74,11 @@ func (e *Engine) Render(ctx context.Context, t Template, s *Scope, enc Encoding)
 	if !enc.valid() {
 		return "", fmt.Errorf("render template: unknown encoding %d", int(enc))
 	}
-	s = s.forRender()
+	return e.render(ctx, t, s.forRender(), enc)
+}
+
+// render renders t with s, which holds the state of the current render.
+func (e *Engine) render(ctx context.Context, t Template, s *Scope, enc Encoding) (string, error) {
 	var b strings.Builder
 	b.Grow(len(t.src))
 	for _, p := range t.pieces {
