@@ -386,18 +386,29 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 3.3 Action-Framework und P0-Actions
 
+Reihenfolge: erst die Bereinigung nach Code-ADR-0017, dann die Doku als unterster PR eines neuen Stacks (Spezifikation `actions.md` und Code-ADR-0013), danach die Umsetzung nach Features. Die Actions testen gegen Fakes der Ports; die Mock-Plattform (3.6) und Twitch (Phase 4) liefern die echten.
+
+- [ ] Vorab: bestehenden Code nach [Code-ADR-0017](adr/code/0017-klare-signale-statt-magischer-werte.md) bereinigen (S):
+  - `template.Scope` ohne Sonderwerte: kein leeres Trennzeichen für `|`, keine fehlende Zeitzone für UTC, kein fehlendes Ziel für den auslösenden Nutzer, kein leerer Text nach dem Trigger für „Argumente mit Leerzeichen“
+  - Settings-Sektion „time“: `system` statt leerer Zeitzone, als neue Version der Sektion mit Migration (Entscheidung des Projektinhabers vom 2026-09-30)
+- [ ] Spezifikation [`docs/spec/actions.md`](spec/README.md): Verhalten der P0-Actions aus der offiziellen Doku, ohne Code des Originals (M):
+  - je Action Konfiguration, Ablauf, gesetzte Identifier, Fehlerfälle
+  - die Grenze für Wiederholungen ([`command-engine.md`](spec/command-engine.md), B74)
+  - was mit den Ausgängen eines Aufrufs geschieht (`engine.Run.Call`: abgeschlossen, eingereiht, inaktiv, abgelehnt, wartend)
+  - globale Werte der Action `specialidentifier`: Lebensdauer und Speicherung, als Quelle der Templates ([`template.md`](spec/template.md), B10)
 - [ ] Code-ADR-0013 Typ-Registry (M): Descriptor mit
   - Typ-ID, Version, Kategorie, i18n-Schlüsseln
   - JSON-Schema und UI-Hinweisen
   - benötigten Capabilities
   - Anschluss an die Engine (seit 3.2): Actions setzen `engine.Performer` um, optional `engine.TimeLimiter` (B72) und `engine.Container` für verschachtelte Actions (B22); die Registry liefert die Funktion für `engine.WithVisualAudio` (B23); „aktuellen Command beenden“ gibt `engine.ErrStop` zurück, die Command-Action nutzt `engine.Run.Call`
-- [ ] Capability-Prüfung je Betriebsmodus: Warnung beim Speichern, Verweigerung bei Ausführung (S)
-- [ ] `chat`: senden, antworten, flüstern; als Bot oder Streamer (S)
-- [ ] `wait`, `random`, `group`, `repeat` (S)
-- [ ] `conditional`: Vergleiche, Und/Oder, `expr`-Ausdrücke, Verzweigungen (M)
-- [ ] `command`: ausführen mit oder ohne Warten, aktivieren/deaktivieren, Gruppe schalten (S)
+- [ ] Plattform-Ports nach Plan §6.11 in `internal/platform` (S): `Chat` (senden, antworten, flüstern, löschen), `Moderation`, Kanalinformation, Nutzer nachschlagen; die Actions nutzen sie, die Mock-Plattform (3.6) und Twitch (Phase 4) setzen sie um
+- [ ] Capability-Prüfung je Betriebsmodus nach [ADR-0013](adr/0013-sicherheitsmodell.md): Warnung beim Speichern, Verweigerung bei Ausführung (S)
+- [ ] `wait`, `random`, `group`, `repeat` mit der Grenze aus B74 (S)
+- [ ] `conditional`: Vergleiche, Und/Oder, `expr`-Ausdrücke (`internal/expr`), Verzweigungen (M)
+- [ ] `command`: ausführen mit oder ohne Warten über `engine.Run.Call`, aktivieren/deaktivieren, Gruppe schalten (S)
 - [ ] `counter`: setzen, addieren, zurücksetzen (S)
-- [ ] `specialidentifier`: lokale und globale Werte setzen, Ausdrücke (S)
+- [ ] `specialidentifier`: lokale und globale Werte setzen, Ausdrücke; globale Werte als Quelle der Template-Engine (S)
+- [ ] `chat`: senden, antworten, flüstern; als Bot oder Streamer, über den Chat-Port (S)
 - [ ] `webrequest`: Methode, Header, Body; JSON-Pfade in Identifier; SSRF-Schutz im Server-Modus (M)
 - [ ] `moderation`: Timeout, Bann, Entbannen, Mod/VIP, Nachricht löschen, Chat leeren (S)
 - [ ] `platformmessage`, `userlookup` (S)
@@ -407,9 +418,17 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 
 ### 3.4 Requirements
 
-- [ ] Set-Validierung und -Ausführung, Fehlermeldungen (i18n), Fehler-Cooldowns (global, pro Command, aus) (M); die Fehler-Cooldowns sitzen seit 3.2 in der Engine (erledigt 2026-09-30), hier folgt der Requirement-Service hinter dem Port `engine.Requirements`
-- [ ] Rolle, Cooldown (pro Nutzer, global, Gruppe), Argumente, Einstellungen, z. B. Auslösenachricht löschen (M)
-- [ ] Threshold: Mindestanzahl Nutzer im Zeitfenster (S) (P1)
+Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022), dann die Umsetzung. Die Engine ruft den Requirement-Service über den Port `engine.Requirements` auf (seit 3.2); die Fehler-Cooldowns sitzen in der Engine.
+
+- [ ] Spezifikation [`docs/spec/requirements.md`](spec/README.md): Prüfung der Anforderungsarten aus der offiziellen Doku, ohne Code des Originals (M):
+  - Reihenfolge der Prüfungen, Kosten und Cooldowns erst, wenn alle erfüllt sind ([`command-engine.md`](spec/command-engine.md), B10)
+  - Fehlermeldungen je Art, wann der Nutzer sie erfährt (`Rejection.Tell`), Schwelle als „wartend“
+  - Argumente: Typen, Pflicht, Werte als Identifier ([`commands.md`](spec/commands.md), B45)
+  - Währung, Rang und Inventar: wie sie bis Phase 8 behandelt werden, das sie liefert
+- [ ] ADR-0022 Internationalisierung; Grundgerüst mit EN und DE (S), aus 3.6 vorgezogen, weil die Fehlermeldungen der Anforderungen übersetzt werden
+- [ ] Requirement-Service hinter `engine.Requirements`: Entscheidung (`met`, `waiting`, `rejected`) mit Kosten und Cooldowns, `Notify` mit übersetzter Meldung, Set-Validierung beim Speichern (M)
+- [ ] Rolle, Cooldown (pro Nutzer, global, Gruppe), Argumente (Werte als Identifier des Durchlaufs), Einstellungen, z. B. Auslösenachricht löschen über den Chat-Port aus 3.3 (M)
+- [ ] Threshold: Mindestanzahl Nutzer im Zeitfenster, je Nutzer ein Durchlauf ([`command-engine.md`](spec/command-engine.md), B82) (S) (P1)
 
 ### 3.5 Commands als Code und Typkatalog
 
@@ -427,7 +446,6 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
   - Einmal-Events pro Nutzer
   - Deduplizierung
 - [ ] Trigger-Erkennung: `!`-Präfix, Wildcards, längster Treffer, Argumente inkl. Anführungszeichen (M)
-- [ ] ADR-0022 Internationalisierung; Grundgerüst mit EN und DE (S)
 - [ ] Command-Engine und Template-Engine in der Composition Root verdrahten: Engine als Runnable beim Supervisor, ihre Ereignistypen im Katalog, Settings, Ports (S)
 - [ ] Settings-Sektion „locale“ (Sprache und Formate des Profils), aus 3.2 verschoben; danach Datums-, Zeit- und Zahlenformate der Templates nach der Locale ([`template.md`](spec/template.md), B41) (S)
 
@@ -1209,3 +1227,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Code-ADR-0018 „JSON mit `encoding/json/v2`“ vorgeschlagen, das ergänzende ADR zu Punkt 7 von Code-ADR-0010: v2 für alles JSON im Core, strenges Lesen nach den Standards von v2, reproduzierbares Schreiben, Migrationen ohne Verlust an Genauigkeit. Die Umsetzung steht in 3.3, vor der Typ-Registry. |
 | 2026-09-30 | Code-ADR-0018 vom Projektinhaber abgenommen, ohne Änderungen. |
 | 2026-09-30 | Wechsel auf `encoding/json/v2` nach Code-ADR-0018 umgesetzt: alle acht Pakete in einem Schritt, strenges Lesen, deterministisches Schreiben, Migrationen in `internal/polydoc` auf `jsontext.Value`; die von v1 geschriebenen Golden Files bleiben Byte für Byte gleich. |
+| 2026-09-30 | 3.3 und 3.4 startklar gemacht: Reihenfolge (Bereinigung nach Code-ADR-0017, dann Doku, dann Umsetzung), neue Aufgaben für die Spezifikationen `actions.md` und `requirements.md` und für die Plattform-Ports nach Plan §6.11; ADR-0022 aus 3.6 nach 3.4 vorgezogen, weil die Fehlermeldungen der Anforderungen übersetzt werden. Die Zeitzone heißt künftig `system` statt leer (Entscheidung des Projektinhabers). |
