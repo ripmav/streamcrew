@@ -1,0 +1,12 @@
+{
+  "type": "repeat",
+  "schemaVersion": 1,
+  "enabled": true,
+  "count": 1000,
+  "actions": [
+    {
+      "type": "wait",
+      "seconds": 0
+    }
+  ]
+}

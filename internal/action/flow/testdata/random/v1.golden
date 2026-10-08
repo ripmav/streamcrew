@@ -1,0 +1,16 @@
+{
+  "type": "random",
+  "schemaVersion": 1,
+  "enabled": true,
+  "count": 2,
+  "draw": "unique_remembered",
+  "actions": [
+    {
+      "type": "wait",
+      "seconds": 1
+    },
+    {
+      "type": "obs_scene"
+    }
+  ]
+}

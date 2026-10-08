@@ -1,0 +1,6 @@
+{
+  "type": "wait",
+  "schemaVersion": 1,
+  "enabled": true,
+  "seconds": 1.5
+}

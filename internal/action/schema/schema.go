@@ -84,8 +84,8 @@ type Schema struct {
 	Items *Schema `json:"items,omitempty"`
 	// Enum lists the allowed texts.
 	Enum []string `json:"enum,omitempty"`
-	// Const is the only allowed text.
-	Const *string `json:"const,omitempty"`
+	// Const is the only allowed value, as JSON.
+	Const jsontext.Value `json:"const,omitempty"`
 	// Minimum and Maximum bound a number, both included.
 	Minimum *float64 `json:"minimum,omitempty"`
 	Maximum *float64 `json:"maximum,omitempty"`
@@ -202,7 +202,7 @@ func Kinds(common []Property, variants ...Variant) *Schema {
 	kind := Property{Name: "kind", Schema: Choice(kinds...), Required: true}
 	s := Document(append([]Property{kind}, common...)...)
 	for _, v := range variants {
-		alt := Object(append(append(append(header(), Property{Name: "kind", Schema: &Schema{Const: new(v.Kind)}, Required: true}), common...), v.Props...)...)
+		alt := Object(append(append(append(header(), Property{Name: "kind", Schema: &Schema{Const: quote(v.Kind)}, Required: true}), common...), v.Props...)...)
 		s.OneOf = append(s.OneOf, alt)
 		// The members of all variants, for editors that read the top level.
 		for _, p := range v.Props {
@@ -213,6 +213,13 @@ func Kinds(common []Property, variants ...Variant) *Schema {
 		}
 	}
 	return s
+}
+
+// quote returns text as a JSON string. Type IDs and kinds are ASCII; were
+// they not valid UTF-8, the invalid bytes would become U+FFFD.
+func quote(text string) jsontext.Value {
+	v, _ := jsontext.AppendQuote(nil, text)
+	return v
 }
 
 // Switch returns a yes or no field.
@@ -271,7 +278,7 @@ func Actions() *Schema {
 func (s *Schema) BindType(typ string) {
 	for i, p := range s.Properties {
 		if p.Name == "type" {
-			s.Properties[i].Schema = &Schema{Type: "string", Const: new(typ)}
+			s.Properties[i].Schema = &Schema{Type: "string", Const: quote(typ)}
 		}
 	}
 	for _, alt := range s.OneOf {
@@ -343,6 +350,7 @@ func (s *Schema) Clone() *Schema {
 	for i := range c.OneOf {
 		c.OneOf[i] = c.OneOf[i].Clone()
 	}
+	c.Const = slices.Clone(s.Const)
 	c.Default = slices.Clone(s.Default)
 	return &c
 }
