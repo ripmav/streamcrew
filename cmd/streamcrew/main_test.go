@@ -383,6 +383,9 @@ func TestCommandsRefuseWhileCoreRuns(t *testing.T) {
 	require.NoError(t, os.WriteFile(file, []byte("apiVersion: streamcrew/v1alpha1\nkind: TimerCommand\nmetadata: {name: Tip}\nspec: {}\n"), 0o600))
 	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "validate", file)
 	require.Equal(t, cli.ExitOK, res.code, "commands-as-code.md, B31: checking works while the core runs: %s", res.stderr)
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "import", file)
+	assert.Equal(t, cli.ExitFailure, res.code, "commands-as-code.md, B33: importing needs a stopped core")
+	assert.Contains(t, res.stderr, "in use by another streamcrew process")
 
 	cancel()
 	require.Equal(t, cli.ExitOK, (<-done).code)
@@ -486,4 +489,44 @@ func TestCommandValidate(t *testing.T) {
 	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "validate", empty)
 	assert.Equal(t, cli.ExitUsage, res.code)
 	assert.Contains(t, res.stderr, "no files of commands as code")
+}
+
+// TestCommandImport covers B33 and B62 of commands-as-code.md: an import
+// creates and then replaces by name; a file with errors imports nothing.
+func TestCommandImport(t *testing.T) {
+	isolate(t)
+	dataDir := t.TempDir()
+	require.Equal(t, cli.ExitOK, runCLI(t.Context(), t, "--data-dir", dataDir, "profile", "create", "Main").code)
+	require.Equal(t, cli.ExitOK, runCLI(t.Context(), t, "--data-dir", dataDir, "profile", "use", "main").code)
+	dir := t.TempDir()
+	hug := filepath.Join(dir, "hug.yaml")
+	require.NoError(t, os.WriteFile(hug, []byte(
+		"apiVersion: streamcrew/v1alpha1\nkind: ChatCommand\nmetadata: {name: Hug}\nspec: {triggers: [hug]}\n"), 0o600))
+
+	res := runCLI(t.Context(), t, "--data-dir", dataDir, "command", "import", hug)
+	require.Equal(t, cli.ExitOK, res.code, res.stderr)
+	assert.Equal(t, "1 document in 1 file: 0 errors, 0 warnings; imported: 1 new, 0 replaced\n", res.stdout)
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "import", hug)
+	require.Equal(t, cli.ExitOK, res.code, res.stderr)
+	assert.Equal(t, "1 document in 1 file: 0 errors, 0 warnings; imported: 0 new, 1 replaced\n", res.stdout)
+
+	bad := filepath.Join(dir, "bad.yaml")
+	require.NoError(t, os.WriteFile(bad, []byte(
+		"apiVersion: streamcrew/v1alpha1\nkind: ChatCommand\nmetadata: {name: Other}\nspec: {triggers: [hug]}\n"), 0o600))
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "import", "-o", "json", bad)
+	assert.Equal(t, cli.ExitFailure, res.code)
+	var report struct {
+		Imported bool `json:"imported"`
+		Errors   int  `json:"errors"`
+		Created  int  `json:"created"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(res.stdout), &report), res.stdout)
+	assert.False(t, report.Imported)
+	assert.Equal(t, 1, report.Errors)
+	assert.Zero(t, report.Created)
+
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "import", bad)
+	assert.Equal(t, cli.ExitFailure, res.code)
+	assert.Equal(t, bad+":4:19: spec.triggers[0]: the trigger \"!hug\" is used by the active chat command \"Hug\"\n"+
+		"1 document in 1 file: 1 error, 0 warnings; nothing imported\n", res.stdout)
 }

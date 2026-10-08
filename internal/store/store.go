@@ -76,6 +76,9 @@ type Store struct {
 	read    *sql.DB
 	logger  *slog.Logger
 	version int64
+	// tx is the transaction of a store that Atomically passes on; reads
+	// and writes go through it. Nil for an open database.
+	tx *sql.Tx
 }
 
 // Open opens or creates the database at path and migrates it to the latest
@@ -120,9 +123,38 @@ func open(ctx context.Context, path string, fsys fs.FS, gos []*goose.Migration, 
 	return s, nil
 }
 
-// Close closes both pools.
+// Close closes both pools. The store of Atomically has none.
 func (s *Store) Close() error {
+	if s.tx != nil {
+		return errors.New("close: the store of a transaction is not closed, Atomically ends it")
+	}
 	return errors.Join(s.read.Close(), s.write.Close())
+}
+
+// Atomically runs fn with a store whose reads and writes go through one
+// transaction on the writer pool, and commits it if fn returns nil;
+// otherwise it rolls back, and nothing fn wrote stays. So several
+// operations, e.g. the saves of an import, succeed or fail together
+// (Code-ADR-0008, addendum of 2026-10-03). Reads in fn see the writes
+// before them. fn must use only the store it gets: SQLite has one writer,
+// so writes through s wait until the transaction ends. Called on such a
+// store, Atomically runs fn in the same transaction.
+func (s *Store) Atomically(ctx context.Context, fn func(tx *Store) error) error {
+	if s.tx != nil {
+		return fn(s)
+	}
+	tx, err := s.write.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	inTx := &Store{path: s.path, logger: s.logger, version: s.version, tx: tx}
+	if err := fn(inTx); err != nil {
+		return errors.Join(err, rollback(tx))
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", translate(err))
+	}
+	return nil
 }
 
 // Path returns the database file.
@@ -149,6 +181,9 @@ func LatestVersion() int64 {
 // the write lock from its start (BEGIN IMMEDIATE); it commits if fn returns
 // nil and rolls back otherwise.
 func (s *Store) Write(ctx context.Context, fn func(q *sqlcgen.Queries) error) error {
+	if s.tx != nil {
+		return translate(fn(sqlcgen.New(s.tx)))
+	}
 	tx, err := s.write.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -162,14 +197,21 @@ func (s *Store) Write(ctx context.Context, fn func(q *sqlcgen.Queries) error) er
 	return nil
 }
 
-// reader returns queries on the reader pool.
+// reader returns queries on the reader pool, or on the transaction of a
+// store of Atomically.
 func (s *Store) reader() *sqlcgen.Queries {
+	if s.tx != nil {
+		return sqlcgen.New(s.tx)
+	}
 	return sqlcgen.New(s.read)
 }
 
 // VacuumInto writes a consistent, compact copy of the database to dest,
 // which must not exist.
 func (s *Store) VacuumInto(ctx context.Context, dest string) error {
+	if s.tx != nil {
+		return errors.New("vacuum into: not within a transaction")
+	}
 	if _, err := s.write.ExecContext(ctx, "VACUUM INTO ?", dest); err != nil {
 		return fmt.Errorf("vacuum into %s: %w", dest, err)
 	}

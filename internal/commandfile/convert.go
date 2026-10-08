@@ -60,6 +60,28 @@ type Plan struct {
 	Commands       []Planned[command.Command]
 }
 
+// Counts returns how many objects of the plan are new in the profile and
+// how many replace one of the same kind and name (B33).
+func (p Plan) Counts() (created, replaced int) {
+	count := func(replaces bool) {
+		if replaces {
+			replaced++
+		} else {
+			created++
+		}
+	}
+	for _, g := range p.CooldownGroups {
+		count(g.Replaces)
+	}
+	for _, g := range p.Groups {
+		count(g.Replaces)
+	}
+	for _, c := range p.Commands {
+		count(c.Replaces)
+	}
+	return created, replaced
+}
+
 // Planned is an object of a plan with the document it comes from.
 type Planned[T any] struct {
 	Doc   Document

@@ -16,6 +16,9 @@ import (
 // readTx runs fn in a transaction on the reader pool, so that queries that
 // belong together see one snapshot. It never commits.
 func (s *Store) readTx(ctx context.Context, fn func(q *sqlcgen.Queries) error) error {
+	if s.tx != nil {
+		return translate(fn(sqlcgen.New(s.tx)))
+	}
 	tx, err := s.read.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin read transaction: %w", err)
