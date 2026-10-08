@@ -69,6 +69,7 @@ func TestBeforeMigrateRunsForExistingDatabases(t *testing.T) {
 	var calls []call
 	hook := WithBeforeMigrate(func(_ context.Context, s *Store, from, to int64) error {
 		calls = append(calls, call{from, to})
+		assert.Equal(t, from, s.SchemaVersion(), "backups made by the hook carry the old version")
 		// The database is still at the old version while the hook runs.
 		var n int
 		require.NoError(t, s.read.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE name = 'b'").Scan(&n))

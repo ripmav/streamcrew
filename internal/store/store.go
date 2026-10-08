@@ -191,6 +191,8 @@ func (s *Store) migrate(ctx context.Context, fsys fs.FS, before func(ctx context
 		return fmt.Errorf("%w: database %d, supported %d", ErrSchemaTooNew, current, target)
 	}
 	if current < target {
+		// The hook sees the version the database has before migrating.
+		s.version = current
 		if current > 0 && before != nil {
 			if err := before(ctx, s, current, target); err != nil {
 				return fmt.Errorf("before migrating from %d to %d: %w", current, target, err)
