@@ -82,6 +82,9 @@ jobs:
           gh pr diff "$PR" --repo "$REPO" > "$dir/diff.patch"
           gh api --paginate "repos/$REPO/pulls/$PR/comments" \
             --jq '.[] | {path, line, author: .user.login, body}' | jq -s . > "$dir/inline-comments.json"
+          # Build, vet, lint and tests run in the CI of the pull request; Claude
+          # cannot run them and reads their state from here instead.
+          gh pr checks "$PR" --repo "$REPO" --json name,workflow,state,bucket > "$dir/checks.json" || true
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
           wc -c "$dir"/*
 
@@ -126,9 +129,15 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: ${{ steps.prompt.outputs.text }}
-          # Read-only tools plus inline comments; no Bash. The context directory is
-          # outside the checkout and therefore added explicitly.
+          # Read-only tools plus inline comments; no Bash. --tools removes every
+          # other built-in tool (shell, web, subagents, …) from what Claude sees;
+          # --allowedTools only decides which calls run without asking. With
+          # --allowedTools alone, Claude still tried the shell, WebFetch and
+          # background subagents, and all these calls were denied (39 in the
+          # review of PR #13). The context directory is outside the checkout
+          # and therefore added explicitly.
           claude_args: |
+            --tools "Read,Glob,Grep"
             --allowedTools "Read,Glob,Grep,mcp__github_inline_comment__create_inline_comment"
             --add-dir "${{ steps.context.outputs.dir }}"
             --json-schema '${{ steps.prompt.outputs.schema }}'
