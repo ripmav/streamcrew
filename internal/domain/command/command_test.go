@@ -184,3 +184,47 @@ func TestRequirementValidation(t *testing.T) {
 		assert.Error(t, r.Validate(), name)
 	}
 }
+
+// step is an action for tests; with children it is a command.Parent.
+type step struct {
+	err      error
+	children []command.Action
+}
+
+func (step) DocType() string              { return "step" }
+func (s step) Validate() error            { return s.err }
+func (s step) Children() []command.Action { return s.children }
+
+// nest returns a step that nests depth levels deep.
+func nest(depth int) command.Action {
+	var a command.Action = step{}
+	for range depth - 1 {
+		a = step{children: []command.Action{a}}
+	}
+	return a
+}
+
+// TestValidateActions covers Code-ADR-0013, points 5 and 7: actions and
+// their child actions are checked, with the path in the error.
+func TestValidateActions(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, command.ValidateActions([]command.Action{step{}, step{children: []command.Action{step{}}}}))
+	require.NoError(t, command.ValidateActions([]command.Action{nest(polydoc.MaxDepth)}))
+
+	for name, tc := range map[string]struct {
+		actions []command.Action
+		want    string
+	}{
+		"empty action":       {[]command.Action{step{}, nil}, "empty action at 2"},
+		"empty child action": {[]command.Action{step{children: []command.Action{step{}, nil}}}, "empty action at 1.2"},
+		"invalid child":      {[]command.Action{step{}, step{children: []command.Action{step{err: assert.AnError}}}}, "action 2.1 (step)"},
+		"too deep":           {[]command.Action{nest(polydoc.MaxDepth + 1)}, "nested more than"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			err := command.ValidateActions(tc.actions)
+			require.ErrorIs(t, err, command.ErrInvalid)
+			assert.ErrorContains(t, err, tc.want)
+		})
+	}
+}

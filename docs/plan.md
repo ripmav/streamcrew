@@ -561,7 +561,7 @@ type Descriptor struct {
 	Category     Category                // e.g. CategoryNetwork
 	Capabilities []capability.Capability // needed to run; empty for none
 	VisualAudio  bool                    // shares the lock "visual_audio"
-	Schema       schema.Schema           // configuration, with UI hints
+	Schema       *schema.Schema          // configuration, with UI hints
 	New          func() command.Action   // a new action with the defaults for creating one
 	Decode       func(data []byte, opts json.Options) (command.Action, error)
 	Migrations   []polydoc.Migration
