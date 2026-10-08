@@ -434,9 +434,13 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
 - [x] [ADR-0022](adr/0022-internationalisierung.md) Internationalisierung (S), aus 3.6 vorgezogen, weil die Fehlermeldungen der Anforderungen übersetzt werden; akzeptiert 2026-10-02: ICU MessageFormat v1 im Teilumfang, eigener Parser und Renderer auf `golang.org/x/text`
 - [x] `internal/i18n` nach [ADR-0022](adr/0022-internationalisierung.md): Parser und Renderer für den Teilumfang, Kataloge EN und DE, Dauern, Rückfall, Vollständigkeitstests und Fuzz-Test (M), erledigt 2026-10-02: `i18n.Catalog` mit `Load`, `New` und `Render`, Werte `Text`, `Int`, `Decimal`, `Duration`; Schlüssel als Konstanten in `keys.go`. Einen Rückfall auf Englisch braucht es noch nicht, weil `New` vollständige Kataloge verlangt; er kommt mit den anpassbaren Meldungen (P1)
 - [x] Settings-Sektion „locale“ mit der Sprache des Profils (`en`, `de`), aus 3.6 vorgezogen ([ADR-0022](adr/0022-internationalisierung.md), Punkt 7) (S), erledigt 2026-10-02: `settings.Locale` (Version 1) mit `language`, Standard `en`; eine Sprache ohne Katalog lehnt das Speichern ab
+- [x] Offene Fragen von [`requirements.md`](spec/requirements.md) am Original klären und entscheiden, vor dem Requirement-Service (S), erledigt 2026-10-02: Recherche-Agent wie bei den Actions; Entscheidungen des Projektinhabers in der Änderungshistorie der Spezifikation
+- [ ] Benannte Cooldown-Gruppen mit einer Dauer je Gruppe, unabhängig von der Gruppe des Commands ([`commands.md`](spec/commands.md), B41; [`requirements.md`](spec/requirements.md), B20, B21) (S)
+- [ ] Argumenttyp `integer`; ein Nutzer-Argument mit `@` gilt auch für unbekannte Namen ([`requirements.md`](spec/requirements.md), B33) (S)
+- [ ] Fehler-Cooldown: neue Art „keine Meldungen“ ([`command-engine.md`](spec/command-engine.md), B12, B90) (S)
 - [ ] Requirement-Service hinter `engine.Requirements`: Entscheidung (`met`, `waiting`, `rejected`) mit Kosten und Cooldowns, `Notify` mit übersetzter Meldung, `StartCooldown` für die Command-Action ([`actions.md`](spec/actions.md), B37), Set-Validierung beim Speichern (M)
 - [ ] Rolle, Cooldown (pro Nutzer, global, Gruppe), Argumente (Werte als Identifier des Durchlaufs), Einstellungen, z. B. Auslösenachricht löschen über den Chat-Port aus 3.3 (M)
-- [ ] Threshold: Mindestanzahl Nutzer im Zeitfenster, je Nutzer ein Durchlauf ([`command-engine.md`](spec/command-engine.md), B82) (S) (P1)
+- [ ] Threshold: Mindestanzahl Nutzer im Zeitfenster, je Nutzer ein Durchlauf ([`command-engine.md`](spec/command-engine.md), B82); solange sie wartet, eine Meldung, wie viele Nutzer fehlen, wofür die Engine bei `waiting` melden können muss ([`requirements.md`](spec/requirements.md), B51) (S) (P1)
 
 ### 3.5 Commands als Code und Typkatalog
 
@@ -557,7 +561,7 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
 - [ ] Senden über Bot oder Streamer, Aufteilen langer Nachrichten, Rate-Limits (`golang.org/x/time/rate`), Whisper (S)
 - [ ] Chatverlauf im Speicher (Ringpuffer je Plattform) und optionales Chat-Protokoll auf Platte (S)
 - [ ] Stummer Chat aus der Moderation-Action ([`actions.md`](spec/actions.md), B85): Port `moderation.ChatMute`; solange er an ist, löscht die Pipeline neue Nachrichten außer denen von Streamer und Bot (S)
-- [ ] Settings-Sektionen „general“ und „chat“ mit ihren Funktionen, aus 3.2 übertragen (S)
+- [ ] Settings-Sektionen „general“ und „chat“ mit ihren Funktionen, aus 3.2 übertragen; in „chat“ auch das Löschen der auslösenden Nachricht für alle Commands ([`requirements.md`](spec/requirements.md), B61) (S)
 
 ### 5.2 Nutzer
 
@@ -1151,6 +1155,10 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 - Velora und VPZone (P3): offizielle API-Dokumentation sichten, Aufwand schätzen, Go/No-Go (S); Adapter umsetzen (je L), falls Go
 - Exit-Kriterien, wenn die Plattformen eingeplant werden: Ein gleichzeitiger Stream auf Twitch, YouTube und Kick läuft mit gemeinsamen Commands und gemeinsamer Währung; plattformübergreifend verknüpfte Nutzer werden korrekt zusammengeführt.
 
+**Anforderungen** (in Roadmap 3.4 zurückgestellt, Entscheidung des Projektinhabers vom 2026-10-02):
+
+- Rollen-Anforderung wie im Original: mehrere Rollen (eine davon genau), Beschränkung auf eine Plattform, Stufen bei Abonnenten (mit den Twitch-Stufen aus Phase 4), global „exakte Rollen“ ([`requirements.md`](spec/requirements.md), A12) (S)
+
 **P3 (nur bei Bedarf):**
 
 - Integrationen aus Tier 3
@@ -1278,3 +1286,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-02 | ADR-0022 vom Projektinhaber angenommen. Neue Aufgaben in 3.4: `internal/i18n` und die Sprache des Profils in der Settings-Sektion „locale“, deren Formate in 3.6 bleiben. Plan §6.22 und die Technologieliste nennen die Entscheidung. |
 | 2026-10-02 | `internal/i18n` nach ADR-0022: eigener Parser und Renderer für den ICU-Teilumfang (Escaping wie ICU ab 4.8, `{name}`, `number` mit `integer` und `percent`, `plural` mit `=N` und `#`, `selectordinal`, `select`, Verschachtelung), Pluralformen gegen CLDR aus `golang.org/x/text` geprüft, Zahlen nach Sprache, Dauern in Worten aufgerundet auf ganze Sekunden; Kataloge EN und DE, Schlüssel als Konstanten mit Vollständigkeitstest; Fuzz-Test. `golang.org/x/text` ist jetzt eine direkte Abhängigkeit (v0.42.0). |
 | 2026-10-02 | Settings-Sektion „locale“ in Version 1 mit der Sprache des Profils (`en` oder `de`, Standard `en`; ADR-0022, Punkt 7); ihre Formate kommen in 3.6 als neue Version. |
+| 2026-10-02 | Offene Fragen von `requirements.md` vor dem Requirement-Service geklärt, um Nacharbeit wie bei den Actions zu vermeiden: Recherche am Original, Entscheidungen des Projektinhabers. Neue Aufgaben in 3.4 für benannte Cooldown-Gruppen, den Argumenttyp `integer` und die Art „keine Meldungen“ des Fehler-Cooldowns, weil sie das Datenmodell oder die Engine ändern; die Schwelle meldet, solange sie wartet; Zusätze der Rollen-Anforderung im Backlog. |
