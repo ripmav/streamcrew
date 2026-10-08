@@ -35,6 +35,16 @@ import (
 	"github.com/ripmav/streamcrew/internal/requirement"
 )
 
+// apply prepares the decision about cmd for p with s and makes it, as the
+// engine does.
+func apply(ctx context.Context, s *requirement.Service, cmd command.Command, p engine.Params) (engine.Decision, error) {
+	decide, err := s.Prepare(ctx, cmd, p)
+	if err != nil {
+		return engine.Decision{}, err
+	}
+	return decide(ctx)
+}
+
 // language is a fake of requirement.Language.
 type language struct {
 	lang i18n.Language
@@ -270,7 +280,7 @@ func TestRole(t *testing.T) {
 		"role before unsupported":         {cmd(command.CooldownRequirement{Scope: command.CooldownStandard, Duration: 1}, mods), chat(ada), rejection(role.Moderator, true)},
 		"role before unsupported, banned": {cmd(command.ArgumentsRequirement{}), chat(banned), rejection(role.User, false)},
 	} {
-		got, err := f.service.Apply(t.Context(), tc.cmd, tc.p)
+		got, err := apply(t.Context(), f.service, tc.cmd, tc.p)
 		require.NoError(t, err, name)
 		if tc.want.Verdict == engine.VerdictMet {
 			require.Len(t, got.Runs, 1, name)
@@ -299,7 +309,7 @@ func TestFaulty(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			f := newFixture(t, language{lang: i18n.English})
-			got, err := f.service.Apply(t.Context(), cmd(mods, tc.req), chat(person("ada", platform.Twitch)))
+			got, err := apply(t.Context(), f.service, cmd(mods, tc.req), chat(person("ada", platform.Twitch)))
 			require.NoError(t, err)
 			assert.Equal(t, engine.Rejected(engine.Rejection{Requirement: tc.req.DocType(), Reason: i18n.Message{Key: tc.key}}), got,
 				"before the role, and nobody is told")
@@ -316,12 +326,12 @@ func TestNotSupported(t *testing.T) {
 	f := newFixture(t, language{lang: i18n.English})
 	minute := command.CooldownRequirement{Scope: command.CooldownStandard, Duration: polydoc.Duration(time.Minute)}
 	threshold := command.ThresholdRequirement{Users: 2, Within: 1}
-	_, err := f.service.Apply(t.Context(), cmd(threshold, minute), chat(person("ada", platform.Twitch)))
+	_, err := apply(t.Context(), f.service, cmd(threshold, minute), chat(person("ada", platform.Twitch)))
 	require.ErrorIs(t, err, requirement.ErrNotSupported)
 	assert.Empty(t, f.cooldowns.running())
 
 	needed := command.ArgumentsRequirement{Arguments: []command.Argument{{Name: "a", Type: command.ArgumentText, Required: true}}}
-	d, err := f.service.Apply(t.Context(), cmd(threshold, needed), chat(person("ada", platform.Twitch)))
+	d, err := apply(t.Context(), f.service, cmd(threshold, needed), chat(person("ada", platform.Twitch)))
 	require.NoError(t, err)
 	assert.Equal(t, command.TypeArguments, d.Rejection.Requirement, "the arguments come before the threshold")
 }
@@ -336,7 +346,7 @@ func TestNotify(t *testing.T) {
 	sue.Identities = append(sue.Identities, user.Identity{Platform: platform.Kick, PlatformUserID: "k-sue", Login: "suek"})
 
 	f := newFixture(t, language{lang: i18n.English})
-	d, err := f.service.Apply(t.Context(), cmd(mods), chat(sue))
+	d, err := apply(t.Context(), f.service, cmd(mods), chat(sue))
 	require.NoError(t, err)
 	require.NoError(t, f.service.Notify(t.Context(), cmd(mods), chat(sue), d.Rejection))
 	assert.Equal(t, []connectortest.Call{{Op: connectortest.OpReply, From: connector.AccountStreamer, MessageID: "m1",

@@ -194,17 +194,19 @@ type requirements struct {
 	cooldowns []string
 }
 
-func (r *requirements) Apply(_ context.Context, _ command.Command, p engine.Params) (engine.Decision, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	switch {
-	case r.reject:
-		return engine.Rejected(engine.Rejection{Requirement: "role", Reason: i18n.Message{Key: "test.not_now"}}), nil
-	case r.wait:
-		return engine.Waiting(), nil
-	default:
-		return engine.Met(p), nil
-	}
+func (r *requirements) Prepare(_ context.Context, _ command.Command, p engine.Params) (engine.Decide, error) {
+	return func(context.Context) (engine.Decision, error) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		switch {
+		case r.reject:
+			return engine.Rejected(engine.Rejection{Requirement: "role", Reason: i18n.Message{Key: "test.not_now"}}), nil
+		case r.wait:
+			return engine.Waiting(), nil
+		default:
+			return engine.Met(p), nil
+		}
+	}, nil
 }
 
 func (*requirements) Notify(context.Context, command.Command, engine.Params, engine.Rejection) error {
