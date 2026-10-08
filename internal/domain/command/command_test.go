@@ -101,6 +101,12 @@ func TestValidate(t *testing.T) {
 		c.ErrorPolicy = p
 		require.NoError(t, c.Validate(), p)
 	}
+	menu := validChat()
+	menu.Requirements = []command.Requirement{command.SettingsRequirement{ShowInChatMenu: true}}
+	require.NoError(t, menu.Validate(), "requirements.md B62: a chat command in the context menu")
+	deleting := command.Command{Name: "reminder", Kind: command.KindTimer, ErrorPolicy: command.ErrorContinue,
+		Requirements: []command.Requirement{command.SettingsRequirement{DeleteTriggerMessage: true}}}
+	require.NoError(t, deleting.Validate(), "other settings fit every kind")
 
 	tests := map[string]func(*command.Command){
 		"empty name":          func(c *command.Command) { c.Name = " " },
@@ -127,6 +133,10 @@ func TestValidate(t *testing.T) {
 		"no policy":           func(c *command.Command) { c.ErrorPolicy = "" },
 		"unknown requirement x2": func(c *command.Command) {
 			c.Requirements = []command.Requirement{unknownRequirement("x"), unknownRequirement("x")}
+		},
+		"requirements.md B62: context menu of a timer": func(c *command.Command) {
+			c.Kind, c.Triggers = command.KindTimer, nil
+			c.Requirements = []command.Requirement{command.SettingsRequirement{ShowInChatMenu: true}}
 		},
 	}
 	for name, change := range tests {
@@ -227,6 +237,9 @@ func TestRequirementValidation(t *testing.T) {
 		"identifier twice": command.ArgumentsRequirement{Arguments: []command.Argument{
 			{Name: "a", Type: command.ArgumentText, Identifier: "x"}, {Name: "b", Type: command.ArgumentText, Identifier: "x"},
 		}},
+		"B34: required after optional": command.ArgumentsRequirement{Arguments: []command.Argument{
+			{Name: "a", Type: command.ArgumentText, Required: true}, {Name: "b", Type: command.ArgumentText}, {Name: "c", Type: command.ArgumentText, Required: true},
+		}},
 		"no threshold users":  command.ThresholdRequirement{Within: polydoc.Duration(time.Minute)},
 		"no threshold window": command.ThresholdRequirement{Users: 2},
 	}
@@ -242,9 +255,31 @@ func TestRequirementValidation(t *testing.T) {
 			{Name: "c", Type: command.ArgumentInteger}, {Name: "d", Type: command.ArgumentUser},
 		}},
 		"per user group": command.CooldownRequirement{Scope: command.CooldownPerUserGrouped, Group: item},
+		"B34: required first": command.ArgumentsRequirement{Arguments: []command.Argument{
+			{Name: "a", Type: command.ArgumentUser, Required: true}, {Name: "b", Type: command.ArgumentText, Required: true},
+			{Name: "c", Type: command.ArgumentText}, {Name: "d", Type: command.ArgumentText},
+		}},
 	} {
 		assert.NoError(t, r.Validate(), name)
 	}
+	err := command.ArgumentsRequirement{Arguments: []command.Argument{
+		{Name: "a", Type: command.ArgumentText}, {Name: "b", Type: command.ArgumentText}, {Name: "c", Type: command.ArgumentText, Required: true},
+	}}.Validate()
+	require.EqualError(t, err, `required argument "c" after the optional argument "a"`, "B34")
+}
+
+// TestResultNames covers requirements.md B36: the identifiers of the
+// arguments are the names that saving checks.
+func TestResultNames(t *testing.T) {
+	t.Parallel()
+	r := command.ArgumentsRequirement{Arguments: []command.Argument{
+		{Name: "target", Type: command.ArgumentUser, Identifier: "target"},
+		{Name: "reason", Type: command.ArgumentText},
+		{Name: "times", Type: command.ArgumentInteger, Identifier: "times"},
+	}}
+	var setter command.ResultSetter = r
+	assert.Equal(t, []string{"target", "times"}, setter.ResultNames())
+	assert.Empty(t, command.ArgumentsRequirement{Arguments: []command.Argument{{Name: "a", Type: command.ArgumentText}}}.ResultNames())
 }
 
 // step is an action for tests; with children it is a command.Parent.

@@ -441,12 +441,12 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
 - [x] Suche nach Nutzern je Durchlauf: ein Fund gilt für Ziel, Anforderungen, Templates, Actions und aufgerufene Commands; Versuche und Zeitgrenze je Versuch in der Settings-Sektion „commands“, Version 4 ([`command-engine.md`](spec/command-engine.md), B17, B90) (S), Entscheidung des Projektinhabers vom 2026-10-03; erledigt 2026-10-03 für Engine, Requirement-Service, Templates und die Actions Chat, Moderation und Nutzersuche
 - [x] Vorarbeit der Prüfung zugleich, Entscheiden und Einreihen in der Reihenfolge des Auslösens, und `engine.Engine.Submit` für Auslöser, die nicht warten ([`command-engine.md`](spec/command-engine.md), B16) (S), Entscheidung des Projektinhabers vom 2026-10-03, damit eine langsame Nutzersuche bei großen Raids nicht alles aufhält; erledigt 2026-10-03
 - [x] Größe der Warteschlange einstellbar, Standard 1 000 ([`command-engine.md`](spec/command-engine.md), B15, B90) (S), Entscheidung des Projektinhabers vom 2026-10-02, erledigt 2026-10-02: Settings-Sektion „commands“ in Version 3 mit `queueSize` von 1 bis 10 000; `engine.MaxPending` entfällt
-- [ ] Requirement-Service hinter `engine.Requirements`: Entscheidung (`met`, `waiting`, `rejected`) mit Kosten und Cooldowns, `Notify` mit übersetzter Meldung, `StartCooldown` für die Command-Action ([`actions.md`](spec/actions.md), B37), Set-Validierung beim Speichern (M), begonnen 2026-10-02 in `internal/requirement`:
+- [x] Requirement-Service hinter `engine.Requirements`: Entscheidung (`met`, `waiting`, `rejected`) mit Kosten und Cooldowns, `Notify` mit übersetzter Meldung, `StartCooldown` für die Command-Action ([`actions.md`](spec/actions.md), B37), Set-Validierung beim Speichern (M), begonnen 2026-10-02 in `internal/requirement`, erledigt 2026-10-03; die Kosten kommen mit Phase 8, die Schwelle mit der eigenen Aufgabe darunter:
   - [x] Reihenfolge der Prüfungen, fehlerhafte und unbekannte Anforderungen, Rolle mit dem Streamer für Durchläufe ohne Nutzer, `Notify` als Antwort oder mit `@Name`, erledigt 2026-10-02
   - [x] Cooldowns in allen vier Arten, gespeichert (Migration 0008), Meldung mit zwei Einheiten, `StartCooldown` für die Command-Action; ein Command, der nicht eingereiht wird, hat keinen Cooldown (`engine.Decision.Revert`), erledigt 2026-10-02
-  - [x] Argumente: Zuordnung, Typen, Werte als Identifier des Durchlaufs ([`requirements.md`](spec/requirements.md), B30–B35), erledigt 2026-10-03; die Prüfung der Namen (B36) kommt mit der Prüfung beim Speichern
+  - [x] Argumente: Zuordnung, Typen, Werte als Identifier des Durchlaufs ([`requirements.md`](spec/requirements.md), B30–B35), erledigt 2026-10-03; die Prüfung der Namen (B36) mit der Prüfung beim Speichern
   - [x] Einstellungen: die auslösende Nachricht löschen, auch bei einer Ablehnung, über den Chat-Port aus 3.3 (B60–B62), erledigt 2026-10-03 über `engine.Requirements.Decided`
-  - [ ] Prüfung beim Speichern (B80, B81)
+  - [x] Prüfung beim Speichern (B34, B36, B62, B80, B81), erledigt 2026-10-03 in `command.Service.Save`: Identifier der Argumente gegen eingebaute Identifier, Pflichtargument nach optionalem, Kontextmenü nur bei Chat-Commands; Währung, Rang und Gegenstand als Warnung `unknown_reference`
 - [ ] Threshold: Mindestanzahl Nutzer im Zeitfenster, je Nutzer ein Durchlauf ([`command-engine.md`](spec/command-engine.md), B82); solange sie wartet, eine Meldung, wie viele Nutzer fehlen, wofür die Engine bei `waiting` melden können muss ([`requirements.md`](spec/requirements.md), B51) (S) (P1)
 
 ### 3.5 Commands als Code und Typkatalog
@@ -773,11 +773,11 @@ Zuerst die Änderungen an Datenmodell und Engine aus den geklärten Fragen vom 2
 - [ ] Ränge: Schwellen, Rang-auf- und Rang-ab-Commands, Identifier für Rang, nächsten Rang und Position (M)
 - [ ] Ranglisten per SQL (`$top…`) (S)
 - [ ] Consumables-Action: hinzufügen, abziehen, setzen, übertragen; für einzelne Nutzer, alle oder eine Rolle (M)
-- [ ] Requirements Währung und Rang (S)
+- [ ] Requirements Währung und Rang (S); die Warnung beim Speichern ([`requirements.md`](spec/requirements.md), B81) prüft dann, ob es Währung und Rang gibt
 
 ### 8.2 Inventar und Shop
 
-- [ ] Inventare und Items (Kauf- und Verkaufspreis, Höchstmenge), Shop-Commands, Inventar-Requirement (M)
+- [ ] Inventare und Items (Kauf- und Verkaufspreis, Höchstmenge), Shop-Commands, Inventar-Requirement (M); die Warnung beim Speichern ([`requirements.md`](spec/requirements.md), B81) prüft dann, ob es den Gegenstand gibt
 - [ ] Stream Pass (M) (P2)
 - [ ] Redemption Store (M) (P2)
 
@@ -901,7 +901,7 @@ Zuerst die Änderungen an Datenmodell und Engine aus den geklärten Fragen vom 2
 - [ ] ADR-0021 Import von Mix-It-Up-Daten, Umsetzung auf Basis der Rechtsgrundlage aus Gate O, O.1 (S)
 - [ ] Importer für `.miubackup`, `.miu3` und `.db3` (XL, vor Beginn aufteilen):
   - Typ-Mapping (`$type` → Typ-ID, numerische Event-IDs → Event-Strings aus `internal/domain/eventtype`; aus 2.2 übertragen)
-  - Commands, Actions, Requirements, Nutzer, Währungen, Quotes, Counter
+  - Commands, Actions, Requirements, Nutzer, Währungen, Quotes, Counter; die Identifier-Namen der Argumente aus ihren Namen, klein und ohne Leerzeichen ([`requirements.md`](spec/requirements.md), B36)
   - Overlays, soweit abbildbar
   - Formeln: Trennzeichen und Obergrenzen der Zufallsfunktionen anpassen ([`template.md`](spec/template.md), A3)
   - Importbericht mit allem, was nicht übernommen wird (C#-Skripte, Tokens)
@@ -1318,3 +1318,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-03 | Prüfung der Anforderungen in zwei Schritten (`command-engine.md`, B16, Entscheidung des Projektinhabers): Vorarbeit wie die Nutzersuche zugleich und ohne die Sperre des Requirement-Service, Entscheiden und Einreihen in der Reihenfolge des Auslösens, Zeitgrenze von 5 s für die Vorarbeit, `engine.Engine.Submit` für den Chat-Service. |
 | 2026-10-03 | Suche nach Nutzern je Durchlauf (`command-engine.md`, B17, Entscheidung des Projektinhabers): Ein gefundener Nutzer wird nicht noch einmal gesucht; Versuche und Zeitgrenze je Versuch einstellbar statt der festen Grenze von 5 s. Die Actions Chat, Moderation und Nutzersuche suchen bekannte Nutzer über den Durchlauf (`engine.Run.UserByName`). |
 | 2026-10-03 | Einstellungen im Requirement-Service: Die auslösende Nachricht wird gelöscht, sobald die Entscheidung feststeht, auch bei einer Ablehnung (nach der Meldung) oder einer wartenden Schwelle, bei erfüllten Commands nach dem Einreihen; die Engine meldet das über `engine.Requirements.Decided` außerhalb der Reihenfolge der Entscheidungen. |
+| 2026-10-03 | Prüfung beim Speichern der Anforderungen in `command.Service.Save` (`requirements.md`, B34, B36, B62, B80, B81): Identifier-Namen der Argumente wie Ergebnisnamen, Pflichtargument nach optionalem, Kontextmenü nur bei Chat-Commands, Warnungen für Währung, Rang und Gegenstand. Der Requirement-Service in 3.4 ist damit fertig; die Schwelle bleibt eine eigene Aufgabe (P1). |

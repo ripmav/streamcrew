@@ -325,7 +325,9 @@ type Argument struct {
 	Type     ArgumentType `json:"type"`
 	Required bool         `json:"required"`
 	// Identifier is the name under which the value is available in
-	// templates, without "$"; empty for none.
+	// templates, without "$"; empty for none. It must not hide a built-in
+	// identifier, which the service checks when it saves the command
+	// (requirements.md, B36).
 	Identifier string `json:"identifier,omitempty"`
 }
 
@@ -337,13 +339,28 @@ type ArgumentsRequirement struct {
 // DocType implements polydoc.Document.
 func (ArgumentsRequirement) DocType() string { return TypeArguments }
 
-// Validate implements Requirement.
+// ResultNames implements ResultSetter: the identifier names of the
+// arguments.
+func (r ArgumentsRequirement) ResultNames() []string {
+	names := make([]string, 0, len(r.Arguments))
+	for _, a := range r.Arguments {
+		if a.Identifier != "" {
+			names = append(names, a.Identifier)
+		}
+	}
+	return names
+}
+
+// Validate implements Requirement. A required argument after an optional
+// one is invalid, because the arguments are matched by their position
+// (requirements.md, B34).
 func (r ArgumentsRequirement) Validate() error {
 	if len(r.Arguments) == 0 {
 		return errors.New("no arguments")
 	}
 	names := make(map[string]bool, len(r.Arguments))
 	identifiers := make(map[string]bool, len(r.Arguments))
+	optional := ""
 	for _, a := range r.Arguments {
 		if a.Name == "" {
 			return errors.New("argument without a name")
@@ -352,6 +369,12 @@ func (r ArgumentsRequirement) Validate() error {
 			return fmt.Errorf("argument %q appears more than once", a.Name)
 		}
 		names[a.Name] = true
+		switch {
+		case !a.Required && optional == "":
+			optional = a.Name
+		case a.Required && optional != "":
+			return fmt.Errorf("required argument %q after the optional argument %q", a.Name, optional)
+		}
 		switch a.Type {
 		case ArgumentText, ArgumentNumber, ArgumentInteger, ArgumentUser:
 		default:
@@ -413,7 +436,8 @@ type SettingsRequirement struct {
 	// command once its requirements decided, also if they rejected it
 	// (spec requirements.md, B61).
 	DeleteTriggerMessage bool `json:"deleteTriggerMessage"`
-	// ShowInChatMenu offers the command in the context menu of the chat.
+	// ShowInChatMenu offers the command in the context menu of the chat;
+	// only chat commands have it (requirements.md, B62).
 	ShowInChatMenu bool `json:"showInChatMenu"`
 }
 

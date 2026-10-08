@@ -45,8 +45,10 @@ type Referrer interface {
 	References() []Reference
 }
 
-// ResultSetter is an action that sets result values under names the
-// streamer chooses (actions.md, B5); saving checks the names.
+// ResultSetter is an action or a requirement that sets values of the run
+// under names the streamer chooses: the result values of actions
+// (actions.md, B5) and the identifiers of arguments (requirements.md, B36).
+// Saving checks that the names hide no built-in identifier.
 type ResultSetter interface {
 	ResultNames() []string
 }
@@ -109,19 +111,27 @@ const (
 	// WarnFileRoot: the start configuration releases no root of this name;
 	// the action fails when it runs (actions.md, B102).
 	WarnFileRoot WarningKind = "unknown_file_root"
+	// WarnUnknownReference: the requirement refers to a currency, a rank
+	// or an item that does not exist; the command is faulty and does not
+	// run (requirements.md, B7, B81).
+	WarnUnknownReference WarningKind = "unknown_reference"
 )
 
 // Warning is something about a saved command that will make an action fail
-// on this core, although the command is stored: the start configuration
-// may differ between computers, and imports should be kept (actions.md,
-// B7).
+// or keep the command from running on this core, although the command is
+// stored: the start configuration may differ between computers, and
+// imports should be kept (actions.md, B7; requirements.md, B81).
 type Warning struct {
 	Kind WarningKind
-	// Path is the place of the action, e.g. [3, 2] (actions.md, B9).
+	// Path is the place of the action, e.g. [3, 2] (actions.md, B9); empty
+	// for a requirement.
 	Path []int
-	// ActionType is the type of the action.
+	// ActionType is the type of the action; empty for a requirement.
 	ActionType string
-	// Subject names the capability or the root.
+	// Requirement is the type of the requirement; empty for an action.
+	Requirement string
+	// Subject names the capability, the root, or the ID that the
+	// requirement refers to.
 	Subject string
 }
 
@@ -194,23 +204,52 @@ func (s *Service) checkActions(ctx context.Context, cmd Command) ([]Warning, err
 	return warnings, nil
 }
 
-// checkCooldownGroup checks that a grouped cooldown names a cooldown group
-// that exists (B33; requirements.md, B80).
-func (s *Service) checkCooldownGroup(ctx context.Context, cmd Command) error {
+// checkRequirements checks the requirements of cmd against the profile
+// and returns the warnings (requirements.md, B80, B81): a grouped cooldown
+// must name a cooldown group that exists (B33), and the identifiers of
+// arguments must not hide a built-in identifier (B36). A currency, a rank
+// or an item a requirement refers to that does not exist is a warning.
+// Until roadmap phase 8 there are none, so every such reference is one
+// (B40).
+func (s *Service) checkRequirements(ctx context.Context, cmd Command) ([]Warning, error) {
+	warnings := []Warning{}
 	for _, r := range cmd.Requirements {
-		c, ok := r.(CooldownRequirement)
-		if !ok || !c.Scope.Grouped() {
+		at := func(err error) error {
+			return fmt.Errorf("%w: requirement %q: %w", ErrInvalid, r.DocType(), err)
+		}
+		if setter, ok := r.(ResultSetter); ok {
+			for _, name := range setter.ResultNames() {
+				if builtIn, taken := s.checks.Names.Reserved(name); taken {
+					return nil, at(fmt.Errorf("identifier %q hides $%s", name, builtIn))
+				}
+			}
+		}
+		var ref id.ID
+		switch r := r.(type) {
+		case CooldownRequirement:
+			if !r.Scope.Grouped() {
+				continue
+			}
+			groups, err := s.repo.CooldownGroups(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("list cooldown groups: %w", err)
+			}
+			if !slices.ContainsFunc(groups, func(g CooldownGroup) bool { return g.ID == r.Group }) {
+				return nil, at(fmt.Errorf("unknown cooldown group %s", r.Group))
+			}
+			continue
+		case CurrencyRequirement:
+			ref = r.Currency
+		case RankRequirement:
+			ref = r.Rank
+		case InventoryRequirement:
+			ref = r.Item
+		default:
 			continue
 		}
-		groups, err := s.repo.CooldownGroups(ctx)
-		if err != nil {
-			return fmt.Errorf("list cooldown groups: %w", err)
-		}
-		if !slices.ContainsFunc(groups, func(g CooldownGroup) bool { return g.ID == c.Group }) {
-			return fmt.Errorf("%w: requirement %q: unknown cooldown group %s", ErrInvalid, TypeCooldown, c.Group)
-		}
+		warnings = append(warnings, Warning{Kind: WarnUnknownReference, Requirement: r.DocType(), Subject: ref.String()})
 	}
-	return nil
+	return warnings, nil
 }
 
 // knownObjects are the commands, groups and counters at the start of a
