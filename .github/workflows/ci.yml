@@ -19,6 +19,8 @@ on:
       - "go.mod"
       - "go.sum"
       - ".golangci.yml"
+      - "sqlc.yaml"
+      - "**.sql"
       - "Dockerfile"
       - ".dockerignore"
       - "scripts/**"
@@ -30,6 +32,8 @@ on:
       - "go.mod"
       - "go.sum"
       - ".golangci.yml"
+      - "sqlc.yaml"
+      - "**.sql"
       - "Dockerfile"
       - ".dockerignore"
       - "scripts/**"
@@ -70,6 +74,11 @@ jobs:
 
       - name: go vet
         run: go vet ./...
+
+      # The generated database code must match the SQL (Code-ADR-0008). The
+      # version is pinned like in internal/store/generate.go.
+      - name: sqlc diff
+        run: go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 diff -f sqlc.yaml
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
