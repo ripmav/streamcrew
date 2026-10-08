@@ -98,6 +98,26 @@ func (s CooldownScope) Grouped() bool {
 	return s == CooldownGrouped || s == CooldownPerUserGrouped
 }
 
+// PerUser reports whether the scope applies to each user separately
+// (requirements.md, B20).
+func (s CooldownScope) PerUser() bool {
+	return s == CooldownPerUser || s == CooldownPerUserGrouped
+}
+
+// CooldownKey names a running cooldown (requirements.md, B20, B22): the
+// command or the cooldown group it blocks, and for the scopes per user the
+// user. Exactly one of Command and Group is set.
+type CooldownKey struct {
+	// Command is the command of the scopes standard and per_user; zero for
+	// the grouped scopes.
+	Command id.ID
+	// Group is the cooldown group of the grouped scopes; zero for the
+	// others.
+	Group id.ID
+	// User is the user of the scopes per user; zero for the others.
+	User id.ID
+}
+
 // CooldownRequirement blocks a command for a duration after it was queued
 // (B41). The scopes standard and per_user have their own Duration; the
 // grouped scopes name a cooldown group and take its duration (B33).
@@ -140,6 +160,29 @@ func (r CooldownRequirement) Validate() error {
 		return fmt.Errorf("unknown cooldown scope %q", r.Scope)
 	}
 	return nil
+}
+
+// Key returns the key of the cooldown r of the command commandID for the
+// user userID (requirements.md, B20): the command or the cooldown group by
+// the scope, and the user for the scopes per user only. The scopes per user
+// need a user; r must be valid.
+func (r CooldownRequirement) Key(commandID, userID id.ID) (CooldownKey, error) {
+	var k CooldownKey
+	if r.Scope.Grouped() {
+		k.Group = r.Group
+	} else {
+		k.Command = commandID
+	}
+	if r.Scope.PerUser() {
+		if userID.IsZero() {
+			return CooldownKey{}, fmt.Errorf("cooldown scope %q needs a user", r.Scope)
+		}
+		k.User = userID
+	}
+	if k.Command.IsZero() && k.Group.IsZero() {
+		return CooldownKey{}, fmt.Errorf("cooldown scope %q without a command or cooldown group", r.Scope)
+	}
+	return k, nil
 }
 
 // migrateCooldownV1 drops the duration of the grouped scopes of version 1;
