@@ -15,6 +15,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/event"
+	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/settings"
 )
 
@@ -92,10 +93,10 @@ func (d Decision) validate() error {
 		return fmt.Errorf("%w: unknown verdict %q", ErrInvalidDecision, d.Verdict)
 	}
 	rejected := d.Verdict == VerdictRejected
-	if rejected != (d.Rejection != Rejection{}) {
+	if rejected == d.Rejection.zero() {
 		return fmt.Errorf("%w: %s with a rejection that does not fit", ErrInvalidDecision, d.Verdict)
 	}
-	if rejected && (d.Rejection.Requirement == "" || d.Rejection.Reason == "") {
+	if rejected && (d.Rejection.Requirement == "" || d.Rejection.Reason.Key == "") {
 		return fmt.Errorf("%w: rejection without requirement or reason", ErrInvalidDecision)
 	}
 	return nil
@@ -105,12 +106,20 @@ func (d Decision) validate() error {
 type Rejection struct {
 	// Requirement is the requirement type, e.g. "cooldown".
 	Requirement string
-	// Reason says why, in the words the user would see; it is required.
-	Reason string
+	// Reason says why, as a message the requirement service renders in the
+	// language of the profile when it tells the user (ADR-0022, point 5);
+	// it is required.
+	Reason i18n.Message
 	// Tell says whether the user is told the reason (B11), subject to the
 	// error cooldown (B12). The requirement service does not tell, e.g.,
 	// in a run without a user.
 	Tell bool
+}
+
+// zero reports whether r is the zero value, the rejection of a decision
+// that is not a rejection.
+func (r Rejection) zero() bool {
+	return r.Requirement == "" && r.Reason.Key == "" && r.Reason.Args == nil && !r.Tell
 }
 
 // Requirements checks and applies the requirements of commands (B10). The
