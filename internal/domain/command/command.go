@@ -202,10 +202,10 @@ func (c Command) Validate() error {
 		}
 		seen[typ] = true
 		if err := r.Validate(); err != nil {
-			return fmt.Errorf("%w: requirement %q: %w", ErrInvalid, typ, err)
+			return fmt.Errorf("%w: %w", ErrInvalid, &RequirementError{Type: typ, Err: err})
 		}
 		if s, ok := r.(SettingsRequirement); ok && s.ShowInChatMenu && c.Kind != KindChat {
-			return invalid("requirement %q: only chat commands are offered in the context menu of the chat", typ)
+			return fmt.Errorf("%w: %w", ErrInvalid, &RequirementError{Type: typ, Err: errors.New("only chat commands are offered in the context menu of the chat")})
 		}
 	}
 	return ValidateActions(c.Actions)
@@ -230,7 +230,7 @@ func validActions(list []Action, path []int) error {
 			return invalid("empty action at %s", position(at))
 		}
 		if err := a.Validate(); err != nil {
-			return fmt.Errorf("%w: action %s (%s): %w", ErrInvalid, position(at), a.DocType(), err)
+			return fmt.Errorf("%w: %w", ErrInvalid, &ActionError{Path: at, Type: a.DocType(), Err: err})
 		}
 		if p, ok := a.(Parent); ok {
 			if err := validActions(p.Children(), at); err != nil {
@@ -240,6 +240,36 @@ func validActions(list []Action, path []int) error {
 	}
 	return nil
 }
+
+// ActionError is an error about the action at Path, e.g. [3, 2] for the
+// second child of the third action (actions.md, B9).
+type ActionError struct {
+	Path []int
+	Type string
+	Err  error
+}
+
+// Error implements error, e.g. "action 3.2 (chat): …".
+func (e *ActionError) Error() string {
+	return fmt.Sprintf("action %s (%s): %v", position(e.Path), e.Type, e.Err)
+}
+
+// Unwrap returns the error about the action.
+func (e *ActionError) Unwrap() error { return e.Err }
+
+// RequirementError is an error about the requirement of type Type.
+type RequirementError struct {
+	Type string
+	Err  error
+}
+
+// Error implements error, e.g. `requirement "role": …`.
+func (e *RequirementError) Error() string {
+	return fmt.Sprintf("requirement %q: %v", e.Type, e.Err)
+}
+
+// Unwrap returns the error about the requirement.
+func (e *RequirementError) Unwrap() error { return e.Err }
 
 // position writes the path of an action as in the spec, e.g. "3.2"
 // (actions.md B9).

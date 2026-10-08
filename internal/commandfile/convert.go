@@ -22,18 +22,33 @@ type Types struct {
 	Codec *command.Codec
 }
 
-// Named is an object of the profile: its ID and its name.
-type Named struct {
-	ID   id.ID
-	Name string
-}
-
 // Existing are the commands, command groups and cooldown groups of the
 // profile, which documents replace by name and refer to (B22 to B24, B33).
 type Existing struct {
-	Commands       []Named
-	Groups         []Named
-	CooldownGroups []Named
+	Commands       []command.Header
+	Groups         []command.Group
+	CooldownGroups []command.CooldownGroup
+}
+
+// named is the ID and name of an object of the profile.
+type named struct {
+	id   id.ID
+	name string
+}
+
+// names returns the IDs and names of the objects of the profile by space.
+func (e Existing) names() map[space][]named {
+	out := map[space][]named{}
+	for _, c := range e.Commands {
+		out[spaceCommand] = append(out[spaceCommand], named{c.ID, c.Name})
+	}
+	for _, g := range e.Groups {
+		out[spaceGroup] = append(out[spaceGroup], named{g.ID, g.Name})
+	}
+	for _, g := range e.CooldownGroups {
+		out[spaceCooldownGroup] = append(out[spaceCooldownGroup], named{g.ID, g.Name})
+	}
+	return out
 }
 
 // Plan is what documents describe, in the order of an import (B34):
@@ -125,10 +140,10 @@ func Convert(docs []Document, existing Existing, types Types) (Plan, []Problem) 
 		c.reqOrder = append(c.reqOrder, d.Type)
 	}
 	known := map[space]map[string]id.ID{spaceCommand: {}, spaceGroup: {}, spaceCooldownGroup: {}}
-	for sp, list := range map[space][]Named{spaceCommand: existing.Commands, spaceGroup: existing.Groups, spaceCooldownGroup: existing.CooldownGroups} {
+	for sp, list := range existing.names() {
 		for _, n := range list {
-			known[sp][command.NameKey(n.Name)] = n.ID
-			c.ids[sp][command.NameKey(n.Name)] = n.ID
+			known[sp][command.NameKey(n.name)] = n.id
+			c.ids[sp][command.NameKey(n.name)] = n.id
 		}
 	}
 

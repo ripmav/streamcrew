@@ -3,6 +3,7 @@
 package command_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -396,4 +397,30 @@ func TestValidateActions(t *testing.T) {
 			assert.ErrorContains(t, err, tc.want)
 		})
 	}
+}
+
+// TestTypedErrors checks that errors about an action or a requirement name
+// it, so that callers find its place, e.g. in a file of commands as code.
+func TestTypedErrors(t *testing.T) {
+	t.Parallel()
+	err := command.ValidateActions([]command.Action{step{}, step{children: []command.Action{step{}, step{err: assert.AnError}}}})
+	ae, ok := errors.AsType[*command.ActionError](err)
+	require.True(t, ok)
+	assert.Equal(t, []int{2, 2}, ae.Path)
+	assert.Equal(t, "step", ae.Type)
+	require.ErrorIs(t, err, assert.AnError)
+	assert.EqualError(t, err, "invalid command: action 2.2 (step): "+assert.AnError.Error())
+
+	cmd := command.Command{
+		Name: "a", Kind: command.KindTimer, ErrorPolicy: command.ErrorContinue, Requirements: []command.Requirement{command.RoleRequirement{Role: "king"}}}
+	err = cmd.Validate()
+	re, ok := errors.AsType[*command.RequirementError](err)
+	require.True(t, ok)
+	assert.Equal(t, command.TypeRole, re.Type)
+	assert.EqualError(t, err, `invalid command: requirement "role": unknown role "king"`)
+
+	cmd.Requirements = []command.Requirement{command.SettingsRequirement{ShowInChatMenu: true}}
+	re, ok = errors.AsType[*command.RequirementError](cmd.Validate())
+	require.True(t, ok)
+	assert.Equal(t, command.TypeSettings, re.Type)
 }

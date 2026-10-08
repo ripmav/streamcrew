@@ -379,6 +379,11 @@ func TestCommandsRefuseWhileCoreRuns(t *testing.T) {
 	res = runCLI(t.Context(), t, "--data-dir", dataDir, "backup", "create")
 	require.Equal(t, cli.ExitOK, res.code, "backups work while the core runs: %s", res.stderr)
 
+	file := filepath.Join(t.TempDir(), "tip.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("apiVersion: streamcrew/v1alpha1\nkind: TimerCommand\nmetadata: {name: Tip}\nspec: {}\n"), 0o600))
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "validate", file)
+	require.Equal(t, cli.ExitOK, res.code, "commands-as-code.md, B31: checking works while the core runs: %s", res.stderr)
+
 	cancel()
 	require.Equal(t, cli.ExitOK, (<-done).code)
 }
@@ -423,4 +428,62 @@ func TestSchemaExport(t *testing.T) {
 	again, err := os.ReadFile(filepath.Join("schemas", commandfile.SchemaFile))
 	require.NoError(t, err, "the default directory is schemas")
 	assert.Equal(t, string(got), string(again))
+}
+
+// TestCommandValidate covers B31, B32 and B37 of commands-as-code.md: the
+// files of a directory are checked against the profile, as text or JSON,
+// and errors end with exit code 1; paths without such files are a usage
+// error.
+func TestCommandValidate(t *testing.T) {
+	isolate(t)
+	dataDir := t.TempDir()
+	dir := t.TempDir()
+	good := filepath.Join(dir, "good")
+	require.NoError(t, os.MkdirAll(good, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(good, "hug.yaml"), []byte(
+		"apiVersion: streamcrew/v1alpha1\nkind: ChatCommand\nmetadata: {name: Hug}\nspec: {triggers: [hug]}\n"), 0o600))
+	res := runCLI(t.Context(), t, "--data-dir", dataDir, "command", "validate", good)
+	assert.Equal(t, cli.ExitFailure, res.code)
+	assert.Contains(t, res.stderr, `profile "default" does not exist`)
+	require.Equal(t, cli.ExitOK, runCLI(t.Context(), t, "--data-dir", dataDir, "profile", "create", "Main").code)
+	require.Equal(t, cli.ExitOK, runCLI(t.Context(), t, "--data-dir", dataDir, "profile", "use", "main").code)
+
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "validate", good)
+	require.Equal(t, cli.ExitOK, res.code, res.stderr)
+	assert.Equal(t, "1 document in 1 file: 0 errors, 0 warnings\n", res.stdout)
+
+	bad := filepath.Join(dir, "bad.json")
+	require.NoError(t, os.WriteFile(bad, []byte(`{"apiVersion":"streamcrew/v1","kind":"TimerCommand","metadata":{"name":"a"},"spec":{}}`), 0o600))
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "validate", good, bad)
+	assert.Equal(t, cli.ExitFailure, res.code)
+	assert.Equal(t, bad+":1:15: apiVersion: must be \"streamcrew/v1alpha1\"\n2 documents in 2 files: 1 error, 0 warnings\n", res.stdout)
+	assert.Empty(t, res.stderr)
+
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "validate", "-o", "json", bad)
+	assert.Equal(t, cli.ExitFailure, res.code)
+	var report struct {
+		Files     int              `json:"files"`
+		Documents int              `json:"documents"`
+		Errors    int              `json:"errors"`
+		Warnings  int              `json:"warnings"`
+		Problems  []map[string]any `json:"problems"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(res.stdout), &report), res.stdout)
+	assert.Equal(t, 1, report.Errors)
+	assert.Equal(t, 1, report.Files)
+	assert.Equal(t, 1, report.Documents)
+	assert.Equal(t, 0, report.Warnings)
+	require.Len(t, report.Problems, 1)
+	assert.Equal(t, map[string]any{"severity": "error", "file": bad, "line": 1.0, "column": 15.0, "path": "apiVersion", "message": `must be "streamcrew/v1alpha1"`}, report.Problems[0])
+
+	notes := filepath.Join(dir, "notes.txt")
+	require.NoError(t, os.WriteFile(notes, nil, 0o600))
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "validate", notes)
+	assert.Equal(t, cli.ExitUsage, res.code)
+	assert.Contains(t, res.stderr, "extension")
+	empty := filepath.Join(dir, "empty")
+	require.NoError(t, os.MkdirAll(empty, 0o750))
+	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "validate", empty)
+	assert.Equal(t, cli.ExitUsage, res.code)
+	assert.Contains(t, res.stderr, "no files of commands as code")
 }

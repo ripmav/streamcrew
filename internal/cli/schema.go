@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/ripmav/streamcrew/internal/app"
+	"github.com/ripmav/streamcrew/internal/capability"
 	"github.com/ripmav/streamcrew/internal/commandfile"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 )
@@ -24,7 +25,7 @@ type schemaExportCmd struct {
 // (commands-as-code.md, B30). It needs neither the configuration nor a
 // profile.
 func (c schemaExportCmd) Run(e *Env) error {
-	reg, err := app.ActionCatalog()
+	reg, err := app.ActionCatalog(capability.Set{})
 	if err != nil {
 		return err
 	}
