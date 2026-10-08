@@ -17,7 +17,7 @@ func TestRender_Encoding_B30_B31_B75(t *testing.T) {
 	t.Parallel()
 	const value = "a b+c&d=%26/?#<e>\"f'g\\h\n~._-ü😀 \x00"
 	const text = `<p a="1">q=$value&x=1 "$" 'ü'</p>`
-	var s template.Scope
+	s := scope()
 	s.SetValue("value", template.TextValue(value))
 	s.SetValue("broken", template.TextValue("a\xffb"))
 
