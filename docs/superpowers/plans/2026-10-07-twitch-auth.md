@@ -146,6 +146,7 @@ internal/auth/
 
 ### Task 1 — ADR-0014 (Docs-PR, unterstes PR im Stack)
 
+**Status:** erledigt, PR #144
 **Zweig:** `docs/oauth-adr` (von `main`)
 **PR:** `docs(adr): OAuth and app credentials (ADR-0014)`
 
@@ -194,6 +195,7 @@ internal/auth/
 
 ### Task 2 — `accounts`-Tabelle im Store
 
+**Status:** erledigt, PR #145
 **Zweig:** `feat/auth-accounts-store` (auf `docs/oauth-adr`)
 **PR:** `feat(store): accounts table for platform logins`
 
@@ -239,6 +241,7 @@ CRUD inkl. Upsert-Semantik (erneuter Login ersetzt, `updated_at` neu) und
 
 ### Task 3 — `internal/auth`: Twitch-Device-Code-Flow
 
+**Status:** erledigt, PR folgt (Stack #146)
 **Zweig:** `feat/auth-device-flow` (auf `feat/auth-accounts-store`)
 **PR:** `feat(auth): Twitch device code flow`
 
@@ -514,7 +517,7 @@ BYO (eigene Confidential-App des Nutzers, Secret im Vault unter
 |---|---|---|---|
 | R1 | ADR-0023, ADR-0014 „Abgelöst“, ADR-Index, dieser Plan-Abschnitt, Roadmap-Historie | `docs/oauth-adr` / #144 | erledigt |
 | R2 | `accounts`-Tabelle: Spalte `flow` (`authorization_code`/`device_code`) in Migration 0016, `store.Account`, Round-trip-Test | `feat/auth-accounts-store` / #145 | erledigt |
-| R3 | `Flow`-Interface verallgemeinern (Login-Handle + Prompt statt nur DeviceAuthResponse); `twitchCodeFlow`: Authorize-URL, Loopback-Listener (localhost, state, Fehler-Redirect), Code-Austausch mit Secret; DCF-Implementierung bleibt; Tests gegen Fake-Server | `feat/auth-device-flow` / #147 | offen |
+| R3 | `Flow`-Interface verallgemeinern (Login-Handle + Prompt statt nur DeviceAuthResponse); `twitchCodeFlow`: Authorize-URL, Loopback-Listener (localhost, state, Fehler-Redirect), Code-Austausch mit Secret; DCF-Implementierung bleibt; Tests gegen Fake-Server | `feat/auth-device-flow` / #147 | erledigt |
 | R4 | Service: `Credentials` (ID, Secret, DeviceFlow) für Start/Wait, Secret im Vault (`auth/<platform>/client`, Plattform-Ebene, mit Account/Token transaktional gespeichert), Flow-Auflösung je `flow`-Spalte (Secret aus Vault), Re-Login widerruft vorher best-effort, Logout löscht Token + Secret, `auth.action_required` im Code-Flow (URL, leeres `code`, Fensterende) | `feat/auth-service` / #148 | offen |
 | R5 | CLI: `auth login twitch` = Code-Flow-Standard, `--device-flow` (DCF), `--client-id`/`--client-secret` (erster Login, danach aus dem Vault; Flags überschreiben), Fehlermeldung ohne Credentials, Kong-Tests | `feat/auth-cli` / #149 | offen |
 | R6 | Doku: README (BYO-App-Setup + Redirect-Registrierung, `--device-flow`, Statusparagraf), `events.md` (Code-Flow-Semantik), Roadmap 4.1-Abschnitt + Historie, Plan-Status | `docs/auth-events` / #150 | offen |
