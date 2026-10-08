@@ -57,5 +57,5 @@
 
 - [x] Einbettung in Desktop-Builds entschieden: [ADR-0005](0005-core-in-desktop-builds.md) (2026-09-27)
 - [x] API-Protokoll entschieden: [ADR-0010](0010-api-protokoll.md) (2026-09-28)
-- [ ] ADR zum Sicherheitsmodell mit den Capabilities je Modus schreiben (Entwurf in Phase 2)
+- [x] ADR zum Sicherheitsmodell mit den Capabilities je Modus schreiben (Entwurf in Phase 2): [ADR-0013](0013-sicherheitsmodell.md), akzeptiert 2026-09-29
 - [ ] Container-Image und Server-Dokumentation im MVP (Phase 6)
