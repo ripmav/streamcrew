@@ -75,13 +75,13 @@ func StreamFamily(states StreamStates) Family {
 	}
 	// started returns the start in the time zone of the profile and the
 	// uptime; ok is false while the stream is offline.
-	started := func(value func(start time.Time, uptime time.Duration) Value) Resolver {
+	started := func(value func(start time.Time, uptime time.Duration, p localePattern) Value) Resolver {
 		return func(ctx context.Context, s *Scope) (Value, bool, error) {
 			st, ok, err := state(ctx, s)
 			if !ok || !st.Live || st.StartedAt.IsZero() {
 				return Value{}, false, err
 			}
-			return value(st.StartedAt.In(s.location()), max(s.now().Sub(st.StartedAt), 0)), true, nil
+			return value(st.StartedAt.In(s.location()), max(s.now().Sub(st.StartedAt), 0), s.pattern()), true, nil
 		}
 	}
 	return Family{
@@ -99,26 +99,26 @@ func StreamFamily(states StreamStates) Family {
 				}
 				return TextValue(strconv.FormatBool(st.Live)), true, nil
 			}},
-			{Name: "streamstartdatetime", Resolve: started(func(start time.Time, _ time.Duration) Value {
-				return TextValue(start.Format(layoutDateTime))
+			{Name: "streamstartdatetime", Resolve: started(func(start time.Time, _ time.Duration, p localePattern) Value {
+				return TextValue(start.Format(p.datetime))
 			})},
-			{Name: "streamstartdate", Resolve: started(func(start time.Time, _ time.Duration) Value {
-				return TextValue(start.Format(layoutDate))
+			{Name: "streamstartdate", Resolve: started(func(start time.Time, _ time.Duration, p localePattern) Value {
+				return TextValue(start.Format(p.date))
 			})},
-			{Name: "streamstarttime", Resolve: started(func(start time.Time, _ time.Duration) Value {
-				return TextValue(start.Format(layoutTime))
+			{Name: "streamstarttime", Resolve: started(func(start time.Time, _ time.Duration, p localePattern) Value {
+				return TextValue(start.Format(p.time))
 			})},
 			// The uptime parts are the places of a clock (B43).
-			{Name: "streamuptimetotal", Resolve: started(func(_ time.Time, up time.Duration) Value {
+			{Name: "streamuptimetotal", Resolve: started(func(_ time.Time, up time.Duration, _ localePattern) Value {
 				return TextValue(fmt.Sprintf("%d:%02d", int64(up/time.Hour), int64(up/time.Minute%60)))
 			})},
-			{Name: "streamuptimehours", Resolve: started(func(_ time.Time, up time.Duration) Value {
+			{Name: "streamuptimehours", Resolve: started(func(_ time.Time, up time.Duration, _ localePattern) Value {
 				return IntValue(int64(up / time.Hour))
 			})},
-			{Name: "streamuptimeminutes", Resolve: started(func(_ time.Time, up time.Duration) Value {
+			{Name: "streamuptimeminutes", Resolve: started(func(_ time.Time, up time.Duration, _ localePattern) Value {
 				return IntValue(int64(up / time.Minute % 60))
 			})},
-			{Name: "streamuptimeseconds", Resolve: started(func(_ time.Time, up time.Duration) Value {
+			{Name: "streamuptimeseconds", Resolve: started(func(_ time.Time, up time.Duration, _ localePattern) Value {
 				return IntValue(int64(up / time.Second % 60))
 			})},
 		},
