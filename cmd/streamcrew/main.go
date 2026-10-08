@@ -4,21 +4,14 @@
 // automation service for live streams. Frontends such as the CLI/TUI, the
 // desktop app and the web interface talk to it exclusively through its API.
 //
-// Subcommands:
-//
-//	serve         run the core until SIGINT or SIGTERM
-//	version       print version information
-//	config show   print the effective configuration
-//	config path   print the configuration file and the directories
-//	doctor        check the environment of the core
-//
-// The configuration comes from flags, STREAMCREW_* environment variables and
-// an optional YAML file, in this order of precedence (Code-ADR-0005).
+// This package sets up the process and kong: signals, environment, the
+// configuration sources (Code-ADR-0005), parsing and the exit code. The
+// commands themselves are defined in internal/cli. "streamcrew --help" lists
+// them.
 package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -29,14 +22,8 @@ import (
 
 	"github.com/alecthomas/kong"
 
+	"github.com/ripmav/streamcrew/internal/cli"
 	"github.com/ripmav/streamcrew/internal/config"
-)
-
-// Exit codes (Code-ADR-0003).
-const (
-	exitOK      = 0
-	exitFailure = 1
-	exitUsage   = 2
 )
 
 func main() {
@@ -45,52 +32,68 @@ func main() {
 	// Ctrl+C ends the process at once (Code-ADR-0004).
 	context.AfterFunc(ctx, stop)
 
-	code := run(ctx, os.Args[1:], os.Stdout, os.Stderr, os.Exit)
+	// Secrets never come as flags (Code-ADR-0005); only this package and
+	// internal/config read the environment.
+	secretKey, _ := os.LookupEnv("STREAMCREW_SECRET_KEY")
+	code := run(ctx, os.Args[1:], process{
+		stdout:     os.Stdout,
+		stderr:     os.Stderr,
+		exit:       os.Exit,
+		executable: executable(),
+		secretKey:  secretKey,
+	})
 	stop()
 	os.Exit(code)
 }
 
-// run parses args, runs the selected command and returns the exit code.
-// exit is called by kong after --help.
-func run(ctx context.Context, args []string, stdout, stderr io.Writer, exit func(int)) int {
-	defaults, defaultsErr := config.DetectDefaults(executable())
+// process is what run takes from the process; tests replace it.
+type process struct {
+	stdout, stderr io.Writer
+	exit           func(int) // called by kong after --help
+	executable     string    // for the portable mode; empty skips it
+	secretKey      string    // STREAMCREW_SECRET_KEY (ADR-0012)
+}
+
+// run sets up kong with the command line of internal/cli, parses args, runs
+// the selected command and returns the exit code.
+func run(ctx context.Context, args []string, p process) int {
+	defaults, defaultsErr := config.DetectDefaults(p.executable)
 	file := config.NewFileResolver(defaults.ConfigFile())
 
-	var c cli
+	var root cli.Root
 	opts := append([]kong.Option{
 		kong.Name("streamcrew"),
 		kong.Description("Headless core of streamcrew, a bot and automation service for live streams."),
-		kong.Writers(stdout, stderr),
-		kong.Exit(exit),
+		kong.Writers(p.stdout, p.stderr),
+		kong.Exit(p.exit),
 		kong.UsageOnError(),
 	}, config.KongOptions(defaults, file)...)
-	parser, err := kong.New(&c, opts...)
+	parser, err := kong.New(&root, opts...)
 	if err != nil {
-		fmt.Fprintf(stderr, "streamcrew: %v\n", err)
-		return exitFailure
+		fmt.Fprintf(p.stderr, "streamcrew: %v\n", err)
+		return cli.ExitFailure
 	}
 	kctx, err := parser.Parse(args)
 	if err != nil {
-		fmt.Fprintf(stderr, "streamcrew: %v\n", err)
-		return exitUsage
+		fmt.Fprintf(p.stderr, "streamcrew: %v\n", err)
+		return cli.ExitUsage
 	}
 	if err := file.Err(); err != nil {
-		fmt.Fprintf(stderr, "streamcrew: %v\n", err)
-		return exitUsage
+		fmt.Fprintf(p.stderr, "streamcrew: %v\n", err)
+		return cli.ExitUsage
 	}
 
-	envKey, _ := os.LookupEnv("STREAMCREW_SECRET_KEY")
-	env := &runEnv{
-		stdout:      stdout,
-		stderr:      stderr,
-		cfg:         &c.Config,
-		defaults:    defaults,
-		defaultsErr: defaultsErr,
-		file:        file,
-		envKey:      envKey,
+	env := &cli.Env{
+		Stdout:      p.stdout,
+		Stderr:      p.stderr,
+		Config:      &root.Config,
+		Defaults:    defaults,
+		DefaultsErr: defaultsErr,
+		File:        file,
+		SecretKey:   p.secretKey,
 	}
 	kctx.BindTo(ctx, (*context.Context)(nil))
-	return exitCode(kctx.Run(env), stderr)
+	return cli.ExitCode(kctx.Run(env), p.stderr)
 }
 
 // executable returns the path of the running binary with symlinks resolved,
@@ -104,37 +107,4 @@ func executable() string {
 		return resolved
 	}
 	return exe
-}
-
-// usageError marks an invalid command line or configuration (exit code 2).
-type usageError struct {
-	err error
-}
-
-func (e *usageError) Error() string { return e.err.Error() }
-func (e *usageError) Unwrap() error { return e.err }
-
-// reportedError marks a failure that has already been reported, e.g. logged
-// by the core or printed as a check result. main only sets exit code 1.
-type reportedError struct {
-	err error
-}
-
-func (e *reportedError) Error() string { return e.err.Error() }
-func (e *reportedError) Unwrap() error { return e.err }
-
-// exitCode reports err on stderr unless it has been reported already and
-// returns the matching exit code.
-func exitCode(err error, stderr io.Writer) int {
-	if err == nil {
-		return exitOK
-	}
-	if _, ok := errors.AsType[*reportedError](err); ok {
-		return exitFailure
-	}
-	fmt.Fprintf(stderr, "streamcrew: %v\n", err)
-	if _, ok := errors.AsType[*usageError](err); ok {
-		return exitUsage
-	}
-	return exitFailure
 }

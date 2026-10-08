@@ -27,7 +27,7 @@
 4. **Übersetzung an Schichtgrenzen:** Treiber- und Adapterfehler werden zu Domänenfehlern (z. B. `sql.ErrNoRows` → `ErrNotFound`), die API übersetzt Domänenfehler zentral in Connect-Codes (Phase 6).
 5. **Behandeln oder zurückgeben, nie beides.** Geloggt wird einmal, an der Grenze, die den Fehler behandelt: der Supervisor für Runnables, die API- bzw. HTTP-Schicht für Anfragen, `main` für den Prozess.
 6. **`panic`** nur für Programmierfehler beim Start (`Must…` mit konstanten Eingaben). Panics in Runnables fängt der Supervisor ab und behandelt sie als Fehler mit Stacktrace im Log ([Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md)). Panics in HTTP-Handlern fängt `net/http` ab; das Server-Log geht über slog.
-7. **Exit-Codes** von `streamcrew`: `0` Erfolg, `1` Laufzeitfehler, `2` ungültige Nutzung oder Konfiguration. `main` gibt den Fehler einmal auf stderr aus.
+7. **Exit-Codes** von `streamcrew`: `0` Erfolg, `1` Laufzeitfehler, `2` ungültige Nutzung oder Konfiguration. `main` gibt den Fehler einmal auf stderr aus. *Präzisiert am 2026-09-29: Die Abbildung auf Exit-Codes liegt in `cli.ExitCode` (`internal/cli`); `main` ruft sie auf und beendet den Prozess.*
 
 ### Logging
 
