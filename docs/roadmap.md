@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | Phase 0 läuft; Kernentscheidungen getroffen (ADR-0001 bis ADR-0011), Umsetzung noch nicht begonnen |
-| **Stand** | 2026-09-27 |
+| **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12) |
+| **Stand** | 2026-09-29 |
 | **Grundlage** | [`plan.md`](plan.md) (Architektur, Prioritäten, Risiken), [`starting.md`](starting.md), [`adr/`](adr/README.md) |
-| **Aktuelle Phase** | Phase 0: Klärung und Projektstart (Gate) |
+| **Aktuelle Phase** | Phase 2: Domäne und Persistenz (nächste) |
 
 > **Name:** Das Projekt heißt vorerst `streamcrew` (Codename, [ADR-0008](adr/0008-codename-streamcrew.md)); Binary `streamcrew`. Der endgültige Name wird vor Gate O geprüft.
 
@@ -89,8 +89,8 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 | Track / Phase | Status |
 |---|---|
-| Phase 0: Klärung und Projektstart | in Arbeit (ADR-0001 bis ADR-0011 akzeptiert, `LICENSE` angelegt) |
-| Phase 1: Fundament | offen |
+| Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
+| Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); offen bleibt nur der Cache, der in Phase 2 neu bewertet wird |
 | Phase 2: Domäne und Persistenz | offen |
 | Phase 3: Engine, Templates, Actions, Mock | offen |
 | Phase 4: Twitch | offen |
@@ -116,31 +116,19 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | **Ziel** | Vorgehen, Lizenz und Organisation klären, bevor Code entsteht |
 | **Voraussetzungen** | keine |
 | **Aufwand** | ~1 PW |
-| **ADRs** | 0001–0011 (akzeptiert), 0021 (rechtlicher Teil) |
+| **ADRs** | 0001–0011 (akzeptiert); 0021 (rechtlicher Teil) übertragen nach Gate O |
 
 ### 0.1 Vorgehen und Recht
 
 - [x] ADR-0001 „Neuimplementierung und Nutzung des Originals“ schreiben und entscheiden (S), erledigt 2026-09-27
 - [x] Festlegen, ob `../mixitup` weiter gelesen werden darf: ja, als Hilfestellung nach den Regeln aus ADR-0001, erledigt 2026-09-27
 - [x] Regeln aus ADR-0001 in [`docs/spec/README.md`](spec/README.md) übernommen, mit Vorlage [`docs/spec/TEMPLATE.md`](spec/TEMPLATE.md) für Spezifikationen mit Quellenangabe (S), erledigt 2026-09-28
-- [ ] Rechtliche Einschätzung einholen (extern), spätestens vor Gate O, besser vor Phase 3. Themen:
-  - BSL §2 und §3.1–3.5
-  - EULA §1 (kein Reverse Engineering)
-  - Nutzung des Codes als Hilfestellung (ADR-0001)
-  - die MIT-Datei `MixItUp.Base/LICENSE.txt`
-  - die Import-Funktion (Interoperabilität)
-  - die Übernahme der `$`-Identifier-Namen
-- [ ] Optional (Option D): Blazing Cacti um eine schriftliche Erlaubnis bitten und die Antwort dokumentieren (S)
-- [ ] Rechtlichen Teil von ADR-0021 (Import, Identifier-Namen) entscheiden; danach in ADR-0001 unter „Interop-Ausnahmen“ den Link auf das neue ADR nachtragen (S)
 
 ### 0.2 Lizenz, Name, Marke
 
 - [x] ADR-0002 Lizenz des Projekts: MIT (S), erledigt 2026-09-27
 - [x] `LICENSE` mit dem offiziellen MIT-Text im Projektwurzelverzeichnis anlegen (S), erledigt 2026-09-27
 - [x] [ADR-0008](adr/0008-codename-streamcrew.md) Codename `streamcrew` (englisch, beschreibend, ohne Anlehnung an Mix It Up), erledigt 2026-09-28
-- [ ] Namensprüfung für den endgültigen Namen, spätestens vor Gate O, möglichst früher (S):
-  - Markenrecherche (DPMA, EUIPO, USPTO)
-  - Domain-, GitHub- und Paketnamen-Verfügbarkeit
 - [x] Platzhalter für Projekt- und Binärnamen in `plan.md`, `roadmap.md` und den ADRs durch `streamcrew` ersetzt (S), erledigt 2026-09-28
 
 ### 0.3 Umfang
@@ -151,24 +139,42 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 - [x] [ADR-0005](adr/0005-core-in-desktop-builds.md) Core in Desktop-Builds: Die App liefert den Core mit und startet ihn als eigenen Prozess, erledigt 2026-09-27
 - [x] [ADR-0006](adr/0006-core-als-bibliothek-fuer-selbststart.md) Core als Bibliothek: schmale Start-API nur für den Selbststart, kein Betrieb im selben Prozess; ob mitgeliefert oder eingebunden, legt der Build-Prozess fest, erledigt 2026-09-27
 - [x] [ADR-0007](adr/0007-release-artefakte-des-cores.md) Release-Artefakte: Jedes Core-Release enthält Binary und Bibliothek (Go-Modul als Quellarchiv), erledigt 2026-09-27
-- [ ] Restliche offene Fragen aus Plan §15 beantworten: Import, Zielsysteme der Desktop-App, Kapazität, Web-Stack (S)
 - [x] MVP-Umfang (P0, M2) wie geplant bestätigt; P1–P3 werden vor den jeweiligen Phasen überprüft (S), erledigt 2026-09-28
 
 ### 0.4 Organisation
 
 - [x] Privates GitHub-Repository `ripmav/streamcrew` angelegt ([ADR-0009](adr/0009-repositories-und-hosting.md)); `LICENSE` im ersten Commit auf `main`, `docs/` per Pull Request (S), erledigt 2026-09-28
-- [ ] `main` schützen und die Branch-Konvention festlegen (S). Branch-Schutz und Rulesets sind für private Repositories im aktuellen GitHub-Plan nicht verfügbar (geprüft 2026-09-28). Bis zur Veröffentlichung oder einem Plan-Upgrade gilt die Regel per Konvention (Arbeit nur auf Branches, Merge per Pull Request), optional abgesichert durch einen lokalen `pre-push`-Hook. Nach dem Merge löscht GitHub den Branch automatisch (Einstellung aktiv seit 2026-09-28).
+- [x] Branch-Konvention festlegen und `main` schützen (S), erledigt 2026-09-29:
+  - Branch-Schutz und Rulesets sind für private Repositories im aktuellen GitHub-Plan nicht verfügbar (geprüft 2026-09-28). Bis zur Veröffentlichung oder einem Plan-Upgrade gilt die Regel per Konvention: Arbeit nur auf Branches, Merge per Pull Request.
+  - Die Konvention steht in [`CONTRIBUTING.md`](../CONTRIBUTING.md); der optionale lokale Hook `scripts/hooks/pre-push` verhindert Pushes auf `main`.
+  - Nach dem Merge löscht GitHub den Branch automatisch (Einstellung aktiv seit 2026-09-28).
+  - Den technischen Schutz aktiviert der Projektinhaber nach dem Umschalten auf öffentlich (Gate O, O.3).
 - [x] ADR-Infrastruktur anlegen (S), erledigt 2026-09-27:
   - `docs/adr/README.md` (Index)
   - `docs/adr/TEMPLATE.md` (Kontext, Entscheidung, Alternativen, Konsequenzen, Status)
   - `docs/adr/code/README.md`
-- [ ] Projekt-Board oder Issues mit den Phasen dieser Roadmap anlegen (S)
 
-**Exit-Kriterien:**
+### 0.5 Übertragene Aufgaben
 
-- ADR-0001 bis ADR-0008 haben den Status „akzeptiert“.
-- Das private Repository existiert, mit `LICENSE` ab dem ersten Commit.
-- Produktivcode entsteht erst, wenn der Name bzw. Codename für den Modulpfad feststeht.
+Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2026-09-29) dorthin verschoben, wo sie fällig werden:
+
+| Aufgabe | jetzt in | fällig |
+|---|---|---|
+| Rechtliche Einschätzung (extern): BSL, EULA, Code als Hilfestellung, MIT-Datei, Import, `$`-Identifier-Namen | Gate O, O.1 | Soll vor Phase 3 (Template-Engine mit den Identifier-Namen), Muss vor Gate O |
+| Rechtlicher Teil von ADR-0021 (Import, Identifier-Namen) | Gate O, O.1 | Soll vor Phase 3 |
+| Optional: schriftliche Erlaubnis von Blazing Cacti | Gate O, O.1 | vor Gate O |
+| Namensprüfung für den endgültigen Namen | Gate O, O.1 | vor Gate O, möglichst früher |
+| Plan §15: Bedeutung des Imports, eigener Datenbestand | Phase 11.2 | vor ADR-0021 (Umsetzung) |
+| Plan §15: Zielsysteme der Desktop-App, Signierung und Notarisierung | Desktop-Track D0 | vor dem Paketierungs-Spike |
+| Plan §15: Web-Stack | Web-Track W0 (ADR-0017) | vor W0 |
+| Plan §15: verfügbare Kapazität pro Woche | Querschnittsaufgaben | spätestens zur Kalibrierung nach M1 |
+| Projekt-Board oder Issues mit den Phasen der Roadmap (Entscheidung des Projektinhabers: später) | Gate O, O.2 | vor Gate O |
+
+**Exit-Kriterien** (erfüllt, Gate bestanden am 2026-09-29):
+
+- [x] ADR-0001 bis ADR-0008 haben den Status „akzeptiert“ (dazu ADR-0009 bis ADR-0011).
+- [x] Das private Repository existiert, mit `LICENSE` ab dem ersten Commit (`fdbbcbc`).
+- [x] Produktivcode entsteht erst, wenn der Name bzw. Codename für den Modulpfad feststeht: `github.com/ripmav/streamcrew` ([ADR-0008](adr/0008-codename-streamcrew.md)).
 
 ---
 
@@ -179,7 +185,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | **Ziel** | lauffähiges, sauber beendbares Skelett mit vollständiger Qualitäts-Pipeline |
 | **Voraussetzungen** | Phase 0 |
 | **Aufwand** | 1–2 PW |
-| **ADRs** | 0009, 0010, 0011 (bereits akzeptiert); Code-ADRs 0001–0005, 0014 |
+| **ADRs** | 0009, 0010, 0011 (bereits akzeptiert); Code-ADRs 0001–0006 |
 
 ### 1.1 Toolchain und Qualität
 
@@ -195,14 +201,14 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
   - Cross-Build linux/windows/darwin × amd64/arm64 in einem Job auf ubuntu
   - Actions auf Commit-SHAs gepinnt; wöchentlicher `govulncheck`-Lauf per Zeitplan
 - [x] Dependency-Updates mit Renovate automatisieren, kein Dependabot (`renovate.json` nach Vorbild von `recipe-reader`: je Ökosystem ein Pull Request, Go-Module samt `go`-Direktive, Actions samt Werkzeugversionen, später Docker-Images; montags, Sicherheitsupdates sofort) (S), erledigt 2026-09-28
-- [ ] Renovate-GitHub-App für `ripmav/streamcrew` installieren; danach das Dependency Dashboard und die ersten Renovate-PRs prüfen (Projektinhaber) (S)
+- [x] Renovate-GitHub-App für `ripmav/streamcrew` installieren; danach das Dependency Dashboard und die ersten Renovate-PRs prüfen (Projektinhaber) (S), erledigt 2026-09-28: Dependency Dashboard (#10), erster Renovate-PR (#11) gemergt
 - [x] Die CI-Läufe des ersten Pull Requests prüfen: Laufzeit, Minutenverbrauch, Cache (S), erledigt 2026-09-28
   - Laufzeit (PR #8): Checks 70 s, Tests 36 s, Cross-Build 55 s, Linkprüfung 7 s; Gesamtdauer der CI 74 s
   - Minuten: pro Push mit Go- und Markdown-Änderungen etwa 5 abgerechnete Minuten, weil jeder Job auf volle Minuten aufgerundet wird
   - Cache: Die drei CI-Jobs teilen sich einen setup-go-Schlüssel. Gespeichert wird nur der Stand des zuerst fertigen Jobs, die anderen melden „Unable to reserve cache“. Ohne Abhängigkeiten ist das unerheblich.
 - [ ] setup-go-Cache mit den ersten Abhängigkeiten neu bewerten, z. B. Cache nur in einem Job speichern (Phase 2) (S)
 - [x] Claude-Code-Review nur auf `@claude`-Erwähnung in Pull Requests, mit Fortschritts- und Ergebniskommentar (`.github/workflows/claude.yml`; kein automatisches Review, keine Issues) (S), erledigt 2026-09-28
-- [ ] Claude-Review so korrigieren, dass das Review tatsächlich läuft (S):
+- [x] Claude-Review so korrigieren, dass das Review tatsächlich läuft (S), erledigt 2026-09-29:
   - Erste Ursache: Das Werkzeug `Skill`, über das Claude Code den Plugin-Befehl ausführt, wurde verweigert. Seit PR #7 ist es gezielt für `code-review:code-review` freigegeben. Im Lauf zu PR #8 wirkt die Freigabe: keine Verweigerung.
   - Zweite Ursache, noch offen: Der Befehl brach in PR #8 nach 12 s in seiner Vorprüfung ab (2 Haiku-Agents, kein eigener Kommentar). Bei einem vollständigen Lauf ohne Befunde hätte er einen Kommentar „No issues found“ gepostet.
   - Wahrscheinlicher Grund: Die Vorprüfung stoppt, wenn Claude den PR schon kommentiert hat. Dafür hält sie vermutlich den vorab geposteten Fortschrittskommentar. Wiederholte `@claude`-Anfragen würden aus demselben Grund übersprungen.
@@ -212,55 +218,59 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
     - Claude nur mit Lese-Werkzeugen und Inline-Kommentaren
     - Ergebnis als strukturierte Ausgabe, die den Fortschrittskommentar ersetzt
   - Prompt und Schema liegen in `.github/claude/`. Der Workflow liest sie aus dem Commit, aus dem er selbst stammt, nie aus dem PR-Checkout.
-  - Offen: der Nachweis in einem echten Lauf. Die Workflow-Fassung hängt vom Ereignis ab:
+  - Die Workflow-Fassung hängt vom Ereignis ab:
     - `@claude` als PR-Kommentar (`issue_comment`) nutzt die Fassung aus `main`.
-    - `@claude` in einem Review oder Inline-Kommentar nutzt die Fassung aus dem Merge-Commit des PRs. Damit lässt sich PR #9 schon vor dem Merge testen.
-- [ ] `anthropics/claude-code-action` in `claude.yml` auf einen Commit-SHA pinnen: Renovate schlägt das selbst vor; erst nach dem Review-Nachweis mergen. `actions/checkout` ist dort seit PR #9 gepinnt ([Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md)) (S)
-- [ ] `GOPRIVATE=github.com/ripmav/*` und CI-Token für den Zugriff auf private Repositories und Release-Artefakte einrichten ([ADR-0009](adr/0009-repositories-und-hosting.md)) (S)
+    - `@claude` in einem Review oder Inline-Kommentar nutzt die Fassung aus dem Merge-Commit des PRs.
+  - Nachweis: Der einzige `@claude`-Lauf zu PR #9 kam als PR-Kommentar kurz vor dem Merge und lief deshalb noch mit der alten Fassung aus `main`. Der Projektinhaber hat die Aufgabe am 2026-09-29 ohne Nachweis in einem echten Lauf als erledigt festgelegt.
+- [x] `anthropics/claude-code-action` in `claude.yml` auf einen Commit-SHA pinnen ([Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md)) (S), erledigt 2026-09-28 mit dem Renovate-PR #11; `actions/checkout` ist dort seit PR #9 gepinnt. Digest-Updates schlägt Renovate vor.
+- [x] `GOPRIVATE=github.com/ripmav/*` einrichten ([ADR-0009](adr/0009-repositories-und-hosting.md)) (S), erledigt 2026-09-29: in `ci.yml` für alle Jobs gesetzt, lokal über `go env -w` (`CONTRIBUTING.md`). Den CI-Token mit Leserechten auf das Core-Repository brauchen laut ADR-0009 nur die abhängigen Repositories; er ist nach D0 und W0 verschoben.
 
 ### 1.2 Architekturentscheidungen
 
 - [x] [ADR-0009](adr/0009-repositories-und-hosting.md) Repositories und Hosting: drei Repositories auf GitHub (privat), CI mit Actions, Releases in GitHub Releases; vorgezogen, erledigt 2026-09-28
 - [x] [ADR-0010](adr/0010-api-protokoll.md) API-Protokoll: ConnectRPC mit Protobuf, inklusive lokalem Transport zum Core-Prozess; vorgezogen, erledigt 2026-09-28
 - [x] [ADR-0011](adr/0011-keine-telemetrie.md) Keine Telemetrie; Fehlersuche über lokale Logs und Diagnose-Paket; vorgezogen, erledigt 2026-09-28
-- [ ] Code-ADRs schreiben (M):
+- [x] Code-ADRs schreiben (M), erledigt 2026-09-29, jedes einzeln vom Projektinhaber abgenommen:
   - 0001 Toolchain und Linting: [Code-ADR-0001](adr/code/0001-go-toolchain-und-linting.md), akzeptiert 2026-09-28
-  - 0002 Dependency Injection
-  - 0003 Fehler und Logging
-  - 0004 Nebenläufigkeit und Supervisor
-  - 0005 Konfiguration
-  - 0014 Teststrategie
+  - 0002 Dependency Injection: [Code-ADR-0002](adr/code/0002-dependency-injection.md), akzeptiert 2026-09-29
+  - 0003 Fehler und Logging: [Code-ADR-0003](adr/code/0003-fehler-und-logging.md), akzeptiert 2026-09-29
+  - 0004 Nebenläufigkeit und Supervisor: [Code-ADR-0004](adr/code/0004-nebenlaeufigkeit-und-supervisor.md), akzeptiert 2026-09-29
+  - 0005 Konfiguration: [Code-ADR-0005](adr/code/0005-konfiguration.md), akzeptiert 2026-09-29
+  - 0006 Teststrategie: [Code-ADR-0006](adr/code/0006-teststrategie.md), akzeptiert 2026-09-29 (vorläufige Backlog-Nummer 0014; die Backlog-Nummern 0006–0013 sind um eins aufgerückt)
 
 ### 1.3 Skelett
 
-- [ ] `cmd/streamcrew/main.go` mit kong und den Unterkommandos `serve`, `version`, `config show|path`, `doctor` (S)
-- [ ] `internal/config` (M):
-  - Flags, Umgebungsvariablen (`STREAMCREW_…`), optionale Konfigurationsdatei
-  - Datenverzeichnis (`os.UserConfigDir`, `--data-dir`, portabler Modus)
-  - Betriebsmodus
-- [ ] `internal/app` (M):
-  - Composition Root
-  - Supervisor: Runnables mit Restart-Policy und Backoff mit Jitter
-  - `signal.NotifyContext`, geordneter Shutdown mit Zeitlimits
-- [ ] Logging mit `log/slog` (S):
+- [x] `cmd/streamcrew/main.go` mit kong und den Unterkommandos `serve`, `version`, `config show|path`, `doctor` (S), erledigt 2026-09-29; Exit-Codes 0/1/2, `--output json` für `version`, `config path` und `doctor`
+- [x] `internal/config` (M), erledigt 2026-09-29 ([Code-ADR-0005](adr/code/0005-konfiguration.md)):
+  - Flags, Umgebungsvariablen (`STREAMCREW_…`), optionale Konfigurationsdatei (YAML); Vorrang Flag > Umgebung > Datei > Standard, unbekannte Schlüssel sind ein Fehler
+  - Datenverzeichnis (`os.UserConfigDir`, `--data-dir`, portabler Modus über `streamcrew.portable` neben dem Binary)
+  - Betriebsmodus mit abhängigen Standardwerten (Adresse `127.0.0.1:8740` bzw. `:8740`)
+- [x] `internal/app` (M), erledigt 2026-09-29 ([Code-ADR-0002](adr/code/0002-dependency-injection.md), [Code-ADR-0004](adr/code/0004-nebenlaeufigkeit-und-supervisor.md)):
+  - Composition Root; Bereitschaft aus den Zuständen der Runnables
+  - Supervisor (`internal/supervisor`): Runnables mit Restart-Policy und Backoff mit Jitter, Panics abgefangen, kritische Runnables
+  - `signal.NotifyContext`, geordneter Shutdown mit Zeitlimit; ein zweites Signal beendet sofort
+- [x] Logging mit `log/slog` (S), erledigt 2026-09-29 (`internal/logging`, [Code-ADR-0003](adr/code/0003-fehler-und-logging.md)):
   - Text oder JSON, Level pro Komponente
-  - Dateiausgabe mit Rotation
-  - Maskierung von Secrets
-- [ ] HTTP-Grundserver mit dem stdlib-Routing: `/healthz`, `/readyz`, `pprof` nur im Dev-Modus (S)
-- [ ] `time/tzdata` einbinden (S)
+  - Datei `<data-dir>/logs/streamcrew.log` als JSON Lines mit eigener Rotation nach Größe
+  - Maskierung von Secrets über Schlüsselnamen und den Typ `logging.Secret`
+- [x] HTTP-Grundserver mit dem stdlib-Routing: `/healthz`, `/readyz`, `pprof` nur im Dev-Modus (S), erledigt 2026-09-29 (`internal/httpserver`)
+- [x] `time/tzdata` einbinden (S), erledigt 2026-09-29
+- [x] `streamcrew doctor` mit ersten Prüfungen: Datenverzeichnis, Konfigurationsdatei, Adresse, Zeitzonen (`internal/doctor`) (S), erledigt 2026-09-29
+- [x] CI-Job für native Tests unter Windows und macOS, wöchentlich und auf Anforderung ([Code-ADR-0006](adr/code/0006-teststrategie.md)) (S), erledigt 2026-09-29
 
 ### 1.4 Dokumentation und Container
 
 - [x] `README.md` (Ziel, Status, Build, Lizenzhinweis MIT) (S), erledigt 2026-09-28
-- [ ] `CONTRIBUTING.md` (Konventionen, Pre-Commit, ADR-Prozess, Herkunftsregeln aus ADR-0001) (S)
-- [ ] Dockerfile: Multi-Stage, CGO-frei, non-root, minimales Laufzeit-Image, aktuelle Basis-Images (S)
-- [ ] Docker-Smoke-Test: `docker build`, `docker run … version`, `serve` mit Healthcheck (S)
+- [x] `README.md` um Bedienung, Konfiguration und Container ergänzt (S), erledigt 2026-09-29
+- [x] `CONTRIBUTING.md` (Konventionen, Pre-Commit, ADR-Prozess, Herkunftsregeln aus ADR-0001) (S), erledigt 2026-09-29
+- [x] Dockerfile: Multi-Stage, CGO-frei, non-root, minimales Laufzeit-Image, aktuelle Basis-Images (S), erledigt 2026-09-29: `golang:1.27.1-trixie` (per Digest gepinnt) zum Bauen, `scratch` zur Laufzeit mit CA-Zertifikaten, Nutzer 65532; Server-Modus, Daten im Volume `/data`; Image rund 16 MB
+- [x] Docker-Smoke-Test: `docker build`, `docker run … version`, `serve` mit Healthcheck (S), erledigt 2026-09-29: `scripts/docker-smoke.sh`, prüft außerdem Nutzer, `config show`, `doctor` im Container und den sauberen Stopp per SIGTERM; läuft in der CI im Build-Job
 
 **Exit-Kriterien (M0):**
 
-- `streamcrew serve` startet, meldet sich gesund und beendet sich auf SIGINT/SIGTERM sauber.
-- Die CI ist grün.
-- Das Docker-Image ist gebaut und getestet.
+- [x] `streamcrew serve` startet, meldet sich gesund und beendet sich auf SIGINT/SIGTERM sauber: `TestServe` in `cmd/streamcrew` und der Docker-Smoke-Test (2026-09-29).
+- [x] Die CI ist grün: PR #12 (2026-09-29), alle Jobs einschließlich Docker-Smoke-Test; per `workflow_dispatch` zusätzlich die nativen Tests unter Windows und macOS.
+- [x] Das Docker-Image ist gebaut und getestet: lokal mit `scripts/docker-smoke.sh` (2026-09-29), in der CI im Build-Job.
 
 ---
 
@@ -271,11 +281,11 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | **Ziel** | Datenmodell, Speicher, Profile, Backups, Event-Bus und Secrets |
 | **Voraussetzungen** | Phase 1 |
 | **Aufwand** | 3–4 PW |
-| **ADRs** | 0012, 0020 (Entwurf); Code-ADRs 0006, 0007, 0008, 0009, 0015 |
+| **ADRs** | 0012, 0020 (Entwurf); Code-ADRs 0008, 0009, 0010, 0011, 0016 |
 
 ### 2.1 Speicher
 
-- [ ] Code-ADR-0006 Datenbankzugriff: `modernc.org/sqlite`, `sqlc`, `goose`; Code-ADR-0015 Codegenerierung (S)
+- [ ] Code-ADR-0008 Datenbankzugriff: `modernc.org/sqlite`, `sqlc`, `goose`; Code-ADR-0016 Codegenerierung (S)
 - [ ] ADR-0012 Persistenz: SQLite je Profil, Backups (S)
 - [ ] `internal/store` (M):
   - Verbindung mit WAL, `foreign_keys` und `busy_timeout`
@@ -291,7 +301,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### 2.2 Domänenmodell
 
-- [ ] Code-ADR-0007 IDs und Zeit: UUIDv7, injizierbare Uhr, `testing/synctest` (S)
+- [ ] Code-ADR-0009 IDs und Zeit: UUIDv7, injizierbare Uhr, `testing/synctest` (S)
 - [ ] Nutzer: Nutzer, Plattform-Identitäten, Statistiken, Titel, Notizen, Ausschlüsse (M)
 - [ ] Rollenmodell: plattformneutrale Rollen mit Rangordnung plus plattformspezifische Rollen; Semantik „erfüllt Mindestrolle“ (Plan Anhang A.7) (M)
 - [ ] Commands (M):
@@ -300,7 +310,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
   - aktiv/unlocked
   - Requirements-Set
   - polymorphe Actions
-- [ ] Code-ADR-0008 polymorphe Serialisierung: `type`-Diskriminator, `schemaVersion`, `encoding/json/v2`, Migrationen je Typversion (M)
+- [ ] Code-ADR-0010 polymorphe Serialisierung: `type`-Diskriminator, `schemaVersion`, `encoding/json/v2`, Migrationen je Typversion (M)
 - [ ] Datenmodell für Counter und Quotes (S)
 - [ ] Settings-Sektionen, typisiert und versioniert: allgemein, Chat, Commands, Moderation, Overlay, Zeit/Locale, Backups (M)
 - [ ] Event-Modell (M):
@@ -310,7 +320,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### 2.3 Event-Bus
 
-- [ ] Code-ADR-0009 Event-Bus (S)
+- [ ] Code-ADR-0011 Event-Bus (S)
 - [ ] Typisierter In-Process-Bus mit Abonnements, Filtern, Puffern und Lag-Erkennung für langsame Abonnenten (M)
 
 ### 2.4 Secrets und Sicherheit
@@ -335,9 +345,9 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | | |
 |---|---|
 | **Ziel** | plattformneutrale Ausführung von Commands, testbar ohne Live-Plattform |
-| **Voraussetzungen** | Phase 2 |
+| **Voraussetzungen** | Phase 2; möglichst die rechtliche Einschätzung zu den `$`-Identifier-Namen (Gate O, O.1) |
 | **Aufwand** | 5–7 PW |
-| **ADRs** | 0022; Code-ADRs 0010, 0011, 0016 |
+| **ADRs** | 0022; Code-ADRs 0012, 0013 |
 
 ### 3.1 Template-Engine
 
@@ -346,7 +356,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
   - Regel „längster Präfix“
   - Kodierung
   - bewusste Abweichungen vom Original
-- [ ] Code-ADR-0010 Template-Engine (S)
+- [ ] Code-ADR-0012 Template-Engine (S)
 - [ ] Tokenizer und Resolver-Registry (statisch, Muster, dynamische Namen); bedarfsgesteuerte Auflösung mit `context`; Cache pro Rendervorgang (M)
 - [ ] Kodierungsmodi: Text, URL, HTML, JSON (S)
 - [ ] Identifier-Familien für das MVP (M):
@@ -369,7 +379,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### 3.3 Action-Framework und P0-Actions
 
-- [ ] Code-ADR-0011 Typ-Registry (M): Descriptor mit
+- [ ] Code-ADR-0013 Typ-Registry (M): Descriptor mit
   - Typ-ID, Version, Kategorie, i18n-Schlüsseln
   - JSON-Schema und UI-Hinweisen
   - benötigten Capabilities
@@ -394,7 +404,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### 3.5 Commands als Code und Typkatalog
 
-- [ ] Code-ADR-0016 YAML-Bibliothek (S)
+- [ ] Prüfen, ob die YAML-Bibliothek aus [Code-ADR-0005](adr/code/0005-konfiguration.md) (`go.yaml.in/yaml/v3`) für Commands als Code genügt, etwa bei Fehlermeldungen mit Zeile und Spalte; sonst ein neues Code-ADR (S)
 - [ ] Typkatalog als JSON-Schema exportieren (`schema export` → `schemas/`) (S)
 - [ ] YAML/JSON-Format (`apiVersion`, `kind`, `metadata`, `spec`) mit Import, Export und Validierung: `command validate|import|export` (M)
 
@@ -425,7 +435,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | **Ziel** | vollständige Twitch-Anbindung für Streamer- und Bot-Konto |
 | **Voraussetzungen** | Phase 3 (parallel zu Phase 5 möglich) |
 | **Aufwand** | 5–6 PW |
-| **ADRs** | 0013; Code-ADRs 0012, 0013 |
+| **ADRs** | 0013; Code-ADRs [0007](adr/code/0007-circuit-breaker.md), 0014, 0015 |
 
 ### 4.1 Authentifizierung
 
@@ -442,7 +452,8 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### 4.2 Helix-Client
 
-- [ ] Code-ADR-0012 HTTP-Client: Retry mit Backoff, Rate-Limit-Header, Paginierung, typisierte Fehler (S)
+- [ ] Code-ADR-0014 HTTP-Client: Retry mit Backoff, Rate-Limit-Header, Paginierung, typisierte Fehler; Reihenfolge Wiederholung → Circuit Breaker → Rate-Limiter → Anfrage (S)
+- [ ] `internal/breaker` nach [Code-ADR-0007](adr/code/0007-circuit-breaker.md): `sony/gobreaker/v2` mit Standardwerten, Fehlerbewertung, Logging und `ErrUnavailable`; Breaker `twitch.helix` und `twitch.auth` (S)
 - [ ] Endpunkte (L):
   - Users, Channels (lesen/aktualisieren), Streams
   - Chat: Nachricht senden, löschen, Einstellungen, Ankündigung, Shoutout
@@ -452,7 +463,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### 4.3 EventSub
 
-- [ ] Code-ADR-0013 WebSocket-Bibliothek (S)
+- [ ] Code-ADR-0015 WebSocket-Bibliothek (S)
 - [ ] WebSocket-Client (L):
   - Welcome-Nachricht, Keepalive-Überwachung
   - `session_reconnect` ohne Eventverlust
@@ -550,11 +561,11 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | **Ziel** | vollständige Bedienung ohne GUI über API, CLI und TUI; erste Releases |
 | **Voraussetzungen** | Phasen 4 und 5 |
 | **Aufwand** | 4–6 PW |
-| **ADRs** | 0023, [ADR-0010](adr/0010-api-protokoll.md) (API), [ADR-0011](adr/0011-keine-telemetrie.md) (Diagnose-Paket), [ADR-0006](adr/0006-core-als-bibliothek-fuer-selbststart.md) (Start-API), [ADR-0007](adr/0007-release-artefakte-des-cores.md) (Release-Artefakte); Code-ADR 0015 (buf ergänzen) |
+| **ADRs** | 0023, [ADR-0010](adr/0010-api-protokoll.md) (API), [ADR-0011](adr/0011-keine-telemetrie.md) (Diagnose-Paket), [ADR-0006](adr/0006-core-als-bibliothek-fuer-selbststart.md) (Start-API), [ADR-0007](adr/0007-release-artefakte-des-cores.md) (Release-Artefakte); Code-ADR 0016 (buf ergänzen) |
 
 ### 6.1 API-Vertrag
 
-- [ ] `buf` einrichten (lint, breaking, generate); Code-ADR-0015 um `buf` ergänzen (S)
+- [ ] `buf` einrichten (lint, breaking, generate); Code-ADR-0016 um `buf` ergänzen (S)
 - [ ] Protos `v1alpha1` gemäß Plan §6.14 (L):
   - `SystemService`, `AuthService`, `StreamService`, `ChatService`
   - `CommandService` inkl. Typkatalog
@@ -869,7 +880,8 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 ### 11.2 Import (P2)
 
 - [ ] Nutzerimport aus CSV und XLSX (S)
-- [ ] ADR-0021 Import von Mix-It-Up-Daten, Umsetzung auf Basis der Rechtsgrundlage aus Phase 0 (S)
+- [ ] Klären, wie wichtig die Übernahme bestehender Mix-It-Up-Daten ist und ob es einen eigenen Datenbestand gibt (Plan §15, aus Phase 0 übertragen) (S)
+- [ ] ADR-0021 Import von Mix-It-Up-Daten, Umsetzung auf Basis der Rechtsgrundlage aus Gate O, O.1 (S)
 - [ ] Importer für `.miubackup`, `.miu3` und `.db3` (XL, vor Beginn aufteilen):
   - Typ-Mapping (`$type` → Typ-ID, numerische Event-IDs → Event-Strings)
   - Commands, Actions, Requirements, Nutzer, Währungen, Quotes, Counter
@@ -924,7 +936,9 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### D0: Setup und Machbarkeit (1–2 PW)
 
+- [ ] Zielsysteme der Desktop-App festlegen (Windows, macOS, Linux) und klären, ob Code-Signierung und Notarisierung nötig sind (Plan §15, aus Phase 0 übertragen) (S)
 - [ ] Repository, `go.mod` (Go 1.27), Fyne v2.8, CI, `fyne-cross`-Builds für Windows, macOS und Linux (M)
+- [ ] CI-Token mit Leserechten auf das Core-Repository und seine Release-Artefakte, z. B. fein granularer Token oder GitHub App; `GOPRIVATE=github.com/ripmav/*` in der CI ([ADR-0009](adr/0009-repositories-und-hosting.md), aus Phase 1 verschoben) (S)
 - [ ] Spike: generisches Formular aus dem JSON-Schema des Typkatalogs und verschachtelter Action-Editor (Baum, Umordnen). Das Ergebnis wird als ADR im Desktop-Repo festgehalten. (M)
 - [ ] Spike: Emote-Darstellung im Chat (statisch und animiert) (S)
 - [ ] Spike Paketierung (M):
@@ -990,8 +1004,9 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### W0: Entscheidung und Setup (1–2 PW)
 
-- [ ] ADR-0017 Web-Technologie; Kandidaten: TypeScript-SPA (Svelte 5 oder React), Go + templ + htmx, Go-WASM (S)
+- [ ] ADR-0017 Web-Technologie; Kandidaten: TypeScript-SPA (Svelte 5 oder React), Go + templ + htmx, Go-WASM; beantwortet die offene Frage zum Web-Stack aus Plan §15 (S)
 - [ ] Repository, Build, TS-Client aus den Protos (`@connectrpc/connect-web`), CI (M)
+- [ ] CI-Token mit Leserechten auf das Core-Repository, um die Protos per Git-Tag zu beziehen ([ADR-0009](adr/0009-repositories-und-hosting.md), aus Phase 1 verschoben) (S)
 - [ ] Auslieferung festlegen: statisch vom Core unter `/ui` (optional eingebettet) oder separat hinter einem Reverse Proxy (S)
 
 ### W1: Grundgerüst (2 PW)
@@ -1065,12 +1080,22 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 
 ### O.1 Recht und Herkunft
 
-- [ ] Rechtliche Prüfung abgeschlossen: BSL §3.1–3.5, Urheberrecht (abgeleitetes Werk), Marken, Import-Funktion (extern)
+- [ ] Rechtliche Einschätzung einholen (extern); aus Phase 0 übertragen, möglichst vor Phase 3, spätestens vor Gate O. Themen:
+  - BSL §2 und §3.1–3.5, Urheberrecht (abgeleitetes Werk), Marken
+  - EULA §1 (kein Reverse Engineering)
+  - Nutzung des Codes als Hilfestellung (ADR-0001)
+  - die MIT-Datei `MixItUp.Base/LICENSE.txt`
+  - die Import-Funktion (Interoperabilität)
+  - die Übernahme der `$`-Identifier-Namen
+- [ ] Rechtlichen Teil von ADR-0021 (Import, Identifier-Namen) entscheiden, möglichst vor Phase 3; danach in ADR-0001 unter „Interop-Ausnahmen“ den Link auf das neue ADR nachtragen (S)
+- [ ] Optional (Option D): Blazing Cacti um eine schriftliche Erlaubnis bitten und die Antwort dokumentieren (S)
 - [ ] Herkunfts-Review (M):
   - Alle Spezifikationen haben einen Quellennachweis.
   - Stichproben des Go-Codes werden mit dem Original verglichen: keine übernommene Struktur, keine Bezeichner ohne Interop-Grund, keine Kommentare oder Texte.
   - Alle Assets und Texte sind eigenständig.
-- [ ] Namensprüfung abgeschlossen und endgültigen Namen als ADR festgehalten (Backlog ADR-0024): `streamcrew` bestätigen oder umbenennen; Logo prüfen (S)
+- [ ] Namensprüfung abgeschlossen und endgültigen Namen als ADR festgehalten (Backlog ADR-0024): `streamcrew` bestätigen oder umbenennen; Logo prüfen. Aus Phase 0 übertragen, möglichst früher erledigen (S):
+  - Markenrecherche (DPMA, EUIPO, USPTO)
+  - Domain-, GitHub- und Paketnamen-Verfügbarkeit
 - [ ] Git-Historie geprüft: keine Secrets, keine kopierten Fremdinhalte; bei Bedarf bereinigt (S)
 
 ### O.2 Lizenz und Community
@@ -1078,6 +1103,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 - [ ] SPDX-Header in allen Quelldateien vorhanden; `NOTICE` mit den Drittkomponenten aus `go.mod` erzeugt (S)
 - [ ] Beitragsregeln entscheiden (DCO oder CLA) und in `CONTRIBUTING.md` festhalten (S)
 - [ ] `CODE_OF_CONDUCT.md`, `SECURITY.md` (Meldeweg für Sicherheitslücken), Issue- und PR-Vorlagen (M)
+- [ ] Projekt-Board oder Issues mit den Phasen der Roadmap anlegen; aus Phase 0 übertragen, bis dahin ist die Roadmap die einzige Aufgabenliste (S)
 - [ ] README für die Öffentlichkeit: Ziel, Status, Abgrenzung zu Mix It Up (keine Verbindung, keine Marken) (S)
 
 ### O.3 Veröffentlichung
@@ -1102,7 +1128,7 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 - Lizenz (ADR-0002): Neue Dateien tragen den SPDX-Header, neue Abhängigkeiten sind MIT-kompatibel.
 - ADRs werden geschrieben, **bevor** eine Entscheidung umgesetzt wird. Der Index in `docs/adr/README.md` wird gepflegt.
 - Dokumentation (README, `docs/`, Code-Kommentare) wird mit jeder Änderung aktualisiert.
-- Roadmap: Checkboxen abhaken, Statusübersicht und Änderungshistorie pflegen, Aufwände nach jedem Meilenstein kalibrieren.
+- Roadmap: Checkboxen abhaken, Statusübersicht und Änderungshistorie pflegen, Aufwände nach jedem Meilenstein kalibrieren. Für die Kalibrierung nach M1 legt der Projektinhaber die verfügbare Kapazität pro Woche fest (Plan §15, aus Phase 0 übertragen).
 - Sicherheit: `govulncheck`, Dependency-Updates, keine Secrets in Repo und Logs. Findings ohne Fix-Version werden gemeldet, nicht ignoriert.
 - i18n: Neue Texte entstehen immer auf Englisch und Deutsch.
 - Tests: Neue Features kommen nur mit Tests; der Race-Detector läuft in der CI.
@@ -1165,3 +1191,10 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-28 | Renovate-Konfiguration nach Vorbild von `recipe-reader` neu gefasst: `renovate.json` im Repository-Root statt `.github/renovate.json5`, ein Pull Request je Ökosystem mit Scope und Label, keine PR-Limits, Commit-Typen nach `config:recommended`, Sicherheitsupdates mit Label `security`. Ergänzt um `go`-Direktive, Werkzeugversionen in Workflows und die Docker-Regel. Code-ADR-0001, Plan und README angepasst. |
 | 2026-09-28 | Claude-Review auf einen eigenen Prompt umgestellt (PR #9): kein Plugin-Befehl und damit keine Vorprüfung mehr; Claude nur lesend ohne Shell, der Kontext wird vorab gesammelt; Befunde als Inline-Kommentare; Zusammenfassung und Befundliste als strukturierte Ausgabe, die den Fortschrittskommentar ersetzt. Plan §11.3 angepasst. Nachweis nach dem Merge offen. |
 | 2026-09-28 | Review-Prompt und Ausgabe-Schema nach `.github/claude/` ausgelagert; der Workflow liest sie aus dem Commit des Workflows, nicht aus dem PR-Checkout. Korrektur: Nur `issue_comment` nutzt die Workflow-Fassung aus `main`, Reviews und Inline-Kommentare nutzen die aus dem Merge-Commit des PRs. PR #9 lässt sich daher per Review mit `@claude` vor dem Merge testen. |
+| 2026-09-29 | Phase 0 abgeschlossen, Gate bestanden: Exit-Kriterien erfüllt. Offene Punkte ohne Einfluss auf Phase 1 übertragen (neuer Abschnitt 0.5): rechtliche Einschätzung, rechtlicher Teil von ADR-0021, Erlaubnis von Blazing Cacti und Namensprüfung nach Gate O (O.1); Fragen aus Plan §15 nach 11.2, D0, W0 und in die Querschnittsaufgaben. Branch-Konvention in `CONTRIBUTING.md` mit optionalem `pre-push`-Hook. Phase 1.1 nachgezogen: Renovate-App installiert, `claude-code-action` gepinnt (#11), Claude-Review auf Festlegung des Projektinhabers ohne Nachweis als erledigt. |
+| 2026-09-29 | Code-ADRs 0002 bis 0006 vorgeschlagen: Dependency Injection, Fehler und Logging, Nebenläufigkeit und Supervisor, Konfiguration, Teststrategie. Die Teststrategie bekommt nach der ADR-Konvention die nächste freie Nummer 0006 statt der vorläufigen 0014; die Backlog-Nummern 0006–0013 rücken um eins auf (Plan §12.2, Phasen 2 bis 4 angepasst). |
+| 2026-09-29 | Code-ADRs 0002 bis 0006 einzeln vom Projektinhaber abgenommen. Überarbeitet vor der Abnahme: Konfigurationsdatei als YAML mit `go.yaml.in/yaml/v3` statt JSON (0005), testify (`assert`, `require`) als Assertion-Bibliothek (0006). Die YAML-Bibliothek gilt damit projektweit; der Backlog-Eintrag „YAML-Bibliothek“ (0016) entfällt, Phase 3 prüft nur ihre Eignung. Projekt-Board aus Phase 0 nach Gate O (O.2) verschoben. |
+| 2026-09-29 | Phase 1.3 und 1.4 umgesetzt: Skelett mit `serve`, `version`, `config show|path` und `doctor`; Pakete `config`, `logging`, `supervisor`, `httpserver`, `app`, `doctor`, `buildinfo` mit Tests. Dockerfile (`scratch`, non-root, Server-Modus) und `scripts/docker-smoke.sh`, in der CI im Build-Job. CI: `GOPRIVATE`, native Tests unter Windows und macOS wöchentlich. `sloglint` und `forbidigo` nach Code-ADR-0003 und -0005 verschärft. CI-Token für abhängige Repositories nach D0 und W0 verschoben. M0 fehlt nur noch die grüne CI im Pull Request. |
+| 2026-09-29 | M0 erreicht: Die CI von PR #12 ist grün, die nativen Tests unter Windows und macOS ebenfalls (`workflow_dispatch`). Phase 1 abgeschlossen. |
+| 2026-09-29 | Code-ADR-0007 „Circuit Breaker für externe Dienste“ vorgeschlagen (`sony/gobreaker/v2`, ein Breaker je API), auf Wunsch des Projektinhabers. Es bekommt die nächste freie Nummer; die Backlog-Nummern 0007–0015 rücken um eins auf (Plan §12.2, Phasen 2 bis 4 und 6). Phase 4.2 um `internal/breaker` ergänzt. |
+| 2026-09-29 | Code-ADR-0007 vom Projektinhaber abgenommen. |

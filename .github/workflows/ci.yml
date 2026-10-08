@@ -2,11 +2,12 @@
 #
 # Quality pipeline for the Go code (Roadmap Phase 1.1, Code-ADR-0001).
 #
-# To save Actions minutes in the private repository, everything runs on
-# ubuntu-latest, cross-compiles instead of using macOS or Windows runners,
-# groups the checks into few jobs and only starts when Go-related files change.
-# The weekly schedule only repeats the checks job, so that newly published
-# vulnerabilities show up without code changes.
+# To save Actions minutes in the private repository, pull requests run on
+# ubuntu-latest only, cross-compile instead of using macOS or Windows runners,
+# group the checks into few jobs and only start when Go-related files change.
+# The weekly schedule repeats the checks job, so that newly published
+# vulnerabilities show up without code changes, and runs the tests natively on
+# Windows and macOS (Code-ADR-0006); workflow_dispatch runs everything.
 name: CI
 
 on:
@@ -18,6 +19,8 @@ on:
       - "go.mod"
       - "go.sum"
       - ".golangci.yml"
+      - "Dockerfile"
+      - ".dockerignore"
       - "scripts/**"
       - ".github/workflows/ci.yml"
   pull_request:
@@ -27,6 +30,8 @@ on:
       - "go.mod"
       - "go.sum"
       - ".golangci.yml"
+      - "Dockerfile"
+      - ".dockerignore"
       - "scripts/**"
       - ".github/workflows/ci.yml"
   schedule:
@@ -35,6 +40,11 @@ on:
 
 permissions:
   contents: read
+
+env:
+  # Modules of the project owner are private: never ask the public proxy or
+  # checksum database for them (ADR-0009).
+  GOPRIVATE: github.com/ripmav/*
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -102,7 +112,7 @@ jobs:
         run: scripts/fuzz.sh
 
   build:
-    name: Cross-build (linux, windows, darwin × amd64, arm64)
+    name: Cross-build and Docker smoke test
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -127,3 +137,33 @@ jobs:
             GOOS=${target%/*} GOARCH=${target#*/} go build -o "${RUNNER_TEMP}/build/${target}/" ./...
             echo "::endgroup::"
           done
+
+      # In the same job to save a billed minute: build the image, run version
+      # and serve, check /healthz and /readyz and a clean stop on SIGTERM.
+      - name: Docker smoke test
+        run: scripts/docker-smoke.sh
+
+  test-native:
+    name: Tests on ${{ matrix.os }}
+    # Weekly and on demand only: macOS runners count ten times, Windows
+    # runners twice (Code-ADR-0006). Start it for a pull request that changes
+    # platform-dependent code with: gh workflow run ci.yml --ref <branch>
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+
+      - name: go test
+        run: go test -shuffle=on ./...
