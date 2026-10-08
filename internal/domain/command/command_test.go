@@ -160,6 +160,43 @@ func TestValidateCooldownGroup(t *testing.T) {
 	require.ErrorIs(t, command.CooldownGroup{Name: "x", Duration: -time.Second}.Validate(), command.ErrInvalid)
 }
 
+// TestCooldownKey covers requirements.md, B20: the command or the cooldown
+// group by the scope, and the user only for the scopes per user.
+func TestCooldownKey(t *testing.T) {
+	t.Parallel()
+	cmd, group, usr := id.New(), id.New(), id.New()
+	second := polydoc.Duration(time.Second)
+	for scope, want := range map[command.CooldownScope]command.CooldownKey{
+		command.CooldownStandard:       {Command: cmd},
+		command.CooldownPerUser:        {Command: cmd, User: usr},
+		command.CooldownGrouped:        {Group: group},
+		command.CooldownPerUserGrouped: {Group: group, User: usr},
+	} {
+		r := command.CooldownRequirement{Scope: scope, Duration: second}
+		if scope.Grouped() {
+			r = command.CooldownRequirement{Scope: scope, Group: group}
+		}
+		got, err := r.Key(cmd, usr)
+		require.NoError(t, err, scope)
+		assert.Equal(t, want, got, scope)
+		assert.Equal(t, !want.User.IsZero(), scope.PerUser(), scope)
+
+		if scope.PerUser() {
+			_, err := r.Key(cmd, id.ID{})
+			require.Error(t, err, "%s without a user", scope)
+		} else {
+			got, err := r.Key(cmd, id.ID{})
+			require.NoError(t, err, scope)
+			assert.Equal(t, want, got, "%s needs no user", scope)
+		}
+	}
+
+	_, err := command.CooldownRequirement{Scope: command.CooldownGrouped}.Key(cmd, usr)
+	require.Error(t, err, "grouped without a cooldown group")
+	_, err = command.CooldownRequirement{Scope: command.CooldownStandard, Duration: second}.Key(id.ID{}, usr)
+	require.Error(t, err, "without a command")
+}
+
 func TestRequirementValidation(t *testing.T) {
 	t.Parallel()
 	item := id.MustParse("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d")

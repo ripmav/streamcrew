@@ -3,6 +3,8 @@
   "duration.hours": "{n, plural, one {# Stunde} other {# Stunden}}",
   "duration.minutes": "{n, plural, one {# Minute} other {# Minuten}}",
   "duration.seconds": "{n, plural, one {# Sekunde} other {# Sekunden}}",
+  "requirement.cooldown.all": "Dieser Command ist in {remaining} wieder verfügbar.",
+  "requirement.cooldown.user": "Du kannst diesen Command in {remaining} wieder nutzen.",
   "requirement.faulty": "Dieser Command kann nicht laufen, weil eine seiner Anforderungen fehlerhaft ist.",
   "requirement.role": "Dieser Command braucht die Rolle {role, select, banned {gebannt} user {Nutzer} creator {Creator} follower {Follower} regular {Stammzuschauer} vip {VIP} subscriber {Abonnent} platform_staff {Plattform-Team} moderator {Moderator} editor {Editor} streamer {Streamer} other {{role}}} oder eine höhere.",
   "requirement.unknown": "Dieser Command kann nicht laufen, weil diese Version eine seiner Anforderungen nicht kennt."

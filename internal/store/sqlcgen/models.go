@@ -41,6 +41,13 @@ type CommandTrigger struct {
 	Active      int64
 }
 
+type Cooldown struct {
+	CommandID sql.NullString
+	GroupID   sql.NullString
+	UserID    sql.NullString
+	EndsAt    int64
+}
+
 type CooldownGroup struct {
 	ID        string
 	Name      string

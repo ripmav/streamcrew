@@ -45,6 +45,11 @@ type requirements struct {
 	// of the user of the run.
 	cooldowns   []string
 	cooldownErr error
+	// revertible makes met decisions take back what they applied, which
+	// reverted records; revertErr is the error of taking back.
+	revertible bool
+	reverted   []string
+	revertErr  error
 }
 
 func (r *requirements) Apply(_ context.Context, cmd command.Command, p engine.Params) (engine.Decision, error) {
@@ -63,10 +68,34 @@ func (r *requirements) Apply(_ context.Context, cmd command.Command, p engine.Pa
 	if d, ok := r.decisions[cmd.Name]; ok {
 		return d, nil
 	}
+	d := engine.Met(p)
 	if r.runs != nil {
-		return engine.Met(r.runs(p)...), nil
+		d = engine.Met(r.runs(p)...)
 	}
-	return engine.Met(p), nil
+	if r.revertible {
+		d.Revert = r.revertFunc(cmd.Name)
+	}
+	return d, nil
+}
+
+// revertFunc returns a Revert that records name.
+func (r *requirements) revertFunc(name string) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.reverted = append(r.reverted, name)
+		return r.revertErr
+	}
+}
+
+// revertedFor returns the commands whose decision was taken back.
+func (r *requirements) revertedFor() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.reverted)
 }
 
 func (r *requirements) Notify(_ context.Context, cmd command.Command, _ engine.Params, rej engine.Rejection) error {
@@ -260,6 +289,11 @@ func TestInvalidDecision(t *testing.T) {
 			"rejected with runs":     {Verdict: engine.VerdictRejected, Runs: []engine.Params{{}}, Rejection: rejection},
 			"no verdict":             {},
 			"unknown verdict":        {Verdict: "maybe"},
+			"waiting to take back":   {Verdict: engine.VerdictWaiting, Revert: reqs.revertFunc("waiting")},
+			"rejected to take back":  {Verdict: engine.VerdictRejected, Rejection: rejection, Revert: reqs.revertFunc("rejected")},
+			"met with a rejection to take back": {
+				Verdict: engine.VerdictMet, Runs: []engine.Params{{}}, Rejection: rejection, Revert: reqs.revertFunc("met"),
+			},
 		} {
 			reqs.decide("x", d, false)
 			_, err := f.trigger(f.command("x", command.KindChat), engine.Params{})
@@ -267,6 +301,87 @@ func TestInvalidDecision(t *testing.T) {
 		}
 		assert.Empty(t, reqs.messages())
 		assert.Empty(t, f.engine.History())
+		assert.ElementsMatch(t, []string{"waiting", "rejected", "met"}, reqs.revertedFor(),
+			"what an invalid decision applied is taken back")
+	})
+}
+
+// TestRevertWhenNotQueued covers B15: if none of the runs of met
+// requirements could be queued, their costs and cooldowns are taken back,
+// also when the request was canceled meanwhile; a failure to take back is
+// logged. Queued runs keep them.
+func TestRevertWhenNotQueued(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		logs := &records{}
+		reqs := newRequirements()
+		reqs.revertible = true
+		f := newFixture(t, settings.LockPerCommandType, engine.WithRequirements(reqs), engine.WithLogger(slog.New(logs)))
+		defer f.stop()
+
+		_, err := f.trigger(f.command("queued", command.KindChat), engine.Params{})
+		require.NoError(t, err)
+		assert.Empty(t, reqs.revertedFor(), "a queued run keeps what was applied")
+
+		// The core stops while the requirements of a trigger are checked.
+		ctx, cancel := context.WithCancel(t.Context())
+		reqs.gate = make(chan struct{})
+		result := make(chan error, 1)
+		go func() {
+			_, err := f.engine.Trigger(ctx, engine.Request{Command: f.command("late", command.KindChat), Source: engine.SourceChat})
+			result <- err
+		}()
+		synctest.Wait()
+		go f.stop()
+		synctest.Wait()
+		cancel()
+		reqs.mu.Lock()
+		reqs.revertErr = errors.New("store gone")
+		reqs.mu.Unlock()
+		close(reqs.gate)
+		require.ErrorIs(t, <-result, engine.ErrClosed)
+		assert.Equal(t, []string{"late"}, reqs.revertedFor())
+		assert.Contains(t, logs.messages(), "taking back the requirements of a command that was not queued failed")
+	})
+}
+
+// TestRevertCallNotQueued covers B15 and B55 for calls: a call that checks
+// requirements but cannot be queued while the core stops takes back what
+// they applied; a call the caller waits for runs and keeps it, also if it
+// fails.
+func TestRevertCallNotQueued(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		reqs := newRequirements()
+		reqs.revertible = true
+		f := newFixture(t, settings.LockPerCommandType, engine.WithRequirements(reqs))
+		defer f.stop()
+
+		failing := f.command("failing", command.KindActionGroup, f.journal.fail("failing"))
+		failing.ErrorPolicy = command.ErrorAbort
+		f.commands.put(failing)
+		f.start(f.command("tries", command.KindChat, f.call(failing.ID, engine.CallOptions{Wait: true, CheckRequirements: true})), engine.Params{})
+		assert.Empty(t, reqs.revertedFor(), "the failed call ran")
+		before := len(f.journal.get())
+
+		release := make(chan struct{})
+		waited := f.command("waited", command.KindActionGroup, f.show("waited"))
+		queued := f.command("queued", command.KindActionGroup, f.show("queued"))
+		f.start(f.command("caller", command.KindChat,
+			f.journal.hold("x", "caller", release),
+			f.call(waited.ID, engine.CallOptions{Wait: true, CheckRequirements: true}),
+			f.call(queued.ID, engine.CallOptions{CheckRequirements: true})), engine.Params{})
+		go f.stop()
+		synctest.Wait()
+		close(release)
+		synctest.Wait()
+
+		lines := f.journal.get()[before:]
+		require.Len(t, lines, 3)
+		assert.Equal(t, []string{"caller", "waited"}, lines[:2])
+		assert.Contains(t, lines[2], engine.ErrClosed.Error())
+		assert.Equal(t, []string{"failing", "waited", "queued"}, reqs.appliedTo())
+		assert.Equal(t, []string{"queued"}, reqs.revertedFor())
 	})
 }
 

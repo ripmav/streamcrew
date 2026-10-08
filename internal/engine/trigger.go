@@ -55,6 +55,12 @@ type Decision struct {
 	// Rejection is the unmet requirement for VerdictRejected; the zero
 	// value for the other verdicts.
 	Rejection Rejection
+	// Revert takes back the costs and cooldowns the requirements applied
+	// for VerdictMet. The engine calls it if it queues none of the runs,
+	// e.g. because the core stops meanwhile or, for a call, the queue is
+	// full (B15). It is nil if there is nothing to take back, and for the
+	// other verdicts.
+	Revert func(ctx context.Context) error
 }
 
 // Met returns the decision that all requirements are met and runs are to
@@ -88,6 +94,9 @@ func (d Decision) validate() error {
 	case VerdictWaiting, VerdictRejected:
 		if len(d.Runs) > 0 {
 			return fmt.Errorf("%w: %s with runs", ErrInvalidDecision, d.Verdict)
+		}
+		if d.Revert != nil {
+			return fmt.Errorf("%w: %s with something to take back", ErrInvalidDecision, d.Verdict)
 		}
 	default:
 		return fmt.Errorf("%w: unknown verdict %q", ErrInvalidDecision, d.Verdict)
@@ -126,8 +135,10 @@ func (r Rejection) zero() bool {
 // requirement service (roadmap 3.4) implements it.
 type Requirements interface {
 	// Apply checks the requirements of cmd for the run p. Only for
-	// VerdictMet it charges their costs and starts their cooldowns. An
-	// error means it could not decide.
+	// VerdictMet it charges their costs and starts their cooldowns, which
+	// Decision.Revert takes back. Decisions about the same command are
+	// made one after another (requirements.md, B3). An error means it
+	// could not decide.
 	Apply(ctx context.Context, cmd command.Command, p Params) (Decision, error)
 	// Notify tells the user of p the reason of r (B11). The engine calls it
 	// only for a rejection with Tell, outside the error cooldown (B12).
@@ -300,6 +311,7 @@ func (e *Engine) Trigger(ctx context.Context, req Request) (Result, error) {
 		res.Instances = append(res.Instances, instanceID)
 	}
 	if len(res.Instances) == 0 {
+		e.revert(ctx, cmd, d)
 		return Result{}, dropErr
 	}
 	if res.Dropped > 0 {
@@ -309,7 +321,8 @@ func (e *Engine) Trigger(ctx context.Context, req Request) (Result, error) {
 	return res, nil
 }
 
-// decide applies the requirements of cmd for p and checks the decision.
+// decide applies the requirements of cmd for p and checks the decision. It
+// takes back what an invalid decision applied.
 func (e *Engine) decide(ctx context.Context, cmd command.Command, p Params) (Decision, error) {
 	if e.requirements == nil {
 		return Met(p), nil
@@ -319,9 +332,23 @@ func (e *Engine) decide(ctx context.Context, cmd command.Command, p Params) (Dec
 		return Decision{}, fmt.Errorf("check requirements: %w", err)
 	}
 	if err := d.validate(); err != nil {
+		e.revert(ctx, cmd, d)
 		return Decision{}, err
 	}
 	return d, nil
+}
+
+// revert takes back what the requirements applied for d, after none of its
+// runs could be queued (B15). It does so also if the request was canceled
+// meanwhile; a failure is logged.
+func (e *Engine) revert(ctx context.Context, cmd command.Command, d Decision) {
+	if d.Revert == nil {
+		return
+	}
+	if err := d.Revert(context.WithoutCancel(ctx)); err != nil {
+		e.logger.ErrorContext(ctx, "taking back the requirements of a command that was not queued failed",
+			"command", cmd.Name, "error", err)
+	}
 }
 
 // reject tells the user why cmd did not run, if the rejection says so and

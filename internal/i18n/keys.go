@@ -16,6 +16,12 @@ const (
 	// KeyRequirementRole tells that the command needs the role role or a
 	// higher one (requirements.md, B12).
 	KeyRequirementRole Key = "requirement.role"
+	// KeyRequirementCooldownAll says that the command is blocked for
+	// everyone for the duration remaining (requirements.md, B24).
+	KeyRequirementCooldownAll Key = "requirement.cooldown.all"
+	// KeyRequirementCooldownUser tells the user that they can use the
+	// command again after the duration remaining (requirements.md, B24).
+	KeyRequirementCooldownUser Key = "requirement.cooldown.user"
 	// KeyRequirementFaulty says that a requirement of the command is broken
 	// (requirements.md, B7, B40); the user is not told.
 	KeyRequirementFaulty Key = "requirement.faulty"

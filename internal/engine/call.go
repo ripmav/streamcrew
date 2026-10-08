@@ -129,6 +129,9 @@ func (r *Run) Call(ctx context.Context, commandID id.ID, opts CallOptions) (Resu
 		for _, run := range d.Runs {
 			instanceID, err := e.runCall(ctx, r, cmd, run, org)
 			if err != nil {
+				if instanceID.IsZero() && len(res.Instances) == 0 {
+					e.revert(ctx, cmd, d)
+				}
 				return Result{}, err
 			}
 			res.Instances = append(res.Instances, instanceID)
@@ -147,13 +150,14 @@ func (r *Run) Call(ctx context.Context, commandID id.ID, opts CallOptions) (Resu
 		res.Instances = append(res.Instances, instanceID)
 	}
 	if len(res.Instances) == 0 {
+		e.revert(ctx, cmd, d)
 		return Result{}, dropErr
 	}
 	return res, nil
 }
 
 // runCall runs cmd as part of the calling instance (B31) and returns the ID
-// of its instance.
+// of its instance; the zero ID if it did not start.
 func (e *Engine) runCall(ctx context.Context, caller *Run, cmd command.Command, p Params, org origin) (id.ID, error) {
 	in := newInstance(cmd, SourceCall, withTarget(p), Config{}, []string{}, org)
 	// It belongs to a greeting that calls it (B43).
