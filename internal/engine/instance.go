@@ -76,8 +76,9 @@ type Params struct {
 	User *user.User
 	// Target is the user the run is about (B81). The caller sets the one
 	// it knows, e.g. the target of an event, or nil. The engine sets the
-	// target of the run before queuing: without one from the caller, the
-	// triggering user. It is nil only in a run without a user.
+	// target of the run before queuing: without one from the caller, Start
+	// and Trigger take the user the first argument names if the platform
+	// knows them, and otherwise the triggering user.
 	Target *user.User
 	// Args are the arguments: the words after the trigger, with quoted text
 	// as one argument.
