@@ -40,9 +40,29 @@ type CommandTrigger struct {
 	Active      int64
 }
 
+type Counter struct {
+	ID           string
+	Name         string
+	Value        int64
+	ResetOnStart int64
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
 type Meta struct {
 	Key   string
 	Value string
+}
+
+type Quote struct {
+	Number    int64
+	ID        string
+	Text      string
+	Game      string
+	QuotedAt  int64
+	AddedBy   sql.NullString
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 type Secret struct {
