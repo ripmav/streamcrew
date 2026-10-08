@@ -319,7 +319,7 @@ func (f *fixture) withCooldowns(t *testing.T, c requirement.Cooldowns) *requirem
 	require.NoError(t, err)
 	svc, err := requirement.New(requirement.Ports{
 		Catalog: catalog, Language: language{lang: i18n.English}, Platforms: set,
-		Cooldowns: c, Streamer: f.streamer, Users: f.users, Logger: slog.New(slog.NewTextHandler(f.logs, nil)),
+		Cooldowns: c, Streamer: f.streamer, Logger: slog.New(slog.NewTextHandler(f.logs, nil)),
 	})
 	require.NoError(t, err)
 	return svc

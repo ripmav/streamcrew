@@ -242,3 +242,18 @@ func TestUserFamily_Reserved_B12(t *testing.T) {
 		assert.Equal(t, want, with, name)
 	}
 }
+
+// TestUserFamily_Finder: with a finder of the run, $arg1user… finds the
+// user through it, not through the users of the engine (spec
+// command-engine.md, B17); without users of the engine as well.
+func TestUserFamily_Finder(t *testing.T) {
+	t.Parallel()
+	_, bob, users := testUsers()
+	finder := fakeUsers{byName: map[string]user.User{"robert": bob}}
+	s := template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch, Args: []string{"@Robert"}, ArgsText: "@Robert", Finder: finder}
+	for _, e := range []*template.Engine{template.New(userRegistry(t, users)), template.New(userRegistry(t, nil))} {
+		assert.Equal(t, "bob", render(t, e, "$arg1username", &s))
+	}
+	s.Finder = nil
+	assert.Equal(t, "$arg1username", render(t, template.New(userRegistry(t, users)), "$arg1username", &s), "the users of the engine do not know robert")
+}

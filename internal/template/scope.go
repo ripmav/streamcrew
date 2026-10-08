@@ -54,6 +54,10 @@ type Scope struct {
 	ArgDelimiter string
 	// Location is the time zone of the profile (B40); it is required.
 	Location *time.Location
+	// Finder finds users by name for the run, e.g. for $arg1user, so that
+	// the run shares what it found (spec command-engine.md, B17); nil to
+	// find them through the Users of the engine.
+	Finder Finder
 
 	values map[string]Value
 	render *renderState

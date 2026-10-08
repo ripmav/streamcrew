@@ -56,8 +56,6 @@ type Ports struct {
 	Cooldowns Cooldowns
 	// Streamer finds the streamer for runs without a user (B4).
 	Streamer Streamer
-	// Users finds the users that arguments name (B33).
-	Users engine.Users
 	// Logger records faulty requirements (B7, B8).
 	Logger *slog.Logger
 }
@@ -87,8 +85,6 @@ func New(p Ports) (*Service, error) {
 		return nil, errors.New("requirement service: no cooldowns")
 	case p.Streamer == nil:
 		return nil, errors.New("requirement service: no streamer")
-	case p.Users == nil:
-		return nil, errors.New("requirement service: no users")
 	case p.Logger == nil:
 		return nil, errors.New("requirement service: no logger")
 	}
@@ -100,12 +96,13 @@ func New(p Ports) (*Service, error) {
 // at the same time (command-engine.md, B16): it finds faulty
 // requirements (B7, B8, B40), checks the role (B10 to B12), finds the user
 // a cooldown per user counts against (B4) and the users that arguments
-// name (B30 to B35). The decision then checks the cooldown (B20 to B24) and
+// name (B30 to B35) through users, the lookup of the run, which the engine
+// gives (command-engine.md, B17). The decision then checks the cooldown (B20 to B24) and
 // takes the first requirement that is not met in the order of B2. If all
 // are met, it starts the cooldown (B3, B21), which it can take back, and the
 // run has the values of the arguments. Decisions are made one after another
 // (B3).
-func (s *Service) Prepare(ctx context.Context, cmd command.Command, p engine.Params) (engine.Decide, error) {
+func (s *Service) Prepare(ctx context.Context, cmd command.Command, p engine.Params, users engine.Users) (engine.Decide, error) {
 	if r, ok, err := s.faulty(ctx, cmd); err != nil || ok {
 		return decided(cmd, r, err)
 	}
@@ -121,7 +118,7 @@ func (s *Service) Prepare(ctx context.Context, cmd command.Command, p engine.Par
 		}
 	}
 	if args, ok := find[command.ArgumentsRequirement](cmd); ok {
-		pr.run, pr.argsRejection, pr.argsRejected, pr.argsErr = s.checkArguments(ctx, cmd, args, p)
+		pr.run, pr.argsRejection, pr.argsRejected, pr.argsErr = s.checkArguments(ctx, cmd, args, p, users)
 	}
 	return pr.decide, nil
 }

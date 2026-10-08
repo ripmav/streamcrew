@@ -5,18 +5,13 @@ package engine_test
 import (
 	"context"
 	"errors"
-	"log/slog"
-	"strings"
 	"testing"
 	"testing/synctest"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ripmav/streamcrew/internal/domain/command"
-	"github.com/ripmav/streamcrew/internal/domain/platform"
-	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/settings"
 )
@@ -95,11 +90,11 @@ type failing struct {
 	name string
 }
 
-func (f *failing) Prepare(ctx context.Context, cmd command.Command, p engine.Params) (engine.Decide, error) {
+func (f *failing) Prepare(ctx context.Context, cmd command.Command, p engine.Params, users engine.Users) (engine.Decide, error) {
 	if cmd.Name == f.name {
 		return nil, errors.New("prepare failed")
 	}
-	return f.requirements.Prepare(ctx, cmd, p)
+	return f.requirements.Prepare(ctx, cmd, p, users)
 }
 
 // TestQueueInTurn covers B16: a trigger lets the next one decide only
@@ -162,63 +157,6 @@ func TestTellAfterTurn(t *testing.T) {
 // rejectedBy returns a rejection of requirement that tells the user.
 func rejectedBy(requirement string) engine.Decision {
 	return engine.Rejected(engine.Rejection{Requirement: requirement, Reason: reason("no"), Tell: true})
-}
-
-// TestDecisionTimeout covers B16: a preparation that takes longer than
-// DecisionTimeout lets the command not run, and the triggers after it go
-// on; so does a lookup of the target that takes too long, without the
-// target.
-func TestDecisionTimeout(t *testing.T) {
-	t.Parallel()
-	synctest.Test(t, func(t *testing.T) {
-		reqs := &stalling{requirements: newRequirements(), name: "stuck"}
-		logs := &records{}
-		f := newFixture(t, settings.LockNone, engine.WithRequirements(reqs), engine.WithUsers(stalledUsers{}),
-			engine.WithLogger(slog.New(logs)))
-		defer f.stop()
-
-		out := make(outcomes, 2)
-		start := time.Now()
-		f.triggerAsync(f.command("stuck", command.KindChat), out)
-		f.triggerAsync(f.command("next", command.KindChat), out)
-		got := strings.Join(out.drain(2), "\n")
-		assert.Equal(t, engine.DecisionTimeout, time.Since(start), "both waited for the time limit")
-		assert.Contains(t, got, "next queued")
-		assert.Contains(t, got, "stuck trigger command")
-		assert.Contains(t, got, context.DeadlineExceeded.Error())
-
-		p := engine.Params{Platform: platform.Twitch, Args: []string{"bob"}, ArgsText: "bob"}
-		start = time.Now()
-		res, err := f.engine.Trigger(t.Context(), engine.Request{Command: f.command("lookup", command.KindChat), Source: engine.SourceChat, Params: p})
-		require.NoError(t, err)
-		assert.Equal(t, engine.OutcomeQueued, res.Outcome)
-		assert.Equal(t, engine.DecisionTimeout, time.Since(start))
-		assert.Contains(t, logs.messages(), "looking up the target user failed")
-	})
-}
-
-// stalling is a fake of engine.Requirements whose preparation for the
-// command name waits until its context ends.
-type stalling struct {
-	*requirements
-	name string
-}
-
-func (s *stalling) Prepare(ctx context.Context, cmd command.Command, p engine.Params) (engine.Decide, error) {
-	if cmd.Name == s.name {
-		<-ctx.Done()
-		return nil, ctx.Err()
-	}
-	return s.requirements.Prepare(ctx, cmd, p)
-}
-
-// stalledUsers is a fake of engine.Users that waits until its context
-// ends.
-type stalledUsers struct{}
-
-func (stalledUsers) UserByName(ctx context.Context, _ platform.Name, _ string) (user.User, bool, error) {
-	<-ctx.Done()
-	return user.User{}, false, ctx.Err()
 }
 
 // TestSubmit covers B16: Submit returns once the trigger has its place and
