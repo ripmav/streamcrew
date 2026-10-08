@@ -32,7 +32,8 @@ const (
 	MaxPending = 1000
 	// HistorySize is the number of instances the history keeps (B60).
 	HistorySize = 200
-	// DefaultTimeLimit applies to an action whose type sets none (B72).
+	// DefaultTimeLimit is the time limit of an action until it sets another
+	// with Run.LimitTo (B72).
 	DefaultTimeLimit = 60 * time.Second
 	// DefaultShutdownTimeout is how long running instances may go on when
 	// the core stops, unless WithShutdownTimeout sets another duration
@@ -148,19 +149,6 @@ func WithConfig(fn func(ctx context.Context) (Config, error)) Option {
 	}
 }
 
-// WithVisualAudio sets which action types are visual or audio for the lock
-// mode "visual_audio" (B23); the action type registry (Code-ADR-0013) knows
-// it. Without it, no action type is.
-func WithVisualAudio(fn func(actionType string) bool) Option {
-	return func(e *Engine) error {
-		if fn == nil {
-			return fmt.Errorf("%w: nil visual and audio function", ErrInvalidOption)
-		}
-		e.visualAudio = fn
-		return nil
-	}
-}
-
 // WithShutdownTimeout sets how long running instances may go on when the
 // core stops (B55); it must be positive. Without it, the engine uses
 // DefaultShutdownTimeout.
@@ -192,12 +180,12 @@ const (
 // Engine runs commands. It is safe for concurrent use.
 type Engine struct {
 	commands        Commands
+	types           ActionTypes
 	requirements    Requirements
 	users           Users
 	publisher       Publisher
 	logger          *slog.Logger
 	config          func(context.Context) (Config, error)
-	visualAudio     func(actionType string) bool
 	shutdownTimeout time.Duration
 
 	// wg has the goroutines of the instances.
@@ -229,17 +217,22 @@ type Engine struct {
 }
 
 // New returns an engine that loads commands from commands, e.g. to replay
-// an instance with the current version of its command.
-func New(commands Commands, opts ...Option) (*Engine, error) {
-	if commands == nil {
+// an instance with the current version of its command. types tells it which
+// action types are visual or audio and which capabilities they lack; it has
+// no default, because only the action type registry knows (Code-ADR-0013).
+func New(commands Commands, types ActionTypes, opts ...Option) (*Engine, error) {
+	switch {
+	case commands == nil:
 		return nil, fmt.Errorf("new command engine: %w: nil commands", ErrInvalidOption)
+	case types == nil:
+		return nil, fmt.Errorf("new command engine: %w: nil action types", ErrInvalidOption)
 	}
 	e := &Engine{
 		commands:        commands,
+		types:           types,
 		publisher:       noPublisher{},
 		logger:          slog.New(slog.DiscardHandler),
 		config:          func(context.Context) (Config, error) { return DefaultConfig(), nil },
-		visualAudio:     func(string) bool { return false },
 		shutdownTimeout: DefaultShutdownTimeout,
 		active:          make(map[id.ID]*instance),
 		held:            make(map[string]struct{}),
@@ -701,9 +694,9 @@ func (e *Engine) findLocked(instanceID id.ID) *instance {
 	return nil
 }
 
-// failAction records a failed action of in (B60).
-func (e *Engine) failAction(in *instance, position int, actionType string, err error) {
+// failAction records a failed action of in at path (B60, actions.md B9).
+func (e *Engine) failAction(in *instance, path []int, actionType string, err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	in.errors = append(in.errors, ActionError{Position: position, Type: actionType, Message: err.Error()})
+	in.errors = append(in.errors, ActionError{Path: slices.Clone(path), Type: actionType, Message: err.Error()})
 }

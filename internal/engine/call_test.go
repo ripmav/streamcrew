@@ -217,9 +217,9 @@ func TestCallFails(t *testing.T) {
 		in, _ := f.engine.Instance(lenientID)
 		assert.Equal(t, engine.StateCompleted, in.State)
 		require.Len(t, in.Errors, 2)
-		assert.Equal(t, 1, in.Errors[0].Position)
+		assert.Equal(t, []int{1}, in.Errors[0].Path)
 		assert.Contains(t, in.Errors[0].Message, engine.ErrCallFailed.Error())
-		assert.Equal(t, 3, in.Errors[1].Position)
+		assert.Equal(t, []int{3}, in.Errors[1].Path)
 		assert.Contains(t, in.Errors[1].Message, errNoCommand.Error())
 		assert.Contains(t, f.journal.get(), "call disabled", "B14: an outcome, not an error")
 

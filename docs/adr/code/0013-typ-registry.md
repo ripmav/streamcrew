@@ -125,6 +125,8 @@
       Einen Fehler gibt es nur für einen ungültigen Index. Den Ausgang der Instanz bestimmt die Engine aus ihrem eigenen Zustand, nicht aus der Rückgabe des Containers.
    5. **Verlauf:** `engine.ActionError` bekommt statt der Position (`position`, eine Zahl) den Pfad (`path`), eine Liste ab 1, etwa `[3, 2]` (B9). Die Nutzlast der Ereignisse `command.instance.*` ändert sich damit; Verbraucher außerhalb des Cores gibt es noch nicht.
    6. Der Port `engine.ActionTypes` ersetzt `engine.WithVisualAudio`; `*action.Registry` setzt ihn um. Er sagt, welche Typen Bild oder Ton sind (B23) und welche Capabilities einem Typ im Betriebsmodus fehlen. Vor jeder Action, auch einer Kind-Action, prüft die Engine die Capabilities. Fehlt eine, scheitert die Action, ohne zu laufen, mit `engine.ErrCapability` und dem Namen der Capability (B7, ADR-0013 Punkt 1). Ohne den Port gilt keine Capability als vorhanden und kein Typ als Bild oder Ton.
+
+      *Umgesetzt am 2026-10-01 als Pflichtparameter von `engine.New` statt als Option: Ohne die Registry weiß die Engine nicht, welche Capabilities ein Typ braucht, und kann deshalb keinen Standard anbieten, der „keine vorhanden“ bedeutet.*
    7. `Run.Path()` nennt den Pfad der laufenden Action. Typen mit Zustand über Ausführungen hinweg, etwa der Zufall mit Gedächtnis (B13), bilden ihren Schlüssel aus Command-ID, Änderungszeitpunkt des Commands und Pfad.
    8. Unverändert bleiben `engine.ErrStop` für `exit`, `engine.Container.Children()` für die Sperren und `engine.Run.Call` für die Command-Action.
 
@@ -180,5 +182,5 @@
 - [x] Nach der Annahme Plan §2.4, §6.9 (Descriptor, Beispiel `chat.send`), §8 (JSON-Schema: eigener Typ, `santhosh-tekuri/jsonschema/v6` in Tests statt des Kandidaten `google/jsonschema-go`) und §12.2 anpassen und in Code-ADR-0010 den Vermerk **Ergänzt durch** setzen, erledigt 2026-10-01
 - [ ] Die Folgearbeit „Die Typ-Registry in Phase 3 auf `internal/polydoc` aufbauen“ in Code-ADR-0010 mit der Umsetzung abhaken
 - [x] In `actions.md` die Arbeitsnamen durch die Typ-IDs aus Punkt 1 ersetzen und auf dieses ADR verweisen, erledigt 2026-10-01
-- [ ] In `command-engine.md` die Änderungen aus Punkt 8 mit der Umsetzung in der Änderungshistorie festhalten
+- [x] In `command-engine.md` die Änderungen aus Punkt 8 mit der Umsetzung in der Änderungshistorie festhalten, erledigt 2026-10-01
 - [ ] Umsetzen (Roadmap 3.3), bevor die einzelnen Typen kommen: `internal/capability`, `internal/action` mit Registry und Feldtypen, `internal/action/schema` mit Schema-Typ und Bausteinen, der Konformitätstest mit `santhosh-tekuri/jsonschema/v6`, verschachtelte Dokumente in `internal/polydoc`, die Erweiterungen der Engine aus Punkt 8 und das Speichern mit Verweisen, Namen und Warnungen

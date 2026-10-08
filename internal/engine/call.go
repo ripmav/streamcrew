@@ -119,6 +119,12 @@ func (r *Run) Call(ctx context.Context, commandID id.ID, opts CallOptions) (Resu
 
 	org := origin{parent: caller.id, chain: caller.chain}
 	if opts.Wait {
+		// The called actions have their own time limits; the one of the
+		// calling action stands meanwhile (actions.md B8).
+		if f := r.top(); f != nil {
+			f.stand()
+			defer f.run()
+		}
 		res := Result{Outcome: OutcomeCompleted, Instances: make([]id.ID, 0, len(d.Runs))}
 		for _, run := range d.Runs {
 			instanceID, err := e.runCall(ctx, r, cmd, run, org)

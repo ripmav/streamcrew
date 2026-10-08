@@ -510,9 +510,9 @@ func TestTarget(t *testing.T) {
 			})
 		})
 	}
-	_, err := engine.New(&commandStore{}, engine.WithUsers(nil))
+	_, err := engine.New(&commandStore{}, &actionTypes{}, engine.WithUsers(nil))
 	require.ErrorIs(t, err, engine.ErrInvalidOption)
-	_, err = engine.New(&commandStore{}, engine.WithRequirements(nil))
+	_, err = engine.New(&commandStore{}, &actionTypes{}, engine.WithRequirements(nil))
 	require.ErrorIs(t, err, engine.ErrInvalidOption)
 }
 
