@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-09-29 |
 | **Bezug** | Roadmap Phase 2.2 (Nutzer, Rollenmodell), 5.2; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0009](../adr/code/0009-ids-und-zeit.md); Plan §5.5, §6.13, Anhang A.6, A.7 |
-| **Umsetzung** | noch offen (geplant: `internal/domain/user`, Repository in `internal/store`) |
+| **Umsetzung** | teilweise: Rollen in `internal/domain/role`; Nutzer folgen (geplant: `internal/domain/user`, Repository in `internal/store`) |
 
 ## Zweck und Umfang
 
@@ -81,9 +81,9 @@ Nicht Teil dieser Spezifikation:
 
 - [ ] B3: Ein zweiter Nutzer mit derselben Kombination aus Plattform und Plattform-ID wird abgelehnt (Constraint in der Datenbank).
 - [ ] B4: Eine Namensänderung aktualisiert die Identität, ohne einen neuen Nutzer anzulegen.
-- [ ] B20, B23: Tabellengetriebener Test über alle Paare aus Nutzerrolle und Mindestrolle.
-- [ ] B22: Hauptrolle eines Nutzers mit mehreren Rollen ist die höchste.
-- [ ] B27: Ein gebannter Nutzer erfüllt keine Mindestrolle.
+- [x] B20, B23: Tabellengetriebener Test über alle Paare aus Nutzerrolle und Mindestrolle.
+- [x] B22: Hauptrolle eines Nutzers mit mehreren Rollen ist die höchste.
+- [x] B27: Ein gebannter Nutzer erfüllt keine Mindestrolle.
 - [ ] B9: Statistiken werden gespeichert und gelesen (Integrationstest gegen SQLite).
 
 ## Offene Fragen
@@ -111,3 +111,4 @@ Nicht Teil dieser Spezifikation:
 |---|---|
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
 | 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
+| 2026-09-29 | Rollen umgesetzt (`internal/domain/role`). Festlegung dabei: Die Hauptrolle eines gebannten Nutzers ist `banned`, auch wenn er weitere Rollen hat (B22 mit B27). Plattformspezifische Rollen zählen auf der Stufe, auf der sie stehen (B20). |
