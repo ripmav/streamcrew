@@ -19,6 +19,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/buildinfo"
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/doctor"
+	"github.com/ripmav/streamcrew/internal/profile"
 )
 
 // cli is the command line: the global flags of config.Config and the
@@ -26,10 +27,13 @@ import (
 type cli struct {
 	config.Config
 
-	Serve     serveCmd   `cmd:"" help:"Run the core until SIGINT or SIGTERM."`
-	Version   versionCmd `cmd:"" help:"Print version information."`
-	ConfigCmd configCmd  `cmd:"" name:"config" help:"Show the configuration."`
-	Doctor    doctorCmd  `cmd:"" help:"Check the environment of the core."`
+	Serve      serveCmd   `cmd:"" help:"Run the core until SIGINT or SIGTERM."`
+	ProfileCmd profileCmd `cmd:"" name:"profile" help:"Manage profiles. Changes need a stopped core."`
+	Backup     backupCmd  `cmd:"" help:"Create, list and restore profile backups."`
+	Vault      vaultCmd   `cmd:"" name:"secret" help:"Manage the key that encrypts tokens at rest."`
+	Version    versionCmd `cmd:"" help:"Print version information."`
+	ConfigCmd  configCmd  `cmd:"" name:"config" help:"Show the configuration."`
+	Doctor     doctorCmd  `cmd:"" help:"Check the environment of the core."`
 }
 
 // runEnv is passed to the Run methods of the commands, together with the
@@ -40,6 +44,8 @@ type runEnv struct {
 	defaults       config.Defaults
 	defaultsErr    error
 	file           *config.FileResolver
+	// envKey is the value of STREAMCREW_SECRET_KEY (ADR-0012).
+	envKey string
 }
 
 // resolve completes and checks the configuration for commands that need it.
@@ -47,6 +53,9 @@ func (e *runEnv) resolve() (*config.Config, error) {
 	err := e.cfg.Resolve()
 	if err != nil && e.cfg.DataDir == "" && e.defaultsErr != nil {
 		err = errors.Join(err, e.defaultsErr)
+	}
+	if e.cfg.Profile != "" && !profile.ValidID(e.cfg.Profile) {
+		err = errors.Join(err, fmt.Errorf("--profile: %w: %q", profile.ErrInvalidID, e.cfg.Profile))
 	}
 	if err != nil {
 		return nil, &usageError{err: err}
@@ -67,7 +76,7 @@ func (serveCmd) Run(ctx context.Context, e *runEnv) error {
 	if err != nil {
 		return err
 	}
-	a, err := app.New(*cfg, app.WithConsole(e.stderr))
+	a, err := app.New(ctx, *cfg, app.WithConsole(e.stderr), app.WithSecretKey(e.envKey))
 	if err != nil {
 		return err
 	}
