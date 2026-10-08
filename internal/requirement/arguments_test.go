@@ -38,6 +38,14 @@ func hug(args ...command.Argument) command.Command {
 	return c
 }
 
+// spelled returns a command with an argument target and the triggers with
+// the trigger mode m.
+func spelled(m command.TriggerMode, triggers ...string) command.Command {
+	c := hug(arg("!target", command.ArgumentUser))
+	c.TriggerMode, c.Triggers = m, triggers
+	return c
+}
+
 // said returns the parameters of the chat message text of ada on Twitch,
 // with the words after the first as arguments.
 func said(text string) engine.Params {
@@ -173,6 +181,18 @@ func TestArguments(t *testing.T) {
 			cmd: hug(arg("!target", command.ArgumentUser)), p: hugMe,
 			rej: usage("!hug me <target>", true),
 		},
+		"B32 missing, exact spelling first": {
+			cmd: spelled(command.TriggerExclamation, "HUG ME", "hug"), p: hugMe,
+			rej: usage("!hug <target>", true),
+		},
+		"B32 missing, longest regardless of case": {
+			cmd: spelled(command.TriggerExclamation, "Hug", "HUG ME"), p: hugMe,
+			rej: usage("!HUG ME <target>", true),
+		},
+		"B32 missing, literal trigger": {
+			cmd: spelled(command.TriggerLiteral, "hug", "?hug"), p: said("?hug"),
+			rej: usage("?hug <target>", true),
+		},
 		"unknown user, no message": {
 			cmd: hug(arg("!target", command.ArgumentUser)), p: event,
 			rej: engine.Rejection{Requirement: command.TypeArguments, Reason: i18n.Message{Key: i18n.KeyRequirementArgumentsUser, Args: map[string]i18n.Value{
@@ -232,7 +252,7 @@ func TestArgumentValues(t *testing.T) {
 	assert.Equal(t, engine.Rejected(usage("!hug <who>", true)), got)
 
 	wildcard := hug(arg("!who", command.ArgumentText))
-	wildcard.Wildcard = true
+	wildcard.TriggerMode = command.TriggerWildcard
 	got, err = apply(t.Context(), f.service, wildcard, engine.Params{Platform: platform.Twitch, Message: "a hug"})
 	require.NoError(t, err)
 	assert.Equal(t, engine.Rejected(usage("hug <who>", true)), got, "a wildcard trigger without !")

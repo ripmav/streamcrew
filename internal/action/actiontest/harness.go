@@ -65,7 +65,8 @@ func (h *Harness) Engine() *engine.Engine {
 // policy "continue", and stores it so that calls find it.
 func (h *Harness) Command(name string, actions ...command.Action) command.Command {
 	cmd := command.Command{
-		ID: id.New(), Name: name, Kind: command.KindChat, Enabled: true, ErrorPolicy: command.ErrorContinue, Actions: actions}
+		ID: id.New(), Name: name, Kind: command.KindChat, Enabled: true, TriggerMode: command.TriggerExclamation,
+		ErrorPolicy: command.ErrorContinue, Actions: actions}
 	h.Put(cmd)
 	return cmd
 }

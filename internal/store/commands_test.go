@@ -69,7 +69,10 @@ type noRoots struct{}
 func (noRoots) HasRoot(string) bool { return false }
 
 func chatCommand(name string, enabled bool, triggers ...string) command.Command {
-	return command.Command{Name: name, Kind: command.KindChat, Enabled: enabled, Triggers: triggers, ErrorPolicy: command.ErrorContinue}
+	return command.Command{
+		Name: name, Kind: command.KindChat, Enabled: enabled, Triggers: triggers,
+		TriggerMode: command.TriggerExclamation, ErrorPolicy: command.ErrorContinue,
+	}
 }
 
 // TestCommandKeepsUnknownActions covers B1 and B4: a command with actions of
@@ -81,7 +84,7 @@ func TestCommandKeepsUnknownActions(t *testing.T) {
 
 	actions := jsontext.Value(`[{"type":"chat.send","schemaVersion":1,"message":"Hi $username!"},{"type":"obs.scene","schemaVersion":4,"scene":"Main"}]`)
 	cmd, err := codec.Command(command.Record{
-		Name: "hug", Kind: command.KindChat, Enabled: true, Unlocked: true, Triggers: []string{"hug"}, Wildcard: true,
+		Name: "hug", Kind: command.KindChat, Enabled: true, Unlocked: true, Triggers: []string{"hug"}, TriggerMode: command.TriggerWildcard,
 		ErrorPolicy: command.ErrorContinue, Actions: actions,
 	})
 	require.NoError(t, err)
@@ -96,7 +99,7 @@ func TestCommandKeepsUnknownActions(t *testing.T) {
 	assert.Equal(t, saved.CreatedAt, saved.UpdatedAt)
 	assert.True(t, saved.Enabled)
 	assert.True(t, saved.Unlocked)
-	assert.True(t, saved.Wildcard)
+	assert.Equal(t, command.TriggerWildcard, saved.TriggerMode)
 	assert.Equal(t, command.ErrorContinue, saved.ErrorPolicy, "spec command-engine.md, B71")
 	assert.Equal(t, cmd.Requirements, saved.Requirements)
 
@@ -126,7 +129,7 @@ func TestTriggersAsEntered(t *testing.T) {
 	ctx := t.Context()
 	svc, _ := commandService(t)
 
-	cmd, err := svc.Save(ctx, chatCommand("hug", true, command.ParseTriggers("!Hug;good night; !umarmen")...))
+	cmd, err := svc.Save(ctx, chatCommand("hug", true, command.ParseTriggers("!Hug;good night; !umarmen", command.TriggerExclamation)...))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Hug", "good night", "umarmen"}, cmd.Triggers)
 
@@ -142,10 +145,10 @@ func TestTriggerUniqueAmongEnabledChatCommands(t *testing.T) {
 
 	first, err := svc.Save(ctx, chatCommand("hug", true, "hug"))
 	require.NoError(t, err)
-	_, err = svc.Save(ctx, chatCommand("hug 2", true, "HUG"))
-	require.ErrorIs(t, err, store.ErrConflict, "same trigger regardless of case")
+	_, err = svc.Save(ctx, chatCommand("hug 2", true, "hug"))
+	require.ErrorIs(t, err, store.ErrConflict, "the same trigger")
 
-	second, err := svc.Save(ctx, chatCommand("hug 2", false, "HUG"))
+	second, err := svc.Save(ctx, chatCommand("hug 2", false, "hug"))
 	require.NoError(t, err, "a disabled command may reuse the trigger")
 	second.Enabled = true
 	_, err = svc.Save(ctx, second)
@@ -161,7 +164,38 @@ func TestTriggerUniqueAmongEnabledChatCommands(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, all, 2)
 	assert.Equal(t, []string{"hug"}, all[0].Triggers)
-	assert.Equal(t, []string{"HUG"}, all[1].Triggers)
+	assert.Equal(t, []string{"hug"}, all[1].Triggers)
+}
+
+// TestTriggerSpellings covers B11, B13, B14 and B67: a trigger is unique as
+// a user writes it, in exactly this spelling; wildcard triggers are unique
+// among themselves regardless of case.
+func TestTriggerSpellings(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc, _ := commandService(t)
+	mode := func(c command.Command, m command.TriggerMode) command.Command {
+		c.TriggerMode = m
+		return c
+	}
+
+	_, err := svc.Save(ctx, chatCommand("hallo", true, "hallo"))
+	require.NoError(t, err)
+	_, err = svc.Save(ctx, chatCommand("Hallo", true, "Hallo"))
+	require.NoError(t, err, "B14: another spelling is another trigger")
+	_, err = svc.Save(ctx, mode(chatCommand("literal", true, "!hallo"), command.TriggerLiteral))
+	require.ErrorIs(t, err, store.ErrConflict, "B11: a literal !hallo is the trigger hallo with \"!\"")
+	question, err := svc.Save(ctx, mode(chatCommand("question", true, "?hallo", "hallo"), command.TriggerLiteral))
+	require.NoError(t, err, "B11: ?hallo and hallo without \"!\" are triggers of their own")
+	assert.Equal(t, command.TriggerLiteral, question.TriggerMode)
+	assert.Equal(t, []string{"?hallo", "hallo"}, question.Triggers)
+
+	_, err = svc.Save(ctx, mode(chatCommand("wild", true, "hallo"), command.TriggerWildcard))
+	require.NoError(t, err, "B67: a wildcard trigger next to a normal one")
+	_, err = svc.Save(ctx, mode(chatCommand("WILD", true, "HALLO"), command.TriggerWildcard))
+	require.ErrorIs(t, err, store.ErrConflict, "B14: wildcard triggers regardless of case")
+	_, err = svc.Save(ctx, mode(chatCommand("off", false, "HALLO"), command.TriggerWildcard))
+	require.NoError(t, err, "a disabled command may reuse it")
 }
 
 // TestOneCommandPerEventType covers B20.
@@ -534,7 +568,7 @@ func TestSwitchCommand(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, toggled.Enabled)
 
-	other, err := svc.Save(ctx, chatCommand("hug 2", true, "HUG"))
+	other, err := svc.Save(ctx, chatCommand("hug 2", true, "hug"))
 	require.NoError(t, err, "the trigger of a disabled command is free")
 	_, err = svc.SwitchCommand(ctx, hug.ID, command.SwitchOn)
 	require.ErrorIs(t, err, store.ErrConflict, "B14: enabling it collides")
@@ -587,7 +621,7 @@ func TestSwitchGroup(t *testing.T) {
 	assert.False(t, enabled(b))
 	assert.True(t, enabled(outside), "only the commands of the group")
 
-	_, err = svc.Save(ctx, chatCommand("b elsewhere", true, "B"))
+	_, err = svc.Save(ctx, chatCommand("b elsewhere", true, "b"))
 	require.NoError(t, err)
 	require.ErrorIs(t, svc.SwitchGroup(ctx, fun.ID, command.SwitchOn), store.ErrConflict)
 	assert.False(t, enabled(a), "all or none")

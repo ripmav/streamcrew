@@ -56,7 +56,7 @@ func (q *Queries) DeleteTriggers(ctx context.Context, commandID string) error {
 }
 
 const getCommand = `-- name: GetCommand :one
-SELECT id, name, kind, enabled, unlocked, group_id, wildcard, event_type, requirements, actions, created_at, updated_at, error_policy FROM commands WHERE id = ?
+SELECT id, name, kind, enabled, unlocked, group_id, event_type, requirements, actions, created_at, updated_at, error_policy, trigger_mode FROM commands WHERE id = ?
 `
 
 func (q *Queries) GetCommand(ctx context.Context, id string) (Command, error) {
@@ -69,13 +69,13 @@ func (q *Queries) GetCommand(ctx context.Context, id string) (Command, error) {
 		&i.Enabled,
 		&i.Unlocked,
 		&i.GroupID,
-		&i.Wildcard,
 		&i.EventType,
 		&i.Requirements,
 		&i.Actions,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ErrorPolicy,
+		&i.TriggerMode,
 	)
 	return i, err
 }
@@ -119,8 +119,8 @@ func (q *Queries) GetCooldownGroup(ctx context.Context, id string) (CooldownGrou
 }
 
 const insertTrigger = `-- name: InsertTrigger :exec
-INSERT INTO command_triggers (command_id, position, trigger_text, trigger_key, active)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO command_triggers (command_id, position, trigger_text, trigger_key, wildcard, active)
+VALUES (?, ?, ?, ?, ?, ?)
 `
 
 type InsertTriggerParams struct {
@@ -128,6 +128,7 @@ type InsertTriggerParams struct {
 	Position    int64
 	TriggerText string
 	TriggerKey  string
+	Wildcard    int64
 	Active      int64
 }
 
@@ -137,6 +138,7 @@ func (q *Queries) InsertTrigger(ctx context.Context, arg InsertTriggerParams) er
 		arg.Position,
 		arg.TriggerText,
 		arg.TriggerKey,
+		arg.Wildcard,
 		arg.Active,
 	)
 	return err
@@ -209,7 +211,7 @@ func (q *Queries) ListCommandGroups(ctx context.Context) ([]CommandGroup, error)
 }
 
 const listCommands = `-- name: ListCommands :many
-SELECT id, name, kind, enabled, unlocked, group_id, wildcard, event_type, requirements, actions, created_at, updated_at, error_policy FROM commands ORDER BY name, id
+SELECT id, name, kind, enabled, unlocked, group_id, event_type, requirements, actions, created_at, updated_at, error_policy, trigger_mode FROM commands ORDER BY name, id
 `
 
 func (q *Queries) ListCommands(ctx context.Context) ([]Command, error) {
@@ -228,13 +230,13 @@ func (q *Queries) ListCommands(ctx context.Context) ([]Command, error) {
 			&i.Enabled,
 			&i.Unlocked,
 			&i.GroupID,
-			&i.Wildcard,
 			&i.EventType,
 			&i.Requirements,
 			&i.Actions,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ErrorPolicy,
+			&i.TriggerMode,
 		); err != nil {
 			return nil, err
 		}
@@ -312,7 +314,7 @@ func (q *Queries) ListTriggers(ctx context.Context, commandID string) ([]string,
 
 const putCommand = `-- name: PutCommand :exec
 INSERT INTO commands (
-    id, name, kind, enabled, unlocked, group_id, wildcard, event_type,
+    id, name, kind, enabled, unlocked, group_id, trigger_mode, event_type,
     error_policy, requirements, actions, created_at, updated_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE SET
@@ -321,7 +323,7 @@ ON CONFLICT (id) DO UPDATE SET
     enabled = excluded.enabled,
     unlocked = excluded.unlocked,
     group_id = excluded.group_id,
-    wildcard = excluded.wildcard,
+    trigger_mode = excluded.trigger_mode,
     event_type = excluded.event_type,
     error_policy = excluded.error_policy,
     requirements = excluded.requirements,
@@ -336,7 +338,7 @@ type PutCommandParams struct {
 	Enabled      int64
 	Unlocked     int64
 	GroupID      sql.NullString
-	Wildcard     int64
+	TriggerMode  sql.NullString
 	EventType    sql.NullString
 	ErrorPolicy  string
 	Requirements string
@@ -353,7 +355,7 @@ func (q *Queries) PutCommand(ctx context.Context, arg PutCommandParams) error {
 		arg.Enabled,
 		arg.Unlocked,
 		arg.GroupID,
-		arg.Wildcard,
+		arg.TriggerMode,
 		arg.EventType,
 		arg.ErrorPolicy,
 		arg.Requirements,

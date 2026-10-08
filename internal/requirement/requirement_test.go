@@ -223,6 +223,7 @@ func person(login string, p platform.Name, roles ...role.Role) *user.User {
 func cmd(reqs ...command.Requirement) command.Command {
 	c := command.Command{Requirements: reqs}
 	c.ID, c.Name, c.Kind, c.Enabled = id.New(), "hug", command.KindChat, true
+	c.TriggerMode = command.TriggerExclamation
 	return c
 }
 

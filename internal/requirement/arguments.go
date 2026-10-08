@@ -159,23 +159,21 @@ func usageRejection(cmd command.Command, r command.ArgumentsRequirement, p engin
 	}
 }
 
-// usedTrigger returns the trigger of cmd as the user writes it: the one the
-// message of p matches, the longest if several do, otherwise the first;
-// with "!" unless cmd is a wildcard command (commands.md, B11, B13). A
-// command without triggers is shown by its name.
+// usedTrigger returns the trigger of cmd as the user writes it
+// (commands.md, B11, B13): the one the message of p matches, otherwise the
+// first. If several match, an exact match counts before one regardless of
+// case, then the longest (B16). A command without triggers is shown by its
+// name.
 func usedTrigger(cmd command.Command, p engine.Params) string {
 	if len(cmd.Triggers) == 0 {
 		return cmd.Name
 	}
-	trigger := cmd.Triggers[0]
-	matched := false
+	trigger, best := cmd.Triggers[0], command.NoMatch
 	for _, t := range cmd.Triggers {
-		if command.Matches(p.Message, t, cmd.Wildcard) && (!matched || len(t) > len(trigger)) {
-			trigger, matched = t, true
+		m := command.MatchTrigger(p.Message, t, cmd.TriggerMode)
+		if m > best || m == best && m != command.NoMatch && len(t) > len(trigger) {
+			trigger, best = t, m
 		}
 	}
-	if cmd.Wildcard {
-		return trigger
-	}
-	return "!" + trigger
+	return cmd.TriggerMode.Typed(trigger)
 }

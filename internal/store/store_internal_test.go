@@ -12,6 +12,9 @@ import (
 	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ripmav/streamcrew/internal/domain/command"
+	"github.com/ripmav/streamcrew/internal/domain/id"
 )
 
 // TestMigrationsUpDownUp covers the exit criterion of roadmap phase 2: every
@@ -70,6 +73,95 @@ func TestCounterStepMigration(t *testing.T) {
 	assert.Equal(t, int64(4), c.Value)
 	assert.Equal(t, int64(1), c.Step)
 	require.NoError(t, c.Validate())
+}
+
+// TestTriggerModeMigration covers commands.md B11, B13 and B14: chat
+// commands from before the trigger mode keep their behavior, triggers get
+// their keys in exact spelling, and the way down restores the flag.
+func TestTriggerModeMigration(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, err := Open(ctx, filepath.Join(t.TempDir(), "p.db"))
+	require.NoError(t, err)
+	defer s.Close()
+	fsys, err := fs.Sub(migrations, "migrations")
+	require.NoError(t, err)
+	p, err := goose.NewProvider(goose.DialectSQLite3, s.write, fsys, goose.WithDisableGlobalRegistry(true))
+	require.NoError(t, err)
+
+	const beforeMode = 8
+	_, err = p.DownTo(ctx, beforeMode)
+	require.NoError(t, err)
+	hug, what, follow := id.New(), id.New(), id.New()
+	_, err = s.write.ExecContext(ctx, `INSERT INTO commands
+		(id, name, kind, enabled, unlocked, wildcard, event_type, requirements, actions, created_at, updated_at) VALUES
+		(?, 'hug', 'chat', 1, 0, 0, NULL, '[]', '[]', 0, 0),
+		(?, 'what', 'chat', 1, 0, 1, NULL, '[]', '[]', 0, 0),
+		(?, 'follow', 'event', 1, 0, 0, 'channel.follow', '[]', '[]', 0, 0)`,
+		hug.String(), what.String(), follow.String())
+	require.NoError(t, err)
+	_, err = s.write.ExecContext(ctx, `INSERT INTO command_triggers (command_id, position, trigger_text, trigger_key, active) VALUES
+		(?, 0, 'Hug', 'hug', 1), (?, 1, 'umarmen', 'umarmen', 1), (?, 0, 'What', 'what', 1)`,
+		hug.String(), hug.String(), what.String())
+	require.NoError(t, err)
+	_, err = p.Up(ctx)
+	require.NoError(t, err)
+
+	for cmdID, want := range map[id.ID]command.TriggerMode{
+		hug: command.TriggerExclamation, what: command.TriggerWildcard, follow: "",
+	} {
+		rec, err := s.Command(ctx, cmdID)
+		require.NoError(t, err)
+		assert.Equal(t, want, rec.TriggerMode, rec.Name)
+	}
+	keys := func() map[string]int64 {
+		rows, err := s.write.QueryContext(ctx, "SELECT trigger_key, wildcard FROM command_triggers")
+		require.NoError(t, err)
+		defer rows.Close()
+		got := map[string]int64{}
+		for rows.Next() {
+			var (
+				key      string
+				wildcard int64
+			)
+			require.NoError(t, rows.Scan(&key, &wildcard))
+			got[key] = wildcard
+		}
+		require.NoError(t, rows.Err())
+		return got
+	}
+	assert.Equal(t, map[string]int64{"!Hug": 0, "!umarmen": 0, "what": 1}, keys())
+
+	_, err = p.DownTo(ctx, beforeMode)
+	require.NoError(t, err)
+	var wildcards []int64
+	require.NoError(t, func() error {
+		rows, err := s.write.QueryContext(ctx, "SELECT wildcard FROM commands ORDER BY name")
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var w int64
+			if err := rows.Scan(&w); err != nil {
+				return err
+			}
+			wildcards = append(wildcards, w)
+		}
+		return rows.Err()
+	}())
+	assert.Equal(t, []int64{0, 0, 1}, wildcards, "follow, hug, what")
+	rows, err := s.write.QueryContext(ctx, "SELECT trigger_key FROM command_triggers ORDER BY trigger_key")
+	require.NoError(t, err)
+	defer rows.Close()
+	var oldKeys []string
+	for rows.Next() {
+		var key string
+		require.NoError(t, rows.Scan(&key))
+		oldKeys = append(oldKeys, key)
+	}
+	require.NoError(t, rows.Err())
+	assert.Equal(t, []string{"hug", "umarmen", "what"}, oldKeys)
 }
 
 func TestLatestVersionMatchesFiles(t *testing.T) {

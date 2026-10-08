@@ -77,9 +77,12 @@ func (s *Store) Commands(ctx context.Context) ([]command.Record, error) {
 func (s *Store) PutCommand(ctx context.Context, rec command.Record) error {
 	err := s.Write(ctx, func(q *sqlcgen.Queries) error {
 		cmdID := rec.ID.String()
-		var eventType sql.NullString
+		var eventType, triggerMode sql.NullString
 		if rec.Event != "" {
 			eventType = sql.NullString{String: string(rec.Event), Valid: true}
+		}
+		if rec.TriggerMode != "" {
+			triggerMode = sql.NullString{String: string(rec.TriggerMode), Valid: true}
 		}
 		err := q.PutCommand(ctx, sqlcgen.PutCommandParams{
 			ID:           cmdID,
@@ -88,7 +91,7 @@ func (s *Store) PutCommand(ctx context.Context, rec command.Record) error {
 			Enabled:      flag(rec.Enabled),
 			Unlocked:     flag(rec.Unlocked),
 			GroupID:      nullID(rec.GroupID),
-			Wildcard:     flag(rec.Wildcard),
+			TriggerMode:  triggerMode,
 			EventType:    eventType,
 			ErrorPolicy:  string(rec.ErrorPolicy),
 			Requirements: documents(rec.Requirements),
@@ -108,7 +111,8 @@ func (s *Store) PutCommand(ctx context.Context, rec command.Record) error {
 				CommandID:   cmdID,
 				Position:    int64(i),
 				TriggerText: t,
-				TriggerKey:  command.TriggerKey(t),
+				TriggerKey:  command.TriggerKey(rec.TriggerMode, t),
+				Wildcard:    flag(rec.TriggerMode == command.TriggerWildcard),
 				Active:      active,
 			})
 			if err != nil {
@@ -329,7 +333,7 @@ func toCommandRecord(row sqlcgen.Command, triggers []string) (command.Record, er
 		Unlocked:     row.Unlocked != 0,
 		GroupID:      groupID,
 		Triggers:     triggers,
-		Wildcard:     row.Wildcard != 0,
+		TriggerMode:  command.TriggerMode(row.TriggerMode.String),
 		Event:        event.Type(row.EventType.String),
 		ErrorPolicy:  command.ErrorPolicy(row.ErrorPolicy),
 		CreatedAt:    fromMillis(row.CreatedAt),
