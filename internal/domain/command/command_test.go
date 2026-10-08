@@ -196,7 +196,7 @@ func TestValidate(t *testing.T) {
 			c.Kind, c.Triggers, c.TriggerMode, c.Event = command.KindTimer, nil, "", eventtype.ChannelFollow
 		},
 		"requirement twice": func(c *command.Command) {
-			c.Requirements = append(c.Requirements, command.RoleRequirement{Role: role.VIP})
+			c.Requirements = append(c.Requirements, command.RoleRequirement{Role: role.TwitchVIP})
 		},
 		"invalid requirement": func(c *command.Command) { c.Requirements = []command.Requirement{command.RoleRequirement{}} },
 		"nil requirement":     func(c *command.Command) { c.Requirements = []command.Requirement{nil} },

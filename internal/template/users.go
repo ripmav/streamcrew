@@ -67,8 +67,8 @@ func userSubjects(users Users) map[string]subject {
 		"streameruser":         account(users, StreamerAccount),
 		"botuser":              account(users, BotAccount),
 		"randomuser":           randomUser(users, "randomuser", func(role.Set) bool { return true }),
-		"randomfolloweruser":   randomUser(users, "randomfolloweruser", hasRole(role.Follower)),
-		"randomsubscriberuser": randomUser(users, "randomsubscriberuser", hasRole(role.Subscriber)),
+		"randomfolloweruser":   randomUser(users, "randomfolloweruser", hasRole(followerRoles()...)),
+		"randomsubscriberuser": randomUser(users, "randomsubscriberuser", hasRole(subscriberRoles()...)),
 		"randomregularuser":    randomUser(users, "randomregularuser", hasRole(role.Regular)),
 	}
 }
@@ -224,7 +224,7 @@ func randomUser(users Users, name string, match func(role.Set) bool) subject {
 	}
 }
 
-// hasRole returns a match for users with role r.
-func hasRole(r role.Role) func(role.Set) bool {
-	return func(s role.Set) bool { return s.Has(r) }
+// hasRole returns a match for users with one of roles.
+func hasRole(roles ...role.Role) func(role.Set) bool {
+	return func(s role.Set) bool { return s.HasAny(roles...) }
 }

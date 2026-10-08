@@ -9,6 +9,6 @@
   "requirement.cooldown.all": "This command can be used again in {remaining}.",
   "requirement.cooldown.user": "You can use this command again in {remaining}.",
   "requirement.faulty": "This command cannot run because one of its requirements is broken.",
-  "requirement.role": "This command needs the role {role, select, banned {banned} user {user} creator {creator} follower {follower} regular {regular} vip {VIP} subscriber {subscriber} platform_staff {platform staff} moderator {moderator} editor {editor} streamer {streamer} other {{role}}} or a higher one.",
+  "requirement.role": "This command needs the role {role, select, banned {banned} user {user} twitch_affiliate {Twitch affiliate} twitch_partner {Twitch partner} follower {follower} youtube_subscriber {YouTube subscriber} regular {regular} twitch_vip {Twitch VIP} kick_vip {Kick VIP} kick_og {Kick OG} velora_vip {Velora VIP} vpzone_plus {VPZone Plus} vpzone_founder {VPZone founder} vpzone_ambassador {VPZone ambassador} subscriber {subscriber} youtube_member {YouTube member} twitch_global_mod {Twitch global moderator} twitch_staff {Twitch staff} moderator {moderator} editor {editor} streamer {streamer} other {{role}}} or a higher one.",
   "requirement.unknown": "This command cannot run because this version does not know one of its requirements."
 }
