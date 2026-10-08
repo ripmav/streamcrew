@@ -140,7 +140,9 @@ func newFixture(t *testing.T) *fixture {
 	set, err := connector.NewSet(f.twitch, f.youtube)
 	require.NoError(t, err)
 	f.reg, f.templates = registry(t, set, f.store, slog.New(slog.NewTextHandler(f.logs, nil)))
-	f.harness = actiontest.NewHarness(t, f.reg)
+	// The run finds known users through the engine (spec command-engine.md,
+	// B17).
+	f.harness = actiontest.NewHarnessWith(t, f.reg, actiontest.NewCommands(), engine.WithUsers(f.store))
 	return f
 }
 
@@ -389,7 +391,7 @@ func TestFails(t *testing.T) {
 		setup func(f *fixture)
 		want  string
 	}{
-		{"known users", func(f *fixture) { f.store.err = boom }, "user: boom"},
+		{"known users", func(f *fixture) { f.store.err = boom }, `user: look up user "bob" on twitch after 3 attempts: boom`},
 		{"platform", func(f *fixture) { f.twitch.Fail(connectortest.OpUserByLogin, boom) }, `user: look up "bob" on twitch: boom`},
 		{"platform by ID", func(f *fixture) { f.twitch.Fail(connectortest.OpUserByID, boom) }, `user: look up "bob" on twitch: boom`},
 		{"storing", func(f *fixture) {

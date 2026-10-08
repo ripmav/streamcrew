@@ -76,9 +76,6 @@ type Ports struct {
 	Templates *template.Engine
 	// Platforms are the platforms messages go to.
 	Platforms Platforms
-	// Known are the users the core knows; the recipient of a whisper is
-	// looked up there first (B63).
-	Known connector.Known
 	// Logger records messages that are not sent and the platforms a
 	// whisper skips (B62, B63).
 	Logger *slog.Logger
@@ -96,8 +93,6 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("chat action types: no template engine")
 	case p.Platforms == nil:
 		return nil, errors.New("chat action types: no platforms")
-	case p.Known == nil:
-		return nil, errors.New("chat action types: no known users")
 	case p.Logger == nil:
 		return nil, errors.New("chat action types: no logger")
 	}
@@ -232,7 +227,7 @@ func (c Chat) Perform(ctx context.Context, run *engine.Run) error {
 		return send(ctx, run.Params(), targets, connector.Message{Text: text}, delivery{
 			asStreamer: c.AsStreamer, reply: c.Chat.Reply})
 	case KindWhisper:
-		return c.whisper(ctx, targets, text, rendered[1].Text)
+		return c.whisper(ctx, run, targets, text, rendered[1].Text)
 	default:
 		return field("kind", fmt.Errorf("%w: unknown kind %q", action.ErrInvalid, c.Kind))
 	}
@@ -286,9 +281,11 @@ func (d delivery) replies(name platform.Name, p engine.Params) bool {
 }
 
 // whisper sends text privately to the recipient on each target that can
-// whisper and has an account of that name, at the same time (B63). It
-// fails if a target fails, and if no target whispered.
-func (c Chat) whisper(ctx context.Context, targets []connector.Platform, text, recipient string) error {
+// whisper and has an account of that name, at the same time (B63): a user
+// the run knows, found through its lookup (spec command-engine.md, B17),
+// and otherwise the account the platform reports. It fails if a target
+// fails, and if no target whispered.
+func (c Chat) whisper(ctx context.Context, run *engine.Run, targets []connector.Platform, text, recipient string) error {
 	errs := make([]error, len(targets))
 	sent := make([]bool, len(targets))
 	var wg sync.WaitGroup
@@ -301,7 +298,7 @@ func (c Chat) whisper(ctx context.Context, targets []connector.Platform, text, r
 		}
 		m := connector.Message{Text: text, From: target.Status().Sender(c.AsStreamer)}
 		wg.Go(func() {
-			to, err := connector.FindAccount(ctx, c.ports.Known, target, recipient)
+			to, err := connector.FindAccount(ctx, run, target, recipient)
 			if errors.Is(err, connector.ErrUnknownUser) {
 				c.ports.Logger.InfoContext(ctx, "whisper skipped: unknown recipient",
 					"platform", target.Name(), "recipient", recipient)
