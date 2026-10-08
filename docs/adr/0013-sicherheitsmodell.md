@@ -6,6 +6,7 @@
 | **Datum** | 2026-09-29 |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | [ADR-0003](0003-betriebsmodi.md), [ADR-0010](0010-api-protokoll.md), [ADR-0011](0011-keine-telemetrie.md), [ADR-0012](0012-persistenz.md); Plan §6.5, §6.9, §6.15, §13 (R10); Roadmap Phase 2.4, 6.2, 12 |
+| **Ergänzt durch** | [Code-ADR-0019](code/0019-host-rechte-in-der-startkonfiguration.md): Einstellungen zu Punkt 3 und 4 (`--grant`, `--revoke`, `--file-root`, `--outbound-allow`), ohne Neustart aus der Konfigurationsdatei nachgeladen; `host:input` ist bis zum Agent in keinem Modus an |
 
 *Entwurf nach Roadmap Phase 2.4. Das endgültige Sicherheitsmodell mit Bedrohungsanalyse folgt in Phase 11 und bestätigt oder ersetzt dieses ADR.*
 
@@ -70,6 +71,6 @@
 
 - [x] Nach der Annahme den Status setzen, den Index in [`README.md`](README.md) anpassen und die Backlog-Nummern in Plan und Roadmap nachziehen, erledigt 2026-09-29
 - [ ] Capabilities in Descriptors und Engine-Prüfung (Roadmap Phase 3)
-- [ ] Startkonfiguration für abweichende Capabilities und die SSRF-Allowlist (Roadmap Phase 3 bzw. mit der WebRequest-Action)
+- [ ] Startkonfiguration für abweichende Capabilities und die SSRF-Allowlist (Roadmap Phase 3 bzw. mit der WebRequest-Action); Format in [Code-ADR-0019](code/0019-host-rechte-in-der-startkonfiguration.md) (akzeptiert 2026-10-01)
 - [ ] API-Tokens mit Scopes, lokaler Admin-Token, Bremse für Fehlversuche (Roadmap Phase 6.2)
 - [ ] Bedrohungsanalyse und endgültiges Sicherheitsmodell (Roadmap Phase 11)

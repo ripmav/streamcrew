@@ -6,6 +6,7 @@
 | **Datum** | 2026-09-29 |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | [ADR-0003](../0003-betriebsmodi.md), [ADR-0010](../0010-api-protokoll.md); Plan §6.5, §6.21, §7.2, §8; Roadmap Phase 1.2 und 1.3; [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0003](0003-fehler-und-logging.md) |
+| **Ergänzt durch** | [Code-ADR-0019](0019-host-rechte-in-der-startkonfiguration.md): Rechte (`grant`, `revoke`), freigegebene Wurzeln und Allowlist für Netzziele; diese vier Einstellungen lädt der Core aus der Datei ohne Neustart nach |
 
 ## Kontext
 
