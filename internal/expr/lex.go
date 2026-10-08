@@ -106,19 +106,18 @@ func isDigit(r rune) bool {
 	return r >= '0' && r <= '9'
 }
 
-// numberLength returns the length of the number that s starts with: digits
-// with an optional point and decimal places, and an exponent if one
-// follows, as decimal.Parse reads it.
+// numberLength returns the length of the number that s starts with, as
+// decimal.Parse reads it: a whole hexadecimal number after 0x or 0X, or
+// digits with an optional point and decimal places and an exponent if one
+// follows; underscores between digits belong to it. decimal.Parse then
+// checks where they stand.
 func numberLength(s string) int {
-	n := 0
-	for n < len(s) && isDigit(rune(s[n])) {
-		n++
+	if len(s) > 1 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X') {
+		return digitsEnd(s, 2, isHexDigit)
 	}
+	n := digitsEnd(s, 0, isDecimalDigit)
 	if n < len(s) && s[n] == '.' {
-		n++
-		for n < len(s) && isDigit(rune(s[n])) {
-			n++
-		}
+		n = digitsEnd(s, n+1, isDecimalDigit)
 	}
 	if n < len(s) && (s[n] == 'e' || s[n] == 'E') {
 		m := n + 1
@@ -126,13 +125,29 @@ func numberLength(s string) int {
 			m++
 		}
 		if m < len(s) && isDigit(rune(s[m])) {
-			for m < len(s) && isDigit(rune(s[m])) {
-				m++
-			}
-			n = m
+			n = digitsEnd(s, m, isDecimalDigit)
 		}
 	}
 	return n
+}
+
+// digitsEnd returns the index after the digits and underscores of s that
+// start at i.
+func digitsEnd(s string, i int, digit func(byte) bool) int {
+	for i < len(s) && (digit(s[i]) || s[i] == '_') {
+		i++
+	}
+	return i
+}
+
+// isDecimalDigit reports whether c is an ASCII digit.
+func isDecimalDigit(c byte) bool {
+	return c >= '0' && c <= '9'
+}
+
+// isHexDigit reports whether c is a hexadecimal digit.
+func isHexDigit(c byte) bool {
+	return isDecimalDigit(c) || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
 }
 
 // unquote returns the text of a literal in quotes. Back quotes take the

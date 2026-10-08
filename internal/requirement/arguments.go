@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/ripmav/streamcrew/internal/decimal"
@@ -77,7 +76,7 @@ func argumentValue(ctx context.Context, a command.Argument, word string, p engin
 		if !ok {
 			return template.Value{}, typeRejection(a, p), false, nil
 		}
-		return template.Value{Text: word, Number: decimal.New(n), IsNumber: true}, engine.Rejection{}, true, nil
+		return template.Value{Text: word, Number: n, IsNumber: true}, engine.Rejection{}, true, nil
 	case command.ArgumentUser:
 		return userValue(ctx, a, word, p, users)
 	default:
@@ -85,11 +84,24 @@ func argumentValue(ctx context.Context, a command.Argument, word string, p engin
 	}
 }
 
-// parseInteger returns the whole number word stands for (B33): decimal
-// digits with an optional sign, in the range of 64 bits.
-func parseInteger(word string) (int64, bool) {
-	n, err := strconv.ParseInt(word, 10, 64)
-	return n, err == nil
+// parseInteger reads a whole number of 64 bits (B33) as numbers are read
+// (Code-ADR-0020): decimal digits or a hexadecimal number after 0x, with an
+// optional sign and underscores between digits, but without a decimal point
+// or an exponent, even if the value is whole.
+func parseInteger(word string) (decimal.Decimal, bool) {
+	body := strings.TrimPrefix(strings.TrimPrefix(word, "+"), "-")
+	hex := strings.HasPrefix(body, "0x") || strings.HasPrefix(body, "0X")
+	if !hex && strings.ContainsAny(body, ".eE") {
+		return decimal.Decimal{}, false
+	}
+	d, err := decimal.Parse(word)
+	if err != nil {
+		return decimal.Decimal{}, false
+	}
+	if _, err := d.Int64(); err != nil {
+		return decimal.Decimal{}, false
+	}
+	return d, true
 }
 
 // userValue returns the login name of the user word names on the platform

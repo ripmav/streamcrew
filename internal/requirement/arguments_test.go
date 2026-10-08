@@ -159,6 +159,38 @@ func TestArguments(t *testing.T) {
 			cmd: hug(arg("!n", command.ArgumentInteger)), p: said("!hug 9223372036854775807"),
 			values: map[string]template.Value{"n": number("9223372036854775807")},
 		},
+		"number in hex": {
+			cmd: hug(arg("!n", command.ArgumentNumber)), p: said("!hug 0x1F"),
+			values: map[string]template.Value{"n": number("0x1F")},
+		},
+		"number with underscores": {
+			cmd: hug(arg("!n", command.ArgumentNumber)), p: said("!hug 1_000.5"),
+			values: map[string]template.Value{"n": number("1_000.5")},
+		},
+		"integer in hex": {
+			cmd: hug(arg("!n", command.ArgumentInteger)), p: said("!hug -0x7FFF_FFFF_FFFF_FFFF"),
+			values: map[string]template.Value{"n": number("-0x7FFF_FFFF_FFFF_FFFF")},
+		},
+		"integer in hex with the digit e": {
+			cmd: hug(arg("!n", command.ArgumentInteger)), p: said("!hug 0x1E"),
+			values: map[string]template.Value{"n": number("0x1E")},
+		},
+		"integer with underscores": {
+			cmd: hug(arg("!n", command.ArgumentInteger)), p: said("!hug 1_000"),
+			values: map[string]template.Value{"n": number("1_000")},
+		},
+		"integer in hex beyond 64 bits": {
+			cmd: hug(arg("!n", command.ArgumentInteger)), p: said("!hug 0x8000000000000000"),
+			rej: wrongType("n", command.ArgumentInteger),
+		},
+		"integer with exponent": {
+			cmd: hug(arg("!n", command.ArgumentInteger)), p: said("!hug 1e3"),
+			rej: wrongType("n", command.ArgumentInteger),
+		},
+		"integer with a misplaced underscore": {
+			cmd: hug(arg("!n", command.ArgumentInteger)), p: said("!hug 1__000"),
+			rej: wrongType("n", command.ArgumentInteger),
+		},
 		"B112 integer with fraction": {
 			cmd: hug(arg("!n", command.ArgumentInteger)), p: said("!hug 1.5"),
 			rej: wrongType("n", command.ArgumentInteger),

@@ -44,12 +44,33 @@ func TestParse(t *testing.T) {
 		"0.00000000000000000000000000000000025":    "0.0000000000000000000000000000000002",
 		"1e-99999999999":                           "0",
 		"-0.000":                                   "0",
+		"0xFF":                                     "255",
+		"0X1f":                                     "31",
+		"-0x10":                                    "-16",
+		"+0x0":                                     "0",
+		"-0x0":                                     "0",
+		"0x_FF":                                    "255",
+		"0xF_F":                                    "255",
+		"0x1e3":                                    "483",
+		"0x00000000000000000000000000000000001":    "1",
+		"0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF":           "5192296858534827628530496329220095",
+		"0x10000000000000000000000000000":          "5192296858534827628530496329220096",
+		"1_000":                                    "1000",
+		"-1_000_000":                               "-1000000",
+		"1_000.000_1":                              "1000.0001",
+		"1e1_0":                                    "10000000000",
+		".5_5":                                     "0.55",
+		"0_7":                                      "7",
 	} {
 		d, err := decimal.Parse(in)
 		require.NoError(t, err, in)
 		assert.Equal(t, want, d.String(), in)
 	}
-	for _, in := range []string{"", "-", "+-1", "--1", "1e", "1e+", "e5", ".", ".e1", "1.2.3", "0x10", "1_000", " 1", "1 ", "inf", "NaN", "1,5", "1e1.5", "١"} {
+	for _, in := range []string{
+		"", "-", "+-1", "--1", "1e", "1e+", "e5", ".", ".e1", "1.2.3", " 1", "1 ", "inf", "NaN", "1,5", "1e1.5", "١",
+		"0x", "0xG", "0x1.8", "0x1p3", "0x__1", "0x1_", "0x_", "-0x", "0x-1", "--0x1", "0_x10",
+		"1__000", "_1", "1_", "1_.5", "1._5", "1e_5", "1e5_", "-_1", "_", "1_e5",
+	} {
 		_, err := decimal.Parse(in)
 		require.ErrorIs(t, err, decimal.ErrSyntax, "%q", in)
 	}
@@ -61,6 +82,9 @@ func TestParse(t *testing.T) {
 		"1e5000",
 		"-123e4000",
 		"1234567890123456789012345678901234567890e5000",
+		"0x20000000000000000000000000000",
+		"0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+		"-0x123456789ABCDEF0123456789ABCDEF",
 	} {
 		_, err := decimal.Parse(in)
 		require.ErrorIs(t, err, decimal.ErrRange, in)
@@ -269,7 +293,7 @@ func TestText(t *testing.T) {
 // FuzzParse: the canonical form of a number reads back as the same number
 // and the same text, and Parse does not panic.
 func FuzzParse(f *testing.F) {
-	for _, seed := range []string{"0", "-2.50", "1e3", ".5", "0.1234567890123456789012345678901234567", "9999999999999999999999999999999999.5", "1e-40", "abc"} {
+	for _, seed := range []string{"0", "-2.50", "1e3", ".5", "0.1234567890123456789012345678901234567", "9999999999999999999999999999999999.5", "1e-40", "abc", "0xFF", "-0x_1F", "1_000.5", "1e1_0"} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
