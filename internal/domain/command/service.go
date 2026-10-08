@@ -74,6 +74,9 @@ func (s *Service) Save(ctx context.Context, cmd Command) (Saved, error) {
 	if cmd.ID.IsZero() {
 		cmd.ID = id.New()
 	}
+	if err := s.checkCooldownGroup(ctx, cmd); err != nil {
+		return Saved{}, err
+	}
 	warnings, err := s.checkActions(ctx, cmd)
 	if err != nil {
 		return Saved{}, err
@@ -127,6 +130,40 @@ func (s *Service) SaveGroup(ctx context.Context, g Group) (Group, error) {
 // DeleteGroup deletes a group; its commands stay without a group (B62).
 func (s *Service) DeleteGroup(ctx context.Context, groupID id.ID) error {
 	return s.repo.DeleteGroup(ctx, groupID)
+}
+
+// CooldownGroup returns a cooldown group.
+func (s *Service) CooldownGroup(ctx context.Context, groupID id.ID) (CooldownGroup, error) {
+	return s.repo.CooldownGroup(ctx, groupID)
+}
+
+// CooldownGroups returns all cooldown groups.
+func (s *Service) CooldownGroups(ctx context.Context) ([]CooldownGroup, error) {
+	return s.repo.CooldownGroups(ctx)
+}
+
+// SaveCooldownGroup validates and stores a cooldown group and returns it as
+// stored (B33). A cooldown group without an ID is new and gets one. A new
+// duration applies to cooldowns that start afterwards; running ones keep
+// their end (requirements.md, B23).
+func (s *Service) SaveCooldownGroup(ctx context.Context, g CooldownGroup) (CooldownGroup, error) {
+	if err := g.Validate(); err != nil {
+		return CooldownGroup{}, err
+	}
+	if g.ID.IsZero() {
+		g.ID = id.New()
+	}
+	g.CreatedAt, g.UpdatedAt = stamps(g.CreatedAt)
+	if err := s.repo.PutCooldownGroup(ctx, g); err != nil {
+		return CooldownGroup{}, fmt.Errorf("save cooldown group %q: %w", g.Name, err)
+	}
+	return s.repo.CooldownGroup(ctx, g.ID)
+}
+
+// DeleteCooldownGroup deletes a cooldown group; commands whose cooldown
+// names it become faulty until another one is picked (B64).
+func (s *Service) DeleteCooldownGroup(ctx context.Context, groupID id.ID) error {
+	return s.repo.DeleteCooldownGroup(ctx, groupID)
 }
 
 // stamps returns the creation and update time of a save, in UTC with the

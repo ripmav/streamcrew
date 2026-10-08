@@ -37,7 +37,7 @@ func requirementExamples() map[string]Requirement {
 	ref := id.MustParse("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d")
 	return map[string]Requirement{
 		"role.v1":      RoleRequirement{Role: role.Follower},
-		"cooldown.v1":  CooldownRequirement{Scope: CooldownPerUserGroup, Duration: polydoc.Duration(90 * time.Second)},
+		"cooldown.v2":  CooldownRequirement{Scope: CooldownPerUserGrouped, Group: ref},
 		"currency.v1":  CurrencyRequirement{Currency: ref, Mode: CurrencyRange, Amount: 10, Maximum: 100},
 		"rank.v1":      RankRequirement{Rank: ref, Match: RankAtLeast},
 		"inventory.v1": InventoryRequirement{Item: ref, Amount: 2},
@@ -79,6 +79,33 @@ func TestRequirementGoldenFiles(t *testing.T) {
 	}
 	slices.Sort(covered)
 	assert.Equal(t, c.RequirementTypes(), covered, "one example per requirement type")
+}
+
+// TestCooldownVersion1 covers B33: version 1 of the cooldown keeps the
+// duration of the scopes standard and per_user; the grouped scopes lose
+// theirs and name no cooldown group, so the command is faulty until the
+// streamer picks one (requirements.md, B7).
+func TestCooldownVersion1(t *testing.T) {
+	t.Parallel()
+	c, err := NewCodec()
+	require.NoError(t, err)
+
+	stored, err := os.ReadFile(filepath.Join("testdata", "requirement", "cooldown.v1.golden"))
+	require.NoError(t, err)
+	grouped, err := c.requirements.Decode(stored)
+	require.NoError(t, err)
+	assert.Equal(t, CooldownRequirement{Scope: CooldownPerUserGrouped}, grouped)
+	require.ErrorContains(t, grouped.Validate(), "needs a cooldown group")
+
+	standard, err := c.requirements.Decode([]byte(`{"type":"cooldown","schemaVersion":1,"scope":"standard","duration":"30s"}`))
+	require.NoError(t, err)
+	assert.Equal(t, CooldownRequirement{Scope: CooldownStandard, Duration: polydoc.Duration(30 * time.Second)}, standard)
+	require.NoError(t, standard.Validate())
+
+	_, err = c.requirements.Decode([]byte(`{"type":"cooldown","schemaVersion":1,"duration":"30s"}`))
+	require.ErrorContains(t, err, "cooldown scope missing")
+	_, err = c.requirements.Decode([]byte(`{"type":"cooldown","schemaVersion":1,"scope":7}`))
+	require.ErrorContains(t, err, "cooldown scope")
 }
 
 // TestUnknownPartsSurvive covers B4: requirements and actions of unknown

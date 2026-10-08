@@ -229,6 +229,78 @@ func (s *Store) DeleteGroup(ctx context.Context, groupID id.ID) error {
 	})
 }
 
+// CooldownGroup implements command.Repository.
+func (s *Store) CooldownGroup(ctx context.Context, groupID id.ID) (command.CooldownGroup, error) {
+	row, err := s.reader().GetCooldownGroup(ctx, groupID.String())
+	if err != nil {
+		return command.CooldownGroup{}, fmt.Errorf("cooldown group %s: %w", groupID, translate(err))
+	}
+	return toCooldownGroup(row)
+}
+
+// CooldownGroups implements command.Repository: all cooldown groups by
+// name.
+func (s *Store) CooldownGroups(ctx context.Context) ([]command.CooldownGroup, error) {
+	rows, err := s.reader().ListCooldownGroups(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list cooldown groups: %w", translate(err))
+	}
+	groups := make([]command.CooldownGroup, 0, len(rows))
+	for _, row := range rows {
+		g, err := toCooldownGroup(row)
+		if err != nil {
+			return nil, err
+		}
+		groups = append(groups, g)
+	}
+	return groups, nil
+}
+
+// PutCooldownGroup implements command.Repository.
+func (s *Store) PutCooldownGroup(ctx context.Context, g command.CooldownGroup) error {
+	err := s.Write(ctx, func(q *sqlcgen.Queries) error {
+		return q.PutCooldownGroup(ctx, sqlcgen.PutCooldownGroupParams{
+			ID:        g.ID.String(),
+			Name:      g.Name,
+			NameKey:   strings.ToLower(g.Name),
+			Duration:  g.Duration.Milliseconds(),
+			CreatedAt: g.CreatedAt.UnixMilli(),
+			UpdatedAt: g.UpdatedAt.UnixMilli(),
+		})
+	})
+	if err != nil {
+		return fmt.Errorf("put cooldown group %s: %w", g.ID, err)
+	}
+	return nil
+}
+
+// DeleteCooldownGroup implements command.Repository. Commands whose
+// cooldown names the group keep the reference and become faulty (B64).
+func (s *Store) DeleteCooldownGroup(ctx context.Context, groupID id.ID) error {
+	return s.Write(ctx, func(q *sqlcgen.Queries) error {
+		n, err := q.DeleteCooldownGroup(ctx, groupID.String())
+		if err != nil {
+			return err
+		}
+		return notFound(n, "cooldown group "+groupID.String())
+	})
+}
+
+// toCooldownGroup converts a row.
+func toCooldownGroup(row sqlcgen.CooldownGroup) (command.CooldownGroup, error) {
+	groupID, err := id.Parse(row.ID)
+	if err != nil {
+		return command.CooldownGroup{}, err
+	}
+	return command.CooldownGroup{
+		ID:        groupID,
+		Name:      row.Name,
+		Duration:  time.Duration(row.Duration) * time.Millisecond,
+		CreatedAt: fromMillis(row.CreatedAt),
+		UpdatedAt: fromMillis(row.UpdatedAt),
+	}, nil
+}
+
 // documents stores a JSON array of documents; nil is the empty array.
 func documents(raw jsontext.Value) string {
 	if len(raw) == 0 {

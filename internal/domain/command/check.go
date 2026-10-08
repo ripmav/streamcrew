@@ -194,6 +194,25 @@ func (s *Service) checkActions(ctx context.Context, cmd Command) ([]Warning, err
 	return warnings, nil
 }
 
+// checkCooldownGroup checks that a grouped cooldown names a cooldown group
+// that exists (B33; requirements.md, B80).
+func (s *Service) checkCooldownGroup(ctx context.Context, cmd Command) error {
+	for _, r := range cmd.Requirements {
+		c, ok := r.(CooldownRequirement)
+		if !ok || !c.Scope.Grouped() {
+			continue
+		}
+		groups, err := s.repo.CooldownGroups(ctx)
+		if err != nil {
+			return fmt.Errorf("list cooldown groups: %w", err)
+		}
+		if !slices.ContainsFunc(groups, func(g CooldownGroup) bool { return g.ID == c.Group }) {
+			return fmt.Errorf("%w: requirement %q: unknown cooldown group %s", ErrInvalid, TypeCooldown, c.Group)
+		}
+	}
+	return nil
+}
+
 // knownObjects are the commands, groups and counters at the start of a
 // save.
 type knownObjects struct {

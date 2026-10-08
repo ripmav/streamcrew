@@ -151,6 +151,15 @@ func TestValidateGroup(t *testing.T) {
 	require.ErrorIs(t, command.Group{Name: "x", TimerInterval: -time.Second}.Validate(), command.ErrInvalid)
 }
 
+// TestValidateCooldownGroup covers B33: a name and a positive duration.
+func TestValidateCooldownGroup(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, command.CooldownGroup{Name: "Sounds", Duration: 30 * time.Second}.Validate())
+	require.ErrorIs(t, command.CooldownGroup{Name: "", Duration: time.Second}.Validate(), command.ErrInvalid)
+	require.ErrorIs(t, command.CooldownGroup{Name: "x"}.Validate(), command.ErrInvalid)
+	require.ErrorIs(t, command.CooldownGroup{Name: "x", Duration: -time.Second}.Validate(), command.ErrInvalid)
+}
+
 func TestRequirementValidation(t *testing.T) {
 	t.Parallel()
 	item := id.MustParse("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d")
@@ -158,6 +167,10 @@ func TestRequirementValidation(t *testing.T) {
 		"unknown role":               command.RoleRequirement{Role: "admin"},
 		"unknown cooldown scope":     command.CooldownRequirement{Scope: "global", Duration: polydoc.Duration(time.Second)},
 		"zero cooldown":              command.CooldownRequirement{Scope: command.CooldownStandard},
+		"zero per-user cooldown":     command.CooldownRequirement{Scope: command.CooldownPerUser},
+		"standard with a group":      command.CooldownRequirement{Scope: command.CooldownStandard, Duration: polydoc.Duration(time.Second), Group: item},
+		"grouped without a group":    command.CooldownRequirement{Scope: command.CooldownGrouped},
+		"grouped with a duration":    command.CooldownRequirement{Scope: command.CooldownPerUserGrouped, Group: item, Duration: polydoc.Duration(time.Second)},
 		"no currency":                command.CurrencyRequirement{Mode: command.CurrencyRequired, Amount: 1},
 		"negative amount":            command.CurrencyRequirement{Currency: item, Mode: command.CurrencyRequired, Amount: -1},
 		"maximum outside range mode": command.CurrencyRequirement{Currency: item, Mode: command.CurrencyMinimum, Amount: 1, Maximum: 5},
@@ -182,6 +195,14 @@ func TestRequirementValidation(t *testing.T) {
 	}
 	for name, r := range invalid {
 		assert.Error(t, r.Validate(), name)
+	}
+	for name, r := range map[string]command.Requirement{
+		"standard":       command.CooldownRequirement{Scope: command.CooldownStandard, Duration: polydoc.Duration(time.Second)},
+		"per user":       command.CooldownRequirement{Scope: command.CooldownPerUser, Duration: polydoc.Duration(time.Second)},
+		"grouped":        command.CooldownRequirement{Scope: command.CooldownGrouped, Group: item},
+		"per user group": command.CooldownRequirement{Scope: command.CooldownPerUserGrouped, Group: item},
+	} {
+		assert.NoError(t, r.Validate(), name)
 	}
 }
 
