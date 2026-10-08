@@ -261,7 +261,9 @@ func (a *App) backupSchedule(ctx context.Context) (backup.Schedule, error) {
 	}
 	loc, err := t.Location()
 	if err != nil {
-		return backup.Schedule{}, err
+		// A stored zone this build cannot load: UTC instead of stopping the
+		// schedule (Code-ADR-0009).
+		a.logger.WarnContext(ctx, "invalid profile time zone", "error", err)
 	}
 	hour, minute, err := b.Clock()
 	if err != nil {

@@ -143,7 +143,9 @@ func (b Backups) validate() error {
 	return nil
 }
 
-// Time holds the time zone of the profile (Code-ADR-0009).
+// Time holds the time zone of the profile (Code-ADR-0009, as decided by the
+// project owner on 2026-09-29): an IANA name, or empty for the time zone of
+// the system at run time. UTC is the fallback when neither can be used.
 type Time struct {
 	// TimeZone is an IANA name such as "Europe/Berlin"; empty means the
 	// time zone of the system.
@@ -158,14 +160,17 @@ func DefaultTime() Time {
 // DocType implements polydoc.Document.
 func (Time) DocType() string { return sectionTime }
 
-// Location returns the time zone; the system zone if none is set.
+// Location returns the time zone: the named one, or the system zone if none
+// is set. Go uses UTC as the system zone when it cannot determine one. If
+// the named zone cannot be loaded, Location returns UTC together with the
+// error, so that callers can warn and carry on.
 func (t Time) Location() (*time.Location, error) {
 	if t.TimeZone == "" {
 		return time.Local, nil
 	}
 	loc, err := time.LoadLocation(t.TimeZone)
 	if err != nil {
-		return nil, fmt.Errorf("time zone %q: %w", t.TimeZone, err)
+		return time.UTC, fmt.Errorf("time zone %q, using UTC: %w", t.TimeZone, err)
 	}
 	return loc, nil
 }

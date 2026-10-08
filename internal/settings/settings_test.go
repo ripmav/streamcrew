@@ -89,3 +89,10 @@ func TestNewerStoredVersionFallsBackToDefaults(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, settings.DefaultBackups(), b)
 }
+
+func TestUnloadableTimeZoneFallsBackToUTC(t *testing.T) {
+	t.Parallel()
+	loc, err := settings.Time{TimeZone: "Mars/Olympus"}.Location()
+	require.Error(t, err)
+	assert.Equal(t, time.UTC, loc)
+}
