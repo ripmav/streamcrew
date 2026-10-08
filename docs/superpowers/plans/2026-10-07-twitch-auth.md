@@ -366,6 +366,7 @@ Ereignisse“ (mit Belegen), Historie-Notiz.
 
 ### Task 5 — CLI `auth` + E2E-Test
 
+**Status:** erledigt, PR #149
 **Zweig:** `feat/auth-cli` (auf `feat/auth-service`)
 **PR:** `feat(cli): auth login, status and logout`
 
