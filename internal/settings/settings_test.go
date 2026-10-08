@@ -152,3 +152,45 @@ func TestUnloadableTimeZoneFallsBackToUTC(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, time.UTC, loc)
 }
+
+// TestTimeZoneSystem: the system time zone has its own name instead of an
+// empty one (Code-ADR-0017), in version 2 of the section.
+func TestTimeZoneSystem(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc, s := newService(t)
+
+	assert.Equal(t, settings.Time{TimeZone: settings.TimeZoneSystem}, settings.DefaultTime())
+	require.NoError(t, settings.Save(ctx, svc, settings.DefaultTime()))
+	doc, _, err := s.Settings(ctx, "time")
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"type":"time","schemaVersion":2,"timeZone":"system"}`, string(doc))
+	loc, err := settings.DefaultTime().Location()
+	require.NoError(t, err)
+	assert.Equal(t, time.Local, loc)
+
+	require.Error(t, settings.Save(ctx, svc, settings.Time{}), "an empty name is not the system zone")
+	loc, err = settings.Time{}.Location()
+	require.Error(t, err)
+	assert.Equal(t, time.UTC, loc)
+}
+
+// TestTimeVersion1: stored version 1 documents are migrated; their empty
+// name becomes "system".
+func TestTimeVersion1(t *testing.T) {
+	t.Parallel()
+	for doc, want := range map[string]string{
+		`{"type":"time","schemaVersion":1,"timeZone":""}`:              settings.TimeZoneSystem,
+		`{"type":"time","schemaVersion":1,"timeZone":"Europe/Berlin"}`: "Europe/Berlin",
+	} {
+		svc, err := settings.New(fakeRepo{doc: []byte(doc)})
+		require.NoError(t, err)
+		got, err := settings.Load(t.Context(), svc, settings.DefaultTime())
+		require.NoError(t, err, doc)
+		assert.Equal(t, want, got.TimeZone, doc)
+	}
+	svc, err := settings.New(fakeRepo{doc: []byte(`{"type":"time","schemaVersion":1}`)})
+	require.NoError(t, err)
+	_, err = settings.Load(t.Context(), svc, settings.DefaultTime())
+	require.Error(t, err, "version 1 always had the field")
+}
