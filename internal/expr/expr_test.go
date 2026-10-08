@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +30,7 @@ func eval(t *testing.T, text string, args ...string) (expr.Result, error) {
 	t.Helper()
 	x, err := expr.Compile(text)
 	require.NoError(t, err)
-	return x.Eval(t.Context(), engine(t), &template.Scope{Args: args})
+	return x.Eval(t.Context(), engine(t), &template.Scope{Location: time.UTC, ArgDelimiter: "|", Args: args, ArgsText: strings.Join(args, " ")})
 }
 
 // TestEval_B50 covers the language of B50.
@@ -191,7 +192,7 @@ func TestEval_Canceled(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err = x.Eval(ctx, engine(t), nil)
+	_, err = x.Eval(ctx, engine(t), &template.Scope{Location: time.UTC, ArgDelimiter: "|", Args: []string{"1"}, ArgsText: "1"})
 	require.ErrorIs(t, err, context.Canceled)
 	require.NotErrorIs(t, err, expr.ErrEvaluation)
 }
@@ -205,7 +206,7 @@ func TestEval_Concurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range 8 {
 		wg.Go(func() {
-			r, err := x.Eval(t.Context(), e, &template.Scope{Args: []string{strconv.Itoa(i)}})
+			r, err := x.Eval(t.Context(), e, &template.Scope{Location: time.UTC, ArgDelimiter: "|", Args: []string{strconv.Itoa(i)}, ArgsText: strconv.Itoa(i)})
 			assert.NoError(t, err)
 			assert.InDelta(t, float64(i*2+1), r.Number, 0)
 		})

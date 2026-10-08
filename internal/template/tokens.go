@@ -4,6 +4,7 @@ package template
 
 import (
 	"context"
+	"fmt"
 	"iter"
 )
 
@@ -27,8 +28,12 @@ func (t Template) Segments() iter.Seq2[string, bool] {
 // RenderEach renders each template of ts with the encoding Text, all in one
 // render, so each identifier is resolved at most once across them (B21).
 // Expressions use it to get the values of their identifiers (B51). Like
-// Render, it fails only when ctx is done.
+// Render, it fails only for a scope that lacks what a render needs and when
+// ctx is done.
 func (e *Engine) RenderEach(ctx context.Context, ts []Template, s *Scope) ([]string, error) {
+	if err := s.check(); err != nil {
+		return nil, fmt.Errorf("render templates: %w", err)
+	}
 	s = s.forRender()
 	texts := make([]string, len(ts))
 	for i, t := range ts {

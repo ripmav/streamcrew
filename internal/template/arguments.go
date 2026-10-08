@@ -3,7 +3,6 @@
 package template
 
 import (
-	"cmp"
 	"context"
 	"strings"
 )
@@ -95,10 +94,7 @@ func matchArgDelimited(token string) (int, Resolver) {
 
 // argsText returns the text after the trigger.
 func (s *Scope) argsText() string {
-	if s.ArgsText != "" {
-		return s.ArgsText
-	}
-	return strings.Join(s.Args, " ")
+	return s.ArgsText
 }
 
 // delimitedArgs splits the text after the trigger at the delimiter and
@@ -108,7 +104,7 @@ func (s *Scope) delimitedArgs() []string {
 	if text == "" {
 		return nil
 	}
-	parts := strings.Split(text, cmp.Or(s.ArgDelimiter, "|"))
+	parts := strings.Split(text, s.ArgDelimiter)
 	for i, p := range parts {
 		parts[i] = strings.TrimSpace(p)
 	}

@@ -60,19 +60,23 @@ func New(registry *Registry, opts ...Option) *Engine {
 	return e
 }
 
-// Render renders t with the values of s, which may be nil, and encodes each
-// inserted value with enc (B30, B31).
+// Render renders t with the values of s and encodes each inserted value
+// with enc (B30, B31).
 //
 // For each token the longest known name wins across all sources, for equal
 // lengths the source that ranks first (B2, B10, B11); the rest of the token
 // stays as written. Render resolves an identifier only if it occurs (B20)
 // and at most once (B21). A token without a known name, an identifier
 // without a value and one whose resolver fails stay as written (B3, B4,
-// B23). Render fails only for an unknown encoding and when ctx is canceled
-// or its deadline passes (B24).
+// B23). Render fails only for an unknown encoding, for a scope that lacks
+// what a render needs (ErrInvalidScope) and when ctx is canceled or its
+// deadline passes (B24).
 func (e *Engine) Render(ctx context.Context, t Template, s *Scope, enc Encoding) (string, error) {
 	if !enc.valid() {
 		return "", fmt.Errorf("render template: unknown encoding %d", int(enc))
+	}
+	if err := s.check(); err != nil {
+		return "", fmt.Errorf("render template: %w", err)
 	}
 	return e.render(ctx, t, s.forRender(), enc)
 }

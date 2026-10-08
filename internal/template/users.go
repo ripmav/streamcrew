@@ -51,12 +51,10 @@ func userSubjects(users Users) map[string]subject {
 		"user": func(_ context.Context, s *Scope) (user.User, bool, error) {
 			return deref(s.User)
 		},
-		// Without a target, the target is the triggering user.
+		// The command engine sets the target, to the triggering user if
+		// nothing else names one (spec command-engine.md, B81).
 		"targetuser": func(_ context.Context, s *Scope) (user.User, bool, error) {
-			if s.Target != nil {
-				return *s.Target, true, nil
-			}
-			return deref(s.User)
+			return deref(s.Target)
 		},
 		"streameruser":         account(users, StreamerAccount),
 		"botuser":              account(users, BotAccount),

@@ -4,6 +4,7 @@ package expr_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -33,7 +34,7 @@ func FuzzExpression(f *testing.F) {
 			assert.ErrorIs(t, err, expr.ErrInvalid)
 			return
 		}
-		r, err := x.Eval(t.Context(), e, &template.Scope{Args: []string{arg, arg}})
+		r, err := x.Eval(t.Context(), e, &template.Scope{Location: time.UTC, ArgDelimiter: "|", Args: []string{arg, arg}, ArgsText: arg + " " + arg})
 		if err != nil {
 			assert.ErrorIs(t, err, expr.ErrEvaluation)
 			return

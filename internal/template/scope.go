@@ -3,6 +3,8 @@
 package template
 
 import (
+	"errors"
+	"fmt"
 	"maps"
 	"strings"
 	"time"
@@ -17,9 +19,11 @@ import (
 // render. Data that holds for the whole profile, such as the stream state,
 // reaches the families through the ports they get in the composition root.
 //
-// The zero value is an empty scope. Render works on a copy with fresh state,
-// so a scope can serve all renders of a run; it must not be changed while a
-// render uses it.
+// A render needs the time zone and the argument delimiter of the profile;
+// Render rejects a scope without them, and one with arguments but without
+// the text they come from (ErrInvalidScope, Code-ADR-0017). No field stands
+// for another value. Render works on a copy with fresh state, so a scope can
+// serve all renders of a run; it must not be changed while a render uses it.
 type Scope struct {
 	// Platform is the platform the run was triggered on; empty if none.
 	Platform platform.Name
@@ -27,7 +31,9 @@ type Scope struct {
 	// timer.
 	User *user.User
 	// Target is the user the run is about, e.g. the one the first argument
-	// mentions; nil means the triggering user (B60).
+	// mentions; nil if the run has none. The command engine sets it, to the
+	// triggering user if nothing else names one (spec command-engine.md,
+	// B81).
 	Target *user.User
 	// CommandName is the name of the running command.
 	CommandName string
@@ -40,12 +46,13 @@ type Scope struct {
 	// Args are the arguments of the run: the words after the trigger, with
 	// quoted text as one argument.
 	Args []string
-	// ArgsText is the text after the trigger as written; empty means the
-	// arguments joined by spaces.
+	// ArgsText is the text after the trigger as written; empty if there is
+	// none. It must not be empty if there are arguments.
 	ArgsText string
-	// ArgDelimiter separates the delimited arguments; empty means "|".
+	// ArgDelimiter separates the delimited arguments, from the settings of
+	// the profile; it is required.
 	ArgDelimiter string
-	// Location is the time zone of the profile (B40); nil means UTC.
+	// Location is the time zone of the profile (B40); it is required.
 	Location *time.Location
 
 	values map[string]Value
@@ -129,12 +136,29 @@ func (s *Scope) Memo[T any](key string, fn func() (T, error)) (T, error) {
 	return v, err
 }
 
-// forRender returns a copy of s with fresh render state; s may be nil.
-func (s *Scope) forRender() *Scope {
-	var c Scope
-	if s != nil {
-		c = *s
+// ErrInvalidScope is returned by Render and RenderEach for a scope that
+// lacks what a render needs.
+var ErrInvalidScope = errors.New("invalid template scope")
+
+// check reports why s cannot be rendered with, if it cannot.
+func (s *Scope) check() error {
+	switch {
+	case s == nil:
+		return fmt.Errorf("%w: no scope", ErrInvalidScope)
+	case s.Location == nil:
+		return fmt.Errorf("%w: no time zone", ErrInvalidScope)
+	case s.ArgDelimiter == "":
+		return fmt.Errorf("%w: no argument delimiter", ErrInvalidScope)
+	case len(s.Args) > 0 && s.ArgsText == "":
+		return fmt.Errorf("%w: arguments without the text after the trigger", ErrInvalidScope)
+	default:
+		return nil
 	}
+}
+
+// forRender returns a copy of s with fresh render state; s is checked.
+func (s *Scope) forRender() *Scope {
+	c := *s
 	c.render = &renderState{}
 	return &c
 }

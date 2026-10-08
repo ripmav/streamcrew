@@ -42,23 +42,25 @@ func FuzzRender(f *testing.F) {
 	)
 	require.NoError(f, err)
 	mvp := template.New(all, template.WithSources(template.CounterSource(counters)))
-	scope := template.Scope{
+	full := template.Scope{
+		Location: time.UTC, ArgDelimiter: "|",
 		Platform: platform.Twitch,
 		User:     &alice,
 		Target:   &bob,
 		Message:  "!cmd a b | c Kappa",
 		Emotes:   []string{"Kappa"},
 		Args:     []string{"a", "b", "|", "c", "Kappa"},
+		ArgsText: "a b | c Kappa",
 	}
 	f.Fuzz(func(t *testing.T, text string) {
 		tmpl := template.Parse(text)
 		assert.Equal(t, text, tmpl.String())
 		for _, enc := range []template.Encoding{template.Text, template.URL, template.HTML, template.JSON} {
-			out, err := empty.Render(t.Context(), tmpl, nil, enc)
+			out, err := empty.Render(t.Context(), tmpl, new(scope()), enc)
 			require.NoError(t, err)
 			assert.Equal(t, text, out, "without identifiers the output equals the input")
 
-			for _, out := range []string{renderNoError(t, e, tmpl, nil, enc), renderNoError(t, mvp, tmpl, &scope, enc)} {
+			for _, out := range []string{renderNoError(t, e, tmpl, new(scope()), enc), renderNoError(t, mvp, tmpl, &full, enc)} {
 				if utf8.ValidString(text) {
 					assert.True(t, utf8.ValidString(out), "the output of valid UTF-8 is valid UTF-8")
 				}

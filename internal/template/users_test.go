@@ -116,11 +116,13 @@ func TestUserFamily_Golden_B42_B60(t *testing.T) {
 		sleepUntil(time.Date(2009, time.June, 15, 17, 45, 20, 0, time.UTC))
 		alice, bob, users := testUsers()
 		s := template.Scope{
-			Platform: platform.Twitch,
-			User:     &alice,
-			Target:   &bob,
-			Args:     []string{"@Bob", "chessqueen", "nobody"},
-			Location: profileZone(),
+			ArgDelimiter: "|",
+			Platform:     platform.Twitch,
+			User:         &alice,
+			Target:       &bob,
+			Args:         []string{"@Bob", "chessqueen", "nobody"},
+			ArgsText:     "@Bob chessqueen nobody",
+			Location:     profileZone(),
 		}
 		renderGolden(t, template.New(userRegistry(t, users)), &s, "user")
 	})
@@ -137,7 +139,7 @@ func TestUserFamily_RandomUserOncePerRender_B22(t *testing.T) {
 		users.chatters = append(users.chatters, twitchUser(id.New().String(), name, strings.ToUpper(name)))
 	}
 	e := template.New(userRegistry(t, users))
-	s := template.Scope{Platform: platform.Twitch}
+	s := template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch}
 	seen := map[string]bool{}
 	for range 40 {
 		users.chatterCalls.Store(0)
@@ -158,19 +160,19 @@ func TestUserFamily_NoUsers(t *testing.T) {
 	const text = "$username $targetusername $streamerusername $botusername $arg1username $randomusername"
 
 	e := template.New(userRegistry(t, nil))
-	assert.Equal(t, text, render(t, e, text, nil), "no run data and no port")
+	assert.Equal(t, text, render(t, e, text, new(scope())), "no run data and no port")
 
-	s := template.Scope{Platform: platform.Twitch, User: &alice, Args: []string{"bob"}}
-	assert.Equal(t, "alice_99 alice_99 $streamerusername $botusername $arg1username $randomusername", render(t, e, text, &s),
-		"without a target the target is the triggering user")
+	s := template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch, User: &alice, Args: []string{"bob"}, ArgsText: "bob"}
+	assert.Equal(t, "alice_99 $targetusername $streamerusername $botusername $arg1username $randomusername", render(t, e, text, &s),
+		"without a target, the target identifiers have no value; the command engine sets the target (spec command-engine.md, B81)")
 
 	e = template.New(userRegistry(t, users))
-	assert.Equal(t, "$arg1username", render(t, e, "$arg1username", &template.Scope{Platform: platform.Twitch, Args: []string{"@"}}))
+	assert.Equal(t, "$arg1username", render(t, e, "$arg1username", &template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch, Args: []string{"@"}, ArgsText: "@"}))
 
 	users.chatters = []user.User{users.chatters[0]} // only the excluded Carol
 	e = template.New(userRegistry(t, users))
-	assert.Equal(t, "$randomusername $arg1user", render(t, e, "$randomusername $arg1user", &template.Scope{Platform: platform.Kick}))
-	assert.Equal(t, "$streamerusername", render(t, e, "$streamerusername", &template.Scope{Platform: platform.Kick}))
+	assert.Equal(t, "$randomusername $arg1user", render(t, e, "$randomusername $arg1user", &template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Kick}))
+	assert.Equal(t, "$streamerusername", render(t, e, "$streamerusername", &template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Kick}))
 }
 
 func TestUserFamily_Error_B23(t *testing.T) {
@@ -179,7 +181,7 @@ func TestUserFamily_Error_B23(t *testing.T) {
 	users.err = errors.New("user service unavailable")
 	logger, logs := logBuffer()
 	e := template.New(userRegistry(t, users), template.WithLogger(logger))
-	s := template.Scope{Platform: platform.Twitch, Args: []string{"bob"}}
+	s := template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch, Args: []string{"bob"}, ArgsText: "bob"}
 	assert.Equal(t, "$randomusername $streamerusername $arg1username", render(t, e, "$randomusername $streamerusername $arg1username", &s))
 	assert.Equal(t, 3, strings.Count(logs.String(), "user service unavailable"), logs.String())
 }
@@ -201,17 +203,17 @@ func TestUserFamily_Properties(t *testing.T) {
 		text  string
 		want  string
 	}{
-		{"singular units", template.Scope{User: &u}, "$usertime", "1 Hour & 1 Min"},
-		{"negative amount", template.Scope{User: &u}, "$usertotalamountdonated", "-0.05"},
-		{"same name in other case", template.Scope{User: &u}, "$userfulldisplayname", "zed"},
-		{"banned is the primary role", template.Scope{User: &u}, "$userprimaryrole|$usertitle|$userroles", "Banned|Banned|VIP, Banned"},
-		{"end of a shorter month", template.Scope{User: &u}, "$userfollowage|$userfollowdays|$userfollowmonths", "1 Month, 1 Day|29|1"},
-		{"today", template.Scope{User: &u}, "$usersubage|$usersubdays", "0 Days|0"},
-		{"date in the future", template.Scope{User: &u}, "$useraccountage|$useraccountdays", "0 Days|0"},
-		{"identity of another platform", template.Scope{User: &u, Platform: platform.Kick}, "$username|$userurl", "Zed|https://www.twitch.tv/Zed"},
-		{"no identity", template.Scope{User: &noIdentity}, "$username|$userroles|$usertitle|$userid|$usersubtier", "$username|User|Guest|$userid|$usersubtier"},
-		{"never seen", template.Scope{User: &noIdentity}, "$userlastseendate|$userlastseenage", "$userlastseendate|$userlastseenage"},
-		{"all roles", template.Scope{User: &everything}, "$userroles", "Streamer, Editor, Moderator, Platform Staff, Subscriber, VIP, Regular, Follower, Creator, Banned"},
+		{"singular units", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$usertime", "1 Hour & 1 Min"},
+		{"negative amount", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$usertotalamountdonated", "-0.05"},
+		{"same name in other case", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$userfulldisplayname", "zed"},
+		{"banned is the primary role", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$userprimaryrole|$usertitle|$userroles", "Banned|Banned|VIP, Banned"},
+		{"end of a shorter month", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$userfollowage|$userfollowdays|$userfollowmonths", "1 Month, 1 Day|29|1"},
+		{"today", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$usersubage|$usersubdays", "0 Days|0"},
+		{"date in the future", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u}, "$useraccountage|$useraccountdays", "0 Days|0"},
+		{"identity of another platform", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &u, Platform: platform.Kick}, "$username|$userurl", "Zed|https://www.twitch.tv/Zed"},
+		{"no identity", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &noIdentity}, "$username|$userroles|$usertitle|$userid|$usersubtier", "$username|User|Guest|$userid|$usersubtier"},
+		{"never seen", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &noIdentity}, "$userlastseendate|$userlastseenage", "$userlastseendate|$userlastseenage"},
+		{"all roles", template.Scope{Location: time.UTC, ArgDelimiter: "|", User: &everything}, "$userroles", "Streamer, Editor, Moderator, Platform Staff, Subscriber, VIP, Regular, Follower, Creator, Banned"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

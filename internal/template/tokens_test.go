@@ -39,7 +39,7 @@ func TestEngine_RenderEach_B21(t *testing.T) {
 	var calls atomic.Int64
 	family := template.Family{Name: "count", Identifiers: []template.Identifier{{Name: "score", Resolve: counting("21", &calls)}}}
 	e := template.New(newRegistry(t, family))
-	var s template.Scope
+	s := scope()
 	s.SetValue("text", template.TextValue("1)+(2"))
 
 	var ts []template.Template
@@ -51,12 +51,12 @@ func TestEngine_RenderEach_B21(t *testing.T) {
 	assert.Equal(t, []string{"21", "21", "210", "1)+(2", "$arg3text", "score: 21 <b>", ""}, texts)
 	assert.Equal(t, int64(1), calls.Load(), "all templates share one render")
 
-	texts, err = e.RenderEach(t.Context(), nil, nil)
+	texts, err = e.RenderEach(t.Context(), nil, new(scope()))
 	require.NoError(t, err)
 	assert.Empty(t, texts)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err = e.RenderEach(ctx, ts, nil)
+	_, err = e.RenderEach(ctx, ts, new(scope()))
 	require.ErrorIs(t, err, context.Canceled)
 }

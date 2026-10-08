@@ -16,7 +16,7 @@ import (
 // B70–B73, B78).
 func TestRender_Golden(t *testing.T) {
 	t.Parallel()
-	renderGolden(t, template.New(newRegistry(t)), nil, "syntax")
+	renderGolden(t, template.New(newRegistry(t)), new(scope()), "syntax")
 }
 
 func TestParse_String(t *testing.T) {
@@ -50,7 +50,7 @@ func TestRender_TokensStay(t *testing.T) {
 	} {
 		t.Run(text, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, text, render(t, e, text, nil))
+			assert.Equal(t, text, render(t, e, text, new(scope())))
 		})
 	}
 }
@@ -59,11 +59,11 @@ func TestRender_TokensStay(t *testing.T) {
 func TestRender_ZeroValues(t *testing.T) {
 	t.Parallel()
 	var tmpl template.Template
-	out, err := template.New(nil).Render(t.Context(), tmpl, nil, template.Text)
+	out, err := template.New(nil).Render(t.Context(), tmpl, new(scope()), template.Text)
 	require.NoError(t, err)
 	assert.Empty(t, out)
 
-	var s template.Scope
+	s := scope()
 	s.SetValue("Name", template.TextValue("Alice"))
 	assert.Equal(t, "Hi Alice", render(t, template.New(nil), "Hi $name", &s))
 }
