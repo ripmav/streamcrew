@@ -192,6 +192,8 @@ const (
 // Engine runs commands. It is safe for concurrent use.
 type Engine struct {
 	commands        Commands
+	requirements    Requirements
+	users           Users
 	publisher       Publisher
 	logger          *slog.Logger
 	config          func(context.Context) (Config, error)
@@ -205,6 +207,11 @@ type Engine struct {
 	phase phase
 	// paused holds back all queued instances (B40).
 	paused bool
+	// entrancePaused holds back entrance commands (B41).
+	entrancePaused bool
+	// reserved are places in the queue taken by triggers whose
+	// requirements are being checked (B15).
+	reserved int
 	// pending are the waiting instances in queue order.
 	pending []*instance
 	// active are the pending and running instances.
@@ -215,6 +222,10 @@ type Engine struct {
 	history []*instance
 	// changed is closed and replaced whenever an instance ends.
 	changed chan struct{}
+	// errorUntil holds back the error messages of unmet requirements per
+	// command and requirement type, globalErrorUntil all of them (B12).
+	errorUntil       map[id.ID]map[string]time.Time
+	globalErrorUntil time.Time
 }
 
 // New returns an engine that loads commands from commands, e.g. to replay
@@ -233,6 +244,7 @@ func New(commands Commands, opts ...Option) (*Engine, error) {
 		active:          make(map[id.ID]*instance),
 		held:            make(map[string]struct{}),
 		changed:         make(chan struct{}),
+		errorUntil:      make(map[id.ID]map[string]time.Time),
 	}
 	var errs []error
 	for _, opt := range opts {
@@ -299,7 +311,7 @@ func (e *Engine) Run(ctx context.Context) error {
 // also a disabled command, and without its requirements, costs and
 // cooldowns. It returns the ID of the instance.
 func (e *Engine) Start(ctx context.Context, cmd command.Command, p Params) (id.ID, error) {
-	return e.queue(ctx, cmd, SourceManual, p)
+	return e.queue(ctx, cmd, SourceManual, e.lookupTarget(ctx, p))
 }
 
 // Replayed is the result of replaying one instance (B54).
@@ -373,7 +385,8 @@ func (e *Engine) CancelAll(ctx context.Context) {
 
 // Pause pauses scope until Resume. PauseAll holds back all queued
 // instances (B40): none starts, not even an unlocked one; running instances
-// go on, and commands are still queued. Pausing again does nothing.
+// go on, and commands are still queued. PauseEntrance lets Trigger drop
+// entrance commands (B41). Pausing again does nothing.
 func (e *Engine) Pause(ctx context.Context, scope PauseScope) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -417,6 +430,8 @@ func (e *Engine) pausedLocked(scope PauseScope) (*bool, error) {
 	switch scope {
 	case PauseAll:
 		return &e.paused, nil
+	case PauseEntrance:
+		return &e.entrancePaused, nil
 	default:
 		return nil, fmt.Errorf("%w %q", ErrUnknownPauseScope, scope)
 	}
@@ -454,27 +469,36 @@ func (e *Engine) queue(ctx context.Context, cmd command.Command, src Source, p P
 	if err != nil {
 		return id.ID{}, fmt.Errorf("queue command %q: %w", cmd.Name, err)
 	}
+	return e.enqueue(ctx, cmd, src, p, cfg, admission{})
+}
+
+// admission says how an instance enters the queue.
+type admission struct {
+	// reserved means the instance has a place from reserveLocked.
+	reserved bool
+	// whileStopping takes the instance while the core stops, for the events
+	// at shutdown (B55).
+	whileStopping bool
+}
+
+// enqueue queues an instance of cmd with the settings cfg; cmd and p are
+// checked.
+func (e *Engine) enqueue(ctx context.Context, cmd command.Command, src Source, p Params, cfg Config, adm admission) (id.ID, error) {
 	locks, err := e.locks(cmd, cfg.Commands.LockMode)
-	if err != nil {
-		return id.ID{}, fmt.Errorf("queue command %q: %w", cmd.Name, err)
-	}
-	in := newInstance(cmd, src, withTarget(p), cfg, locks)
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	switch e.phase {
-	case phaseIdle:
-		return id.ID{}, fmt.Errorf("queue command %q: %w", cmd.Name, ErrNotRunning)
-	case phaseRunning:
-	default:
-		return id.ID{}, fmt.Errorf("queue command %q: %w", cmd.Name, ErrClosed)
+	if adm.reserved {
+		e.reserved--
 	}
-	if len(e.pending) >= MaxPending {
-		e.logger.WarnContext(ctx, "command queue full, command dropped",
-			"command", cmd.Name, "source", src, "pending", len(e.pending))
-		return id.ID{}, fmt.Errorf("queue command %q: %w", cmd.Name, ErrQueueFull)
+	if err != nil {
+		return id.ID{}, fmt.Errorf("queue command %q: %w", cmd.Name, err)
+	}
+	if err := e.admitLocked(ctx, cmd, src, adm); err != nil {
+		return id.ID{}, err
 	}
 
+	in := newInstance(cmd, src, withTarget(p), cfg, locks)
 	// The instance outlives the request that queued it; it ends through its
 	// own cancel function.
 	ictx, cancel := context.WithCancel(context.WithoutCancel(ctx))
@@ -515,6 +539,11 @@ func checkRun(cmd command.Command, p Params) error {
 	if slices.Contains(cmd.Actions, nil) {
 		return fmt.Errorf("%w: empty action", ErrInvalidCommand)
 	}
+	return checkParams(p)
+}
+
+// checkParams checks that the fields of p agree with each other.
+func checkParams(p Params) error {
 	if len(p.Args) > 0 && p.ArgsText == "" {
 		return fmt.Errorf("%w: arguments without the text after the trigger", ErrInvalidParams)
 	}
@@ -531,6 +560,36 @@ func withTarget(p Params) Params {
 		p.Target = p.User
 	}
 	return p
+}
+
+// admitLocked checks that an instance of cmd may enter the queue: the
+// engine runs, and, unless the instance has a place already, the queue has
+// room (B15). e.mu is held.
+func (e *Engine) admitLocked(ctx context.Context, cmd command.Command, src Source, adm admission) error {
+	switch {
+	case e.phase == phaseRunning, e.phase == phaseStopping && adm.whileStopping:
+	case e.phase == phaseIdle:
+		return fmt.Errorf("queue command %q: %w", cmd.Name, ErrNotRunning)
+	default:
+		return fmt.Errorf("queue command %q: %w", cmd.Name, ErrClosed)
+	}
+	if !adm.reserved && len(e.pending)+e.reserved >= MaxPending {
+		e.logger.WarnContext(ctx, "command queue full, command dropped",
+			"command", cmd.Name, "source", src, "pending", len(e.pending))
+		return fmt.Errorf("queue command %q: %w", cmd.Name, ErrQueueFull)
+	}
+	return nil
+}
+
+// reserveLocked takes a place in the queue for an instance of cmd before
+// its requirements are checked, so that a full queue drops the command
+// before it costs anything (B15, B108). e.mu is held.
+func (e *Engine) reserveLocked(ctx context.Context, cmd command.Command, src Source, adm admission) error {
+	if err := e.admitLocked(ctx, cmd, src, adm); err != nil {
+		return err
+	}
+	e.reserved++
+	return nil
 }
 
 // await waits until in gets its locks, then runs it. If in is canceled while
