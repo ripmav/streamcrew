@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Status** | Geprüft |
-| **Stand** | 2026-09-30 |
+| **Stand** | 2026-10-01 |
 | **Bezug** | Roadmap Phase 3.1; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0009](../adr/code/0009-ids-und-zeit.md), [Code-ADR-0012](../adr/code/0012-template-engine.md); Plan §3, §6.10, Anhang A.6; [`commands.md`](commands.md), [`counters-and-quotes.md`](counters-and-quotes.md), [`events.md`](events.md), [`users-and-roles.md`](users-and-roles.md) |
-| **Umsetzung** | `internal/template`: Kern mit Syntax, Quellen, Auswertung, Kodierung, `$linebreak` und `$unicode<n>` (B1–B7, B10–B12, B20, B21, B23, B24, B30–B33); alle Identifier-Familien des MVP (B22, B40–B43, B60); `internal/expr`: Ausdrücke (B50–B52) |
+| **Umsetzung** | `internal/template`: Kern mit Syntax, Quellen, Auswertung, Kodierung, `$linebreak` und `$unicode<n>` (B1–B7, B10–B12, B20, B21, B23, B24, B30–B33); alle Identifier-Familien des MVP (B22, B40–B43, B60); `internal/expr`: Ausdrücke (B50–B52); globale Werte der Special-Identifier-Action als Quelle `template.Globals` (B10) |
 
 ## Zweck und Umfang
 
@@ -199,3 +199,4 @@ Die Tabellen nennen die Namen, die das MVP (Roadmap 3.1) auflöst. Alle Namen si
 | 2026-09-30 | Ausdrücke umgesetzt (`internal/expr`). Festlegungen dabei: Die Sprache ist, was B50 nennt: Zahlen, Text in Anführungszeichen für Vergleiche, `+ - * / %`, die Potenz mit `^` und `**`, Klammern, Vergleiche, `and`, `or`, `not` (auch `&&`, `\|\|`, `!`) und die Funktionen `abs`, `ceil`, `floor`, `round`, `min`, `max`; alles andere lehnt der Core beim Kompilieren ab. Alle Zahlen sind Gleitkommazahlen; `%` ist der Rest mit dem Vorzeichen des Dividenden, auch für Kommazahlen. Ein Wert zählt als Zahl, wenn er eine Dezimalzahl ist, auch mit Exponent; hexadezimale Zahlen, `Inf`, `NaN`, `true` und `false` sind Text (B51). Ein Identifier ohne Wert ist sein eigener Text (B4). Text in Anführungszeichen mit Identifiern, etwa `"$arg1text"`, wird als Ganzes gerendert und ist immer Text; Escape-Sequenzen sind darin nicht erlaubt. Ein `$` ohne Identifier-Namen außerhalb von Anführungszeichen ist ein Fehler. Division durch 0 und Ergebnisse außerhalb der Gleitkommazahlen sind Fehler (B52). Grenzen: 500 Knoten im Syntaxbaum, ein Speicherbudget von 10 000 Einheiten. |
 | 2026-09-30 | Die Locale-Einstellung kommt mit ADR-0022 in Roadmap 3.6 statt 3.2 (B41; Entscheidung des Projektinhabers). |
 | 2026-09-30 | Nach Code-ADR-0017 bereinigt, ohne Änderung des Verhaltens in einem Durchlauf der Engine: Ein Rendervorgang braucht die Zeitzone und das Trennzeichen des Profils; ein Scope ohne sie oder mit Argumenten ohne den Text, aus dem sie stammen, wird abgelehnt (`template.ErrInvalidScope`), statt auf UTC, `|` oder die Argumente mit Leerzeichen zu fallen. Den Zielnutzer setzt die Command-Engine, ohne anderes Ziel den auslösenden Nutzer ([`command-engine.md`](command-engine.md), B81); ein Scope ohne Ziel hat für `$targetuser…` keinen Wert. |
+| 2026-10-01 | Globale Werte als Quelle umgesetzt (`template.Globals`, B10): Die Special-Identifier-Action setzt sie ([`actions.md`](actions.md), B56, B57); sie ranken nach den Werten des Durchlaufs und vor den Countern, ihre Namen gelten unabhängig von der Schreibweise. `template.FormatSpan` gibt Zeitspannen nach B42 auch für die Textfunktionen `datefrom` und `dateto` aus. |

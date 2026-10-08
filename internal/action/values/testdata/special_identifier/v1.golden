@@ -1,0 +1,9 @@
+{
+  "type": "special_identifier",
+  "schemaVersion": 1,
+  "enabled": true,
+  "kind": "text",
+  "name": "greeting",
+  "value": "Hello toupper($arg1text)",
+  "global": false
+}
