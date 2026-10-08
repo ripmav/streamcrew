@@ -8,7 +8,7 @@
 
 ## Status
 
-Phase 1 (Fundament) und Phase 2 (Domäne und Persistenz) sind abgeschlossen. In Phase 3 stehen die Template-Engine, die Command-Engine, das Action-Framework mit allen 15 plattformneutralen P0-Actions, die Anforderungen und Commands als Code; der Core führt Commands aus, und die Mock-Plattform liefert Chat und Events für Tests und Demos. Es folgen die Mock-Konsole, die Rechenfunktionen der Templates und die Locale-Formate. `streamcrew serve` startet mit dem aktiven Profil, meldet sich über `/healthz` und `/readyz` gesund und beendet sich sauber. Den Stand zeigt die [Roadmap](docs/roadmap.md).
+Phase 1 (Fundament) und Phase 2 (Domäne und Persistenz) sind abgeschlossen. In Phase 3 stehen die Template-Engine, die Command-Engine, das Action-Framework mit allen 15 plattformneutralen P0-Actions, die Anforderungen und Commands als Code; der Core führt Commands aus, und die Mock-Plattform liefert Chat und Events für Tests und Demos. Die Mock-Konsole `streamcrew mock` startet den Core in einem Prozess gegen eine Kopie des Profils — mit simulierten Chat-Nachrichten, Events und dem Stream; die Kopie wird am Ende verworfen. Es folgen die Rechenfunktionen der Templates und die Locale-Formate. `streamcrew serve` startet mit dem aktiven Profil, meldet sich über `/healthz` und `/readyz` gesund und beendet sich sauber. Den Stand zeigt die [Roadmap](docs/roadmap.md).
 
 Das Repository ist privat. Nur der Projektinhaber schaltet es öffentlich.
 
