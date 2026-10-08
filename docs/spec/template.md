@@ -17,7 +17,7 @@ Nicht Teil dieser Spezifikation:
 
 - die Textfunktionen der Special-Identifier-Action (etwa Groß- und Kleinschreibung, Ersetzen, Datumsrechnung) und die Vergleiche der Conditional-Action; sie kommen mit den Actions (Roadmap 3.3)
 - Identifier, deren Quelle erst später entsteht: plattformspezifische Werte (Twitch Phase 4, weitere Plattformen im Backlog der Roadmap), Währungen, Ränge und Inventare (Phase 8), Spenden und Integrationen (Phase 9). Sie folgen denselben Regeln und werden mit ihrer Phase ergänzt.
-- die Übersetzung von Texten der Oberfläche (ADR-0022, Roadmap 3.6)
+- die Übersetzung von Texten der Oberfläche ([ADR-0022](../adr/0022-internationalisierung.md))
 
 ## Begriffe
 
