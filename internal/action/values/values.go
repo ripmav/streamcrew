@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: MIT
 
 // Package values has the action types that change values (spec
-// actions.md, B40 to B57): counter now, special_identifier to follow. They
-// belong to the category "values" (Code-ADR-0013).
+// actions.md, B40 to B57): counter changes counters, special_identifier
+// sets values of the run and global values. They belong to the category
+// "values" (Code-ADR-0013).
+//
+// The text functions of special_identifier are in internal/textfunc, its
+// calculations in internal/expr, and the global values in
+// template.Globals, which the template engine reads as a source.
 package values
 
 import (
@@ -74,10 +79,14 @@ type Counters interface {
 
 // Ports are what the value types need.
 type Ports struct {
-	// Templates renders the identifiers in the expressions of amounts.
+	// Templates renders the identifiers in the expressions of amounts and
+	// in the values of special identifiers.
 	Templates *template.Engine
 	// Counters changes counters.
 	Counters Counters
+	// Globals holds the global values; the composition root passes the
+	// same template.Globals to the template engine as its first source.
+	Globals Globals
 }
 
 // ports are the ports of the value types.
@@ -92,6 +101,8 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("value action types: no template engine")
 	case p.Counters == nil:
 		return nil, errors.New("value action types: no counters")
+	case p.Globals == nil:
+		return nil, errors.New("value action types: no global values")
 	}
 	ports := &ports{Ports: p}
 	return []action.Descriptor{
@@ -109,6 +120,14 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 				c.Amount = action.Fixed(1)
 			}
 			return c, true
+		}),
+		action.Descriptor{
+			Type:     TypeSpecialIdentifier,
+			Version:  1,
+			Category: action.CategoryValues,
+			Schema:   specialIdentifierSchema(),
+		}.WithKinds(SpecialText, func(k SpecialKind) (SpecialIdentifier, bool) {
+			return SpecialIdentifier{Common: action.On(), Kind: k, ports: ports}, k.Valid()
 		}),
 	}, nil
 }

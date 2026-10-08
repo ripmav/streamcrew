@@ -27,6 +27,8 @@
    - Muster (`arg<n>text`, `randomnumber<min>:<max>`, `unicode<n>` …) sind kleine Parser-Funktionen, die ein Token prüfen und die Länge ihres Treffers und ihre Zahlen liefern; keine regulären Ausdrücke.
    - Dynamische Quellen fragt die Engine über ein kleines Interface nach bekannten Namen.
    - Unter allen Quellen gewinnt der längste Treffer; bei gleicher Länge die Rangfolge der Spezifikation (B10, B11).
+
+   *Ergänzt am 2026-10-01 für die Special-Identifier-Action ([`actions.md`](../../spec/actions.md), B56, B57): Die globalen Werte sind die Quelle `template.Globals`. Die Composition Root gibt sie der Engine als erste Quelle vor den Countern und dieselbe Instanz der Action über den Port `values.Globals`; das kommt mit dem Einbau der Action-Typen in den App-Start. Sie liegen nur im Speicher, sind sicher für gleichzeitigen Zugriff und fassen höchstens `template.MaxGlobals` (10 000) Namen.*
 3. **Registry und Resolver:**
    - Eine `Registry` enthält die eingebauten Identifier und Muster. Sie wird in der Composition Root aus Listenfunktionen der Familien gebaut, z. B. `template.UserFamily()`, nicht per `init()` ([Code-ADR-0002](0002-dependency-injection.md)).
    - Ein Resolver ist eine Funktion `func(ctx context.Context, s *Scope) (Value, bool, error)`. `false` heißt „kein Wert“; der Identifier bleibt dann stehen (Spezifikation B4).
@@ -54,6 +56,8 @@
    *Präzisiert am 2026-09-30: Ein Prüfer auf dem Syntaxbaum lässt nur zu, was die Spezifikation in B50 nennt, und lehnt etwa Arrays, Zugriffe auf Felder, Bereiche und weitere Funktionen ab. Alle Zahlen sind `float64`, auch die Zahlen im Ausdruck selbst; `%` ersetzt ein Patch durch `math.Mod`, weil `expr` den Rest nur für ganze Zahlen kennt. Die Variablen sind beim Kompilieren nicht typisiert (`AllowUndefinedVariables`), ihre Namen prüft der Prüfer. Text in Anführungszeichen mit Identifiern wird als Ganzes zu einer Text-Variablen. Alle Identifier eines Ausdrucks löst ein Rendervorgang auf (`template.Engine.RenderEach`, B21). Ergebnisse, die keine endliche Zahl sind, gelten als Fehler.*
 
    *Ergänzt am 2026-10-01 für die Bedingung ([`actions.md`](../../spec/actions.md), B22, B24, B27): `Expression.Templates` und `Expression.EvalWithTexts` lassen einen Aufrufer die Identifier eines Ausdrucks zusammen mit anderen Templates in einem Rendervorgang auflösen. `template.Engine.RenderEach` meldet je Template, ob jedes Token einen Wert bekommen hat (`template.Rendered.Replaced`), für den Vergleich `replaced`. `expr.ParseNumber` stellt die Regel aus B51, was als Zahl gilt, auch dem Vergleich der Bedingung bereit.*
+
+   *Ergänzt am 2026-10-01 für die Textfunktionen der Special-Identifier-Action ([`actions.md`](../../spec/actions.md), B52–B55): Sie liegen im Paket `internal/textfunc`, das wie `internal/expr` arbeitet. `textfunc.Parse` liest die Struktur vor dem Einsetzen der Identifier, `Text.Templates` und `Text.EvalWithTexts` lassen den Aufrufer alle Texte in einem Rendervorgang auflösen. Zeitspannen für `datefrom` und `dateto` formatiert `template.FormatSpan`, damit die Formate nach Punkt 7 in `internal/template` bleiben.*
 9. **Tests** ([Code-ADR-0006](0006-teststrategie.md)): Golden Files mit Template, Kontext und Ausgabe je Familie in `internal/template/testdata`; tabellengetriebene Tests für Rangfolge, Kodierung und Randfälle; `testing/synctest` für Datum, Zeit und Uptime; Fuzz-Tests für `Parse` und `Render` (keine Panics, ohne bekannte Identifier gleich der Eingabe) und für Ausdrücke; ein Benchmark für das Rendern.
 
 ## Betrachtete Alternativen
@@ -94,5 +98,5 @@
 - [x] Familien für Argumente, Nachricht, Datum und Zeit, Zufallszahlen, Stream, Counter, Ereigniswerte, Command-Name und Plattform, erledigt 2026-09-30
 - [x] Nutzer-Familien mit Zufallsnutzer (Roadmap 3.1), erledigt 2026-09-30
 - [x] `internal/expr` umsetzen (Roadmap 3.1); `expr-lang/expr` 1.17.8 in `go.mod` aufgenommen, Lizenzprüfung grün, erledigt 2026-09-30
-- [ ] Die Special-Identifier-Action (Roadmap 3.3) setzt lokale und globale Werte über die Quellen aus Punkt 2
+- [x] Die Special-Identifier-Action (Roadmap 3.3) setzt lokale und globale Werte über die Quellen aus Punkt 2, erledigt 2026-10-01
 - [ ] Namen und Eigenschaften nach der rechtlichen Einschätzung (Gate O, O.1) bestätigen oder austauschen
