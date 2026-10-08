@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Geprüft |
-| **Stand** | 2026-09-29 |
+| **Stand** | 2026-10-02 |
 | **Bezug** | Roadmap Phase 2.2 (Nutzer, Rollenmodell), 5.2; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0009](../adr/code/0009-ids-und-zeit.md); Plan §5.5, §6.13, Anhang A.6, A.7 |
 | **Umsetzung** | Datenmodell und Rollen umgesetzt: `internal/domain/role`, `internal/domain/user`, `internal/domain/platform`, Repository in `internal/store`. Offen: Standardtitel (B5) und Vergabe der Regular-Rolle (B26) mit Phase 5.2, nutzerspezifische Chat-Commands (B8, P1), Import (B11, P2) |
 
@@ -42,7 +42,7 @@ Nicht Teil dieser Spezifikation:
 | B5 | Ein Nutzer kann einen eigenen Titel haben, den der Streamer vergibt. Ohne eigenen Titel gilt ein Standardtitel, abgeleitet aus Rolle bzw. Rang. | Q1, Q2 (`$usertitle`) |
 | B6 | Ein Nutzer kann Notizen haben (freier Text des Streamers). | Q2 (`$usernotes`) |
 | B7 | Ein Nutzer kann von bestimmten Funktionen ausgenommen werden: Zuwachs und Anforderungen von Währung und Rang, zufällige Auswahl in Spielen, Ranglisten. Diese Ausnahme ist ein einzelnes Merkmal des Nutzers. | Q1, Q2 (`$userisspecialtyexcluded`) |
-| B8 | Ein Nutzer kann auf einen Entrance-Command verweisen, der bei seiner ersten Nachricht in einer Sitzung läuft; dazu kommen später nutzerspezifische Chat-Commands (P1). Das Datenmodell hält nur den Verweis auf die Commands. | Q1, Q9 |
+| B8 | Ein Nutzer kann auf einen Entrance-Command verweisen, der bei seiner ersten Nachricht in einer Sitzung läuft, solange der Stream live ist ([`command-engine.md`](command-engine.md), B41); dazu kommen später nutzerspezifische Chat-Commands (P1). Das Datenmodell hält nur den Verweis auf die Commands. | Q1, Q9 |
 | B9 | Gespeicherte Statistiken je Nutzer: Watchtime in Minuten, Zahl gesendeter Chatnachrichten, Zahl ausgeführter Commands, wie oft der Nutzer erwähnt wurde, Zahl gesehener Streams, Zeitpunkt des ersten und letzten Kontakts, Summe der Spenden, Zahl der Moderations-Strikes. | Q2 (Nutzer-Identifier für Zeit, Nachrichten, Commands, Erwähnungen, Streams, zuletzt gesehen, Spenden, Strikes) |
 | B10 | Daten, die die Plattform liefert (Follow-Datum, Abo-Beginn, Abo-Stufe, Kontoalter), werden je Identität zwischengespeichert, mit dem Zeitpunkt der letzten Aktualisierung. | Q2 (`$userfollowage`, `$usersubage`, `$usersubtier`, `$useraccountage`) |
 | B11 | Nutzer lassen sich aus Text- oder Tabellendateien importieren; die Zuordnung der Spalten wählt der Streamer (P2). | Q1 |
@@ -114,3 +114,4 @@ Nicht Teil dieser Spezifikation:
 | 2026-09-29 | Rollen umgesetzt (`internal/domain/role`). Festlegung dabei: Die Hauptrolle eines gebannten Nutzers ist `banned`, auch wenn er weitere Rollen hat (B22 mit B27). Plattformspezifische Rollen zählen auf der Stufe, auf der sie stehen (B20). |
 | 2026-09-29 | Nutzer umgesetzt (`internal/domain/user`). Festlegungen dabei: `regular` gehört zum Nutzer, nicht zu einer Plattform-Identität (B26). Beim erneuten Kontakt übernimmt streamcrew Login, Anzeigename, Chatfarbe und Profilbild (B4); Rollen und Plattformdaten kommen über einen eigenen Abgleich (B10, B42). Spenden werden in Hundertsteln der Hauptwährungseinheit summiert (B9). |
 | 2026-09-30 | Identifier der Nutzer umgesetzt (`internal/template`, Spezifikation Templates, B60). Festlegung dabei: Bis zu den Standardtiteln (B5, Phase 5.2) gilt die Hauptrolle als Titel. |
+| 2026-10-02 | B8: Der Entrance-Command läuft nur, solange der Stream live ist (Entscheidung des Projektinhabers, [`command-engine.md`](command-engine.md), B41). |

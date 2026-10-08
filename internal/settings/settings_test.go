@@ -46,6 +46,7 @@ func TestDefaultsWhenNeverSaved(t *testing.T) {
 		ErrorCooldown:         settings.ErrorCooldownPerCommand,
 		ErrorCooldownDuration: polydoc.Duration(10 * time.Second),
 		ArgDelimiter:          "|",
+		EntranceMediaGap:      polydoc.Duration(5 * time.Second),
 	}, c, "B90")
 }
 
@@ -76,6 +77,7 @@ func TestSaveAndLoad(t *testing.T) {
 		ErrorCooldown:         settings.ErrorCooldownGlobal,
 		ErrorCooldownDuration: polydoc.Duration(time.Minute),
 		ArgDelimiter:          ";",
+		EntranceMediaGap:      polydoc.Duration(1500 * time.Millisecond),
 	}
 	require.NoError(t, settings.Save(ctx, svc, cmds))
 	gotCmds, err := settings.Load(ctx, svc, settings.DefaultCommands())
@@ -83,7 +85,7 @@ func TestSaveAndLoad(t *testing.T) {
 	assert.Equal(t, cmds, gotCmds)
 	doc, _, err = s.Settings(ctx, "commands")
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"type":"commands","schemaVersion":1,"lockMode":"visual_audio","errorCooldown":"global","errorCooldownDuration":"1m0s","argDelimiter":";"}`, string(doc))
+	assert.JSONEq(t, `{"type":"commands","schemaVersion":2,"lockMode":"visual_audio","errorCooldown":"global","errorCooldownDuration":"1m0s","argDelimiter":";","entranceMediaGap":"1.5s"}`, string(doc))
 }
 
 func TestValidation(t *testing.T) {
@@ -101,6 +103,9 @@ func TestValidation(t *testing.T) {
 		withCommands(func(c *settings.Commands) { c.ErrorCooldownDuration = -1 }),
 		withCommands(func(c *settings.Commands) { c.ArgDelimiter = "" }),
 		withCommands(func(c *settings.Commands) { c.ArgDelimiter = "\n" }),
+		withCommands(func(c *settings.Commands) { c.EntranceMediaGap = 0 }),
+		withCommands(func(c *settings.Commands) { c.EntranceMediaGap = polydoc.Duration(999 * time.Millisecond) }),
+		withCommands(func(c *settings.Commands) { c.EntranceMediaGap = polydoc.Duration(time.Minute + time.Millisecond) }),
 	} {
 		assert.Error(t, settings.Save(ctx, svc, s), "%+v", s)
 	}
@@ -123,6 +128,34 @@ func TestCommandsModes(t *testing.T) {
 	}
 	assert.NoError(t, settings.Save(ctx, svc, withCommands(func(c *settings.Commands) { c.ErrorCooldownDuration = 0 })),
 		"0 holds back no message")
+	for _, gap := range []time.Duration{settings.MinEntranceMediaGap, settings.MaxEntranceMediaGap} {
+		assert.NoError(t, settings.Save(ctx, svc, withCommands(func(c *settings.Commands) { c.EntranceMediaGap = polydoc.Duration(gap) })),
+			"B43: %s", gap)
+	}
+}
+
+// TestCommandsVersion1: stored version 1 documents are migrated; they get
+// the default gap of B43.
+func TestCommandsVersion1(t *testing.T) {
+	t.Parallel()
+	v1 := `{"type":"commands","schemaVersion":1,"lockMode":"singular","errorCooldown":"off","errorCooldownDuration":"0s","argDelimiter":";"}`
+	svc, err := settings.New(fakeRepo{doc: []byte(v1)})
+	require.NoError(t, err)
+	got, err := settings.Load(t.Context(), svc, settings.DefaultCommands())
+	require.NoError(t, err)
+	assert.Equal(t, settings.Commands{
+		LockMode:              settings.LockSingular,
+		ErrorCooldown:         settings.ErrorCooldownOff,
+		ErrorCooldownDuration: 0,
+		ArgDelimiter:          ";",
+		EntranceMediaGap:      polydoc.Duration(settings.DefaultEntranceMediaGap),
+	}, got)
+
+	withGap := `{"type":"commands","schemaVersion":1,"lockMode":"singular","errorCooldown":"off","errorCooldownDuration":"0s","argDelimiter":";","entranceMediaGap":"2s"}`
+	svc, err = settings.New(fakeRepo{doc: []byte(withGap)})
+	require.NoError(t, err)
+	_, err = settings.Load(t.Context(), svc, settings.DefaultCommands())
+	require.Error(t, err, "version 1 never had the gap")
 }
 
 // withCommands returns the default commands section changed by edit.

@@ -195,8 +195,11 @@ type Engine struct {
 	phase phase
 	// paused holds back all queued instances (B40).
 	paused bool
-	// entrancePaused holds back entrance commands (B41).
+	// entrancePaused holds back queued greetings (B41).
 	entrancePaused bool
+	// media lets the pictures and sounds of greetings play one after the
+	// other (B43).
+	media mediaGate
 	// reserved are places in the queue taken by triggers whose
 	// requirements are being checked (B15).
 	reserved int
@@ -378,8 +381,9 @@ func (e *Engine) CancelAll(ctx context.Context) {
 
 // Pause pauses scope until Resume. PauseAll holds back all queued
 // instances (B40): none starts, not even an unlocked one; running instances
-// go on, and commands are still queued. PauseEntrance lets Trigger drop
-// entrance commands (B41). Pausing again does nothing.
+// go on, and commands are still queued. PauseEntrance does the same for
+// greetings only, which then hold up no other instance (B41). Pausing again
+// does nothing.
 func (e *Engine) Pause(ctx context.Context, scope PauseScope) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -472,6 +476,8 @@ type admission struct {
 	// whileStopping takes the instance while the core stops, for the events
 	// at shutdown (B55).
 	whileStopping bool
+	// greeting makes the instance a greeting (B41).
+	greeting bool
 }
 
 // enqueue queues an instance of cmd with the settings cfg; cmd and p are
@@ -492,6 +498,9 @@ func (e *Engine) enqueue(ctx context.Context, cmd command.Command, src Source, p
 	}
 
 	in := newInstance(cmd, src, withTarget(p), cfg, locks, org)
+	if adm.greeting {
+		in.greeting = in.id
+	}
 	// The instance outlives the request that queued it; it ends through its
 	// own cancel function.
 	ictx, cancel := context.WithCancel(context.WithoutCancel(ctx))
@@ -624,6 +633,12 @@ func (e *Engine) scheduleLocked(ctx context.Context) {
 	}
 	waiting := e.pending[:0]
 	for _, in := range e.pending {
+		if !in.greeting.IsZero() && e.entrancePaused {
+			// Held back without holding up others: its locks do not block
+			// (B41).
+			waiting = append(waiting, in)
+			continue
+		}
 		free := !slices.ContainsFunc(in.locks, func(l string) bool {
 			_, taken := blocked[l]
 			return taken

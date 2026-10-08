@@ -431,34 +431,48 @@ func TestRunnerParams(t *testing.T) {
 	})
 }
 
-// TestEntrancePause covers B41: while entrance commands are paused, they are
-// not queued; other commands are.
+// TestEntrancePause covers B41 and B110: while greetings are paused, they
+// are queued but do not start and hold up no other instance; they start in
+// their order once neither pause holds them back. Event commands of
+// "chat.user.entrance" are greetings as well.
 func TestEntrancePause(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		f := newFixture(t, settings.LockPerCommandType)
+		f := newFixture(t, settings.LockSingular)
 		defer f.stop()
 		ctx := t.Context()
 
 		welcome := f.command("welcome", command.KindChat, f.journal.note("welcome"))
-		entrance := engine.Request{Command: welcome, Source: engine.SourceChat, Entrance: true}
+		hello := f.command("hello", command.KindEvent, f.journal.note("hello"))
+		other := f.command("other", command.KindChat, f.journal.note("other"))
 		require.NoError(t, f.engine.Pause(ctx, engine.PauseEntrance))
 		assert.True(t, paused(t, f.engine, engine.PauseEntrance))
 		assert.False(t, paused(t, f.engine, engine.PauseAll))
 
-		res, err := f.engine.Trigger(ctx, entrance)
+		res, err := f.engine.Trigger(ctx, engine.Request{Command: welcome, Source: engine.SourceChat, Entrance: true})
 		require.NoError(t, err)
-		assert.Equal(t, engine.Result{Outcome: engine.OutcomeEntrancePaused}, res)
+		require.Equal(t, engine.OutcomeQueued, res.Outcome)
+		greeting := res.Instances[0]
+		res, err = f.engine.Trigger(ctx, engine.Request{Command: hello, Source: engine.SourceEvent, Event: eventtype.ChatUserEntrance})
+		require.NoError(t, err)
+		require.Equal(t, engine.OutcomeQueued, res.Outcome)
+		event := res.Instances[0]
+		res, err = f.trigger(other, engine.Params{})
+		require.NoError(t, err)
+		assert.Equal(t, engine.StateCompleted, f.state(res.Instances[0]), "a held greeting holds up no one")
 		res, err = f.trigger(welcome, engine.Params{})
 		require.NoError(t, err)
-		assert.Equal(t, engine.OutcomeQueued, res.Outcome, "not as an entrance command")
+		assert.Equal(t, engine.StateCompleted, f.state(res.Instances[0]), "not as a greeting")
+		assert.Equal(t, engine.StatePending, f.state(greeting))
+		assert.Equal(t, engine.StatePending, f.state(event))
 
+		require.NoError(t, f.engine.Pause(ctx, engine.PauseAll))
 		require.NoError(t, f.engine.Resume(ctx, engine.PauseEntrance))
-		res, err = f.engine.Trigger(ctx, entrance)
-		require.NoError(t, err)
-		assert.Equal(t, engine.OutcomeQueued, res.Outcome)
 		synctest.Wait()
-		assert.Equal(t, []string{"welcome", "welcome"}, f.journal.get())
+		assert.Equal(t, engine.StatePending, f.state(greeting), "B110: the pause of all commands still holds")
+		require.NoError(t, f.engine.Resume(ctx, engine.PauseAll))
+		synctest.Wait()
+		assert.Equal(t, []string{"other", "welcome", "welcome", "hello"}, f.journal.get())
 		events := f.events()
 		assert.Equal(t, "paused entrance", events[0])
 		assert.Contains(t, events, "resumed entrance")

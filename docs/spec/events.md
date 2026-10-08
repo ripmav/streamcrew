@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Geprüft |
-| **Stand** | 2026-09-29 |
+| **Stand** | 2026-10-02 |
 | **Bezug** | Roadmap Phase 2.2 (Event-Modell), 3.6, 4.4, 5.1; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0011](../adr/code/0011-event-bus.md); Plan §6.7, Anhang A.1, A.2; [`commands.md`](commands.md) |
 | **Umsetzung** | teilweise: Katalog mit Namen, plattformneutraler Entsprechung und Häufigkeit je Typ in `internal/domain/eventtype`; Umschlag und Bus in `internal/event`; die Namen der Ereigniswerte (B7) als Konstanten in `internal/template`. Die Auslöseregeln (B2 bis B6, B20 bis B22) folgen mit den Quellen: Engine (Phase 3.6), Twitch (Phase 4), Chat (Phase 5) |
 
@@ -67,7 +67,7 @@ Nicht Teil dieser Spezifikation: die Zuordnung zu den numerischen Ereignis-IDs d
 | `chat.whisper` | Eine Flüsternachricht an das Streamer-Konto ist eingegangen. | Q9 |
 | `chat.user.join` | Ein Nutzer wurde in dieser Stream-Sitzung zum ersten Mal im Chat erkannt. | Q9, A1 |
 | `chat.user.leave` | Ein Nutzer hat den Chat verlassen. | Q9 |
-| `chat.user.entrance` | Ein Nutzer hat in dieser Stream-Sitzung seine erste Nachricht geschrieben. | Q9, A1 |
+| `chat.user.entrance` | Ein Nutzer hat in dieser Stream-Sitzung seine erste Nachricht geschrieben, während der Stream live ist ([`command-engine.md`](command-engine.md), B41). | Q9, A1 |
 | `chat.user.new` | Ein Nutzer, den streamcrew noch nie gesehen hat, wurde erkannt. | Q9 |
 | `chat.user.first_message` | Ein Nutzer hat zum allerersten Mal eine Nachricht geschrieben; nie wieder für ihn. | Q9 |
 | `chat.user.timeout` | Ein Nutzer wurde auf Zeit gesperrt. | Q9 |
@@ -151,3 +151,4 @@ Nicht Teil dieser Spezifikation: die Zuordnung zu den numerischen Ereignis-IDs d
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
 | 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
 | 2026-09-29 | Katalog umgesetzt (`internal/domain/eventtype`). Festlegungen dabei: `chat.user.join` und `chat.user.entrance` gelten wie B3 einmal je Nutzer und Stream-Sitzung, `chat.user.new` und `chat.user.first_message` einmal je Nutzer überhaupt; plattformspezifische Typen haben die Häufigkeit ihrer neutralen Entsprechung. |
+| 2026-10-02 | `chat.user.entrance` zählt nur Nachrichten, während der Stream live ist; Nachrichten offline lösen die Begrüßung nicht aus und zählen nicht als erste (Entscheidung des Projektinhabers, [`command-engine.md`](command-engine.md), B41). |

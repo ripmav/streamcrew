@@ -289,7 +289,7 @@ func (c Command) call(ctx context.Context, run *engine.Run) error {
 	}
 	switch res.Outcome {
 	case engine.OutcomeCompleted, engine.OutcomeQueued:
-	case engine.OutcomeDisabled, engine.OutcomeRejected, engine.OutcomeWaiting, engine.OutcomeEntrancePaused:
+	case engine.OutcomeDisabled, engine.OutcomeRejected, engine.OutcomeWaiting:
 		c.ports.Logger.InfoContext(ctx, "called command did not run",
 			"command", c.Command, "outcome", res.Outcome, "instance", run.InstanceID())
 	}

@@ -89,6 +89,9 @@ type Run struct {
 	frames []*frame
 	// end says why the actions end early.
 	end runEnd
+	// playbackEnd is when the playback of the running picture or sound of
+	// a greeting ends; zero if the action did not say (B43).
+	playbackEnd time.Time
 }
 
 // runEnd says why the actions of a run end before the last one.
@@ -269,7 +272,12 @@ func (e *Engine) step(ctx context.Context, run *Run, a command.Action, path []in
 	if missing := e.types.Missing(a.DocType()); len(missing) > 0 {
 		err = fmt.Errorf("%w: %s", ErrCapability, capabilitiesText(missing))
 	} else {
+		done, werr := e.awaitMedia(ctx, run, p)
+		if werr != nil {
+			return false // canceled while it waited (B43)
+		}
 		err = e.perform(ctx, run, p, path)
+		done()
 	}
 	switch {
 	case ctx.Err() != nil:
