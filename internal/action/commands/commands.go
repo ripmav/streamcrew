@@ -115,6 +115,19 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("command action types: no logger")
 	}
 	ports := &ports{Ports: p}
+	return descriptors(ports), nil
+}
+
+// Catalog returns the command types without ports, for the type catalog and
+// commands as code (Code-ADR-0013, point 3): their actions decode,
+// validate and encode, but must not run.
+func Catalog() []action.Descriptor {
+	return descriptors(nil)
+}
+
+// descriptors returns the command types with ports, which are nil in the
+// catalog.
+func descriptors(ports *ports) []action.Descriptor {
 	return []action.Descriptor{
 		action.Descriptor{
 			Type:     TypeCommand,
@@ -131,7 +144,7 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 			}
 			return c, true
 		}),
-	}, nil
+	}
 }
 
 // commandSchema returns the schema of the command action: its kind

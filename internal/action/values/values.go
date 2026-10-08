@@ -103,6 +103,19 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("value action types: no global values")
 	}
 	ports := &ports{Ports: p}
+	return descriptors(ports), nil
+}
+
+// Catalog returns the value types without ports, for the type catalog and
+// commands as code (Code-ADR-0013, point 3): their actions decode,
+// validate and encode, but must not run.
+func Catalog() []action.Descriptor {
+	return descriptors(nil)
+}
+
+// descriptors returns the value types with ports, which are nil in the
+// catalog.
+func descriptors(ports *ports) []action.Descriptor {
 	return []action.Descriptor{
 		action.Descriptor{
 			Type:     TypeCounter,
@@ -127,7 +140,7 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		}.WithKinds(SpecialText, func(k SpecialKind) (SpecialIdentifier, bool) {
 			return SpecialIdentifier{Common: action.On(), Kind: k, ports: ports}, k.Valid()
 		}),
-	}, nil
+	}
 }
 
 // counterSchema returns the schema of the counter action: add has an
