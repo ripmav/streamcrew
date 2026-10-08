@@ -293,28 +293,88 @@ func (f *twitchFlow) Start(ctx context.Context) (*Login, *Prompt, error) {
 }
 
 // Wait blocks until the user completes the login, the code expires, or
-// ctx ends.
+// ctx ends. It polls the token endpoint at the interval of the device
+// authorization response (RFC 8628 §3.2); "authorization_pending" and
+// "slow_down" (RFC 8628 §3.5) keep the polling going. The polling is
+// done here instead of by golang.org/x/oauth2's DeviceAccessToken,
+// because the real endpoint answers these states with the field
+// "message" instead of the RFC field "error" (verified against Twitch
+// 2026-10-08), which the library does not recognize and aborts on.
 func (f *twitchFlow) Wait(ctx context.Context, l *Login) (*oauth2.Token, error) {
-	tok, err := f.config().DeviceAccessToken(f.clientContext(ctx), l.device)
-	if err != nil {
-		var re *oauth2.RetrieveError
-		switch {
-		case errors.Is(err, context.DeadlineExceeded):
-			return nil, ErrCodeExpired
-		case errors.As(err, &re):
-			switch re.ErrorCode {
-			case "access_denied":
-				return nil, ErrAccessDenied
-			case "expired_token":
+	interval := time.Duration(l.device.Interval) * time.Second
+	if interval == 0 {
+		// "If no value is provided, clients MUST use 5 as the default."
+		interval = 5 * time.Second
+	}
+	if !l.device.Expiry.IsZero() {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, l.device.Expiry)
+		defer cancel()
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				return nil, ErrCodeExpired
 			}
-			return nil, fmt.Errorf("wait for login: %w", err)
-		default:
+			return nil, fmt.Errorf("wait for login: %w", ctx.Err())
+		case <-ticker.C:
+		}
+		body, status, err := f.post(ctx, f.tokenURL, url.Values{
+			"client_id":   {f.clientID},
+			"grant_type":  {"urn:ietf:params:oauth:grant-type:device_code"},
+			"device_code": {l.device.DeviceCode},
+			"scope":       {strings.Join(Scopes, " ")},
+		})
+		if err != nil {
 			return nil, fmt.Errorf("wait for login: %w", err)
 		}
+		if status >= 200 && status <= 299 {
+			tok, err := tokenFromBody(body, "")
+			if err != nil {
+				return nil, fmt.Errorf("wait for login: %w", err)
+			}
+			setExpiry(tok)
+			return normalizeScope(tok), nil
+		}
+		switch code := devicePollCode(body); code {
+		case "authorization_pending":
+			// The user has not authorized yet; keep polling.
+		case "slow_down":
+			// "the interval MUST be increased by 5 seconds for this
+			// and all subsequent requests"
+			interval += 5 * time.Second
+			ticker.Reset(interval)
+		case "expired_token":
+			return nil, ErrCodeExpired
+		case "access_denied":
+			return nil, ErrAccessDenied
+		case "":
+			return nil, fmt.Errorf("wait for login: %s: %s", http.StatusText(status), snippet(body))
+		default:
+			return nil, fmt.Errorf("wait for login: %s: %s", code, snippet(body))
+		}
 	}
-	setExpiry(tok)
-	return normalizeScope(tok), nil
+}
+
+// devicePollCode extracts the polling state of a 4xx answer of the
+// device token endpoint: the RFC 8628 field "error" or the field
+// "message" the real endpoint uses; an unparseable answer is the empty
+// string.
+func devicePollCode(body []byte) string {
+	var e struct {
+		Error   string `json:"error"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(body, &e); err != nil {
+		return ""
+	}
+	if e.Error != "" {
+		return e.Error
+	}
+	return e.Message
 }
 
 // Refresh exchanges a refresh token for a new token. A public client
