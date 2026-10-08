@@ -54,6 +54,9 @@ type Scope struct {
 	ArgDelimiter string
 	// Location is the time zone of the profile (B40); it is required.
 	Location *time.Location
+	// Locale is the locale of the formats of dates and times in the
+	// templates (B41); the zero value takes en-US.
+	Locale Locale
 	// Finder finds users by name for the run, e.g. for $arg1user, so that
 	// the run shares what it found (spec command-engine.md, B17); nil to
 	// find them through the Users of the engine.

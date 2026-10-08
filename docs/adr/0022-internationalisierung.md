@@ -129,7 +129,7 @@
 
 - [x] `internal/i18n`: Parser und Renderer für den Teilumfang, Kataloge EN und DE, Dauern, Rückfall, die Tests aus Punkt 8 und ein Fuzz-Test (Roadmap 3.4), erledigt 2026-10-02; der Rückfall auf Englisch wird erst mit den anpassbaren Meldungen nötig, weil die Kataloge vollständig sein müssen
 - [x] Settings-Sektion „locale“ mit `language` (Roadmap 3.4), erledigt 2026-10-02
-- [ ] Formate der Sektion „locale“ als neue Version (Roadmap 3.6)
+- [x] Formate der Sektion „locale“ als neue Version (Roadmap 3.6), erledigt 2026-10-07: Feld „locale“ mit `system` oder einer der Locales `en-US`, `en-GB`, `de-DE`, `de-AT`, `de-CH`; die Version 1 bekommt bei der Migration `system` dazu, und `system` liest `LC_ALL`, `LC_TIME` und `LANG`
 - [ ] Meldungen der Anforderungen als `i18n.Message` (Roadmap 3.4)
 - [ ] Kataloge über die API (Phase 6); Web- und Desktop-Frontend lesen sie
 - [ ] Namen und Beschreibungen der Action-Typen und Anforderungsarten im Katalog, mit dem Typkatalog der API (Roadmap 3.5 und Phase 6)

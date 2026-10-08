@@ -24,6 +24,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/settings"
+	"github.com/ripmav/streamcrew/internal/template"
 )
 
 // Limits of the spec.
@@ -89,12 +90,15 @@ type Config struct {
 	Commands settings.Commands
 	// Location is the time zone of the profile for templates.
 	Location *time.Location
+	// Locale is the locale of the formats of dates and times in the
+	// templates (B41); the zero value takes en-US.
+	Locale template.Locale
 }
 
 // DefaultConfig returns the settings the engine reads unless WithConfig
-// sets a function: settings.DefaultCommands and UTC.
+// sets a function: settings.DefaultCommands, UTC and en-US.
 func DefaultConfig() Config {
-	return Config{Commands: settings.DefaultCommands(), Location: time.UTC}
+	return Config{Commands: settings.DefaultCommands(), Location: time.UTC, Locale: template.LocaleUSEnglish}
 }
 
 // validate checks cfg.

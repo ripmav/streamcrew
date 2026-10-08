@@ -99,7 +99,7 @@ func userProperties() map[string]property {
 			if u.Stats.LastSeen.IsZero() {
 				return Value{}, false
 			}
-			return TextValue(u.Stats.LastSeen.In(s.location()).Format(layoutDateTime)), true
+			return TextValue(u.Stats.LastSeen.In(s.location()).Format(s.pattern().datetime)), true
 		},
 	}
 }

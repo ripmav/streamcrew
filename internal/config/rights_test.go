@@ -221,3 +221,31 @@ func TestProgramEnv(t *testing.T) {
 		assert.False(t, strings.HasPrefix(strings.ToUpper(kv), "STREAMCREW_"), kv)
 	}
 }
+
+// TestSystemLocale_B41: LC_ALL ranks first, then LC_TIME, then LANG; the
+// encoding is stripped and underscores read as hyphens.
+func TestSystemLocale_B41(t *testing.T) {
+	cases := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{name: "none", want: ""},
+		{name: "lang only", env: map[string]string{"LANG": "de_DE.UTF-8"}, want: "de-DE"},
+		{name: "lc time beats lang", env: map[string]string{"LC_TIME": "en_US", "LANG": "de_DE"}, want: "en-US"},
+		{name: "lc all beats all", env: map[string]string{"LC_ALL": "de_AT", "LC_TIME": "en_US", "LANG": "fr_FR"}, want: "de-AT"},
+		{name: "empty falls through", env: map[string]string{"LC_ALL": "", "LC_TIME": "", "LANG": "en-GB"}, want: "en-GB"},
+		{name: "encoding only", env: map[string]string{"LANG": ".UTF-8"}, want: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, name := range []string{"LC_ALL", "LC_TIME", "LANG"} {
+				t.Setenv(name, "")
+			}
+			for name, value := range tc.env {
+				t.Setenv(name, value)
+			}
+			assert.Equal(t, tc.want, config.SystemLocale())
+		})
+	}
+}

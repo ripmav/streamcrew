@@ -232,6 +232,7 @@ func newScope(cmd command.Command, p Params, cfg Config, lookup *userLookup) *te
 		ArgsText:     p.ArgsText,
 		ArgDelimiter: cfg.Commands.ArgDelimiter,
 		Location:     cfg.Location,
+		Locale:       cfg.Locale,
 	}
 	for name, v := range p.Values {
 		s.SetValue(name, v)
