@@ -23,7 +23,7 @@
    - In Datenbank, JSON und YAML stehen IDs in der kanonischen Textform mit Kleinbuchstaben (36 Zeichen). Sie sortiert chronologisch wie die UUID selbst.
 2. **IDs der Plattformen bleiben, was die Plattform liefert:** Zeichenketten wie die Twitch-Nutzer-ID, ohne Umwandlung. Sie stehen neben der eigenen ID (Plan §6.13, `user_identities`).
 3. **Keine injizierbare Uhr.** Code ruft `time.Now()` direkt auf, Dauern misst er mit `time.Since`.
-   - Tests für Zeitverhalten laufen in `testing/synctest`, dessen Uhr auch `time.Now()` und Timer umfasst; auch `uuid.NewV7` nutzt in einer Bubble diese Uhr.
+   - Tests für Zeitverhalten laufen in `testing/synctest`, dessen Uhr auch `time.Now()` und Timer umfasst; auch `uuid.NewV7` nutzt in einer Bubble diese Uhr.\*
    - Eine Uhr als Interface käme erst für Code in Frage, der außerhalb einer Bubble laufen muss und trotzdem eine feste Zeit braucht; das entscheidet dann ein ergänzendes Code-ADR.
 4. **Speicherung von Zeit:**
 
@@ -36,6 +36,8 @@
 
    Millisekunden reichen für Chat und Ereignisse und bleiben in JavaScript-Frontends verlustfrei.
 5. **Zeitzonen:** Jedes Profil speichert eine IANA-Zeitzone (Standard: die des Systems beim Anlegen, sonst UTC). Zeitpläne wie tägliche Backups oder Timer laufen in dieser Zone; auch Sommerzeitwechsel richten sich nach ihr.
+
+*\* Redaktionell ergänzt am 2026-09-29: Der UUIDv7-Generator der Standardbibliothek ist prozessweit. Entsteht zwischen zwei IDs in einer Bubble eine ID mit echter Zeit, etwa in einem parallelen Test, wirkt das für den Generator wie ein Rücksprung der Uhr, und die IDs der Bubble sind nicht mehr aufsteigend (gemessen: 351 von 2000 Paaren). Tests, die die Reihenfolge von IDs prüfen, laufen deshalb nicht parallel zu anderen Tests, die IDs erzeugen. Im Betrieb gibt es keine Bubbles; die Entscheidung ändert sich nicht.*
 
 ## Betrachtete Alternativen
 
