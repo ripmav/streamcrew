@@ -5,8 +5,9 @@
 // document (Code-ADR-0010) in the settings table of the profile database;
 // a section that was never saved has its defaults.
 //
-// Phase 2 has the sections "backups" and "time"; the others (general, chat,
-// commands, moderation, overlay) follow with their features.
+// There are the sections "backups" and "time" (roadmap 2.2) and "commands"
+// (roadmap 3.2); the others (general, chat, moderation, overlay, locale)
+// follow with their features.
 package settings
 
 import (
@@ -14,7 +15,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/ripmav/streamcrew/internal/polydoc"
 )
@@ -43,6 +46,7 @@ func New(repo Repository) (*Service, error) {
 	for _, e := range []polydoc.Entry[Section]{
 		{Type: sectionBackups, Version: 1, Decode: decode[Backups]},
 		{Type: sectionTime, Version: 1, Decode: decode[Time]},
+		{Type: sectionCommands, Version: 1, Decode: decode[Commands]},
 	} {
 		if err := r.Register(e); err != nil {
 			return nil, err
@@ -99,8 +103,9 @@ func (u unknown) RawJSON() json.RawMessage { return u.Raw }
 func (unknown) validate() error            { return errors.New("unknown settings section") }
 
 const (
-	sectionBackups = "backups"
-	sectionTime    = "time"
+	sectionBackups  = "backups"
+	sectionTime     = "time"
+	sectionCommands = "commands"
 )
 
 // Backups configures the automatic backups (ADR-0012).
@@ -178,4 +183,111 @@ func (t Time) Location() (*time.Location, error) {
 func (t Time) validate() error {
 	_, err := t.Location()
 	return err
+}
+
+// LockMode says which locks an instance of a command needs (spec
+// command-engine.md, B20 to B25).
+type LockMode string
+
+// Lock modes.
+const (
+	// LockPerCommandType has one lock per command kind (B21).
+	LockPerCommandType LockMode = "per_command_type"
+	// LockPerActionType has one lock per action type; an instance needs the
+	// locks of all action types of its command (B22).
+	LockPerActionType LockMode = "per_action_type"
+	// LockVisualAudio has one lock for the commands with a visual or audio
+	// action; the others need none (B23).
+	LockVisualAudio LockMode = "visual_audio"
+	// LockSingular has one lock for all commands (B24).
+	LockSingular LockMode = "singular"
+	// LockNone has no locks (B25).
+	LockNone LockMode = "none"
+)
+
+// Valid reports whether m is a known lock mode.
+func (m LockMode) Valid() bool {
+	switch m {
+	case LockPerCommandType, LockPerActionType, LockVisualAudio, LockSingular, LockNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// ErrorCooldown says how the error messages of unmet requirements are held
+// back (spec command-engine.md, B12).
+type ErrorCooldown string
+
+// Error cooldown modes.
+const (
+	// ErrorCooldownPerCommand holds back a message per requirement and
+	// command.
+	ErrorCooldownPerCommand ErrorCooldown = "per_command"
+	// ErrorCooldownGlobal holds back all messages for one shared duration.
+	ErrorCooldownGlobal ErrorCooldown = "global"
+	// ErrorCooldownOff sends a message for every rejection.
+	ErrorCooldownOff ErrorCooldown = "off"
+)
+
+// Valid reports whether c is a known error cooldown mode.
+func (c ErrorCooldown) Valid() bool {
+	switch c {
+	case ErrorCooldownPerCommand, ErrorCooldownGlobal, ErrorCooldownOff:
+		return true
+	default:
+		return false
+	}
+}
+
+// Commands configures the command engine (spec command-engine.md, B90).
+// Changes apply to the instances queued afterwards.
+type Commands struct {
+	// LockMode is the lock mode of all commands (B20).
+	LockMode LockMode `json:"lockMode"`
+	// ErrorCooldown is the mode of the error cooldown (B12).
+	ErrorCooldown ErrorCooldown `json:"errorCooldown"`
+	// ErrorCooldownDuration is how long an error message holds back the next
+	// one; a duration of 0 holds back nothing.
+	ErrorCooldownDuration polydoc.Duration `json:"errorCooldownDuration"`
+	// ArgDelimiter separates the delimited arguments of templates (spec
+	// template.md, $argdelimited...).
+	ArgDelimiter string `json:"argDelimiter"`
+}
+
+// DefaultCommands returns the defaults of B90.
+func DefaultCommands() Commands {
+	return Commands{
+		LockMode:              LockPerCommandType,
+		ErrorCooldown:         ErrorCooldownPerCommand,
+		ErrorCooldownDuration: polydoc.Duration(10 * time.Second),
+		ArgDelimiter:          "|",
+	}
+}
+
+// DocType implements polydoc.Document.
+func (Commands) DocType() string { return sectionCommands }
+
+// Validate checks the section, e.g. before the command engine uses it.
+func (c Commands) Validate() error {
+	return c.validate()
+}
+
+func (c Commands) validate() error {
+	if !c.LockMode.Valid() {
+		return fmt.Errorf("unknown lock mode %q", c.LockMode)
+	}
+	if !c.ErrorCooldown.Valid() {
+		return fmt.Errorf("unknown error cooldown mode %q", c.ErrorCooldown)
+	}
+	if c.ErrorCooldownDuration < 0 {
+		return errors.New("the error cooldown must not be negative")
+	}
+	if c.ArgDelimiter == "" {
+		return errors.New("empty argument delimiter")
+	}
+	if strings.IndexFunc(c.ArgDelimiter, unicode.IsControl) >= 0 {
+		return errors.New("the argument delimiter contains a control character")
+	}
+	return nil
 }
