@@ -230,3 +230,29 @@ func TestFindAccount(t *testing.T) {
 		require.NotErrorIs(t, err, connector.ErrUnknownUser)
 	})
 }
+
+// TestJoinErrors covers actions.md B66 and B86: the error names the
+// platforms an operation failed on, and each platform's error stays
+// visible.
+func TestJoinErrors(t *testing.T) {
+	t.Parallel()
+	twitch := connectortest.New(platform.Twitch, connectortest.Features{})
+	youtube := connectortest.New(platform.YouTube, connectortest.Features{})
+	kick := connectortest.New(platform.Kick, connectortest.Features{})
+	ps := []connector.Platform{twitch, youtube, kick}
+
+	require.NoError(t, connector.JoinErrors("not sent", ps, make([]error, 3)))
+	require.NoError(t, connector.JoinErrors("not sent", nil, nil))
+
+	boom := errors.New("boom")
+	err := connector.JoinErrors("failed", ps, []error{boom, nil, connector.ErrRefused})
+	require.EqualError(t, err, "failed on twitch, kick: twitch: boom; kick: refused by the platform")
+	require.ErrorIs(t, err, boom)
+	require.ErrorIs(t, err, connector.ErrRefused)
+	opErr, ok := errors.AsType[*connector.OpError](err)
+	require.True(t, ok)
+	assert.Equal(t, []connector.Failure{
+		{Platform: platform.Twitch, Err: boom},
+		{Platform: platform.Kick, Err: connector.ErrRefused},
+	}, opErr.Failures)
+}

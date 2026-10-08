@@ -415,7 +415,7 @@ Reihenfolge: erst die Bereinigung nach Code-ADR-0017, dann die Doku als unterste
 - [x] `special_identifier`: lokale und globale Werte setzen, Ausdrücke; globale Werte als Quelle der Template-Engine (S), erledigt 2026-10-01: `internal/action/values`, Textfunktionen in `internal/textfunc`, globale Werte als `template.Globals`; die Option „Rechnen“ ist die Art `expression`
 - [x] `chat`: senden, antworten, flüstern; als Bot oder Streamer, über den Chat-Port (S), erledigt 2026-10-01: `internal/action/chat`; das Flüstern ist die Art `whisper`, die ID der auslösenden Nachricht steht in `engine.Params.MessageID`
 - [ ] `web_request`: Methode, Header, Body; JSON-Pfade in Identifier; SSRF-Schutz im Server-Modus (M)
-- [ ] `moderation`: Timeout, Nachrichten eines Nutzers entfernen, Chat leeren, Bann, Entbannen, Mod, Strikes, Chat stumm schalten ([`actions.md`](spec/actions.md), B80–B86); VIP kommt mit der Twitch-Action (Phase 4), das Löschen der auslösenden Nachricht mit den Anforderungen (3.4) (S)
+- [x] `moderation`: Timeout, Nachrichten eines Nutzers entfernen, Chat leeren, Bann, Entbannen, Mod, Strikes, Chat stumm schalten ([`actions.md`](spec/actions.md), B80–B86); VIP kommt mit der Twitch-Action (Phase 4), das Löschen der auslösenden Nachricht mit den Anforderungen (3.4) (S), erledigt 2026-10-01: `internal/action/moderation`; Strikes und gesehene Nutzer über Ports des Nutzer-Service (5.2), der stumme Chat über einen Port des Chat-Service (5.1)
 - [ ] `platform_message`, `user_lookup` (S); `platform_message` erledigt 2026-10-01: `internal/action/chat`
 - [ ] `file`: lesen, schreiben, anhängen, Zeile lesen; nur unter freigegebenen Wurzeln via `os.Root` (S)
 - [ ] `external_program`: nur mit `host:process`; Timeout; Ausgabe in Identifier (S)
@@ -552,6 +552,7 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
 - [ ] Pipeline: normalisieren → Nutzer auflösen → Moderation → Trigger → Folge-Events (erste Nachricht, erster Join) → Verlauf (M)
 - [ ] Senden über Bot oder Streamer, Aufteilen langer Nachrichten, Rate-Limits (`golang.org/x/time/rate`), Whisper (S)
 - [ ] Chatverlauf im Speicher (Ringpuffer je Plattform) und optionales Chat-Protokoll auf Platte (S)
+- [ ] Stummer Chat aus der Moderation-Action ([`actions.md`](spec/actions.md), B85): Port `moderation.ChatMute`; solange er an ist, löscht die Pipeline neue Nachrichten außer denen von Streamer und Bot (S)
 - [ ] Settings-Sektionen „general“ und „chat“ mit ihren Funktionen, aus 3.2 übertragen (S)
 
 ### 5.2 Nutzer
@@ -560,6 +561,7 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
 - [ ] Rollen plattformübergreifend, Regular-Regel (Watchtime-Schwelle), Follow- und Abo-Daten bei Bedarf mit Cache (M)
 - [ ] Konten verknüpfen und Nutzer zusammenführen (M) (P1)
 - [ ] Ausschlüsse von Bots und Streamer aus Ranglisten und Zufallsauswahl (S)
+- [ ] Nutzer-Service als Umsetzung der Ports aus Phase 3: Nutzer nach Login-Name (`UserByName` von Engine, Templates und Actions), Konten von Streamer und Bot (`template.Users`), über eine Plattform gefundene Nutzer speichern (`UpsertIdentity`, [`actions.md`](spec/actions.md), B91), Strikes ändern und zurücksetzen (`moderation.Strikes`, B84) (M)
 
 ### 5.3 Events, Feed, Statistik
 
@@ -1252,3 +1254,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-01 | Plattform-Ports nach Plan §6.11 in `internal/connector`: `Platform` mit Chat (senden, löschen; Antworten und Flüstern als optionale Capabilities), Moderation, Nutzersuche nach Login-Name oder ID und Kanalinformation; die Menge der Plattformen eines Profils (`Set`) mit den verbundenen Plattformen ([`actions.md`](spec/actions.md), B62); die Suche eines Kontos erst unter den bekannten Nutzern, dann über die Plattform (`FindAccount`, B63, B81). Eine Plattform gilt als verbunden, wenn ihr Streamer-Konto verbunden ist. Fakes für die Tests der Actions in `internal/connector/connectortest`. Das Paket heißt `internal/connector` statt wie zuerst geplant `internal/platform`: Der Name betont die Verbindung nach außen und kollidiert nicht mit `internal/domain/platform` (Entscheidung des Projektinhabers). |
 | 2026-10-01 | Action-Typ `chat` in `internal/action/chat` ([`actions.md`](spec/actions.md), B60–B66, B212): Arten `message` (mit Antwort auf die auslösende Nachricht) und `whisper` (mit Empfänger), Absender Bot oder Streamer, an alle verbundenen Plattformen zugleich, Teilerfolg als Scheitern mit den Plattformen in der Meldung. Die Engine führt die ID der auslösenden Nachricht (`engine.Params.MessageID`). |
 | 2026-10-01 | Action-Typ `platform_message` in `internal/action/chat` ([`actions.md`](spec/actions.md), B67): eine Nachricht an genau eine Plattform, sonst wie die Chat-Action; ohne Verbindung geschieht nichts. Neuer Schema-Baustein `schema.Platform`. |
+| 2026-10-01 | Action-Typ `moderation` in `internal/action/moderation` ([`actions.md`](spec/actions.md), B80–B86, B215): Timeout, Nachrichten entfernen, Chat leeren, Bann, Entbannen, Mod, Strikes und stummer Chat; auf der Plattform des Durchlaufs oder ohne sie auf jeder verbundenen. Neue Aufgaben in 5.1 (stummer Chat) und 5.2 (Nutzer-Service für die Ports aus Phase 3). Dazu `connector.OpError` für Teilerfolge über mehrere Plattformen und `action.Amount.Templates`/`EvalWithTexts`, damit Mengenangaben mit den übrigen Templates einer Action in einem Rendervorgang entstehen. |

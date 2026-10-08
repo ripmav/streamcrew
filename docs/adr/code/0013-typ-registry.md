@@ -94,6 +94,8 @@
 
        *Ergänzt am 2026-10-01: Texte, die nicht leer sein dürfen, etwa die Nachricht der Chat-Action und der Empfänger beim Flüstern, mit dem Baustein `schema.NonEmpty`.*
      - `action.Amount`: eine Mengenangabe, in JSON eine Zahl (fester Wert) oder ein Text (Ausdruck nach `template.md`, B50–B52). Zu jedem Feld gehört ein `action.Range` aus Minimum, Maximum und der Angabe, ob nur ganze Zahlen gelten. Derselbe Wert geht ins Schema und gilt beim Ausführen (B4); feste Werte prüft schon das Speichern.
+
+       *Ergänzt am 2026-10-01: `Amount.Templates` und `Amount.EvalWithTexts`, damit eine Action die Identifier einer Mengenangabe mit ihren übrigen Templates in einem Rendervorgang auflöst (B3), etwa Nutzer, Grund und Dauer eines Timeouts.*
      - `action.ResultName`: der Name eines Ergebniswerts nach B5.
      - Verweise auf Commands und Gruppen als `id.ID`, auf Counter als Name (B31, B41).
 

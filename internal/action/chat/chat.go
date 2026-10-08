@@ -275,7 +275,7 @@ func send(ctx context.Context, p engine.Params, targets []connector.Platform, m 
 		})
 	}
 	wg.Wait()
-	return failed(targets, errs)
+	return connector.JoinErrors("not sent", targets, errs)
 }
 
 // replies reports whether the message answers the triggering message on
@@ -314,57 +314,13 @@ func (c Chat) whisper(ctx context.Context, targets []connector.Platform, text, r
 		})
 	}
 	wg.Wait()
-	if err := failed(targets, errs); err != nil {
+	if err := connector.JoinErrors("not sent", targets, errs); err != nil {
 		return err
 	}
 	if !slices.Contains(sent, true) {
 		return field("recipient", fmt.Errorf("%w %q", ErrNoWhisper, connector.Login(recipient)))
 	}
 	return nil
-}
-
-// failed returns the error of the targets whose errs entry is set; nil if
-// none is.
-func failed(targets []connector.Platform, errs []error) error {
-	var e platformsError
-	for i, err := range errs {
-		if err != nil {
-			e = append(e, platformError{name: targets[i].Name(), err: err})
-		}
-	}
-	if len(e) == 0 {
-		return nil
-	}
-	return e
-}
-
-// platformsError is the error of an operation that failed on some
-// platforms; its message names them (B66).
-type platformsError []platformError
-
-// platformError is the error of an operation on one platform.
-type platformError struct {
-	name platform.Name
-	err  error
-}
-
-func (e platformsError) Error() string {
-	names := make([]string, len(e))
-	reasons := make([]string, len(e))
-	for i, pe := range e {
-		names[i] = string(pe.name)
-		reasons[i] = string(pe.name) + ": " + pe.err.Error()
-	}
-	return "not sent on " + strings.Join(names, ", ") + ": " + strings.Join(reasons, "; ")
-}
-
-// Unwrap returns the error of each platform.
-func (e platformsError) Unwrap() []error {
-	errs := make([]error, len(e))
-	for i, pe := range e {
-		errs[i] = pe.err
-	}
-	return errs
 }
 
 // field names the field of an error (actions.md B6); nil stays nil.
