@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ripmav/streamcrew/internal/domain/platform"
+	"github.com/ripmav/streamcrew/internal/domain/user"
 )
 
 // Scope holds what a render needs besides the template: the data of the run
@@ -21,6 +22,12 @@ import (
 type Scope struct {
 	// Platform is the platform the run was triggered on; empty if none.
 	Platform platform.Name
+	// User is the user who triggered the run; nil if none did, e.g. a
+	// timer.
+	User *user.User
+	// Target is the user the run is about, e.g. the one the first argument
+	// mentions; nil means the triggering user (B60).
+	Target *user.User
 	// CommandName is the name of the running command.
 	CommandName string
 	// Message is the triggering chat message, with the trigger (spec

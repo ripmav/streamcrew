@@ -92,7 +92,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 0: Klärung und Projektstart | abgeschlossen 2026-09-29 (Gate bestanden; offene Punkte übertragen, siehe 0.5) |
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
-| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: Kern der Template-Engine und Identifier-Familien ohne Nutzer umgesetzt (3.1); als Nächstes die Nutzer-Familien und Ausdrücke |
+| Phase 3: Engine, Templates, Actions, Mock | in Arbeit: Kern der Template-Engine und alle Identifier-Familien umgesetzt (3.1); als Nächstes die Ausdrücke |
 | Phase 4: Twitch | offen |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
@@ -365,14 +365,14 @@ Diese Aufgaben blockieren Phase 1 nicht und wurden beim Abschluss von Phase 0 (2
 - [x] [Code-ADR-0012](adr/code/0012-template-engine.md) Template-Engine (S), akzeptiert 2026-09-29: Tokenizer mit Präfixbaum, Präfix-Familien, Kodierung je Ausgabeort, Ausdrücke mit `expr-lang/expr`
 - [x] Tokenizer und Resolver-Registry (statisch, Muster, dynamische Namen); bedarfsgesteuerte Auflösung mit `context`; Cache pro Rendervorgang (M), erledigt 2026-09-30: `internal/template`
 - [x] Kodierungsmodi: Text, URL, HTML, JSON (S)
-- [ ] Identifier-Familien für das MVP (M):
-  - Nutzer, Ziel, Streamer, Bot
-  - Argumente, erledigt 2026-09-30 (mit Nachricht)
-  - Datum und Zeit in der Profil-Zeitzone, erledigt 2026-09-30
-  - Zufall, Stream, Counter, letzte Ereignisse; ohne Zufallsnutzer erledigt 2026-09-30 (Ereigniswerte als Werte des Durchlaufs)
-  - Command-Name, Plattform, erledigt 2026-09-30
+- [x] Identifier-Familien für das MVP (M), erledigt 2026-09-30:
+  - Nutzer, Ziel, Streamer, Bot (Port `template.Users`)
+  - Argumente (mit Nachricht)
+  - Datum und Zeit in der Profil-Zeitzone
+  - Zufall, Stream, Counter, letzte Ereignisse (Ereigniswerte als Werte des Durchlaufs)
+  - Command-Name, Plattform
 - [ ] Ausdrücke mit `expr-lang/expr`: Rechnen, Vergleiche (S)
-- [ ] Golden-Tests und Fuzz-Targets (S); für den Kern erledigt (`FuzzRender`, `testdata/syntax.golden`), die Familien folgen
+- [ ] Golden-Tests und Fuzz-Targets (S); für Kern und Familien erledigt (`FuzzRender`, Golden Files je Familie), die Ausdrücke folgen
 
 ### 3.2 Command-Engine
 
@@ -1190,3 +1190,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-09-30 | Phase 3.1 begonnen, als neuer Stack nach Feature: Kern der Template-Engine (`internal/template`: Tokenizer, Präfixbaum, Muster, dynamische Quellen, Cache je Rendervorgang, Kodierung, `$linebreak`, `$unicode<n>`, Golden Files, Fuzz-Test, Benchmark), danach Identifier-Familien und Ausdrücke. |
 | 2026-09-30 | Code-ADR-0010 und Plan §6.9 und §8 berichtigt: `encoding/json/v2` und `encoding/json/jsontext` sind in go1.27.1 ohne `GOEXPERIMENT` verfügbar; der Wechsel von `internal/polydoc` braucht weiterhin ein ergänzendes Code-ADR (Befund aus dem Review von PR #42). |
 | 2026-09-30 | Identifier-Familien ohne Nutzer umgesetzt: Argumente, Nachricht, Datum und Zeit, Zufallszahlen, Stream (Port `StreamStates`), Counter als Quelle mit Namensprüfung (`Counter.CheckReserved`), Namen der Ereigniswerte, Command-Name und Plattform. |
+| 2026-09-30 | Nutzer-Familien umgesetzt: Subjekt mal Eigenschaft für auslösenden Nutzer, Ziel, Streamer, Bot, `arg<n>user` und Zufallsnutzer über den Port `template.Users`; Zeitspannen in Jahren, Monaten und Tagen; `platform.Name.ProfileURL`. |

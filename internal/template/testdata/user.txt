@@ -1,0 +1,30 @@
+# UserFamily on 15 June 2009, 13:45:20 in the time zone of the profile (UTC-4)
+# on Twitch. Alice triggers the run, Bob is the target; the arguments are
+# "@Bob", "chessqueen" and "nobody". In the chat are Carol, who is excluded,
+# and Dave, a follower and subscriber.
+
+# B60: the triggering user
+$username / $userdisplayname / $userfulldisplayname / $userid
+$userurl $useravatar $usercolor
+$userroles | $userdisplayroles | $userprimaryrole | $usertitle
+$userisfollower $userisregular $userissubscriber $userisvip $userismod $userisspecialtyexcluded
+$usertime ($userhours h $usermins min), $usertotalstreamswatched streams, $usertotalchatmessagessent messages
+$usertotalcommandsrun commands, $usertotaltimestagged tags, $usertotalamountdonated donated, $usermoderationstrikes strikes
+# B42: spans in years, months and days
+$useraccountage ($useraccountdays days)
+$userfollowage = $userfollowdays days = $userfollowmonths months = $userfollowyears years
+$usersubage ($usersubdays days, $usersubmonths months, $usersubtier)
+$userlastseenage ($userlastseendays days) since $userlastseendate
+$usernotes
+# B2: the rest of the token stays
+$usernames $UserNameX
+# the target; data the platform did not report has no value (B4)
+$targetusername: $targetuserdisplayname / $targetuserfulldisplayname / $targetusertitle / $targetuserroles
+$targetusercolor / $targetuserfollowage / $targetusersubtier / $targetuserisfollower
+# streamer, bot and the users the arguments name
+$streamerusername $streameruserprimaryrole / $botusername $botuserroles
+$arg1username $arg2username $arg3username $arg4username $arg1userfollowage
+# random users; the excluded user is never picked (B22)
+$randomusername $randomfolloweruserdisplayname $randomsubscriberusername $randomregularusername
+# B4, B6: unknown properties, subjects without property, invalid numbers
+$userfoo $user $targetuser $arg0username $argusername
