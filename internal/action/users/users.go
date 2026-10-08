@@ -105,6 +105,19 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("user action types: no logger")
 	}
 	ports := &ports{Ports: p}
+	return descriptors(ports), nil
+}
+
+// Catalog returns the user types without ports, for the type catalog and
+// commands as code (Code-ADR-0013, point 3): their actions decode,
+// validate and encode, but must not run.
+func Catalog() []action.Descriptor {
+	return descriptors(nil)
+}
+
+// descriptors returns the user types with ports, which are nil in the
+// catalog.
+func descriptors(ports *ports) []action.Descriptor {
 	return []action.Descriptor{
 		action.Descriptor{
 			Type:     TypeUserLookup,
@@ -118,7 +131,7 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		}.WithNew(func() UserLookup {
 			return UserLookup{Common: action.On(), ports: ports}
 		}),
-	}, nil
+	}
 }
 
 // UserLookup is the user lookup action (actions.md B90 to B93).

@@ -59,6 +59,8 @@
    - `internal/action`: Descriptor, Kategorie, Registry und die gemeinsamen Feldtypen (Punkt 4); in `internal/action/schema` der Schema-Typ mit seinen Bausteinen (Punkt 6); in `internal/action/actiontest` der gemeinsame Konformitätstest (Punkt 9).
    - Ein Paket je Kategorie: `internal/action/flow`, `…/commands`, `…/values`, `…/chat`, `…/network`, `…/moderation`, `…/users` und `…/host`. Jedes liefert `Descriptors(…) []action.Descriptor` mit den Ports, die seine Typen brauchen. Die Ports sind kleine Schnittstellen im Paket selbst. Registriert wird in der Composition Root mit `action.NewRegistry`, nicht per `init()` (Code-ADR-0002).
 
+     *Ergänzt am 2026-10-03 für Commands als Code ([`commands-as-code.md`](../../spec/commands-as-code.md), B30): Jedes Paket liefert außerdem `Catalog() []action.Descriptor`, dieselben Typen ohne Ports. Ihre Actions dekodieren, prüfen und kodieren, dürfen aber nicht laufen. `app.ActionCatalog` setzt daraus eine Registry ohne Capabilities zusammen, für `schema export` und später für das Prüfen von Dateien, die beide ohne Core auskommen.*
+
 3. **Descriptor und Registry:**
 
    ```go
@@ -85,6 +87,8 @@
    - Sie liefert die Einträge für `command.NewCodec`, die Descriptors in fester Reihenfolge für den Typkatalog (API, Phase 6) und `schema export` (Roadmap 3.5), und sie setzt den Port der Engine um (Punkt 8).
    - Die i18n-Schlüssel folgen aus der Typ-ID und stehen deshalb nicht einzeln im Descriptor: `action.<typ>.name`, `action.<typ>.description`, `action.<typ>.field.<feld>`, `action.<typ>.kind.<art>` und `action.category.<kategorie>`. Der Typkatalog liefert sie ausgeschrieben mit. Die Texte kommen mit [ADR-0022](../0022-internationalisierung.md).
    - Anforderungen bekommen Descriptors derselben Form (Schema, UI-Hinweise, i18n), sobald der Typkatalog sie braucht (Roadmap 3.5). Capabilities und der Anschluss an die Engine betreffen nur Actions.
+
+     *Umgesetzt am 2026-10-03 für den Schema-Export: `command.RequirementDescriptor` mit Typ-ID, Version und Schema der Felder ohne `type` und `schemaVersion`, und `command.RequirementCatalog` in der Reihenfolge der Prüfungen (`requirements.md`, B2). Die i18n-Schlüssel kommen mit dem Typkatalog der API. Ein Konformitätstest wie in Punkt 9 prüft je Anforderungsart Schema und Codec an Beispielen.*
 
 4. **Konfiguration einer Action:**
    - Eine Action ist ein Struct aus ihrer Konfiguration und einem unexportierten Verweis auf ihre Ports. `Decode` ist eine Closure der Composition Root, die die Ports einsetzt; JSON sieht nur die Konfiguration.
@@ -124,12 +128,18 @@
    - **Eigener Schema-Typ:** `schema.Schema` bildet nur die Schlüsselwörter ab, die die Bausteine brauchen, etwa `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `const`, `minimum`, `maximum`, `oneOf`, `default` und `x-ui`. Kodiert wird mit `encoding/json/v2` (Code-ADR-0018). Weitere Schlüsselwörter kommen hinzu, wenn ein Baustein sie braucht.
 
      *Ergänzt am 2026-10-01 für die Bedingung um `minItems` und den Baustein `schema.Pick`: Der Wert eines Auswahlfelds bestimmt, welche weiteren Felder ein Objekt hat, als `oneOf` geschlossener Objekte; Felder, die der gewählte Wert nicht nutzt, sind nicht erlaubt. So hat eine Klausel der Bedingung je nach Vergleich einen rechten Wert, zwei Grenzen oder nichts weiter. `schema.Kinds` baut auf demselben Baustein auf.*
+
+     *Ergänzt am 2026-10-03 für das Schema der Dateien von Commands als Code um `$ref` und `$defs` (`schema.DefRef`, `schema.Defs` in fester Reihenfolge) und um den Baustein `schema.CommandName` mit dem Muster `schema.PatternCommandName` für Namen von Commands und Gruppen und Verweise mit Namen. Das Muster schließt nur Steuerzeichen und Leerzeichen am Rand aus; weitere Leerraumzeichen am Rand prüft allein der Go-Code.*
+
+     *Korrigiert am 2026-10-03: `default` und `const` stehen mit `omitzero`. Mit `omitempty` ließ `encoding/json/v2` leere Texte, Listen und Objekte weg, etwa die Voreinstellung `[]` der Kind-Actions.*
    - **Prüfbibliothek:** `github.com/santhosh-tekuri/jsonschema/v6`, nur in Tests (Punkt 9). Sie kommt so nicht ins ausgelieferte Binary.
    - UI-Hinweise stehen am Feld als eigenes Schlüsselwort `x-ui`. Es ist ein geschlossenes Enum, zum Start mit `text`, `multiline`, `template`, `amount`, `expression`, `user`, `platform`, `command`, `group`, `counter`, `file_root`, `result_name` und `actions`. Weitere Werte kommen mit den Typen, die sie brauchen, etwa `color` für Overlays. Voreinstellungen stehen als `default`.
 
      *Umgesetzt am 2026-10-01 mit zwei weiteren Werten, die die Bausteine für Wahrheitswerte und Auswahllisten brauchen: `switch` und `choice`.*
 
      *Ergänzt am 2026-10-01 um `list` für Listen von Einträgen mit eigenem Schema, etwa die Klauseln der Bedingung.*
+
+     *Ergänzt am 2026-10-03 für die Anforderungen um `duration` (Dauer als Text wie `30s`, Muster `schema.PatternDuration`) und um `cooldown_group`, `currency`, `rank` und `item` für Verweise.*
    - **Schemas lesen auch Frontends in anderen Sprachen.** Deshalb gilt:
      - `format` ist nur ein Hinweis für Editoren. Was geprüft werden muss, steht in Enums, Bereichen und `pattern` und im Go-Code, weil Validatoren `format` verschieden oder gar nicht prüfen.
      - `pattern` kommt nur aus Konstanten in `internal/action/schema` und nutzt nur, was Go-RE2 und ECMA-262 gleich verstehen: Zeichenklassen, Quantoren, Gruppen ohne Namen und Anker, aber keine Rückverweise, kein Lookaround und keine Unicode-Klassen wie `\p{…}`.

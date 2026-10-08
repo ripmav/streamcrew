@@ -35,6 +35,7 @@ type Root struct {
 	Version    versionCmd `cmd:"" help:"Print version information."`
 	ConfigCmd  configCmd  `cmd:"" name:"config" help:"Show the configuration."`
 	Doctor     doctorCmd  `cmd:"" help:"Check the environment of the core."`
+	Schema     schemaCmd  `cmd:"" help:"Export the JSON Schema of commands as code."`
 }
 
 // Env is bound to the Run methods of the commands, together with the context

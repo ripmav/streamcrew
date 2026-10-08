@@ -7,3 +7,7 @@
 # The inputs of the golden files of the template engine are copied into the
 # golden files; they need the same line endings.
 internal/template/testdata/*.txt -text
+
+# The exported JSON Schema is compared byte for byte with the output of
+# "schema export" (commands-as-code.md, B30).
+schemas/*.json -text

@@ -1,0 +1,4457 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/document"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/document"
+      }
+    }
+  ],
+  "$defs": {
+    "document": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ChatCommand"
+        },
+        {
+          "$ref": "#/$defs/EventCommand"
+        },
+        {
+          "$ref": "#/$defs/TimerCommand"
+        },
+        {
+          "$ref": "#/$defs/ActionGroup"
+        },
+        {
+          "$ref": "#/$defs/CommandGroup"
+        },
+        {
+          "$ref": "#/$defs/CooldownGroup"
+        }
+      ]
+    },
+    "ChatCommand": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "type": "string",
+          "const": "streamcrew/v1alpha1"
+        },
+        "kind": {
+          "type": "string",
+          "const": "ChatCommand"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "text"
+            },
+            "group": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "group"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "spec": {
+          "type": "object",
+          "properties": {
+            "triggers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "x-ui": "text"
+              },
+              "minItems": 1,
+              "x-ui": "list"
+            },
+            "triggerMode": {
+              "type": "string",
+              "enum": [
+                "exclamation",
+                "literal",
+                "wildcard"
+              ],
+              "default": "exclamation",
+              "x-ui": "choice"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "unlocked": {
+              "type": "boolean",
+              "default": false,
+              "x-ui": "switch"
+            },
+            "errorPolicy": {
+              "type": "string",
+              "enum": [
+                "continue",
+                "abort"
+              ],
+              "default": "continue",
+              "x-ui": "choice"
+            },
+            "requirements": {
+              "$ref": "#/$defs/requirements",
+              "default": {}
+            },
+            "actions": {
+              "$ref": "#/$defs/actions",
+              "default": [],
+              "x-ui": "actions"
+            }
+          },
+          "required": [
+            "triggers"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "metadata",
+        "spec"
+      ],
+      "additionalProperties": false
+    },
+    "EventCommand": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "type": "string",
+          "const": "streamcrew/v1alpha1"
+        },
+        "kind": {
+          "type": "string",
+          "const": "EventCommand"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "text"
+            },
+            "group": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "group"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "spec": {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "enum": [
+                "app.started",
+                "app.stopping",
+                "channel.stream.start",
+                "channel.stream.stop",
+                "channel.follow",
+                "channel.raid",
+                "channel.subscribe",
+                "channel.resubscribe",
+                "channel.subscription.gift",
+                "channel.subscription.mass_gift",
+                "chat.message",
+                "chat.message.delete",
+                "chat.whisper",
+                "chat.user.join",
+                "chat.user.leave",
+                "chat.user.entrance",
+                "chat.user.new",
+                "chat.user.first_message",
+                "chat.user.timeout",
+                "chat.user.ban",
+                "twitch.stream.start",
+                "twitch.stream.stop",
+                "twitch.channel.update",
+                "twitch.channel.follow",
+                "twitch.channel.raid",
+                "twitch.raid.outgoing",
+                "twitch.channel.subscribe",
+                "twitch.channel.resubscribe",
+                "twitch.subscription.gift",
+                "twitch.subscription.mass_gift",
+                "twitch.chat.watch_streak",
+                "twitch.chat.modiversary",
+                "twitch.chat.highlighted_message",
+                "twitch.chat.user_intro",
+                "twitch.power_up.message_effect",
+                "twitch.power_up.gigantified_emote",
+                "twitch.power_up.celebration",
+                "twitch.custom_power_up.redeem",
+                "twitch.channel_points.redeem",
+                "twitch.bits.cheer",
+                "twitch.ad.upcoming",
+                "twitch.ad.start",
+                "twitch.ad.end",
+                "twitch.charity.donation",
+                "twitch.hype_train.start",
+                "twitch.hype_train.progress",
+                "twitch.hype_train.level_up",
+                "twitch.hype_train.end",
+                "twitch.moderation.user_warn",
+                "twitch.shoutout.receive",
+                "twitch.suspicious_user.message",
+                "twitch.suspicious_user.update",
+                "twitch.shield_mode.start",
+                "twitch.shield_mode.end",
+                "twitch.unban_request.create",
+                "twitch.unban_request.resolve",
+                "twitch.goal.start",
+                "twitch.goal.progress",
+                "twitch.goal.end"
+              ],
+              "x-ui": "choice"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "unlocked": {
+              "type": "boolean",
+              "default": false,
+              "x-ui": "switch"
+            },
+            "errorPolicy": {
+              "type": "string",
+              "enum": [
+                "continue",
+                "abort"
+              ],
+              "default": "continue",
+              "x-ui": "choice"
+            },
+            "requirements": {
+              "$ref": "#/$defs/requirements",
+              "default": {}
+            },
+            "actions": {
+              "$ref": "#/$defs/actions",
+              "default": [],
+              "x-ui": "actions"
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "metadata",
+        "spec"
+      ],
+      "additionalProperties": false
+    },
+    "TimerCommand": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "type": "string",
+          "const": "streamcrew/v1alpha1"
+        },
+        "kind": {
+          "type": "string",
+          "const": "TimerCommand"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "text"
+            },
+            "group": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "group"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "spec": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "unlocked": {
+              "type": "boolean",
+              "default": false,
+              "x-ui": "switch"
+            },
+            "errorPolicy": {
+              "type": "string",
+              "enum": [
+                "continue",
+                "abort"
+              ],
+              "default": "continue",
+              "x-ui": "choice"
+            },
+            "requirements": {
+              "$ref": "#/$defs/requirements",
+              "default": {}
+            },
+            "actions": {
+              "$ref": "#/$defs/actions",
+              "default": [],
+              "x-ui": "actions"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "metadata",
+        "spec"
+      ],
+      "additionalProperties": false
+    },
+    "ActionGroup": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "type": "string",
+          "const": "streamcrew/v1alpha1"
+        },
+        "kind": {
+          "type": "string",
+          "const": "ActionGroup"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "text"
+            },
+            "group": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "group"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "spec": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "unlocked": {
+              "type": "boolean",
+              "default": false,
+              "x-ui": "switch"
+            },
+            "errorPolicy": {
+              "type": "string",
+              "enum": [
+                "continue",
+                "abort"
+              ],
+              "default": "continue",
+              "x-ui": "choice"
+            },
+            "requirements": {
+              "$ref": "#/$defs/requirements",
+              "default": {}
+            },
+            "actions": {
+              "$ref": "#/$defs/actions",
+              "default": [],
+              "x-ui": "actions"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "metadata",
+        "spec"
+      ],
+      "additionalProperties": false
+    },
+    "CommandGroup": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "type": "string",
+          "const": "streamcrew/v1alpha1"
+        },
+        "kind": {
+          "type": "string",
+          "const": "CommandGroup"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "text"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "spec": {
+          "type": "object",
+          "properties": {
+            "timerInterval": {
+              "type": "string",
+              "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
+              "x-ui": "duration"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "metadata",
+        "spec"
+      ],
+      "additionalProperties": false
+    },
+    "CooldownGroup": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "type": "string",
+          "const": "streamcrew/v1alpha1"
+        },
+        "kind": {
+          "type": "string",
+          "const": "CooldownGroup"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "text"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "spec": {
+          "type": "object",
+          "properties": {
+            "duration": {
+              "type": "string",
+              "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
+              "x-ui": "duration"
+            }
+          },
+          "required": [
+            "duration"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "metadata",
+        "spec"
+      ],
+      "additionalProperties": false
+    },
+    "requirements": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/requirement.role"
+        },
+        "cooldown": {
+          "$ref": "#/$defs/requirement.cooldown"
+        },
+        "arguments": {
+          "$ref": "#/$defs/requirement.arguments"
+        },
+        "rank": {
+          "$ref": "#/$defs/requirement.rank"
+        },
+        "currency": {
+          "$ref": "#/$defs/requirement.currency"
+        },
+        "inventory": {
+          "$ref": "#/$defs/requirement.inventory"
+        },
+        "threshold": {
+          "$ref": "#/$defs/requirement.threshold"
+        },
+        "settings": {
+          "$ref": "#/$defs/requirement.settings"
+        }
+      },
+      "additionalProperties": false
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/action"
+      }
+    },
+    "action": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/action.chat"
+        },
+        {
+          "$ref": "#/$defs/action.command"
+        },
+        {
+          "$ref": "#/$defs/action.conditional"
+        },
+        {
+          "$ref": "#/$defs/action.counter"
+        },
+        {
+          "$ref": "#/$defs/action.external_program"
+        },
+        {
+          "$ref": "#/$defs/action.file"
+        },
+        {
+          "$ref": "#/$defs/action.group"
+        },
+        {
+          "$ref": "#/$defs/action.moderation"
+        },
+        {
+          "$ref": "#/$defs/action.platform_message"
+        },
+        {
+          "$ref": "#/$defs/action.random"
+        },
+        {
+          "$ref": "#/$defs/action.repeat"
+        },
+        {
+          "$ref": "#/$defs/action.special_identifier"
+        },
+        {
+          "$ref": "#/$defs/action.user_lookup"
+        },
+        {
+          "$ref": "#/$defs/action.wait"
+        },
+        {
+          "$ref": "#/$defs/action.web_request"
+        }
+      ]
+    },
+    "action.chat": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "chat"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "message",
+            "whisper"
+          ],
+          "default": "message",
+          "x-ui": "choice"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "template"
+        },
+        "asStreamer": {
+          "type": "boolean",
+          "default": false,
+          "x-ui": "switch"
+        },
+        "reply": {
+          "type": "boolean",
+          "default": false,
+          "x-ui": "switch"
+        },
+        "recipient": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "user"
+        }
+      },
+      "required": [
+        "type",
+        "kind",
+        "message"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "chat"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "message",
+              "default": "message"
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "asStreamer": {
+              "type": "boolean",
+              "default": false,
+              "x-ui": "switch"
+            },
+            "reply": {
+              "type": "boolean",
+              "default": false,
+              "x-ui": "switch"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "chat"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "whisper",
+              "default": "message"
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "asStreamer": {
+              "type": "boolean",
+              "default": false,
+              "x-ui": "switch"
+            },
+            "recipient": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "user"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "message"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "action.command": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "command"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "run",
+            "enable",
+            "disable",
+            "toggle",
+            "enable_group",
+            "disable_group",
+            "cancel_all",
+            "pause",
+            "unpause",
+            "pause_entrance",
+            "unpause_entrance",
+            "start_cooldown",
+            "exit"
+          ],
+          "default": "run",
+          "x-ui": "choice"
+        },
+        "command": {
+          "type": "string",
+          "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+          "x-ui": "command"
+        },
+        "wait": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "checkRequirements": {
+          "type": "boolean",
+          "default": false,
+          "x-ui": "switch"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "enum": [
+                "caller",
+                "own"
+              ],
+              "x-ui": "choice"
+            },
+            "text": {
+              "type": "string",
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "from"
+          ],
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "const": "caller"
+                }
+              },
+              "required": [
+                "from"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "const": "own"
+                },
+                "text": {
+                  "type": "string",
+                  "x-ui": "template"
+                }
+              },
+              "required": [
+                "from",
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "default": {
+            "from": "caller"
+          }
+        },
+        "group": {
+          "type": "string",
+          "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+          "x-ui": "group"
+        }
+      },
+      "required": [
+        "type",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "run",
+              "default": "run"
+            },
+            "command": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "command"
+            },
+            "wait": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "checkRequirements": {
+              "type": "boolean",
+              "default": false,
+              "x-ui": "switch"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "enum": [
+                    "caller",
+                    "own"
+                  ],
+                  "x-ui": "choice"
+                },
+                "text": {
+                  "type": "string",
+                  "x-ui": "template"
+                }
+              },
+              "required": [
+                "from"
+              ],
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "const": "caller"
+                    }
+                  },
+                  "required": [
+                    "from"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "const": "own"
+                    },
+                    "text": {
+                      "type": "string",
+                      "x-ui": "template"
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "default": {
+                "from": "caller"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "enable",
+              "default": "run"
+            },
+            "command": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "command"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "disable",
+              "default": "run"
+            },
+            "command": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "command"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "toggle",
+              "default": "run"
+            },
+            "command": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "command"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "enable_group",
+              "default": "run"
+            },
+            "group": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "group"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "group"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "disable_group",
+              "default": "run"
+            },
+            "group": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "group"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "group"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "cancel_all",
+              "default": "run"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "pause",
+              "default": "run"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "unpause",
+              "default": "run"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "pause_entrance",
+              "default": "run"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "unpause_entrance",
+              "default": "run"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "start_cooldown",
+              "default": "run"
+            },
+            "command": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "command"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "exit",
+              "default": "run"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "action.conditional": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "conditional"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "clauses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "left": {
+                "type": "string",
+                "x-ui": "template"
+              },
+              "compare": {
+                "type": "string",
+                "enum": [
+                  "equals",
+                  "not_equals",
+                  "greater",
+                  "greater_or_equal",
+                  "less",
+                  "less_or_equal",
+                  "contains",
+                  "not_contains",
+                  "regex",
+                  "in",
+                  "not_in",
+                  "between",
+                  "replaced",
+                  "not_replaced",
+                  "expression"
+                ],
+                "x-ui": "choice"
+              },
+              "right": {
+                "type": "string",
+                "x-ui": "template"
+              },
+              "min": {
+                "type": "string",
+                "x-ui": "template"
+              },
+              "max": {
+                "type": "string",
+                "x-ui": "template"
+              }
+            },
+            "required": [
+              "left",
+              "compare"
+            ],
+            "additionalProperties": false,
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "left": {
+                    "type": "string",
+                    "x-ui": "template"
+                  },
+                  "compare": {
+                    "enum": [
+                      "equals",
+                      "not_equals",
+                      "greater",
+                      "greater_or_equal",
+                      "less",
+                      "less_or_equal",
+                      "contains",
+                      "not_contains",
+                      "regex",
+                      "in",
+                      "not_in"
+                    ]
+                  },
+                  "right": {
+                    "type": "string",
+                    "x-ui": "template"
+                  }
+                },
+                "required": [
+                  "left",
+                  "compare",
+                  "right"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "left": {
+                    "type": "string",
+                    "x-ui": "template"
+                  },
+                  "compare": {
+                    "const": "between"
+                  },
+                  "min": {
+                    "type": "string",
+                    "x-ui": "template"
+                  },
+                  "max": {
+                    "type": "string",
+                    "x-ui": "template"
+                  }
+                },
+                "required": [
+                  "left",
+                  "compare",
+                  "min",
+                  "max"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "left": {
+                    "type": "string",
+                    "x-ui": "template"
+                  },
+                  "compare": {
+                    "enum": [
+                      "replaced",
+                      "not_replaced"
+                    ]
+                  }
+                },
+                "required": [
+                  "left",
+                  "compare"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "left": {
+                    "type": "string",
+                    "x-ui": "template"
+                  },
+                  "compare": {
+                    "const": "expression"
+                  }
+                },
+                "required": [
+                  "left",
+                  "compare"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "minItems": 1,
+          "x-ui": "list"
+        },
+        "combine": {
+          "type": "string",
+          "enum": [
+            "and",
+            "or",
+            "xor"
+          ],
+          "default": "and",
+          "x-ui": "choice"
+        },
+        "caseSensitive": {
+          "type": "boolean",
+          "default": false,
+          "x-ui": "switch"
+        },
+        "actions": {
+          "$ref": "#/$defs/actions",
+          "default": [],
+          "x-ui": "actions"
+        },
+        "else": {
+          "$ref": "#/$defs/actions",
+          "default": [],
+          "x-ui": "actions"
+        },
+        "repeatWhileTrue": {
+          "type": "boolean",
+          "default": false,
+          "x-ui": "switch"
+        }
+      },
+      "required": [
+        "type",
+        "clauses"
+      ],
+      "additionalProperties": false
+    },
+    "action.counter": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "counter"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "increment",
+            "decrement",
+            "add",
+            "set",
+            "reset"
+          ],
+          "default": "increment",
+          "x-ui": "choice"
+        },
+        "counter": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[^\\x00-/:-@[-`{-\\x7F]+$",
+          "default": "",
+          "x-ui": "counter"
+        },
+        "amount": {
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": -1e+34,
+              "maximum": 1e+34
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "expression"
+            }
+          ],
+          "x-ui": "amount"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": -1e+34,
+              "maximum": 1e+34
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "expression"
+            }
+          ],
+          "x-ui": "amount"
+        }
+      },
+      "required": [
+        "type",
+        "kind",
+        "counter"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "counter"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "increment",
+              "default": "increment"
+            },
+            "counter": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[^\\x00-/:-@[-`{-\\x7F]+$",
+              "default": "",
+              "x-ui": "counter"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "counter"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "counter"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "decrement",
+              "default": "increment"
+            },
+            "counter": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[^\\x00-/:-@[-`{-\\x7F]+$",
+              "default": "",
+              "x-ui": "counter"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "counter"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "counter"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "add",
+              "default": "increment"
+            },
+            "counter": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[^\\x00-/:-@[-`{-\\x7F]+$",
+              "default": "",
+              "x-ui": "counter"
+            },
+            "amount": {
+              "oneOf": [
+                {
+                  "type": "number",
+                  "minimum": -1e+34,
+                  "maximum": 1e+34
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "expression"
+                }
+              ],
+              "x-ui": "amount"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "counter"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "counter"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "set",
+              "default": "increment"
+            },
+            "counter": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[^\\x00-/:-@[-`{-\\x7F]+$",
+              "default": "",
+              "x-ui": "counter"
+            },
+            "value": {
+              "oneOf": [
+                {
+                  "type": "number",
+                  "minimum": -1e+34,
+                  "maximum": 1e+34
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "expression"
+                }
+              ],
+              "x-ui": "amount"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "counter",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "counter"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "reset",
+              "default": "increment"
+            },
+            "counter": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[^\\x00-/:-@[-`{-\\x7F]+$",
+              "default": "",
+              "x-ui": "counter"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "counter"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "action.external_program": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "external_program"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "start",
+            "run",
+            "open"
+          ],
+          "default": "start",
+          "x-ui": "choice"
+        },
+        "program": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "template"
+        },
+        "args": {
+          "type": "string",
+          "default": "",
+          "x-ui": "template"
+        },
+        "showWindow": {
+          "type": "boolean",
+          "default": false,
+          "x-ui": "switch"
+        },
+        "timeout": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3600
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "expression"
+            }
+          ],
+          "x-ui": "amount"
+        },
+        "saveOutput": {
+          "type": "boolean",
+          "x-ui": "switch"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "template"
+        }
+      },
+      "required": [
+        "type",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "external_program"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "start",
+              "default": "start"
+            },
+            "program": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "args": {
+              "type": "string",
+              "default": "",
+              "x-ui": "template"
+            },
+            "showWindow": {
+              "type": "boolean",
+              "default": false,
+              "x-ui": "switch"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "program"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "external_program"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "run",
+              "default": "start"
+            },
+            "program": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "args": {
+              "type": "string",
+              "default": "",
+              "x-ui": "template"
+            },
+            "showWindow": {
+              "type": "boolean",
+              "default": false,
+              "x-ui": "switch"
+            },
+            "timeout": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3600
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "expression"
+                }
+              ],
+              "x-ui": "amount"
+            },
+            "saveOutput": {
+              "type": "boolean",
+              "x-ui": "switch"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "program"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "external_program"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "open",
+              "default": "start"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "action.file": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "file"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "write",
+            "append",
+            "count_lines",
+            "read",
+            "read_line",
+            "read_random_line",
+            "each_line",
+            "remove_line",
+            "remove_random_line",
+            "remove_matching_line",
+            "insert_line",
+            "insert_random_line"
+          ],
+          "default": "write",
+          "x-ui": "choice"
+        },
+        "root": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]{1,32}$",
+          "x-ui": "file_root"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "template"
+        },
+        "text": {
+          "type": "string",
+          "default": "",
+          "x-ui": "template"
+        },
+        "result": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+$",
+          "x-ui": "result_name"
+        },
+        "line": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048577
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "expression"
+            }
+          ],
+          "x-ui": "amount"
+        },
+        "actions": {
+          "$ref": "#/$defs/actions",
+          "x-ui": "actions"
+        }
+      },
+      "required": [
+        "type",
+        "kind",
+        "root",
+        "path"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "write",
+              "default": "write"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]{1,32}$",
+              "x-ui": "file_root"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "text": {
+              "type": "string",
+              "default": "",
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "root",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "append",
+              "default": "write"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]{1,32}$",
+              "x-ui": "file_root"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "text": {
+              "type": "string",
+              "default": "",
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "root",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "count_lines",
+              "default": "write"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]{1,32}$",
+              "x-ui": "file_root"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "result": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+$",
+              "x-ui": "result_name"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "root",
+            "path",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "read",
+              "default": "write"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]{1,32}$",
+              "x-ui": "file_root"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "result": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+$",
+              "x-ui": "result_name"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "root",
+            "path",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "read_line",
+              "default": "write"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]{1,32}$",
+              "x-ui": "file_root"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "line": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1048577
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "expression"
+                }
+              ],
+              "x-ui": "amount"
+            },
+            "result": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+$",
+              "x-ui": "result_name"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "root",
+            "path",
+            "line",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "read_random_line",
+              "default": "write"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]{1,32}$",
+              "x-ui": "file_root"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "result": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+$",
+              "x-ui": "result_name"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "root",
+            "path",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "each_line",
+              "default": "write"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]{1,32}$",
+              "x-ui": "file_root"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "result": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+$",
+              "x-ui": "result_name"
+            },
+            "actions": {
+              "$ref": "#/$defs/actions",
+              "x-ui": "actions"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "root",
+            "path",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "remove_line",
+              "default": "write"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]{1,32}$",
+              "x-ui": "file_root"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "line": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1048577
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "expression"
+                }
+              ],
+              "x-ui": "amount"
+            },
+            "result": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+$",
+              "x-ui": "result_name"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "root",
+            "path",
+            "line",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "remove_random_line",
+              "default": "write"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]{1,32}$",
+              "x-ui": "file_root"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "result": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+$",
+              "x-ui": "result_name"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "root",
+            "path",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "remove_matching_line",
+              "default": "write"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]{1,32}$",
+              "x-ui": "file_root"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "text": {
+              "type": "string",
+              "default": "",
+              "x-ui": "template"
+            },
+            "result": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+$",
+              "x-ui": "result_name"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "root",
+            "path",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "insert_line",
+              "default": "write"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]{1,32}$",
+              "x-ui": "file_root"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "text": {
+              "type": "string",
+              "default": "",
+              "x-ui": "template"
+            },
+            "line": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1048577
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "expression"
+                }
+              ],
+              "x-ui": "amount"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "root",
+            "path",
+            "line"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "insert_random_line",
+              "default": "write"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]{1,32}$",
+              "x-ui": "file_root"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "text": {
+              "type": "string",
+              "default": "",
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "root",
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "action.group": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "group"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "actions": {
+          "$ref": "#/$defs/actions",
+          "default": [],
+          "x-ui": "actions"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "action.moderation": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "moderation"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "timeout",
+            "purge",
+            "clear_chat",
+            "ban",
+            "unban",
+            "mod",
+            "unmod",
+            "add_strike",
+            "remove_strike",
+            "reset_strikes",
+            "disable_chat",
+            "enable_chat"
+          ],
+          "default": "timeout",
+          "x-ui": "choice"
+        },
+        "user": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "user"
+        },
+        "seconds": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1209600
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "expression"
+            }
+          ],
+          "x-ui": "amount"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "template"
+        }
+      },
+      "required": [
+        "type",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moderation"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "timeout",
+              "default": "timeout"
+            },
+            "user": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "user"
+            },
+            "seconds": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1209600
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "expression"
+                }
+              ],
+              "x-ui": "amount"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "user",
+            "seconds"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moderation"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "purge",
+              "default": "timeout"
+            },
+            "user": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "user"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "user"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moderation"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "clear_chat",
+              "default": "timeout"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moderation"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "ban",
+              "default": "timeout"
+            },
+            "user": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "user"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "user"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moderation"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "unban",
+              "default": "timeout"
+            },
+            "user": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "user"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "user"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moderation"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "mod",
+              "default": "timeout"
+            },
+            "user": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "user"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "user"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moderation"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "unmod",
+              "default": "timeout"
+            },
+            "user": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "user"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "user"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moderation"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "add_strike",
+              "default": "timeout"
+            },
+            "user": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "user"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "user"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moderation"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "remove_strike",
+              "default": "timeout"
+            },
+            "user": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "user"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "user"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moderation"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "reset_strikes",
+              "default": "timeout"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moderation"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "disable_chat",
+              "default": "timeout"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moderation"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "enable_chat",
+              "default": "timeout"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "action.platform_message": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "platform_message"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "platform": {
+          "type": "string",
+          "pattern": "^[a-z0-9]{1,32}$",
+          "x-ui": "platform"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "template"
+        },
+        "asStreamer": {
+          "type": "boolean",
+          "default": false,
+          "x-ui": "switch"
+        },
+        "reply": {
+          "type": "boolean",
+          "default": false,
+          "x-ui": "switch"
+        }
+      },
+      "required": [
+        "type",
+        "platform",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "action.random": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "random"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "count": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "expression"
+            }
+          ],
+          "default": 1,
+          "x-ui": "amount"
+        },
+        "draw": {
+          "type": "string",
+          "enum": [
+            "free",
+            "unique",
+            "unique_remembered"
+          ],
+          "default": "free",
+          "x-ui": "choice"
+        },
+        "actions": {
+          "$ref": "#/$defs/actions",
+          "default": [],
+          "x-ui": "actions"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "action.repeat": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "repeat"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "count": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "expression"
+            }
+          ],
+          "x-ui": "amount"
+        },
+        "actions": {
+          "$ref": "#/$defs/actions",
+          "default": [],
+          "x-ui": "actions"
+        }
+      },
+      "required": [
+        "type",
+        "count"
+      ],
+      "additionalProperties": false
+    },
+    "action.special_identifier": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "special_identifier"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "text",
+            "expression"
+          ],
+          "default": "text",
+          "x-ui": "choice"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+$",
+          "default": "",
+          "x-ui": "result_name"
+        },
+        "global": {
+          "type": "boolean",
+          "default": false,
+          "x-ui": "switch"
+        },
+        "value": {
+          "type": "string",
+          "default": "",
+          "x-ui": "template"
+        }
+      },
+      "required": [
+        "type",
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "special_identifier"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "text",
+              "default": "text"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+$",
+              "default": "",
+              "x-ui": "result_name"
+            },
+            "global": {
+              "type": "boolean",
+              "default": false,
+              "x-ui": "switch"
+            },
+            "value": {
+              "type": "string",
+              "default": "",
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "special_identifier"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "expression",
+              "default": "text"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+$",
+              "default": "",
+              "x-ui": "result_name"
+            },
+            "global": {
+              "type": "boolean",
+              "default": false,
+              "x-ui": "switch"
+            },
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "default": "",
+              "x-ui": "expression"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "name",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "action.user_lookup": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "user_lookup"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "platform": {
+          "type": "string",
+          "pattern": "^[a-z0-9]{1,32}$",
+          "x-ui": "platform"
+        },
+        "user": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "user"
+        }
+      },
+      "required": [
+        "type",
+        "platform",
+        "user"
+      ],
+      "additionalProperties": false
+    },
+    "action.wait": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "wait"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "seconds": {
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 3600
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "expression"
+            }
+          ],
+          "x-ui": "amount"
+        }
+      },
+      "required": [
+        "type",
+        "seconds"
+      ],
+      "additionalProperties": false
+    },
+    "action.web_request": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "web_request"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "get",
+            "post",
+            "put",
+            "delete"
+          ],
+          "default": "get",
+          "x-ui": "choice"
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "template"
+        },
+        "headers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$",
+                "x-ui": "text"
+              },
+              "value": {
+                "type": "string",
+                "x-ui": "template"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "default": [],
+          "x-ui": "list"
+        },
+        "response": {
+          "type": "object",
+          "properties": {
+            "as": {
+              "type": "string",
+              "enum": [
+                "ignore",
+                "text",
+                "json"
+              ],
+              "x-ui": "choice"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "pattern": "^[^\\\\]+(\\\\[^\\\\]+)*$",
+                    "x-ui": "text"
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]+$",
+                    "x-ui": "result_name"
+                  }
+                },
+                "required": [
+                  "path",
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "x-ui": "list"
+            }
+          },
+          "required": [
+            "as"
+          ],
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "as": {
+                  "const": "ignore"
+                }
+              },
+              "required": [
+                "as"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "as": {
+                  "const": "text"
+                }
+              },
+              "required": [
+                "as"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "as": {
+                  "const": "json"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "pattern": "^[^\\\\]+(\\\\[^\\\\]+)*$",
+                        "x-ui": "text"
+                      },
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+$",
+                        "x-ui": "result_name"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "x-ui": "list"
+                }
+              },
+              "required": [
+                "as",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "default": {
+            "as": "ignore"
+          }
+        },
+        "body": {
+          "type": "string",
+          "x-ui": "template"
+        }
+      },
+      "required": [
+        "type",
+        "kind",
+        "url"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "web_request"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "get",
+              "default": "get"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "headers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$",
+                    "x-ui": "text"
+                  },
+                  "value": {
+                    "type": "string",
+                    "x-ui": "template"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 0,
+              "default": [],
+              "x-ui": "list"
+            },
+            "response": {
+              "type": "object",
+              "properties": {
+                "as": {
+                  "type": "string",
+                  "enum": [
+                    "ignore",
+                    "text",
+                    "json"
+                  ],
+                  "x-ui": "choice"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "pattern": "^[^\\\\]+(\\\\[^\\\\]+)*$",
+                        "x-ui": "text"
+                      },
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+$",
+                        "x-ui": "result_name"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "x-ui": "list"
+                }
+              },
+              "required": [
+                "as"
+              ],
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "as": {
+                      "const": "ignore"
+                    }
+                  },
+                  "required": [
+                    "as"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "as": {
+                      "const": "text"
+                    }
+                  },
+                  "required": [
+                    "as"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "as": {
+                      "const": "json"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string",
+                            "pattern": "^[^\\\\]+(\\\\[^\\\\]+)*$",
+                            "x-ui": "text"
+                          },
+                          "name": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+$",
+                            "x-ui": "result_name"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "x-ui": "list"
+                    }
+                  },
+                  "required": [
+                    "as",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "default": {
+                "as": "ignore"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "url"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "web_request"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "post",
+              "default": "get"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "headers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$",
+                    "x-ui": "text"
+                  },
+                  "value": {
+                    "type": "string",
+                    "x-ui": "template"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 0,
+              "default": [],
+              "x-ui": "list"
+            },
+            "response": {
+              "type": "object",
+              "properties": {
+                "as": {
+                  "type": "string",
+                  "enum": [
+                    "ignore",
+                    "text",
+                    "json"
+                  ],
+                  "x-ui": "choice"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "pattern": "^[^\\\\]+(\\\\[^\\\\]+)*$",
+                        "x-ui": "text"
+                      },
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+$",
+                        "x-ui": "result_name"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "x-ui": "list"
+                }
+              },
+              "required": [
+                "as"
+              ],
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "as": {
+                      "const": "ignore"
+                    }
+                  },
+                  "required": [
+                    "as"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "as": {
+                      "const": "text"
+                    }
+                  },
+                  "required": [
+                    "as"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "as": {
+                      "const": "json"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string",
+                            "pattern": "^[^\\\\]+(\\\\[^\\\\]+)*$",
+                            "x-ui": "text"
+                          },
+                          "name": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+$",
+                            "x-ui": "result_name"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "x-ui": "list"
+                    }
+                  },
+                  "required": [
+                    "as",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "default": {
+                "as": "ignore"
+              }
+            },
+            "body": {
+              "type": "string",
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "url"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "web_request"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "put",
+              "default": "get"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "headers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$",
+                    "x-ui": "text"
+                  },
+                  "value": {
+                    "type": "string",
+                    "x-ui": "template"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 0,
+              "default": [],
+              "x-ui": "list"
+            },
+            "response": {
+              "type": "object",
+              "properties": {
+                "as": {
+                  "type": "string",
+                  "enum": [
+                    "ignore",
+                    "text",
+                    "json"
+                  ],
+                  "x-ui": "choice"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "pattern": "^[^\\\\]+(\\\\[^\\\\]+)*$",
+                        "x-ui": "text"
+                      },
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+$",
+                        "x-ui": "result_name"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "x-ui": "list"
+                }
+              },
+              "required": [
+                "as"
+              ],
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "as": {
+                      "const": "ignore"
+                    }
+                  },
+                  "required": [
+                    "as"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "as": {
+                      "const": "text"
+                    }
+                  },
+                  "required": [
+                    "as"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "as": {
+                      "const": "json"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string",
+                            "pattern": "^[^\\\\]+(\\\\[^\\\\]+)*$",
+                            "x-ui": "text"
+                          },
+                          "name": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+$",
+                            "x-ui": "result_name"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "x-ui": "list"
+                    }
+                  },
+                  "required": [
+                    "as",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "default": {
+                "as": "ignore"
+              }
+            },
+            "body": {
+              "type": "string",
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "url"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "web_request"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "delete",
+              "default": "get"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "headers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$",
+                    "x-ui": "text"
+                  },
+                  "value": {
+                    "type": "string",
+                    "x-ui": "template"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 0,
+              "default": [],
+              "x-ui": "list"
+            },
+            "response": {
+              "type": "object",
+              "properties": {
+                "as": {
+                  "type": "string",
+                  "enum": [
+                    "ignore",
+                    "text",
+                    "json"
+                  ],
+                  "x-ui": "choice"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "pattern": "^[^\\\\]+(\\\\[^\\\\]+)*$",
+                        "x-ui": "text"
+                      },
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+$",
+                        "x-ui": "result_name"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "x-ui": "list"
+                }
+              },
+              "required": [
+                "as"
+              ],
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "as": {
+                      "const": "ignore"
+                    }
+                  },
+                  "required": [
+                    "as"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "as": {
+                      "const": "text"
+                    }
+                  },
+                  "required": [
+                    "as"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "as": {
+                      "const": "json"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string",
+                            "pattern": "^[^\\\\]+(\\\\[^\\\\]+)*$",
+                            "x-ui": "text"
+                          },
+                          "name": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+$",
+                            "x-ui": "result_name"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "x-ui": "list"
+                    }
+                  },
+                  "required": [
+                    "as",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "default": {
+                "as": "ignore"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "url"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "requirement.role": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "banned",
+            "user",
+            "twitch_affiliate",
+            "twitch_partner",
+            "follower",
+            "youtube_subscriber",
+            "regular",
+            "twitch_vip",
+            "kick_vip",
+            "kick_og",
+            "velora_vip",
+            "vpzone_plus",
+            "vpzone_founder",
+            "vpzone_ambassador",
+            "subscriber",
+            "youtube_member",
+            "twitch_global_mod",
+            "twitch_staff",
+            "moderator",
+            "editor",
+            "streamer"
+          ],
+          "x-ui": "choice"
+        }
+      },
+      "required": [
+        "role"
+      ],
+      "additionalProperties": false
+    },
+    "requirement.cooldown": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "per_user",
+            "group",
+            "per_user_group"
+          ],
+          "x-ui": "choice"
+        },
+        "duration": {
+          "type": "string",
+          "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
+          "x-ui": "duration"
+        },
+        "group": {
+          "type": "string",
+          "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+          "x-ui": "cooldown_group"
+        }
+      },
+      "required": [
+        "scope"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "enum": [
+                "standard",
+                "per_user"
+              ]
+            },
+            "duration": {
+              "type": "string",
+              "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
+              "x-ui": "duration"
+            }
+          },
+          "required": [
+            "scope",
+            "duration"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "enum": [
+                "group",
+                "per_user_group"
+              ]
+            },
+            "group": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "cooldown_group"
+            }
+          },
+          "required": [
+            "scope",
+            "group"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "requirement.arguments": {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "x-ui": "text"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "number",
+                  "integer",
+                  "user"
+                ],
+                "x-ui": "choice"
+              },
+              "required": {
+                "type": "boolean",
+                "x-ui": "switch"
+              },
+              "identifier": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+$",
+                "x-ui": "result_name"
+              }
+            },
+            "required": [
+              "name",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "x-ui": "list"
+        }
+      },
+      "required": [
+        "arguments"
+      ],
+      "additionalProperties": false
+    },
+    "requirement.rank": {
+      "type": "object",
+      "properties": {
+        "rank": {
+          "type": "string",
+          "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+          "x-ui": "rank"
+        },
+        "match": {
+          "type": "string",
+          "enum": [
+            "at_least",
+            "exactly",
+            "at_most"
+          ],
+          "x-ui": "choice"
+        }
+      },
+      "required": [
+        "rank",
+        "match"
+      ],
+      "additionalProperties": false
+    },
+    "requirement.currency": {
+      "type": "object",
+      "properties": {
+        "currency": {
+          "type": "string",
+          "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+          "x-ui": "currency"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "required",
+            "minimum",
+            "range"
+          ],
+          "x-ui": "choice"
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maximum": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "currency",
+        "mode"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "currency": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "currency"
+            },
+            "mode": {
+              "enum": [
+                "required",
+                "minimum"
+              ]
+            },
+            "amount": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "currency",
+            "mode",
+            "amount"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "currency": {
+              "type": "string",
+              "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+              "x-ui": "currency"
+            },
+            "mode": {
+              "const": "range"
+            },
+            "amount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maximum": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "currency",
+            "mode",
+            "amount",
+            "maximum"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "requirement.inventory": {
+      "type": "object",
+      "properties": {
+        "item": {
+          "type": "string",
+          "pattern": "^[^\\x00-\\x20\\x7F-\\x9F]([^\\x00-\\x1F\\x7F-\\x9F]*[^\\x00-\\x20\\x7F-\\x9F])?$",
+          "x-ui": "item"
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "item",
+        "amount"
+      ],
+      "additionalProperties": false
+    },
+    "requirement.threshold": {
+      "type": "object",
+      "properties": {
+        "users": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "within": {
+          "type": "string",
+          "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
+          "x-ui": "duration"
+        },
+        "runForEachUser": {
+          "type": "boolean",
+          "x-ui": "switch"
+        }
+      },
+      "required": [
+        "users",
+        "within"
+      ],
+      "additionalProperties": false
+    },
+    "requirement.settings": {
+      "type": "object",
+      "properties": {
+        "deleteTriggerMessage": {
+          "type": "boolean",
+          "x-ui": "switch"
+        },
+        "showInChatMenu": {
+          "type": "boolean",
+          "x-ui": "switch"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

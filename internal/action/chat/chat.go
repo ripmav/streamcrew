@@ -97,6 +97,19 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("chat action types: no logger")
 	}
 	ports := &ports{Ports: p}
+	return descriptors(ports), nil
+}
+
+// Catalog returns the chat types without ports, for the type catalog and
+// commands as code (Code-ADR-0013, point 3): their actions decode,
+// validate and encode, but must not run.
+func Catalog() []action.Descriptor {
+	return descriptors(nil)
+}
+
+// descriptors returns the chat types with ports, which are nil in the
+// catalog.
+func descriptors(ports *ports) []action.Descriptor {
 	return []action.Descriptor{
 		action.Descriptor{
 			Type:     TypeChat,
@@ -123,7 +136,7 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		}.WithNew(func() PlatformMessage {
 			return PlatformMessage{Common: action.On(), ports: ports}
 		}),
-	}, nil
+	}
 }
 
 // chatSchema returns the schema of the chat action: a message has the

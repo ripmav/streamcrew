@@ -43,6 +43,14 @@ const (
 	UISwitch     UI = "switch"      // a yes or no choice
 	UIChoice     UI = "choice"      // one of fixed values
 	UIList       UI = "list"        // a list of entries, each with the fields of its schema
+	// UIDuration is a duration as text, e.g. "30s" (Code-ADR-0009).
+	UIDuration UI = "duration"
+	// UICooldownGroup, UICurrency, UIRank and UIItem refer to a cooldown
+	// group, a currency, a rank and an inventory item (requirements.md).
+	UICooldownGroup UI = "cooldown_group"
+	UICurrency      UI = "currency"
+	UIRank          UI = "rank"
+	UIItem          UI = "item"
 )
 
 // UIs returns every UI hint, in a fixed order.
@@ -50,6 +58,7 @@ func UIs() []UI {
 	return []UI{
 		UIText, UIMultiline, UITemplate, UIAmount, UIExpression, UIUser, UIPlatform,
 		UICommand, UIGroup, UICounter, UIFileRoot, UIResultName, UIActions, UISwitch, UIChoice, UIList,
+		UIDuration, UICooldownGroup, UICurrency, UIRank, UIItem,
 	}
 }
 
@@ -67,6 +76,10 @@ const (
 	// PatternID is the canonical text form of an ID: a UUID in lowercase
 	// (Code-ADR-0009).
 	PatternID = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+	// PatternDuration is the form of a positive duration as Go writes and
+	// reads it, e.g. "30s", "1m30s" or "1.5h" (Code-ADR-0009); that it is
+	// positive and in range the Go code checks.
+	PatternDuration = "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$"
 	// PatternCounterName is what a pattern can say about counter names
 	// without Unicode classes, which ECMA-262 does not know without its u
 	// flag (Code-ADR-0013, point 6): no ASCII character but letters and
@@ -74,6 +87,12 @@ const (
 	// (counters-and-quotes.md, B7) only counter.ValidateName checks;
 	// CounterName bounds the length.
 	PatternCounterName = `^[^\x00-/:-@[-` + "`" + `{-\x7F]+$`
+	// PatternCommandName is what a pattern can say about the names of
+	// commands, command groups and cooldown groups (commands.md, B1, B30,
+	// B33): no control character of Latin-1, and no space at the start or
+	// end. That the name has no other white space at either end only
+	// command.Command.Validate and its siblings check.
+	PatternCommandName = `^[^\x00-\x20\x7F-\x9F]([^\x00-\x1F\x7F-\x9F]*[^\x00-\x20\x7F-\x9F])?$`
 	// PatternPlatform is the form of the names of platforms: 1 to 32
 	// lowercase ASCII letters and digits, as platform.Name.Validate checks
 	// them.
@@ -93,6 +112,8 @@ const KeyKind = "kind"
 type Schema struct {
 	// Dialect is "$schema"; only the schema of a whole document has it.
 	Dialect string `json:"$schema,omitempty"`
+	// Ref refers to a definition, e.g. "#/$defs/actions".
+	Ref string `json:"$ref,omitempty"`
 	// Type is the JSON type, e.g. "object" or "string".
 	Type string `json:"type,omitempty"`
 	// Properties are the members of an object, in the order editors show
@@ -110,7 +131,7 @@ type Schema struct {
 	// Enum lists the allowed texts.
 	Enum []string `json:"enum,omitempty"`
 	// Const is the only allowed value, as JSON.
-	Const jsontext.Value `json:"const,omitempty"`
+	Const jsontext.Value `json:"const,omitzero"`
 	// Minimum and Maximum bound a number, both included.
 	Minimum *float64 `json:"minimum,omitempty"`
 	Maximum *float64 `json:"maximum,omitempty"`
@@ -124,9 +145,41 @@ type Schema struct {
 	// OneOf are alternatives of which exactly one must match.
 	OneOf []*Schema `json:"oneOf,omitempty"`
 	// Default is the value a new action has (Code-ADR-0013, point 4).
-	Default jsontext.Value `json:"default,omitempty"`
+	Default jsontext.Value `json:"default,omitzero"`
 	// UI is the hint for generic editors.
 	UI UI `json:"x-ui,omitempty"`
+	// Defs are definitions that Ref names, in order.
+	Defs Defs `json:"$defs,omitzero"`
+}
+
+// Def is a definition of Defs.
+type Def struct {
+	Name   string
+	Schema *Schema
+}
+
+// Defs are definitions in order.
+type Defs []Def
+
+// MarshalJSONTo writes the definitions as a JSON object in their order.
+func (ds Defs) MarshalJSONTo(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	for _, d := range ds {
+		if err := enc.WriteToken(jsontext.String(d.Name)); err != nil {
+			return err
+		}
+		if err := json.MarshalEncode(enc, d.Schema); err != nil {
+			return err
+		}
+	}
+	return enc.WriteToken(jsontext.EndObject)
+}
+
+// DefRef returns a schema that refers to the definition name.
+func DefRef(name string) *Schema {
+	return &Schema{Ref: "#/$defs/" + name}
 }
 
 // Property is a member of an object schema.
@@ -256,7 +309,7 @@ func (s *Schema) Variant(key, value string) (alt *Schema, ok bool) {
 		if !ok {
 			continue
 		}
-		if slices.Contains(p.Schema.Enum, value) || bytes.Equal(p.Schema.Const, quote(value)) {
+		if slices.Contains(p.Schema.Enum, value) || bytes.Equal(p.Schema.Const, Quote(value)) {
 			return alt, true
 		}
 	}
@@ -277,7 +330,7 @@ func pick(before []Property, key string, after []Property, alts []Alternative) *
 	for _, a := range alts {
 		k := &Schema{Enum: slices.Clone(a.Values)}
 		if len(a.Values) == 1 {
-			k = &Schema{Const: quote(a.Values[0])}
+			k = &Schema{Const: Quote(a.Values[0])}
 		}
 		s.OneOf = append(s.OneOf, Object(slices.Concat(before, []Property{{Name: key, Schema: k, Required: true}}, after, a.Props)...))
 		for _, p := range a.Props {
@@ -289,11 +342,17 @@ func pick(before []Property, key string, after []Property, alts []Alternative) *
 	return s
 }
 
-// quote returns text as a JSON string. Type IDs and kinds are ASCII; were
-// they not valid UTF-8, the invalid bytes would become U+FFFD.
-func quote(text string) jsontext.Value {
+// Quote returns text as a JSON string, e.g. for Const or Default. Type IDs,
+// kinds and the values of choices are ASCII; were they not valid UTF-8, the
+// invalid bytes would become U+FFFD.
+func Quote(text string) jsontext.Value {
 	v, _ := jsontext.AppendQuote(nil, text)
 	return v
+}
+
+// Duration returns the field of a duration as text, e.g. "30s".
+func Duration() *Schema {
+	return &Schema{Type: "string", Pattern: PatternDuration, UI: UIDuration}
 }
 
 // Switch returns a yes or no field.
@@ -362,6 +421,13 @@ func FileRoot() *Schema {
 	return &Schema{Type: "string", Pattern: PatternFileRoot, UI: UIFileRoot}
 }
 
+// CommandName returns the field of the name of a command, a command group
+// or a cooldown group, shown as ui: the name of a document or a reference
+// to one by its name (commands-as-code.md, B3, B23).
+func CommandName(ui UI) *Schema {
+	return &Schema{Type: "string", Pattern: PatternCommandName, UI: ui}
+}
+
 // ResultName returns the field of the name of a result value
 // (actions.md B5).
 func ResultName() *Schema {
@@ -398,7 +464,7 @@ func Actions() *Schema {
 func (s *Schema) BindType(typ string) {
 	for i, p := range s.Properties {
 		if p.Name == "type" {
-			s.Properties[i].Schema = &Schema{Type: "string", Const: quote(typ)}
+			s.Properties[i].Schema = &Schema{Type: "string", Const: Quote(typ)}
 		}
 	}
 	for _, alt := range s.OneOf {
@@ -442,6 +508,14 @@ func (s *Schema) Validate() error {
 			return fmt.Errorf("property %q: %w", p.Name, err)
 		}
 	}
+	for _, d := range s.Defs {
+		if d.Schema == nil {
+			return fmt.Errorf("definition %q has no schema", d.Name)
+		}
+		if err := d.Schema.Validate(); err != nil {
+			return fmt.Errorf("definition %q: %w", d.Name, err)
+		}
+	}
 	for _, sub := range append(slices.Clone(s.OneOf), s.Items) {
 		if sub == nil {
 			continue
@@ -472,5 +546,9 @@ func (s *Schema) Clone() *Schema {
 	}
 	c.Const = slices.Clone(s.Const)
 	c.Default = slices.Clone(s.Default)
+	c.Defs = slices.Clone(s.Defs)
+	for i := range c.Defs {
+		c.Defs[i].Schema = c.Defs[i].Schema.Clone()
+	}
 	return &c
 }

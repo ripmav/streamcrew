@@ -72,6 +72,19 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("network action types: no logger")
 	}
 	ports := &ports{Ports: p, client: newClient(p.Dialer)}
+	return descriptors(ports), nil
+}
+
+// Catalog returns the network types without ports, for the type catalog and
+// commands as code (Code-ADR-0013, point 3): their actions decode,
+// validate and encode, but must not run.
+func Catalog() []action.Descriptor {
+	return descriptors(nil)
+}
+
+// descriptors returns the network types with ports, which are nil in the
+// catalog.
+func descriptors(ports *ports) []action.Descriptor {
 	return []action.Descriptor{
 		action.Descriptor{
 			Type:         TypeWebRequest,
@@ -81,7 +94,7 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 			Results:      []string{ResultBody},
 			Schema:       webRequestSchema(),
 		}.WithKinds(MethodGet, func(m Method) (WebRequest, bool) { return newWebRequest(ports, m) }),
-	}, nil
+	}
 }
 
 // newClient returns the HTTP client of web requests (B72, B73, B77):

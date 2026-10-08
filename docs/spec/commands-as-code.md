@@ -5,7 +5,7 @@
 | **Status** | Geprüft |
 | **Stand** | 2026-10-03 |
 | **Bezug** | Roadmap Phase 3.5; Plan §2 (Ziel Z9), §6.9, §7.2; [Code-ADR-0005](../adr/code/0005-konfiguration.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0013](../adr/code/0013-typ-registry.md), [Code-ADR-0017](../adr/code/0017-klare-signale-statt-magischer-werte.md), [Code-ADR-0018](../adr/code/0018-json-v2.md), [Code-ADR-0020](../adr/code/0020-dezimalzahlen.md); [`commands.md`](commands.md), [`requirements.md`](requirements.md), [`actions.md`](actions.md) |
-| **Umsetzung** | noch offen (Roadmap 3.5) |
+| **Umsetzung** | begonnen 2026-10-03 (Roadmap 3.5): eindeutige Namen (B22) und Schema-Export (B30) in `internal/commandfile` mit `streamcrew schema export`; Prüfen, Import und Export folgen |
 
 ## Zweck und Umfang
 
@@ -60,7 +60,7 @@ Nicht Teil dieser Spezifikation:
 | ID | Regel | Quellen |
 |---|---|---|
 | B22 | Ein Dokument ist an Art und Name erkennbar. Die Namen von Commands sind im Profil ohne Rücksicht auf die Schreibweise eindeutig, wie die Namen von Cooldown-Gruppen ([`commands.md`](commands.md), B33); die Namen von Command-Gruppen sind es schon (B30). [`commands.md`](commands.md) übernimmt die Regel mit ihrer Umsetzung (Roadmap 3.5). | Entscheidung des Projektinhabers |
-| B23 | Verweise stehen in Dateien als Namen: der Command einer Command-Action, die Gruppe beim Schalten einer Gruppe ([`actions.md`](actions.md), B31, B34), die Cooldown-Gruppe eines Cooldowns ([`requirements.md`](requirements.md), B20) und die Command-Gruppe in `metadata.group`. Counter und freigegebene Wurzeln stehen ohnehin als Name. Der Import löst Namen in IDs auf, der Export schreibt Namen. | Entscheidung des Projektinhabers |
+| B23 | Verweise stehen in Dateien als Namen: der Command einer Command-Action, die Gruppe beim Schalten einer Gruppe ([`actions.md`](actions.md), B31, B34), die Cooldown-Gruppe eines Cooldowns ([`requirements.md`](requirements.md), B20), die Währung, der Rang und der Gegenstand der Anforderungen ([`commands.md`](commands.md), B42–B44) und die Command-Gruppe in `metadata.group`. Counter und freigegebene Wurzeln stehen ohnehin als Name. Der Import löst Namen in IDs auf, der Export schreibt Namen. | Entscheidung des Projektinhabers |
 | B24 | Ein Verweis zeigt auf ein Dokument derselben Prüfung oder desselben Imports oder auf eines, das es im Profil schon gibt. Ein Name, den keines davon trägt, ist ein Fehler. | [`actions.md`](actions.md), B31 |
 
 ### Prüfen, Import und Export
@@ -97,9 +97,9 @@ Keine. Commands als Code sind eine neue Funktion (Plan §4, „neu“); Commands
 ## Akzeptanzkriterien
 
 - [ ] B1–B5, B10–B14, B20, B21: jede Art mit gültigen und ungültigen Dokumenten in YAML und JSON, gegen den Go-Code und gegen das exportierte Schema.
-- [ ] B22: Namen von Commands sind ohne Rücksicht auf die Schreibweise eindeutig; gespeicherte Namen, die das verletzen, behandelt eine Migration.
+- [x] B22: Namen von Commands sind ohne Rücksicht auf die Schreibweise eindeutig; gespeicherte Namen, die das verletzen, behandelt eine Migration. Erledigt 2026-10-03: Spalte `name_key` (Migration 13), Go-Migration 14 benennt doppelte Namen um.
 - [ ] B23, B24, B61: Verweise mit Namen auf Dokumente derselben Dateien und des Profils, auch gegenseitige Aufrufe.
-- [ ] B30: Das exportierte Schema stimmt mit `schemas/` im Repository überein.
+- [x] B30: Das exportierte Schema stimmt mit `schemas/` im Repository überein. Erledigt 2026-10-03: `TestSchemaExport` in `cmd/streamcrew` vergleicht die Ausgabe mit [`schemas/streamcrew-v1alpha1.schema.json`](../../schemas/streamcrew-v1alpha1.schema.json); der Konformitätstest der Anforderungsarten und die Beispiele in `internal/commandfile` prüfen das Schema gegen den Go-Code.
 - [ ] B31, B32, B62, B66: Fehler mit Datei, Zeile, Spalte und Pfad, alle auf einmal, als Text und als JSON.
 - [ ] B33, B34, B60, B63: Import neu und ersetzend, alles oder nichts, mit gestopptem Core.
 - [ ] B35–B38, B64, B65: Export als YAML und JSON, in eine Datei und je Dokument; Rundlauf aus Export und Import ohne Änderung.
@@ -119,3 +119,4 @@ Keine. Die Grundsatzfragen hat der Projektinhaber am 2026-10-03 entschieden (Art
 | Datum | Änderung |
 |---|---|
 | 2026-10-03 | Erstfassung mit den Entscheidungen des Projektinhabers: je Command-Art ein `kind`, Erkennung am Namen mit eindeutigen Command-Namen, Verweise mit Namen, Anforderungen als Map nach Art. Festlegungen dabei: keine Kurzformen, etwa `role: follower`, damit jede Anforderung eine Form hat; unbekannte Arten von Actions und Anforderungen sind in Dateien ein Fehler; der Import ersetzt Dokumente gleichen Namens und löscht keine anderen; der Export schreibt alle Felder ausdrücklich. |
+| 2026-10-03 | Umsetzung begonnen mit B22 und B30. Festlegungen dabei: Auch Währung, Rang und Gegenstand der Anforderungen stehen als Namen (B3, B23); bis Phase 8 gibt es keine, ein solcher Name ist also ein Fehler (B24). Das Schema hat die Definitionen `document`, je Art (`ChatCommand` …), `requirements`, `actions`, `action` und je Typ `action.<typ>` und `requirement.<typ>`; in `spec` stehen die Felder der Art vorn, dann `enabled`, `unlocked`, `errorPolicy`, `requirements` und `actions`, und in dieser Reihenfolge schreibt sie der Export (B36). Namen prüft das Schema nur auf Steuerzeichen und Leerzeichen am Rand, weitere Leerraumzeichen am Rand nur der Go-Code ([Code-ADR-0013](../adr/code/0013-typ-registry.md), Punkt 6). |

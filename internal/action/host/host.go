@@ -85,6 +85,19 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("host action types: no logger")
 	}
 	ports := &ports{Ports: p}
+	return descriptors(ports), nil
+}
+
+// Catalog returns the host types without ports, for the type catalog and
+// commands as code (Code-ADR-0013, point 3): their actions decode,
+// validate and encode, but must not run.
+func Catalog() []action.Descriptor {
+	return descriptors(nil)
+}
+
+// descriptors returns the host types with ports, which are nil in the
+// catalog.
+func descriptors(ports *ports) []action.Descriptor {
 	return []action.Descriptor{
 		action.Descriptor{
 			Type:         TypeFile,
@@ -115,5 +128,5 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 			}
 			return p, true
 		}),
-	}, nil
+	}
 }
