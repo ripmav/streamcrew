@@ -300,6 +300,26 @@ func TestWait(t *testing.T) {
 		assert.Empty(t, reqs[0].Get("client_secret"), "a public client never sends a secret")
 	})
 
+	t.Run("the Twitch error shape of the pending answer", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		f := newOAuthFake(t)
+		flow := f.twitchFlow()
+		// The real endpoint answers the polling with the field
+		// "message", not the RFC 8628 field "error" (verified against
+		// Twitch 2026-10-08); the polling must keep going.
+		f.tokenScript = []tokenReply{
+			{http.StatusBadRequest, `{"status":400,"message":"authorization_pending"}`},
+			{http.StatusOK, fakeSuccessToken},
+		}
+		l, _, err := flow.Start(ctx)
+		require.NoError(t, err)
+		tok, err := flow.Wait(ctx, l)
+		require.NoError(t, err)
+		assert.Equal(t, "at-1", tok.AccessToken)
+		assert.Len(t, f.tokenReqs(), 2, "it polls until the login is complete")
+	})
+
 	t.Run("slow_down lengthens the interval", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()

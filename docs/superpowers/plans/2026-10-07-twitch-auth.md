@@ -527,6 +527,7 @@ BYO (eigene Confidential-App des Nutzers, Secret im Vault unter
 | R5 | CLI: `auth login twitch` = Code-Flow-Standard, `--device-flow` (DCF), `--client-id`/`--client-secret` (erster Login, danach aus dem Vault; Flags überschreiben), Fehlermeldung ohne Credentials, Kong-Tests | `feat/auth-cli` / #149 | erledigt |
 | R6 | Doku: README (BYO-App-Setup + Redirect-Registrierung, `--device-flow`, Statusparagraf), `events.md` (Code-Flow-Semantik), Roadmap 4.1-Abschnitt + Historie, Plan-Status | `docs/auth-events` / #150 | erledigt |
 | R7 | E2E-Nachtrag: `scope` in der Token-Antwort kommt als JSON-Array (Twitch-Doku) — `normalizeScope` normalisiert es in der Token-Auslesung für beide Flows; Test-Fakes in der realen Array-Form | `fix/twitch-scope-array` / #151 | erledigt |
+| R8 | E2E-Nachtrag: Das DCF-Polling läuft eigenständig — Twitch antwortet auf `authorization_pending`/`slow_down` im Feld `message` statt im RFC-Feld `error`, das `x/oauth2`-Polling hält das für fatal und bricht ab; beide Feldformen werden erkannt, `DeviceAuth` (Code + URL) bleibt in der Bibliothek | `fix/twitch-dcf-polling` / #152 | erledigt |
 
 **E2E (ersetzt §7.2):**
 
@@ -544,10 +545,24 @@ BYO (eigene Confidential-App des Nutzers, Secret im Vault unter
 **E2E-Befund (2026-10-08):** Punkt 2 (erster echter Login) lief durch
 (URL, Redirect, Token-Austausch, Konto gespeichert), aber die Scopes waren
 leer gespeichert — der Token-Endpunkt liefert `scope` als JSON-Array, der
-Code las es als raumgetrennte Zeichenkette. Fix in R7; Punkt 2 wird danach
+Code las es als raumgetrennte Zeichenkette. Fix in R7; Punkt 2 wurde danach
 als Re-Login fortgesetzt (flagless, App aus dem Vault, best-effort-Widerruf
-der ersten Anmeldung).
+der ersten Anmeldung) — `auth status` meldet `ok`, die 41 Scopes sind
+gespeichert.
+
+**E2E-Befund 2 (2026-10-08):** Der DCF-Fallback (Punkt 5) endete nach dem
+ersten Poll: Der echte Endpunkt antwortet auf den Poll mit dem Feld
+`message` statt dem RFC-8628-Feld `error`
+(`{"status":400,"message":"authorization_pending"}`), das `DeviceAccessToken`
+von `golang.org/x/oauth2` erkennt nicht und als fatal wertet — die CLI endete
+direkt nach der Code-Anzeige, ein DCF-Login war unmöglich. Fix in R8
+(Polling in `twitchFlow.Wait` eigenständig, beide Feldformen).
+
+**E2E-Ergebnis (2026-10-08):** Punkte 2–5 durchgelaufen — Code-Flow (BYO,
+mit und ohne Flags, Bot-Konto) und DCF-Fallback jeweils mit `ok`-Status (41
+Scopes) und Logout mit erfolgreichem Widerruf. Damit sind die Exit-Kriterien
+von §8 und §10 erfüllt.
 
 **Exit (ergänzt zu §8):** Zusätzlich E2E-Punkte 2–5 (Code-Flow und
-DCF-Fallback) durchgelaufen; Stack #146 [144, 145, 147, 148, 149, 150, 151]
-komplett grün und von unten nach oben mergebar.
+DCF-Fallback) durchgelaufen; Stack #146 [144, 145, 147, 148, 149, 150, 151,
+152] komplett grün und von unten nach oben mergebar.
