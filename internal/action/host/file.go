@@ -234,10 +234,17 @@ func (f File) ResultNames() []string {
 // none for the other kinds.
 func (f File) Children() []command.Action { return f.Actions }
 
-// local reports whether path, with "/" or the separator of the system,
-// stays in its root: not absolute, no ".." beyond it (B102).
+// local reports whether path stays in its root: not absolute, no ".."
+// beyond it (B102).
 func local(path string) bool {
-	return filepath.IsLocal(filepath.FromSlash(path))
+	return filepath.IsLocal(systemPath(path))
+}
+
+// systemPath returns path with the separator of the system: "/" and "\"
+// both separate directories on every system, so that paths from Windows
+// hold on Linux and macOS too (B102).
+func systemPath(path string) string {
+	return filepath.FromSlash(strings.ReplaceAll(path, `\`, "/"))
 }
 
 // Perform implements engine.Performer. Path, text and line number come
@@ -315,7 +322,7 @@ func (f File) render(ctx context.Context, s *template.Scope) (inputs, error) {
 	if !local(in.path) {
 		return inputs{}, field("path", fmt.Errorf("%w: %q leaves the root", action.ErrInvalid, in.path))
 	}
-	in.path = filepath.Clean(filepath.FromSlash(in.path))
+	in.path = filepath.Clean(systemPath(in.path))
 	if f.Text != nil {
 		in.text, texts = texts[0], texts[1:]
 	}

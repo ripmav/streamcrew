@@ -129,14 +129,15 @@ func TestFileConformance(t *testing.T) {
 
 	// Paths without identifiers that leave the root are rejected when saving
 	// (B102, B217); the schema cannot see that.
-	for _, path := range []string{"../geheim.txt", "a/../../b", "/etc/passwd"} {
+	for _, path := range []string{"../geheim.txt", "a/../../b", "/etc/passwd", `..\geheim.txt`, `a\..\..\b`, `a/..\..\b`} {
 		a, err := d.Decode([]byte(`{"kind":"write","root":"obs","path":`+quote(path)+`}`), json.DefaultOptionsV2())
 		require.NoError(t, err)
 		require.ErrorContains(t, a.Validate(), "leaves the root", path)
 	}
 }
 
-// TestFileWriteAndRead covers actions.md B104 and B105.
+// TestFileWriteAndRead covers actions.md B102, B104 and B105; "/" and "\"
+// separate directories on every system.
 func TestFileWriteAndRead(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -144,9 +145,9 @@ func TestFileWriteAndRead(t *testing.T) {
 		f := newFiles(t, dir)
 		in := f.start([]string{"song"},
 			f.op(host.FileWrite, "sub/dir/$arg1text.txt", `"text":"Now: $arg1text"`),
-			f.op(host.FileAppend, "sub/dir/song.txt", `"text":"line 2"`),
+			f.op(host.FileAppend, `sub\dir\song.txt`, `"text":"line 2"`),
 			f.op(host.FileAppend, "log.txt", `"text":"first"`),
-			f.op(host.FileCountLines, "sub/dir/song.txt", `"result":"count"`),
+			f.op(host.FileCountLines, `sub/dir\song.txt`, `"result":"count"`),
 			f.op(host.FileRead, "sub/dir/song.txt", `"result":"all"`),
 			f.show("$count|$all"),
 			f.op(host.FileWrite, "empty.txt", ""),
@@ -210,6 +211,7 @@ func TestFileFails(t *testing.T) {
 		f.put("big.txt", strings.Repeat("x", host.MaxFileSize+1))
 		params := engine.Params{Values: map[string]template.Value{
 			"up": template.TextValue("../secret.txt"), "abs": template.TextValue(filepath.Join(outside, "secret.txt")),
+			"back": template.TextValue(`..\secret.txt`),
 		}}
 		cases := []struct {
 			action command.Action
@@ -217,6 +219,7 @@ func TestFileFails(t *testing.T) {
 		}{
 			{f.op(host.FileRead, "$up", `"result":"r"`), `path: invalid action: "../secret.txt" leaves the root`},
 			{f.op(host.FileRead, "$abs", `"result":"r"`), "leaves the root"},
+			{f.op(host.FileRead, "$back", `"result":"r"`), "leaves the root"},
 			{f.file(`{"kind":"read","root":"other","path":"x","result":"r"}`), `root: invalid action: no root "other" is released`},
 			{f.file(`{"kind":"read","root":"gone","path":"x","result":"r"}`), "root: "},
 			{f.op(host.FileRead, "missing.txt", `"result":"r"`), "path: the file does not exist: missing.txt"},
