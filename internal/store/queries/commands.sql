@@ -25,6 +25,9 @@ ON CONFLICT (id) DO UPDATE SET
 -- name: DeleteCommand :execrows
 DELETE FROM commands WHERE id = ?;
 
+-- name: SetCommandEnabled :exec
+UPDATE commands SET enabled = ?, updated_at = ? WHERE id = ?;
+
 -- name: ListTriggers :many
 SELECT trigger_text FROM command_triggers WHERE command_id = ? ORDER BY position;
 
@@ -37,6 +40,9 @@ DELETE FROM command_triggers WHERE command_id = ?;
 -- name: InsertTrigger :exec
 INSERT INTO command_triggers (command_id, position, trigger_text, trigger_key, active)
 VALUES (?, ?, ?, ?, ?);
+
+-- name: SetTriggersActive :exec
+UPDATE command_triggers SET active = ? WHERE command_id = ?;
 
 -- name: GetCommandGroup :one
 SELECT * FROM command_groups WHERE id = ?;

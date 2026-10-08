@@ -280,4 +280,8 @@ type Repository interface {
 	PutGroup(ctx context.Context, g Group) error
 	// DeleteGroup deletes a group; its commands stay without a group (B62).
 	DeleteGroup(ctx context.Context, groupID id.ID) error
+	// SwitchCommands changes the switch "active" of the commands by sw, in
+	// one transaction: all or none. A command whose switch does not change
+	// keeps its UpdatedAt; the others get updatedAt.
+	SwitchCommands(ctx context.Context, commandIDs []id.ID, sw Switch, updatedAt time.Time) error
 }
