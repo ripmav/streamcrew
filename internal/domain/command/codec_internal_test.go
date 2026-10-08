@@ -90,7 +90,7 @@ func TestUnknownPartsSurvive(t *testing.T) {
 	c, err := NewCodec()
 	require.NoError(t, err)
 	rec := Record{
-		Name: "future", Kind: KindActionGroup,
+		Name: "future", Kind: KindActionGroup, ErrorPolicy: ErrorContinue,
 		Requirements: json.RawMessage(`[{"type":"role","schemaVersion":1,"role":"vip"},{"type":"streak","schemaVersion":3,"days":7}]`),
 		Actions:      json.RawMessage(`[{"type":"chat.send","schemaVersion":1,"message":"hi"},{"type":"obs.scene","schemaVersion":9,"scene":"Main"}]`),
 	}

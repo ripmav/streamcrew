@@ -48,6 +48,29 @@ func (k Kind) Valid() bool {
 	}
 }
 
+// ErrorPolicy says what happens when an action of a command fails (spec
+// command-engine.md, B71).
+type ErrorPolicy string
+
+// Error policies.
+const (
+	// ErrorContinue runs the next action; the instance completes and keeps
+	// the errors in its history. New commands start with it.
+	ErrorContinue ErrorPolicy = "continue"
+	// ErrorAbort ends the instance as failed.
+	ErrorAbort ErrorPolicy = "abort"
+)
+
+// Valid reports whether p is a known error policy.
+func (p ErrorPolicy) Valid() bool {
+	switch p {
+	case ErrorContinue, ErrorAbort:
+		return true
+	default:
+		return false
+	}
+}
+
 // Header holds the fields of a command apart from its requirements and
 // actions (B1).
 type Header struct {
@@ -68,6 +91,9 @@ type Header struct {
 	Wildcard bool
 	// Event is the event type of an event command (B20).
 	Event event.Type
+	// ErrorPolicy says what happens after an action fails (spec
+	// command-engine.md, B71); it must be set.
+	ErrorPolicy ErrorPolicy
 	// CreatedAt and UpdatedAt are maintained by the service.
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -138,6 +164,9 @@ func (c Command) Validate() error {
 		}
 	default:
 		return invalid("unknown kind %q", c.Kind)
+	}
+	if !c.ErrorPolicy.Valid() {
+		return invalid("unknown error policy %q", c.ErrorPolicy)
 	}
 
 	seen := make(map[string]bool, len(c.Requirements))

@@ -35,7 +35,7 @@ Nicht Teil dieser Spezifikation, sondern von `command-engine.md` (Phase 3):
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B1 | Jeder Command hat eine ID (UUIDv7), einen Namen, eine Art, einen Schalter „aktiv“, einen Schalter „freigegeben“, optional eine Gruppe, eine Menge von Anforderungen und eine geordnete Liste von Actions. | Q3, Q4 |
+| B1 | Jeder Command hat eine ID (UUIDv7), einen Namen, eine Art, einen Schalter „aktiv“, einen Schalter „freigegeben“, optional eine Gruppe, eine Menge von Anforderungen, eine geordnete Liste von Actions und eine Fehlerpolitik ([`command-engine.md`](command-engine.md), B71). | Q3, Q4 |
 | B2 | Die Arten teilen den Großteil ihrer Merkmale; sie unterscheiden sich im Auslöser. Arten zum Start (P0): `chat`, `event`, `timer`, `action_group`. Später: nutzerspezifische Chat-Commands (P1), vorgefertigte Commands (Phase 5.6), Kanalpunkte (Phase 4), Spiele (Phase 8), Webhooks (Phase 10), Stream Pass (P2). | Q3, QP (Plan §5.2) |
 | B3 | Ein inaktiver Command wird nie automatisch ausgelöst; von Hand gestartet (Test in der Oberfläche, API) kann er trotzdem werden. | Q3 („Play“ zum Testen), Q8 (Schalter aktiv/inaktiv) |
 | B4 | Actions sind polymorphe Dokumente mit `type` und `schemaVersion`; ihre Reihenfolge ist die Ausführungsreihenfolge. Unbekannte Action-Typen bleiben erhalten und werden nicht ausgeführt. | Code-ADR-0010 |
@@ -137,3 +137,4 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
 | 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
 | 2026-09-29 | Datenmodell umgesetzt. Festlegungen dabei: Der Platzhalter gilt je Command für alle seine Trigger (B13); eine Wortgrenze liegt überall, wo nicht Buchstabe oder Ziffer auf Buchstabe oder Ziffer folgt. Ohne Platzhalter folgt auf `!` und Trigger das Ende der Nachricht oder ein Leerraum (B11). Trigger mit und ohne Platzhalter teilen sich die Eindeutigkeit (B14). Argumenttypen vorerst `text`, `number` und `user` (B45, offene Frage). Dauern in Anforderungen stehen als Go-Dauer, etwa `30s` (B41, B46; Code-ADR-0009). Gruppennamen sind unabhängig von Groß- und Kleinschreibung eindeutig (B30). |
+| 2026-09-30 | B1 um die Fehlerpolitik ergänzt, die die akzeptierte Spezifikation [`command-engine.md`](command-engine.md) (B71) für jeden Command vorsieht: `continue` oder `abort`, ein Pflichtfeld ohne leeren Wert (Vorgabe des Projektinhabers: keine magischen Werte, Code-ADR-0017 vorgeschlagen); gespeichert in der Spalte `error_policy` (Migration 0005), bestehende Commands bekommen mit der Migration `continue`. |
