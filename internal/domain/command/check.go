@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/ripmav/streamcrew/internal/capability"
 	"github.com/ripmav/streamcrew/internal/domain/counter"
@@ -303,7 +302,7 @@ func (s *Service) checkReference(ctx context.Context, k *knownObjects, ref Refer
 			return false, fmt.Errorf("unknown command group %s", ref.ID)
 		}
 	case RefCounter:
-		if slices.ContainsFunc(k.counters, func(name string) bool { return strings.EqualFold(name, ref.Name) }) {
+		if slices.ContainsFunc(k.counters, func(name string) bool { return counter.Key(name) == counter.Key(ref.Name) }) {
 			return false, nil
 		}
 		c := counter.New(ref.Name)

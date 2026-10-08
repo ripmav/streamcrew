@@ -103,7 +103,7 @@ func (e *Engine) render(ctx context.Context, t Template, s *Scope, enc Encoding)
 			continue
 		}
 		enc.write(&b, v.Text)
-		b.WriteString(p.text[n:])
+		b.WriteString(p.rest(n))
 	}
 	return Rendered{Text: b.String(), Replaced: replaced}, nil
 }
