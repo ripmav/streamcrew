@@ -3,7 +3,6 @@
 package flow
 
 import (
-	"cmp"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
 	"fmt"
@@ -176,7 +175,7 @@ func twoValueTest(c Comparison, right action.Template) (func(left, right string,
 func order(left, right string, o compareOptions) int {
 	if x, ok := expr.ParseNumber(left); ok {
 		if y, ok := expr.ParseNumber(right); ok {
-			return cmp.Compare(x, y)
+			return x.Cmp(y)
 		}
 	}
 	return strings.Compare(o.text(left), o.text(right))
@@ -250,7 +249,7 @@ func (c Between) prepare() (prepared, error) {
 			x, xOK := expr.ParseNumber(v[0].Text)
 			lowest, lowOK := expr.ParseNumber(v[1].Text)
 			highest, highOK := expr.ParseNumber(v[2].Text)
-			return xOK && lowOK && highOK && lowest <= x && x <= highest, nil
+			return xOK && lowOK && highOK && lowest.Cmp(x) <= 0 && x.Cmp(highest) <= 0, nil
 		},
 	}, nil
 }

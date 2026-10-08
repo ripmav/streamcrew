@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ripmav/streamcrew/internal/decimal"
 )
 
 // [Interop] The identifier names in this file follow the original (spec
@@ -63,7 +65,7 @@ func DateTimeFamily() Family {
 // paddedValue returns n as a number whose text has at least width digits,
 // e.g. "06" for June.
 func paddedValue(n, width int) Value {
-	return Value{Text: fmt.Sprintf("%0*d", width, n), Number: float64(n), IsNumber: true}
+	return Value{Text: fmt.Sprintf("%0*d", width, n), Number: decimal.New(int64(n)), IsNumber: true}
 }
 
 // now returns the current time in the time zone of the profile, the same

@@ -18,6 +18,7 @@ import (
 
 	"github.com/ripmav/streamcrew/internal/action"
 	"github.com/ripmav/streamcrew/internal/action/schema"
+	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/counter"
 	"github.com/ripmav/streamcrew/internal/engine"
@@ -28,17 +29,16 @@ import (
 // point 1).
 const TypeCounter = "counter"
 
-// maxExact is the largest whole number that expressions compute exactly:
-// they compute with float64 (template.md, B50), which holds every whole
-// number up to 2^53 - 1.
-const maxExact = 1<<53 - 1
+// maxAmount bounds the amount of add and the value of set, 2^53 - 1 as
+// before amounts were decimals, until counters hold decimals too (roadmap
+// 3.5; Code-ADR-0020).
+const maxAmount = 1<<53 - 1
 
 // amountRange is the range of the amount of add and the value of set
-// (actions.md B4, B40): whole numbers that expressions compute exactly.
-// The counter itself and its step hold 64 bits (counters-and-quotes.md,
-// B5, B8).
+// (actions.md B4, B40): whole numbers up to maxAmount. The counter itself
+// and its step hold 64 bits (counters-and-quotes.md, B5, B8).
 func amountRange() action.Range {
-	return action.Range{Min: -maxExact, Max: maxExact, Integer: true}
+	return action.Range{Min: -maxAmount, Max: maxAmount, Integer: true}
 }
 
 // CounterKind is what a counter action does (actions.md B40).
@@ -120,7 +120,7 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 			}
 			c := Counter{Common: action.On(), Kind: k, ports: ports}
 			if k == CounterAdd {
-				c.Amount = action.Fixed(1)
+				c.Amount = action.Fixed(decimal.New(1))
 			}
 			return c, true
 		}),
@@ -224,14 +224,22 @@ func (c Counter) Perform(ctx context.Context, run *engine.Run) error {
 		if err != nil {
 			return field("amount", err)
 		}
-		change = func(k *counter.Counter) error { return k.Add(int64(delta)) }
+		n, err := action.Whole(delta)
+		if err != nil {
+			return field("amount", err)
+		}
+		change = func(k *counter.Counter) error { return k.Add(n) }
 	case CounterSet:
 		v, err := c.Value.Eval(ctx, c.ports.Templates, run.Scope(), amountRange())
 		if err != nil {
 			return field("value", err)
 		}
+		n, err := action.Whole(v)
+		if err != nil {
+			return field("value", err)
+		}
 		change = func(k *counter.Counter) error {
-			k.Set(int64(v))
+			k.Set(n)
 			return nil
 		}
 	case CounterReset:
