@@ -157,33 +157,32 @@ type twitchBase struct {
 	usersURL  string
 }
 
-// post sends v to url and returns the body of a 2xx answer.
-func (b *twitchBase) post(ctx context.Context, target string, v url.Values) ([]byte, error) {
+// post sends v to target and returns the body and status of the answer;
+// err is set for a transport failure.
+func (b *twitchBase) post(ctx context.Context, target string, v url.Values) (body []byte, status int, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(v.Encode()))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	return b.do(req)
 }
 
-// do sends req and returns the body of a 2xx answer. The requests target
-// the Twitch endpoints above, which are set from constants.
-func (b *twitchBase) do(req *http.Request) ([]byte, error) {
+// do sends req and returns the body and status of the answer; err is set
+// for a transport failure. The requests target the Twitch endpoints above,
+// which are set from constants.
+func (b *twitchBase) do(req *http.Request) (body []byte, status int, err error) {
 	//nolint:gosec // G704: the request targets the endpoints of this file
 	r, err := b.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer r.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	body, err = io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	if r.StatusCode < 200 || r.StatusCode > 299 {
-		return nil, fmt.Errorf("%s: %s", r.Status, snippet(body))
-	}
-	return body, nil
+	return body, r.StatusCode, nil
 }
 
 // revoke revokes a token; Twitch answers 400 for a token that is already
@@ -230,9 +229,12 @@ func (b *twitchBase) User(ctx context.Context, token string) (string, string, er
 	req.Header.Set("Authorization", "Bearer "+token)
 	// Helix asks for the client ID in every request (ADR-0014).
 	req.Header.Set("Client-Id", b.clientID)
-	body, err := b.do(req)
+	body, status, err := b.do(req)
 	if err != nil {
 		return "", "", fmt.Errorf("look up account: %w", err)
+	}
+	if status < 200 || status > 299 {
+		return "", "", fmt.Errorf("look up account: %s", snippet(body))
 	}
 	var resp struct {
 		Data []struct {
@@ -316,16 +318,21 @@ func (f *twitchFlow) Wait(ctx context.Context, l *Login) (*oauth2.Token, error) 
 }
 
 // Refresh exchanges a refresh token for a new token. A public client
-// sends only the client ID; there is no secret (ADR-0014).
+// sends only the client ID; there is no secret (ADR-0014). An answer that
+// says the grant is gone, e.g. the refresh token is invalid, is
+// ErrTokenExpired: the login must be started again.
 func (f *twitchFlow) Refresh(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
 	v := url.Values{
 		"client_id":     {f.clientID},
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
 	}
-	body, err := f.post(ctx, f.tokenURL, v)
+	body, status, err := f.post(ctx, f.tokenURL, v)
 	if err != nil {
 		return nil, fmt.Errorf("refresh token: %w", err)
+	}
+	if status < 200 || status > 299 {
+		return nil, fmt.Errorf("refresh token: %w", tokenError(body))
 	}
 	tok, err := tokenFromBody(body, refreshToken)
 	if err != nil {
@@ -409,7 +416,9 @@ func (f *twitchCodeFlow) Wait(ctx context.Context, l *Login) (*oauth2.Token, err
 }
 
 // Refresh exchanges a refresh token for a new token. A confidential
-// client sends its secret (ADR-0023).
+// client sends its secret (ADR-0023). An answer that says the grant is
+// gone, e.g. the refresh token is invalid, is ErrTokenExpired: the login
+// must be started again.
 func (f *twitchCodeFlow) Refresh(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
 	v := url.Values{
 		"client_id":     {f.clientID},
@@ -417,9 +426,12 @@ func (f *twitchCodeFlow) Refresh(ctx context.Context, refreshToken string) (*oau
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
 	}
-	body, err := f.post(ctx, f.tokenURL, v)
+	body, status, err := f.post(ctx, f.tokenURL, v)
 	if err != nil {
 		return nil, fmt.Errorf("refresh token: %w", err)
+	}
+	if status < 200 || status > 299 {
+		return nil, fmt.Errorf("refresh token: %w", tokenError(body))
 	}
 	tok, err := tokenFromBody(body, refreshToken)
 	if err != nil {
@@ -457,9 +469,12 @@ func (f *twitchCodeFlow) exchange(ctx context.Context, code string) (*oauth2.Tok
 		"code":          {code},
 		"redirect_uri":  {f.redirect},
 	}
-	body, err := f.post(ctx, f.tokenURL, v)
+	body, status, err := f.post(ctx, f.tokenURL, v)
 	if err != nil {
 		return nil, fmt.Errorf("exchange the code: %w", err)
+	}
+	if status < 200 || status > 299 {
+		return nil, fmt.Errorf("exchange the code: %w", tokenError(body))
 	}
 	tok, err := tokenFromBody(body, "")
 	if err != nil {
@@ -579,6 +594,26 @@ func setExpiry(tok *oauth2.Token) {
 	if tok.Expiry.IsZero() && tok.ExpiresIn > 0 {
 		tok.Expiry = time.Now().UTC().Add(time.Duration(tok.ExpiresIn) * time.Second)
 	}
+}
+
+// tokenError maps a Twitch token error response: an answer that says the
+// grant is gone is ErrTokenExpired, the other answers keep the error code
+// in the message (ADR-0014, ADR-0023).
+func tokenError(body []byte) error {
+	var e struct {
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
+	}
+	if err := json.Unmarshal(body, &e); err != nil || e.Error == "" {
+		return errors.New(snippet(body))
+	}
+	if e.Error == "expired_token" || e.Error == "invalid_grant" {
+		return fmt.Errorf("%w: %s: %s", ErrTokenExpired, e.Error, e.ErrorDescription)
+	}
+	if e.ErrorDescription == "" {
+		return errors.New(e.Error)
+	}
+	return fmt.Errorf("%s: %s", e.Error, e.ErrorDescription)
 }
 
 // tokenFromBody parses a Twitch token response (device code,

@@ -4,8 +4,12 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,8 +42,12 @@ spec:
 
 // TestMockConsole is the end-to-end test of the mock console (roadmap 3.6):
 // the example commands as YAML are loaded into a copy of the profile, the
-// console, driven by a script, simulates a message of a user, and the chat
-// commands of the message and of "app.started" run and reach the platform.
+// console simulates a message of a user, and the chat commands of the
+// message and of "app.started" run and reach the platform. The console is
+// driven over the standard input, and the test waits for the output of the
+// chat command before it sends "exit": the engine queues a triggered
+// command asynchronously (engine.Submit, B15, B16), so an "exit" right
+// after "chat send" can overtake the queueing and drop the command.
 func TestMockConsole(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -59,27 +67,59 @@ func TestMockConsole(t *testing.T) {
 	require.NoError(t, err)
 	cfg.Profile = "demo"
 
-	// The files the console reads.
+	// The file the console reads for the commands as code.
 	dir := t.TempDir()
 	yamlFile := filepath.Join(dir, "hello.v1alpha1.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(mockConsoleExampleCommands), 0o600))
-	scriptFile := filepath.Join(dir, "console.txt")
-	script := "user add alice\nchat send --as alice !hello\nexit\n"
-	require.NoError(t, os.WriteFile(scriptFile, []byte(script), 0o600))
 
-	var out, errOut bytes.Buffer
-	env := &Env{Stdout: &out, Stderr: &errOut, Config: &cfg, SecretKey: ""}
+	var out bytes.Buffer
+	log := &syncedLog{}
+	stdin, stdinWrite := io.Pipe()
+	defer stdinWrite.Close()
+	env := &Env{Stdout: &out, Stderr: log, Config: &cfg, SecretKey: ""}
 	cmd := mockCmd{
 		Commands: []string{yamlFile},
-		Script:   scriptFile,
 		Streamer: "streamy",
 		Bot:      "bot",
+		stdin:    stdin,
 		appOpts:  []app.Option{app.WithKeyring(nil)},
 	}
-	require.NoError(t, cmd.Run(ctx, env))
+	stopped := make(chan error, 1)
+	go func() { stopped <- cmd.Run(ctx, env) }()
 
-	// The import loaded the commands into the copy, the user was added, and
-	// the message was delivered to the platform.
+	// writeLine sends a line to the console; it fails the test if the
+	// console stops before reading it.
+	writeLine := func(line string) {
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := fmt.Fprintln(stdinWrite, line)
+			errCh <- err
+		}()
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case err := <-stopped:
+			t.Fatalf("the console stopped before reading %q: %v", line, err)
+		}
+	}
+
+	// The console takes input when the core is ready; the import loaded the
+	// commands into the copy.
+	writeLine("user add alice")
+	writeLine("chat send --as alice !hello")
+	require.Eventually(t, func() bool {
+		return log.Contains(`"text":"Hello alice!"`)
+	}, 10*time.Second, 10*time.Millisecond,
+		"the chat command of the message did not reach the platform")
+	writeLine("exit")
+	select {
+	case err := <-stopped:
+		require.NoError(t, err)
+	case <-time.After(15 * time.Second):
+		t.Fatal("the console did not stop after \"exit\"")
+	}
+
+	// The user was added and the message was delivered to the platform.
 	outStr := out.String()
 	assert.Contains(t, outStr, "imported into the copy: 2 new, 0 replaced")
 	assert.Contains(t, outStr, "user alice added")
@@ -87,10 +127,36 @@ func TestMockConsole(t *testing.T) {
 
 	// The simulated message triggered the chat command, and the event
 	// command of "app.started" ran when the core was ready; the chat
-	// actions of both reached the platform (the console log on the stderr).
-	logs := errOut.String()
-	assert.Contains(t, logs, `"text":"Hello alice!"`)
-	assert.Contains(t, logs, `"text":"Core started"`)
+	// actions of both reached the platform (the console log).
+	assert.Contains(t, log.String(), `"text":"Hello alice!"`)
+	assert.Contains(t, log.String(), `"text":"Core started"`)
+}
+
+// syncedLog is a console log the test can read while the core writes to it.
+type syncedLog struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+// Write implements io.Writer.
+func (l *syncedLog) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+// Contains reports whether the log contains s.
+func (l *syncedLog) Contains(s string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return strings.Contains(l.b.String(), s)
+}
+
+// String returns the log.
+func (l *syncedLog) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
 }
 
 // TestMockConsoleBadLine covers that an error of a console line is reported
