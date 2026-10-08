@@ -49,8 +49,8 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Go tools pinned with go run <module>@<version> in workflows and scripts, such as go-licenses.",
-      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/", "/^scripts/[^/]+\\.sh$/"],
+      "description": "Go tools pinned with go run <module>@<version> in workflows, scripts and go:generate lines, such as go-licenses and sqlc.",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/", "/^scripts/[^/]+\\.sh$/", "/\\.go$/"],
       "matchStrings": ["go run (?<depName>[\\w./-]+)@(?<currentValue>v\\d\\S*)"],
       "datasourceTemplate": "go"
     }
