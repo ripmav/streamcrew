@@ -94,8 +94,10 @@ internal/auth/
   Zusätzlich lazies `Token(ctx, platform, role) (string, error)`-Port für die
   Adapter ab 4.2 (refresh-t auf Abruf, wenn abgelaufen).
 - **Scope-Abgleich:** `Scopes` (Pflichtmenge, Konstante in `twitch.go`) vs.
-  gespeicherte `scopes` (aus der Token-Antwort, `scope`-Feld, raumgetrennt).
-  Fehlend → Status „Anmeldung erforderlich“ (keine modalen Dialoge; Plan §6.12).
+  gespeicherte `scopes` (aus der Token-Antwort, `scope`-Feld — JSON-Array
+  laut Twitch-Doku, bei der Token-Auslesung in die raumgetrennte Zeichenkette
+  normalisiert). Fehlend → Status „Anmeldung erforderlich“ (keine modalen
+  Dialoge; Plan §6.12).
 - **Ereignisse** (im Katalog, neutral wie `app.started`; Nutzlasten in `internal/auth`):
   - `auth.action_required`: `{platform, role, url, code, expires_at}`
   - `auth.login_completed`: `{platform, role, login}`
@@ -524,6 +526,7 @@ BYO (eigene Confidential-App des Nutzers, Secret im Vault unter
 | R4 | Service: `Credentials` (ID, Secret, DeviceFlow) für Start/Wait (flagless: App aus dem Vault auflösen, sonst Fehler), App-Credentials im Vault (`auth/<platform>/client`, Plattform-Ebene, mit Account/Token transaktional gespeichert), Flow-Auflösung je `flow`-Spalte (Secret aus Vault), Re-Login widerruft vorher best-effort, Logout entfernt Account + Token und behält die App-Credentials, `Status`/`Token` ohne Secret = `login_required`, `auth.action_required` im Code-Flow (URL, leeres `code`, Fensterende) | `feat/auth-service` / #148 | erledigt |
 | R5 | CLI: `auth login twitch` = Code-Flow-Standard, `--device-flow` (DCF), `--client-id`/`--client-secret` (erster Login, danach aus dem Vault; Flags überschreiben), Fehlermeldung ohne Credentials, Kong-Tests | `feat/auth-cli` / #149 | erledigt |
 | R6 | Doku: README (BYO-App-Setup + Redirect-Registrierung, `--device-flow`, Statusparagraf), `events.md` (Code-Flow-Semantik), Roadmap 4.1-Abschnitt + Historie, Plan-Status | `docs/auth-events` / #150 | erledigt |
+| R7 | E2E-Nachtrag: `scope` in der Token-Antwort kommt als JSON-Array (Twitch-Doku) — `normalizeScope` normalisiert es in der Token-Auslesung für beide Flows; Test-Fakes in der realen Array-Form | `fix/twitch-scope-array` / #151 | erledigt |
 
 **E2E (ersetzt §7.2):**
 
@@ -538,6 +541,13 @@ BYO (eigene Confidential-App des Nutzers, Secret im Vault unter
 5. Fallback-Prüfung: `auth login twitch --device-flow` → DCF wie zuvor →
    `auth logout twitch`.
 
+**E2E-Befund (2026-10-08):** Punkt 2 (erster echter Login) lief durch
+(URL, Redirect, Token-Austausch, Konto gespeichert), aber die Scopes waren
+leer gespeichert — der Token-Endpunkt liefert `scope` als JSON-Array, der
+Code las es als raumgetrennte Zeichenkette. Fix in R7; Punkt 2 wird danach
+als Re-Login fortgesetzt (flagless, App aus dem Vault, best-effort-Widerruf
+der ersten Anmeldung).
+
 **Exit (ergänzt zu §8):** Zusätzlich E2E-Punkte 2–5 (Code-Flow und
-DCF-Fallback) durchgelaufen; Stack #146 [144, 145, 147, 148, 149, 150]
+DCF-Fallback) durchgelaufen; Stack #146 [144, 145, 147, 148, 149, 150, 151]
 komplett grün und von unten nach oben mergebar.
