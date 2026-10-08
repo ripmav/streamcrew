@@ -48,7 +48,9 @@ type oauthFake struct {
 
 const fakeDeviceBody = `{"device_code":"dc-1","user_code":"ABCD-EFGH","verification_uri":"https://login.fake/activate","interval":1,"expires_in":1800}`
 
-const fakeSuccessToken = `{"access_token":"at-1","token_type":"bearer","refresh_token":"rt-1","expires_in":3600,"scope":"user:read:chat user:write:chat"}`
+// fakeSuccessToken is a token response in the shape of the real Twitch
+// endpoint: the granted scopes come as a JSON array.
+const fakeSuccessToken = `{"access_token":"at-1","token_type":"bearer","refresh_token":"rt-1","expires_in":3600,"scope":["user:read:chat","user:write:chat"]}`
 
 func newOAuthFake(t *testing.T) *oauthFake {
 	t.Helper()
@@ -563,7 +565,7 @@ func TestRefresh(t *testing.T) {
 		f := newOAuthFake(t)
 		flow := f.twitchFlow()
 		f.tokenScript = []tokenReply{{http.StatusOK,
-			`{"access_token":"at-2","token_type":"bearer","refresh_token":"rt-2","expires_in":3600,"scope":"user:read:chat user:write:chat"}`}}
+			`{"access_token":"at-2","token_type":"bearer","refresh_token":"rt-2","expires_in":3600,"scope":["user:read:chat","user:write:chat"]}`}}
 		tok, err := flow.Refresh(ctx, "rt-1")
 		require.NoError(t, err)
 		assert.Equal(t, "at-2", tok.AccessToken)
@@ -617,7 +619,7 @@ func TestRefresh(t *testing.T) {
 		f := newOAuthFake(t)
 		flow := f.twitchCodeFlow()
 		f.tokenScript = []tokenReply{{http.StatusOK,
-			`{"access_token":"at-2","token_type":"bearer","refresh_token":"rt-2","expires_in":3600,"scope":"user:read:chat user:write:chat"}`}}
+			`{"access_token":"at-2","token_type":"bearer","refresh_token":"rt-2","expires_in":3600,"scope":["user:read:chat","user:write:chat"]}`}}
 		tok, err := flow.Refresh(ctx, "rt-1")
 		require.NoError(t, err)
 		assert.Equal(t, "at-2", tok.AccessToken)

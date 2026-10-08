@@ -314,7 +314,7 @@ func (f *twitchFlow) Wait(ctx context.Context, l *Login) (*oauth2.Token, error) 
 		}
 	}
 	setExpiry(tok)
-	return tok, nil
+	return normalizeScope(tok), nil
 }
 
 // Refresh exchanges a refresh token for a new token. A public client
@@ -648,7 +648,34 @@ func tokenFromBody(body []byte, previous string) (*oauth2.Token, error) {
 	if err := json.Unmarshal(body, &extra); err == nil {
 		tok = tok.WithExtra(extra)
 	}
-	return tok, nil
+	return normalizeScope(tok), nil
+}
+
+// normalizeScope rewrites the granted scopes of a token. The endpoint
+// returns them as a JSON array in the token response (Twitch
+// documentation); the rest of the code reads them as one
+// space-separated string. A token whose scope is not an array, or has
+// no scope at all, is returned unchanged.
+func normalizeScope(tok *oauth2.Token) *oauth2.Token {
+	arr, ok := tok.Extra("scope").([]any)
+	if !ok {
+		return tok
+	}
+	parts := make([]string, 0, len(arr))
+	for _, v := range arr {
+		if s, ok := v.(string); ok {
+			parts = append(parts, s)
+		}
+	}
+	// The library keeps the raw response in the token's extra fields,
+	// but exposes no setter for one field; rebuild the token with the
+	// normalized scope.
+	return (&oauth2.Token{
+		AccessToken:  tok.AccessToken,
+		TokenType:    tok.Type(),
+		RefreshToken: tok.RefreshToken,
+		Expiry:       tok.Expiry,
+	}).WithExtra(map[string]any{"scope": strings.Join(parts, " ")})
 }
 
 // snippet shortens a response body for error messages.
