@@ -93,16 +93,38 @@ func newFixture(t *testing.T, granted ...capability.Capability) *fixture {
 	return f
 }
 
+// roots are the released roots of the tests.
+type roots map[string]string
+
+func (r roots) Root(name string) (string, bool) {
+	dir, ok := r[name]
+	return dir, ok
+}
+
 // registry returns the host types with a template engine that knows the
-// arguments and the values of the run.
+// arguments and the values of the run, and no released roots.
 func registry(t *testing.T, o host.Opener, log *logs, granted ...capability.Capability) (*action.Registry, *template.Engine) {
+	t.Helper()
+	return registryWith(t, host.Ports{Opener: o, Roots: roots{}, Logger: slog.New(slog.NewTextHandler(log, nil))}, granted...)
+}
+
+// registryWith returns the host types with p, completed by a template
+// engine that knows the arguments and the values of the run, the
+// environment of the tests and, unless p has one, a source of random
+// numbers that always draws the last.
+func registryWith(t *testing.T, p host.Ports, granted ...capability.Capability) (*action.Registry, *template.Engine) {
 	t.Helper()
 	identifiers, err := template.NewRegistry(template.ArgumentFamily(), template.RunFamily())
 	require.NoError(t, err)
-	templates := template.New(identifiers)
-	ds, err := host.Descriptors(host.Ports{
-		Templates: templates, Env: env(), Opener: o, Logger: slog.New(slog.NewTextHandler(log, nil)),
-	})
+	p.Templates = template.New(identifiers)
+	if p.Env == nil {
+		p.Env = env()
+	}
+	if p.IntN == nil {
+		p.IntN = func(n int) int { return n - 1 }
+	}
+	templates := p.Templates
+	ds, err := host.Descriptors(p)
 	require.NoError(t, err)
 	set, err := capability.NewSet(granted...)
 	require.NoError(t, err)
@@ -374,13 +396,16 @@ func TestCapability(t *testing.T) {
 
 func TestPorts(t *testing.T) {
 	t.Parallel()
-	full := host.Ports{Templates: template.New(nil), Env: []string{}, Opener: &opener{}, Logger: slog.New(slog.DiscardHandler)}
+	full := host.Ports{Templates: template.New(nil), Env: []string{}, Opener: &opener{}, Roots: roots{},
+		IntN: func(int) int { return 0 }, Logger: slog.New(slog.DiscardHandler)}
 	_, err := host.Descriptors(full)
 	require.NoError(t, err, "an empty environment is allowed")
 	for name, edit := range map[string]func(*host.Ports){
 		"templates": func(p *host.Ports) { p.Templates = nil },
 		"env":       func(p *host.Ports) { p.Env = nil },
 		"opener":    func(p *host.Ports) { p.Opener = nil },
+		"roots":     func(p *host.Ports) { p.Roots = nil },
+		"random":    func(p *host.Ports) { p.IntN = nil },
 		"logger":    func(p *host.Ports) { p.Logger = nil },
 	} {
 		p := full
