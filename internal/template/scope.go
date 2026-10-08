@@ -3,6 +3,7 @@
 package template
 
 import (
+	"maps"
 	"strings"
 	"time"
 
@@ -83,6 +84,24 @@ func (s *Scope) SetValue(name string, v Value) {
 		s.values = make(map[string]Value)
 	}
 	s.values[strings.ToLower(name)] = v
+}
+
+// Values returns a copy of the values of the run, by lowercase name.
+func (s *Scope) Values() map[string]Value {
+	return maps.Clone(s.values)
+}
+
+// Share returns a copy of s that shares the values of the run with s: a
+// value that one of them sets, the other sees. A command that another one
+// calls and waits for runs with such a copy (spec command-engine.md, B35).
+// Neither may be changed while the other renders.
+func (s *Scope) Share() *Scope {
+	if s.values == nil {
+		s.values = make(map[string]Value)
+	}
+	c := *s
+	c.render = nil
+	return &c
 }
 
 // Memo returns the result of fn for key and calls fn at most once per

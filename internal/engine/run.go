@@ -45,7 +45,8 @@ var (
 // Run is an instance as its actions see it (plan §6.9). The actions of an
 // instance run one after the other, so they use it without locking.
 type Run struct {
-	in *instance
+	engine *Engine
+	in     *instance
 }
 
 // InstanceID returns the ID of the instance.
@@ -72,7 +73,7 @@ func (r *Run) Scope() *template.Scope {
 
 // execute runs the actions of in in order (B70) and ends it.
 func (e *Engine) execute(ctx context.Context, in *instance) {
-	run := &Run{in: in}
+	run := &Run{engine: e, in: in}
 	state := StateCompleted
 	for i, a := range in.cmd.Actions {
 		if ctx.Err() != nil {

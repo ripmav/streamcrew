@@ -246,6 +246,29 @@ func TestScope_Memo(t *testing.T) {
 	assert.Equal(t, int64(2), loads.Load(), "outside a render Memo does not remember")
 }
 
+// TestScope_Share checks the values of the run that a called command shares
+// with its caller, and the copy for one that does not wait (spec
+// command-engine.md, B35).
+func TestScope_Share(t *testing.T) {
+	t.Parallel()
+	e := template.New(nil)
+	var caller template.Scope
+	assert.Empty(t, caller.Values())
+
+	called := caller.Share()
+	called.CommandName = "called"
+	called.SetValue("Mood", template.TextValue("happy"))
+	caller.SetValue("round", template.IntValue(2))
+	assert.Equal(t, "happy 2", render(t, e, "$mood $round", &caller))
+	assert.Equal(t, "happy 2", render(t, e, "$mood $round", called))
+	assert.Empty(t, caller.CommandName, "only the values are shared")
+
+	values := caller.Values()
+	assert.Equal(t, map[string]template.Value{"mood": template.TextValue("happy"), "round": template.IntValue(2)}, values)
+	values["mood"] = template.TextValue("sad")
+	assert.Equal(t, "happy", render(t, e, "$mood", &caller), "Values returns a copy")
+}
+
 func TestValues(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, template.Value{Text: "x"}, template.TextValue("x"))

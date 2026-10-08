@@ -173,13 +173,17 @@ type Request struct {
 	Entrance bool
 }
 
-// Outcome says what became of a triggered command.
+// Outcome says what became of a triggered or called command.
 type Outcome string
 
-// Outcomes of Trigger.
+// Outcomes of Trigger and Run.Call.
 const (
 	// OutcomeQueued means Result.Instances were queued.
 	OutcomeQueued Outcome = "queued"
+	// OutcomeCompleted means the called command ran as part of its caller
+	// and completed; Result.Instances are its instances. Only Run.Call
+	// with Wait has it.
+	OutcomeCompleted Outcome = "completed"
 	// OutcomeWaiting means the requirements wait, e.g. for a threshold
 	// (B82); nothing was queued.
 	OutcomeWaiting Outcome = "waiting"
@@ -189,15 +193,17 @@ const (
 	// OutcomeDisabled means the command is disabled (B14).
 	OutcomeDisabled Outcome = "disabled"
 	// OutcomeEntrancePaused means entrance commands are paused (B41).
+	// Only Trigger has it.
 	OutcomeEntrancePaused Outcome = "entrance_paused"
 )
 
-// Result is what became of a triggered command. The outcomes are not
-// errors; Trigger returns an error only if it could not handle the request.
+// Result is what became of a triggered or called command. The outcomes are
+// not errors; Trigger and Run.Call return an error only if they could not
+// handle the request.
 type Result struct {
 	Outcome Outcome
-	// Instances are the new instances for OutcomeQueued, at least one;
-	// empty for the other outcomes.
+	// Instances are the new instances for OutcomeQueued and
+	// OutcomeCompleted, at least one; empty for the other outcomes.
 	Instances []id.ID
 	// Rejection is the unmet requirement for OutcomeRejected; the zero
 	// value for the other outcomes.
@@ -272,7 +278,7 @@ func (e *Engine) Trigger(ctx context.Context, req Request) (Result, error) {
 	var dropErr error
 	for i, run := range d.Runs {
 		adm.reserved = i == 0
-		instanceID, err := e.enqueue(ctx, cmd, req.Source, run, cfg, adm)
+		instanceID, err := e.enqueue(ctx, cmd, req.Source, run, cfg, adm, origin{})
 		if err != nil {
 			dropErr = errors.Join(dropErr, err)
 			res.Dropped++
