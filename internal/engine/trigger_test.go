@@ -500,7 +500,8 @@ func TestQueueFullBeforeRequirements(t *testing.T) {
 		defer close(release)
 		f.start(f.command("holder", command.KindChat, f.journal.hold("x", "holder", release)), engine.Params{})
 		waiting := f.command("waiting", command.KindChat, f.journal.note("waiting"))
-		for range engine.MaxPending - 1 {
+		f.configs.queueSize(3)
+		for range 3 - 1 {
 			_, err := f.engine.Start(t.Context(), waiting, engine.Params{})
 			require.NoError(t, err)
 		}
@@ -555,7 +556,8 @@ func TestRunnerParams(t *testing.T) {
 		release := make(chan struct{})
 		defer close(release)
 		f.start(f.command("holder", command.KindChat, f.journal.hold("x", "holder", release)), engine.Params{})
-		for range engine.MaxPending - 2 {
+		f.configs.queueSize(4)
+		for range 4 - 2 {
 			_, err := f.engine.Start(t.Context(), raid, engine.Params{})
 			require.NoError(t, err)
 		}
@@ -728,7 +730,7 @@ func TestTriggerSettingsError(t *testing.T) {
 			engine.WithConfig(func(context.Context) (engine.Config, error) { return engine.Config{}, broken }))
 		defer f.stop()
 
-		for range engine.MaxPending + 1 {
+		for range settings.DefaultQueueSize + 1 {
 			_, err := f.engine.Trigger(t.Context(), engine.Request{Command: f.command("x", command.KindChat), Source: engine.SourceTimer})
 			require.ErrorIs(t, err, broken)
 		}
