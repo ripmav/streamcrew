@@ -1,0 +1,53 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "summary",
+    "findings"
+  ],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "German Markdown summary, no headings"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "line",
+          "severity",
+          "title",
+          "already_commented"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "hoch",
+              "mittel",
+              "niedrig"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "one-line German title"
+          },
+          "already_commented": {
+            "type": "boolean",
+            "description": "true if an existing inline comment already covers this issue at this place"
+          }
+        }
+      }
+    }
+  }
+}
