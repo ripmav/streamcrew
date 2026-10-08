@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/ripmav/streamcrew/internal/capability"
 	"github.com/ripmav/streamcrew/internal/domain/command"
@@ -68,6 +69,11 @@ func prepare(d Descriptor, docs *polydoc.Registry[command.Action]) (Descriptor, 
 			return d, fmt.Errorf("%w: unknown capability %q", ErrInvalid, c)
 		}
 	}
+	for _, name := range d.Results {
+		if err := ResultName(name).Validate(); err != nil {
+			return d, fmt.Errorf("fixed result name: %w", err)
+		}
+	}
 	if err := docs.Register(d.entry()); err != nil {
 		return d, err
 	}
@@ -99,8 +105,24 @@ func prepare(d Descriptor, docs *polydoc.Registry[command.Action]) (Descriptor, 
 		}
 	}
 	d.Capabilities = slices.Clone(d.Capabilities)
+	d.Results = slices.Clone(d.Results)
 	d.Migrations = slices.Clone(d.Migrations)
 	return d, nil
+}
+
+// Reserved reports whether name, regardless of case, is a fixed result name
+// of an action type (actions.md B5), and which one. Saving rejects names
+// the streamer chooses that hide one; the composition root joins it with
+// template.Registry.Reserved for command.Names.
+func (r *Registry) Reserved(name string) (fixed string, reserved bool) {
+	for _, d := range r.types {
+		for _, fixed := range d.Results {
+			if strings.EqualFold(name, fixed) {
+				return fixed, true
+			}
+		}
+	}
+	return "", false
 }
 
 // Descriptors returns the descriptors sorted by type ID, for the type

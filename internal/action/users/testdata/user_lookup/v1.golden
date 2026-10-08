@@ -1,0 +1,7 @@
+{
+  "type": "user_lookup",
+  "schemaVersion": 1,
+  "enabled": true,
+  "platform": "twitch",
+  "user": "$arg1text"
+}
