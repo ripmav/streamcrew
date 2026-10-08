@@ -298,6 +298,7 @@ func TestRegistryRejects(t *testing.T) {
 		"type too long":       with(func(d *action.Descriptor) { d.Type = strings.Repeat("a", 41) }),
 		"unknown category":    with(func(d *action.Descriptor) { d.Category = "misc" }),
 		"unknown capability":  with(func(d *action.Descriptor) { d.Capabilities = []capability.Capability{"host:root"} }),
+		"invalid result name": with(func(d *action.Descriptor) { d.Results = []string{"lookup_id"} }),
 		"no schema":           with(func(d *action.Descriptor) { d.Schema = nil }),
 		"no constructor":      with(func(d *action.Descriptor) { d.New = nil }),
 		"no decode":           with(func(d *action.Descriptor) { d.Decode = nil }),
@@ -351,6 +352,27 @@ func TestRegistry(t *testing.T) {
 	codec, err := command.NewCodec(reg.Entries()...)
 	require.NoError(t, err, "the codec of the commands takes the entries")
 	_ = codec
+}
+
+// TestReserved covers actions.md B5: the registry reports the fixed result
+// names of the types, regardless of case, for saving.
+func TestReserved(t *testing.T) {
+	t.Parallel()
+	results := boxType()
+	results.Results = []string{"boxresult", "boxcount"}
+	reg, err := action.NewRegistry(capability.Set{}, probeType(), results)
+	require.NoError(t, err)
+	for name, want := range map[string]string{"boxresult": "boxresult", "BoxCount": "boxcount"} {
+		fixed, ok := reg.Reserved(name)
+		assert.True(t, ok, name)
+		assert.Equal(t, want, fixed, name)
+	}
+	for _, name := range []string{"box", "boxresults", "result", ""} {
+		_, ok := reg.Reserved(name)
+		assert.False(t, ok, name)
+	}
+	d, _ := reg.Descriptor("box")
+	assert.Equal(t, []string{"boxresult", "boxcount"}, d.Results)
 }
 
 // TestDecodeStartsFromNew covers Code-ADR-0013, point 4: members missing in

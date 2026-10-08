@@ -28,6 +28,11 @@ type Descriptor struct {
 	// VisualAudio types share the lock "visual_audio" (command-engine.md
 	// B23).
 	VisualAudio bool
+	// Results are the fixed names of the result values that actions of the
+	// type set, e.g. "lookupsuccess"; empty for none (actions.md B5).
+	// Names the streamer chooses must not hide them; Registry.Reserved
+	// reports them for saving.
+	Results []string
 	// Schema describes the configuration of the current version; build it
 	// with schema.Document or schema.Kinds. The registry fixes its member
 	// "type" and sets its defaults from New.
