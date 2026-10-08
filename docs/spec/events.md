@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Status** | Geprüft |
-| **Stand** | 2026-10-04 |
-| **Bezug** | Roadmap Phase 2.2 (Event-Modell), 3.6, 4.4, 5.1; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0011](../adr/code/0011-event-bus.md); Plan §6.7, Anhang A.1, A.2; [`commands.md`](commands.md), [`command-engine.md`](command-engine.md) |
-| **Umsetzung** | Katalog mit Namen, plattformneutraler Entsprechung und Häufigkeit je Typ in `internal/domain/eventtype`, dazu die Werte eines Ereignisses (`eventtype.Details`) und die Tabelle der Nutzlast als Daten (`eventtype.Shape`, B9); Umschlag und Bus in `internal/event`; die Namen der Ereigniswerte (B7) als Konstanten in `internal/template`; der Eingang der Adapter als Port `connector.Receiver` und die Deduplizierung (B22) als `connector.Dedup`; die Mock-Plattform in `internal/connector/mock`; der Event-Service mit den Auslöseregeln (B2 bis B6, B8 bis B14, B20 bis B29) in `internal/eventservice`, die Stream-Sitzungen in `internal/domain/stream` und im Store (Migration 0015), die Settings-Sektion `events` in `internal/settings`. Die Twitch-Typen bekommen ihre Quelle mit Phase 4 |
+| **Stand** | 2026-10-08 |
+| **Bezug** | Roadmap Phase 2.2 (Event-Modell), 3.6, 4.1, 4.4, 5.1; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [ADR-0014](../adr/0014-oauth-und-app-credentials.md), [Code-ADR-0011](../adr/code/0011-event-bus.md); Plan §6.7, Anhang A.1, A.2; [`commands.md`](commands.md), [`command-engine.md`](command-engine.md) |
+| **Umsetzung** | Katalog mit Namen, plattformneutraler Entsprechung und Häufigkeit je Typ in `internal/domain/eventtype`, dazu die Werte eines Ereignisses (`eventtype.Details`) und die Tabelle der Nutzlast als Daten (`eventtype.Shape`, B9); Umschlag und Bus in `internal/event`; die Namen der Ereigniswerte (B7) als Konstanten in `internal/template`; der Eingang der Adapter als Port `connector.Receiver` und die Deduplizierung (B22) als `connector.Dedup`; die Mock-Plattform in `internal/connector/mock`; der Event-Service mit den Auslöseregeln (B2 bis B6, B8 bis B14, B20 bis B29) in `internal/eventservice`, die Stream-Sitzungen in `internal/domain/stream` und im Store (Migration 0015), die Settings-Sektion `events` in `internal/settings`. Die Twitch-Typen bekommen ihre Quelle mit Phase 4; die Authentifizierungsereignisse stehen in `internal/auth` (Roadmap 4.1, [ADR-0014](../adr/0014-oauth-und-app-credentials.md)), sie lösen keine Ereignis-Commands aus und stehen deshalb nicht im Spec-Katalog `All()` |
 
 ## Zweck und Umfang
 
@@ -65,6 +65,16 @@ Nutzer und Zielnutzer nach B6, Werte nach B7 (B9). „–“ heißt: Das Ereigni
 
 Abo-Stufe und ihr Name stehen so da, wie die Plattform sie nennt; für Twitch legt sie `twitch-events.md` fest (Phase 4). „Anonym“ ist `true` oder `false` wie die anderen Ja-Nein-Werte der Templates ([`template.md`](template.md)).
 
+### Nutzlast der Authentifizierungsereignisse
+
+Die Authentifizierungsereignisse (Roadmap 4.1, [ADR-0014](../adr/0014-oauth-und-app-credentials.md)) informieren die Frontends über den Stand einer Anmeldung. Sie nennen die Plattform und das Konto (`role`: `streamer` oder `bot`) und je Typ die Felder der Tabelle; einen Nutzer oder Zielnutzer tragen sie nicht. Sie kommen von der Anwendung, nicht von einer Plattform, und lösen keine Ereignis-Commands aus: Ihre Typen stehen deshalb nicht im Spec-Katalog `All()`, und sie sind nicht in der obigen Tabelle, die die plattformneutralen Ereignisse beschreibt.
+
+| Typ | Felder |
+|---|---|
+| `auth.action_required` | `url` (wo der Nutzer den Code einträgt), `code` (der Code), `expires_at` (wann der Code abläuft) |
+| `auth.login_completed` | `login` (der Anzeigename des Kontos) |
+| `auth.login_failed` | `reason` (warum die Anmeldung fehlgeschlagen ist, in Worten, die ein Frontend zeigen kann) |
+
 ### Katalog
 
 **Anwendung**
@@ -73,6 +83,9 @@ Abo-Stufe und ihr Name stehen so da, wie die Plattform sie nennt; für Twitch le
 |---|---|---|
 | `app.started` | Der Core ist gestartet (einmal je Start). | Q8 (Application Launch) |
 | `app.stopping` | Der Core fährt herunter. | Q8 (Application Exit) |
+| `auth.action_required` | Eine Anmeldung braucht den Nutzer: die Frontends zeigen die URL und den Code. | [ADR-0014](../adr/0014-oauth-und-app-credentials.md) |
+| `auth.login_completed` | Der Nutzer hat eine Anmeldung abgeschlossen; das Konto ist gespeichert. | [ADR-0014](../adr/0014-oauth-und-app-credentials.md) |
+| `auth.login_failed` | Eine Anmeldung ist fehlgeschlagen, mit dem Grund in Worten. | [ADR-0014](../adr/0014-oauth-und-app-credentials.md) |
 
 **Kanal, plattformneutral**
 
@@ -201,3 +214,4 @@ Keine.
 | 2026-10-04 | Für den Event-Service und die Mock-Plattform als erste Quelle (Roadmap 3.6) ergänzt: Nutzlast der plattformneutralen Ereignisse (B9), Settings-Sektion `events` (B10), eine Stream-Sitzung je Plattform (B11), Auslösen der Ereignis-Commands (B12), Reihenfolge bei einer Chatnachricht und einem Beitritt (B13, B14), Randfälle B27–B29. Entscheidung des Projektinhabers: Adapter übergeben, was sie empfangen, über einen Port an den Event-Service; er wendet die Regeln an, veröffentlicht die Ereignisse und löst die Ereignis-Commands aus, statt sie vom Bus zu lesen ([Code-ADR-0011](../adr/code/0011-event-bus.md), Punkt 4). So wird ein unterdrücktes Ereignis gar nicht erst veröffentlicht, und kein Eingang geht bei vollem Puffer verloren. Doppelte Nachrichten verwirft weiter der Adapter (B22, Code-ADR-0011, Punkt 5). Festlegungen dabei: Die Schwelle reicht bis 1 000 (B10). Vor dem ersten Stream-Start gilt eine Sitzung ohne Start (B11). Ereignisse mit einer Chatnachricht geben sie dem Ereignis-Command als auslösende Nachricht mit, etwa für eine Antwort (B12). Die Erkennung des Nutzers (`chat.user.new`, `chat.user.join`) kommt vor der Nachricht, `chat.user.first_message` und die Begrüßung nach dem Chat-Command (B13), wie in der Chat-Pipeline der Roadmap (5.1). Nachrichten des Bot-Kontos lösen nichts aus, damit sich der Bot nicht selbst antwortet (B13). Bei `chat.user.timeout` und `chat.user.ban` ist der gesperrte Nutzer der Nutzer, weil Plattformen den Moderator nicht immer nennen. Ein Stream-Ende, dessen Karenzzeit ablief, während der Core nicht lief, wird nicht nachgeholt (B27). |
 | 2026-10-04 | Mock-Plattform, Eingangs-Port und Deduplizierung umgesetzt (Roadmap 3.6). Festlegungen dabei: Ein Adapter merkt sich die ID einer Nachricht oder eines Ereignisses 10 Minuten lang (`connector.DefaultDedupTTL`, B22); was ohne ID kommt, kann er nicht als Wiederholung erkennen. Die Mock-Plattform simuliert nur plattformneutrale Typen; Chatnachrichten, Beitritte und Start und Ende des Streams haben eigene Wege (B11, B13, B14), und die Typen, die der Core selbst ableitet (`chat.user.new`, `chat.user.entrance`, `chat.user.first_message`), simuliert sie nicht. Sie lehnt wie eine echte Plattform ab, den Streamer zu moderieren. |
 | 2026-10-04 | Event-Service umgesetzt (`internal/eventservice`, Roadmap 3.6). Festlegungen dabei: Die Rollen eines Nutzers übernimmt der Service nur aus Chatnachrichten; Ereignisse und Beitritte nennen sie nicht verlässlich. `chat.user.new` gilt für das erste Erkennen im Chat, nicht für das Anlegen des Nutzers, das auch ein Follow auslösen kann (B13). Die Einmal-Sperren nach B3 stehen unter dem plattformneutralen Typ, sodass `twitch.channel.follow` und `channel.follow` gemeinsam einmal auslösen. Laufende Begrüßungen bricht der Core ab, wenn keine Plattform mehr live ist ([`command-engine.md`](command-engine.md), B41). Ob ein Stream nach einem Neustart zu lange offline war (B27), misst der Service vom letzten Zeitpunkt, an dem der Core ihn live sah: beim Live-Gehen, bei jeder Meldung „live“ und beim Herunterfahren; nach einem Absturz ist das die letzte solche Meldung. Eine Karenzzeit, die bei einem Neustart noch läuft, läuft weiter. Eine Sammelaktion nennt so viele Beschenkte, wie sie Geschenke zählt. Plattformspezifische Typen ohne neutrale Entsprechung nimmt der Service erst mit ihrer Phase an. Die Ereignisse der Anwendung (`app.started`, `app.stopping`) veröffentlicht der Core über den Service, damit auch sie ihre Ereignis-Commands auslösen (B12). Die Einstellungen liest der Service bei jeder Regel, die sie braucht, sodass Änderungen sofort gelten. |
+| 2026-10-08 | Die Authentifizierungsereignisse ergänzt (Roadmap 4.1, [ADR-0014](../adr/0014-oauth-und-app-credentials.md)): `auth.action_required`, `auth.login_completed` und `auth.login_failed` im Katalog unter „Anwendung“ und ihre Nutzlast in eigener Tabelle, weil sie keine plattformneutralen Ereignisse sind; sie tragen keinen Nutzer und keinen Zielnutzer, und sie lösen keine Ereignis-Commands aus — ihre Typen stehen deshalb nicht im Spec-Katalog `All()`. Umsetzung: die Nutzlasten `ActionRequired`, `LoginCompleted` und `LoginFailed` in `internal/auth`, `auth.RegisterEvents` für den Katalog von `internal/event`, die Konstanten in `internal/domain/eventtype`. |
