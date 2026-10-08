@@ -558,6 +558,11 @@ von `golang.org/x/oauth2` erkennt nicht und als fatal wertet — die CLI endete
 direkt nach der Code-Anzeige, ein DCF-Login war unmöglich. Fix in R8
 (Polling in `twitchFlow.Wait` eigenständig, beide Feldformen).
 
+**E2E-Ergebnis (2026-10-08):** Punkte 2–5 durchgelaufen — Code-Flow (BYO,
+mit und ohne Flags, Bot-Konto) und DCF-Fallback jeweils mit `ok`-Status (41
+Scopes) und Logout mit erfolgreichem Widerruf. Damit sind die Exit-Kriterien
+von §8 und §10 erfüllt.
+
 **Exit (ergänzt zu §8):** Zusätzlich E2E-Punkte 2–5 (Code-Flow und
 DCF-Fallback) durchgelaufen; Stack #146 [144, 145, 147, 148, 149, 150, 151,
 152] komplett grün und von unten nach oben mergebar.
