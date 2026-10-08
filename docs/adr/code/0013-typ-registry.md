@@ -106,10 +106,14 @@
 6. **JSON-Schema:**
    - Die Schemas folgen dem Entwurf 2020-12. Sie entstehen ausdrücklich im Go-Code jedes Typs, aus Bausteinen in `internal/action/schema`, etwa für Template, Mengenangabe mit Bereich und Art. Sie werden nicht per Reflection aus den Structs abgeleitet. Die Bausteine nutzen dieselben Werte wie der Code, etwa `Range` und die Konstanten der Enums, damit Schema und Prüfung nicht auseinanderlaufen.
    - **Eigener Schema-Typ:** `schema.Schema` bildet nur die Schlüsselwörter ab, die die Bausteine brauchen, etwa `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `const`, `minimum`, `maximum`, `oneOf`, `default` und `x-ui`. Kodiert wird mit `encoding/json/v2` (Code-ADR-0018). Weitere Schlüsselwörter kommen hinzu, wenn ein Baustein sie braucht.
+
+     *Ergänzt am 2026-10-01 für die Bedingung um `minItems` und den Baustein `schema.Pick`: Der Wert eines Auswahlfelds bestimmt, welche weiteren Felder ein Objekt hat, als `oneOf` geschlossener Objekte; Felder, die der gewählte Wert nicht nutzt, sind nicht erlaubt. So hat eine Klausel der Bedingung je nach Vergleich einen rechten Wert, zwei Grenzen oder nichts weiter. `schema.Kinds` baut auf demselben Baustein auf.*
    - **Prüfbibliothek:** `github.com/santhosh-tekuri/jsonschema/v6`, nur in Tests (Punkt 9). Sie kommt so nicht ins ausgelieferte Binary.
    - UI-Hinweise stehen am Feld als eigenes Schlüsselwort `x-ui`. Es ist ein geschlossenes Enum, zum Start mit `text`, `multiline`, `template`, `amount`, `expression`, `user`, `platform`, `command`, `group`, `counter`, `file_root`, `result_name` und `actions`. Weitere Werte kommen mit den Typen, die sie brauchen, etwa `color` für Overlays. Voreinstellungen stehen als `default`.
 
      *Umgesetzt am 2026-10-01 mit zwei weiteren Werten, die die Bausteine für Wahrheitswerte und Auswahllisten brauchen: `switch` und `choice`.*
+
+     *Ergänzt am 2026-10-01 um `list` für Listen von Einträgen mit eigenem Schema, etwa die Klauseln der Bedingung.*
    - **Schemas lesen auch Frontends in anderen Sprachen.** Deshalb gilt:
      - `format` ist nur ein Hinweis für Editoren. Was geprüft werden muss, steht in Enums, Bereichen und `pattern` und im Go-Code, weil Validatoren `format` verschieden oder gar nicht prüfen.
      - `pattern` kommt nur aus Konstanten in `internal/action/schema` und nutzt nur, was Go-RE2 und ECMA-262 gleich verstehen: Zeichenklassen, Quantoren, Gruppen ohne Namen und Anker, aber keine Rückverweise, kein Lookaround und keine Unicode-Klassen wie `\p{…}`.
