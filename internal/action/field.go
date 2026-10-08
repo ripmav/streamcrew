@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/ripmav/streamcrew/internal/action/schema"
@@ -26,13 +27,22 @@ func (t Template) Parse() template.Template {
 }
 
 // Range is the allowed range of an amount, both ends included
-// (actions.md B4). The ends are whole numbers; the amounts are decimals
-// (Code-ADR-0020).
+// (actions.md B4); amounts and ends are decimals (Code-ADR-0020).
 type Range struct {
-	Min, Max int64
+	Min, Max decimal.Decimal
 	// Integer allows whole numbers only: a fraction fails, it is not
 	// rounded.
 	Integer bool
+}
+
+// Between returns the range from minimum to maximum, with decimal places.
+func Between(minimum, maximum int64) Range {
+	return Range{Min: decimal.New(minimum), Max: decimal.New(maximum)}
+}
+
+// WholeBetween returns the whole numbers from minimum to maximum.
+func WholeBetween(minimum, maximum int64) Range {
+	return Range{Min: decimal.New(minimum), Max: decimal.New(maximum), Integer: true}
 }
 
 // Check returns an error wrapping ErrInvalid if v is not in r.
@@ -40,16 +50,23 @@ func (r Range) Check(v decimal.Decimal) error {
 	switch {
 	case r.Integer && !v.IsWhole():
 		return fmt.Errorf("%w: %s is not a whole number", ErrInvalid, v)
-	case v.Cmp(decimal.New(r.Min)) < 0 || v.Cmp(decimal.New(r.Max)) > 0:
-		return fmt.Errorf("%w: %s is not between %d and %d", ErrInvalid, v, r.Min, r.Max)
+	case v.Cmp(r.Min) < 0 || v.Cmp(r.Max) > 0:
+		return fmt.Errorf("%w: %s is not between %s and %s", ErrInvalid, v, r.Min, r.Max)
 	}
 	return nil
 }
 
 // Schema returns the schema of an amount in r. JSON Schema has numbers
-// only, so the ends become float64 there, exact up to 2^53.
+// only, so the ends become float64 there, the one place where they leave
+// the decimals; editors take them as a hint, Check decides.
 func (r Range) Schema() *schema.Schema {
-	return schema.Amount(float64(r.Min), float64(r.Max), r.Integer)
+	return schema.Amount(float(r.Min), float(r.Max), r.Integer)
+}
+
+// float returns d as the nearest float64, for JSON Schema.
+func float(d decimal.Decimal) float64 {
+	f, _ := strconv.ParseFloat(d.String(), 64) // a decimal is below 10^34, far inside float64
+	return f
 }
 
 // Amount is a quantity of an action, such as seconds or a count

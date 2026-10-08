@@ -5,7 +5,7 @@ package values_test
 import (
 	"context"
 	json "encoding/json/v2"
-	"math"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -66,18 +66,22 @@ func (s *counters) Counters(context.Context) ([]counter.Counter, error) {
 }
 
 // value returns the value of the counter name.
-func (s *counters) value(name string) int64 {
+func (s *counters) value(name string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	i := slices.IndexFunc(s.list, func(c counter.Counter) bool { return c.Name == name })
-	return s.list[i].Value
+	return s.list[i].Value.String()
 }
 
-// all returns the counters.
-func (s *counters) all() []counter.Counter {
+// summary returns name, value and step of each counter.
+func (s *counters) summary() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return slices.Clone(s.list)
+	out := make([]string, len(s.list))
+	for i, c := range s.list {
+		out[i] = fmt.Sprintf("%s=%s/%s", c.Name, c.Value, c.Step)
+	}
+	return out
 }
 
 // fixture is a running engine with the value types, the counter store and
@@ -187,6 +191,8 @@ func TestConformance(t *testing.T) {
 		{Name: "add with the default", Doc: `{"type":"counter","kind":"add","counter":"deaths"}`, Valid: true},
 		{Name: "add an expression", Doc: `{"type":"counter","kind":"add","counter":"Deaths2","amount":"$arg1text * 2"}`, Valid: true},
 		{Name: "set", Doc: `{"type":"counter","kind":"set","counter":"deaths","value":9007199254740991}`, Valid: true},
+		{Name: "B220 fraction", Doc: `{"type":"counter","kind":"add","counter":"deaths","amount":1.5}`, Valid: true},
+		{Name: "beyond float64", Doc: `{"type":"counter","kind":"set","counter":"deaths","value":123456789012345678901234567890}`, Valid: true},
 		{Name: "reset", Doc: `{"type":"counter","enabled":false,"kind":"reset","counter":"deaths"}`, Valid: true},
 		{Name: "increment", Doc: `{"type":"counter","kind":"increment","counter":"points"}`, Valid: true},
 		{Name: "decrement", Doc: `{"type":"counter","kind":"decrement","counter":"points"}`, Valid: true},
@@ -196,8 +202,7 @@ func TestConformance(t *testing.T) {
 		{Name: "empty name", Doc: `{"type":"counter","kind":"reset","counter":""}`},
 		{Name: "kind missing", Doc: `{"type":"counter","counter":"deaths"}`},
 		{Name: "unknown kind", Doc: `{"type":"counter","kind":"multiply","counter":"deaths"}`},
-		{Name: "B220 fraction", Doc: `{"type":"counter","kind":"add","counter":"deaths","amount":1.5}`},
-		{Name: "amount beyond exact numbers", Doc: `{"type":"counter","kind":"add","counter":"deaths","amount":9007199254740992}`},
+		{Name: "amount beyond the decimals", Doc: `{"type":"counter","kind":"add","counter":"deaths","amount":1e40}`},
 		{Name: "add with a value", Doc: `{"type":"counter","kind":"add","counter":"deaths","value":1}`},
 		{Name: "set without value", Doc: `{"type":"counter","kind":"set","counter":"deaths"}`},
 		{Name: "set with an amount", Doc: `{"type":"counter","kind":"set","counter":"deaths","value":1,"amount":1}`},
@@ -215,9 +220,9 @@ func TestCounter(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		f := newFixture(t,
-			counter.Counter{Name: "deaths", Value: 5, Step: counter.DefaultStep},
-			counter.Counter{Name: "points", Step: 10},
-			counter.Counter{Name: "other", Value: 7, Step: counter.DefaultStep})
+			counter.Counter{Name: "deaths", Value: decimal.New(5), Step: counter.DefaultStep()},
+			counter.Counter{Name: "points", Step: decimal.New(10)},
+			counter.Counter{Name: "other", Value: decimal.New(7), Step: counter.DefaultStep()})
 		in := f.start([]command.Action{
 			f.counter(values.CounterAdd, "deaths", action.Fixed(decimal.New(1))), f.show("$deaths"),
 			f.counter(values.CounterAdd, "DEATHS", action.Expression("$arg1text")), f.show("$deaths"),
@@ -232,7 +237,34 @@ func TestCounter(t *testing.T) {
 		}, "-10")
 		assert.Empty(t, in.Errors)
 		assert.Equal(t, []string{"6", "-4", "1234567 1,234,567", "0", "1", "20", "-10"}, f.lines.get())
-		assert.Equal(t, int64(7), f.counters.value("other"))
+		assert.Equal(t, "7", f.counters.value("other"))
+	})
+}
+
+// TestCounterDecimals covers counters-and-quotes.md B4, B5 and B8 with
+// actions.md B40: amounts, values and steps with decimal places, exact.
+func TestCounterDecimals(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		half, err := decimal.Parse("0.5")
+		require.NoError(t, err)
+		f := newFixture(t, counter.Counter{Name: "score", Step: half})
+		in := f.start([]command.Action{
+			f.counter(values.CounterAdd, "score", action.Expression("$arg1text")), f.show("$score $scoredisplay"),
+			f.counter(values.CounterIncrement, "score", action.Amount{}), f.show("$score $scoredisplay"),
+			f.counter(values.CounterSet, "score", action.Expression("0.1")),
+			f.counter(values.CounterAdd, "score", action.Expression("0.2")), f.show("$score"),
+			f.counter(values.CounterAdd, "score", action.Expression("$score * 1000")), f.show("$score $scoredisplay"),
+			f.counter(values.CounterSet, "score", action.Expression("10 / 3")), f.show("$score $scoredisplay"),
+		}, "1.5")
+		assert.Empty(t, in.Errors)
+		assert.Equal(t, []string{
+			"1.5 1.50",
+			"2 2",
+			"0.3",
+			"300.3 300.30",
+			"3.333333333333333333333333333333333 3.33",
+		}, f.lines.get())
 	})
 }
 
@@ -248,27 +280,29 @@ func TestCounterFails(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"B220 fraction", values.CounterAdd, "deaths", action.Expression("$arg1text"), []string{"1.5"}, "amount: invalid action: 1.5 is not a whole number"},
 		{"not a number", values.CounterSet, "deaths", action.Expression("$arg1text"), []string{"abc"}, `value: invalid action: "abc" is not a number`},
-		{"B42 beyond 64 bits", values.CounterAdd, "big", action.Fixed(decimal.New(10)), nil, "counter value out of range"},
-		{"B42 below 64 bits", values.CounterAdd, "small", action.Fixed(decimal.New(-2)), nil, "counter value out of range"},
-		{"B42 a step beyond 64 bits", values.CounterIncrement, "big", action.Amount{}, nil, "counter value out of range"},
-		{"B42 a step below 64 bits", values.CounterDecrement, "small", action.Amount{}, nil, "counter value out of range"},
+		{"B42 beyond the range", values.CounterAdd, "big", action.Fixed(decimal.New(10)), nil, "counter value out of range"},
+		{"B42 below the range", values.CounterAdd, "small", action.Fixed(decimal.New(-2)), nil, "counter value out of range"},
+		{"B42 a step beyond the range", values.CounterIncrement, "big", action.Amount{}, nil, "counter value out of range"},
+		{"B42 a step below the range", values.CounterDecrement, "small", action.Amount{}, nil, "counter value out of range"},
+		{"amount beyond the range", values.CounterAdd, "deaths", action.Expression("$arg1text"), []string{"1e40"}, "is not a number"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			synctest.Test(t, func(t *testing.T) {
+				almost, err := decimal.Max().Sub(decimal.New(1))
+				require.NoError(t, err)
 				f := newFixture(t,
-					counter.Counter{Name: "deaths", Value: 5, Step: counter.DefaultStep},
-					counter.Counter{Name: "big", Value: math.MaxInt64 - 1, Step: 2},
-					counter.Counter{Name: "small", Value: math.MinInt64 + 1, Step: 2})
-				before := f.counters.all()
+					counter.Counter{Name: "deaths", Value: decimal.New(5), Step: counter.DefaultStep()},
+					counter.Counter{Name: "big", Value: almost, Step: decimal.New(2)},
+					counter.Counter{Name: "small", Value: almost.Neg(), Step: decimal.New(2)})
+				before := f.counters.summary()
 				a := f.counter(tc.kind, tc.of, tc.by)
 				require.NoError(t, a.Validate())
 				in := f.start([]command.Action{a}, tc.args...)
 				require.Len(t, in.Errors, 1)
 				assert.Contains(t, in.Errors[0].Message, tc.want)
-				assert.Equal(t, before, f.counters.all(), "the values stay")
+				assert.Equal(t, before, f.counters.summary(), "the values stay")
 			})
 		})
 	}
@@ -286,15 +320,11 @@ func TestCounterCreated(t *testing.T) {
 			f.counter(values.CounterIncrement, "steps", action.Amount{}), f.show("$steps"),
 			f.counter(values.CounterReset, "zero", action.Amount{}), f.show("$zero"),
 			f.counter(values.CounterAdd, "broken", action.Expression("$arg1text")),
-		}, "1.5")
+		}, "abc")
 		require.Len(t, in.Errors, 1)
-		assert.Contains(t, in.Errors[0].Message, "is not a whole number")
+		assert.Contains(t, in.Errors[0].Message, "is not a number")
 		assert.Equal(t, []string{"3", "1", "0"}, f.lines.get())
-		assert.Equal(t, []counter.Counter{
-			{Name: "Lives", Value: 3, Step: counter.DefaultStep},
-			{Name: "steps", Value: 1, Step: counter.DefaultStep},
-			{Name: "zero", Step: counter.DefaultStep},
-		}, f.counters.all(), "nothing for the failed action")
+		assert.Equal(t, []string{"Lives=3/1", "steps=1/1", "zero=0/1"}, f.counters.summary(), "nothing for the failed action")
 	})
 }
 
@@ -321,7 +351,7 @@ func TestCounterConcurrent(t *testing.T) {
 		for _, in := range started {
 			assert.Equal(t, engine.StateCompleted, f.harness.Instance(in.ID).State)
 		}
-		assert.Equal(t, int64(300), f.counters.value("hugs"))
+		assert.Equal(t, "300", f.counters.value("hugs"))
 	})
 }
 
@@ -351,7 +381,6 @@ func TestValidate(t *testing.T) {
 		{"set without value", func(c *values.Counter) { c.Kind, c.Amount = values.CounterSet, action.Amount{} }, "value: invalid action: no amount"},
 		{"reset with an amount", func(c *values.Counter) { c.Kind = values.CounterReset }, "amount: invalid action: only add has an amount"},
 		{"bad name", func(c *values.Counter) { c.Counter = "my deaths" }, "counter: invalid action: invalid counter"},
-		{"beyond exact numbers", func(c *values.Counter) { c.Amount = action.Fixed(decimal.New(1 << 53)) }, "amount: invalid action"},
 	} {
 		c, ok := d.New().(values.Counter)
 		require.True(t, ok)
