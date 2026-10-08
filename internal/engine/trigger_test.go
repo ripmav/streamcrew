@@ -35,12 +35,17 @@ type requirements struct {
 	decisions map[string]engine.Decision
 	// runs, if set, returns the runs of met requirements.
 	runs func(p engine.Params) []engine.Params
-	// gate, if set, holds Apply back until it is closed.
-	gate      chan struct{}
-	err       error
-	notifyErr error
-	applied   []string
-	notified  []string
+	// gate, if set, holds Prepare back until it is closed; holds does so
+	// for the command name.
+	gate    chan struct{}
+	holds   map[string]chan struct{}
+	decided []string
+	// notifyHold, if set, holds Notify back until it is closed.
+	notifyHold chan struct{}
+	err        error
+	notifyErr  error
+	applied    []string
+	notified   []string
 	// cooldowns are the commands whose cooldown was started, with the ID
 	// of the user of the run.
 	cooldowns   []string
@@ -52,21 +57,31 @@ type requirements struct {
 	revertErr  error
 }
 
-func (r *requirements) Apply(_ context.Context, cmd command.Command, p engine.Params) (engine.Decision, error) {
+func (r *requirements) Prepare(_ context.Context, cmd command.Command, p engine.Params) (engine.Decide, error) {
 	r.mu.Lock()
-	gate := r.gate
+	gate, hold := r.gate, r.holds[cmd.Name]
+	r.applied = append(r.applied, cmd.Name)
+	err := r.err
 	r.mu.Unlock()
 	if gate != nil {
 		<-gate
 	}
+	if hold != nil {
+		<-hold
+	}
+	if err != nil {
+		return nil, err
+	}
+	return func(context.Context) (engine.Decision, error) { return r.decision(cmd, p), nil }, nil
+}
+
+// decision returns the decision for cmd and p and records it.
+func (r *requirements) decision(cmd command.Command, p engine.Params) engine.Decision {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.applied = append(r.applied, cmd.Name)
-	if r.err != nil {
-		return engine.Decision{}, r.err
-	}
+	r.decided = append(r.decided, cmd.Name)
 	if d, ok := r.decisions[cmd.Name]; ok {
-		return d, nil
+		return d
 	}
 	d := engine.Met(p)
 	if r.runs != nil {
@@ -75,7 +90,27 @@ func (r *requirements) Apply(_ context.Context, cmd command.Command, p engine.Pa
 	if r.revertible {
 		d.Revert = r.revertFunc(cmd.Name)
 	}
-	return d, nil
+	return d
+}
+
+// hold holds the preparation for the command name back until the returned
+// function is called.
+func (r *requirements) hold(name string) func() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.holds == nil {
+		r.holds = make(map[string]chan struct{})
+	}
+	ch := make(chan struct{})
+	r.holds[name] = ch
+	return sync.OnceFunc(func() { close(ch) })
+}
+
+// decidedFor returns the commands decided so far, in order.
+func (r *requirements) decidedFor() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.decided)
 }
 
 // revertFunc returns a Revert that records name.
@@ -99,6 +134,12 @@ func (r *requirements) revertedFor() []string {
 }
 
 func (r *requirements) Notify(_ context.Context, cmd command.Command, _ engine.Params, rej engine.Rejection) error {
+	r.mu.Lock()
+	hold := r.notifyHold
+	r.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.notified = append(r.notified, cmd.Name+" "+rej.Requirement)

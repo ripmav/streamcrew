@@ -8,7 +8,7 @@
 //
 // So far it checks the role, the cooldown and the arguments and finds
 // faulty requirements; settings and thresholds follow (roadmap 3.4). A
-// command with a threshold is not decided yet: Apply returns
+// command with a threshold is not decided yet: its decision returns
 // ErrNotSupported.
 package requirement
 
@@ -67,7 +67,8 @@ type Ports struct {
 type Service struct {
 	ports Ports
 	// mu makes the decisions one after another, so that two runs cannot
-	// both pass a cooldown that only one may start (B3, B100).
+	// both pass a cooldown that only one may start (B3, B100). Prepare
+	// does not hold it.
 	mu sync.Mutex
 }
 
@@ -94,50 +95,87 @@ func New(p Ports) (*Service, error) {
 	return &Service{ports: p}, nil
 }
 
-// Apply decides whether cmd runs for p (B1, B2): faulty requirements first
-// (B7, B8, B40), then the role (B10 to B12), the cooldown (B20 to B24) and
-// the arguments (B30 to B35). The first requirement that is not met is the
-// rejection. If all are met, it starts the cooldown (B3, B21), which the
-// decision can take back, and the run has the values of the arguments.
-// Decisions are made one after another (B3).
-func (s *Service) Apply(ctx context.Context, cmd command.Command, p engine.Params) (engine.Decision, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now()
+// Prepare prepares the decision whether cmd runs for p (B1, B2), without
+// the lock of the decisions, so that the engine can prepare many triggers
+// at the same time (command-engine.md, B16): it finds faulty
+// requirements (B7, B8, B40), checks the role (B10 to B12), finds the user
+// a cooldown per user counts against (B4) and the users that arguments
+// name (B30 to B35). The decision then checks the cooldown (B20 to B24) and
+// takes the first requirement that is not met in the order of B2. If all
+// are met, it starts the cooldown (B3, B21), which it can take back, and the
+// run has the values of the arguments. Decisions are made one after another
+// (B3).
+func (s *Service) Prepare(ctx context.Context, cmd command.Command, p engine.Params) (engine.Decide, error) {
 	if r, ok, err := s.faulty(ctx, cmd); err != nil || ok {
-		return rejectedOrError(cmd, r, err)
+		return decided(cmd, r, err)
 	}
 	if r, ok := checkRole(cmd, p); ok {
-		return engine.Rejected(r), nil
+		return decided(cmd, r, nil)
 	}
-	cooldown, hasCooldown := find[command.CooldownRequirement](cmd)
-	var key command.CooldownKey
-	if hasCooldown {
+	pr := &prepared{s: s, cmd: cmd, p: p, run: p}
+	pr.cooldown, pr.hasCooldown = find[command.CooldownRequirement](cmd)
+	if pr.hasCooldown {
 		var err error
-		if key, err = s.cooldownKey(ctx, cmd, cooldown, p); err != nil {
-			return rejectedOrError(cmd, engine.Rejection{}, err)
-		}
-		if r, ok, err := s.checkCooldown(ctx, cooldown, key, p, now); err != nil || ok {
-			return rejectedOrError(cmd, r, err)
+		if pr.key, err = s.cooldownKey(ctx, cmd, pr.cooldown, p); err != nil {
+			return decided(cmd, engine.Rejection{}, err)
 		}
 	}
 	if args, ok := find[command.ArgumentsRequirement](cmd); ok {
-		var (
-			r        engine.Rejection
-			rejected bool
-			err      error
-		)
-		if p, r, rejected, err = s.checkArguments(ctx, cmd, args, p); err != nil || rejected {
+		pr.run, pr.argsRejection, pr.argsRejected, pr.argsErr = s.checkArguments(ctx, cmd, args, p)
+	}
+	return pr.decide, nil
+}
+
+// decided returns the decision of a rejection r found while preparing, or
+// the error err of preparing cmd.
+func decided(cmd command.Command, r engine.Rejection, err error) (engine.Decide, error) {
+	if err != nil {
+		return nil, fmt.Errorf("prepare command %q: %w", cmd.Name, err)
+	}
+	return func(context.Context) (engine.Decision, error) { return engine.Rejected(r), nil }, nil
+}
+
+// prepared is a decision that Prepare prepared: what is left to check while
+// the lock of the decisions is held, and what the arguments gave.
+type prepared struct {
+	s   *Service
+	cmd command.Command
+	p   engine.Params
+	// cooldown is the cooldown requirement of cmd, if hasCooldown, with its
+	// key for p.
+	cooldown    command.CooldownRequirement
+	hasCooldown bool
+	key         command.CooldownKey
+	// run is p with the values of the arguments; argsRejection or argsErr
+	// say why the arguments do not fit, which counts only after the
+	// cooldown (B2).
+	run           engine.Params
+	argsRejection engine.Rejection
+	argsRejected  bool
+	argsErr       error
+}
+
+// decide implements engine.Decide.
+func (pr *prepared) decide(ctx context.Context) (engine.Decision, error) {
+	s, cmd := pr.s, pr.cmd
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now()
+	if pr.hasCooldown {
+		if r, ok, err := s.checkCooldown(ctx, pr.cooldown, pr.key, pr.p, now); err != nil || ok {
 			return rejectedOrError(cmd, r, err)
 		}
+	}
+	if pr.argsErr != nil || pr.argsRejected {
+		return rejectedOrError(cmd, pr.argsRejection, pr.argsErr)
 	}
 	if _, ok := find[command.ThresholdRequirement](cmd); ok {
 		return engine.Decision{}, fmt.Errorf("decide command %q: %w: %s", cmd.Name, ErrNotSupported, command.TypeThreshold)
 	}
-	d := engine.Met(p)
-	if hasCooldown {
+	d := engine.Met(pr.run)
+	if pr.hasCooldown {
 		var err error
-		if d.Revert, err = s.startCooldown(ctx, cooldown, key, now); err != nil {
+		if d.Revert, err = s.startCooldown(ctx, pr.cooldown, pr.key, now); err != nil {
 			return rejectedOrError(cmd, engine.Rejection{}, err)
 		}
 	}

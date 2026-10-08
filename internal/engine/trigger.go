@@ -134,12 +134,14 @@ func (r Rejection) zero() bool {
 // Requirements checks and applies the requirements of commands (B10). The
 // requirement service (roadmap 3.4) implements it.
 type Requirements interface {
-	// Apply checks the requirements of cmd for the run p. Only for
-	// VerdictMet it charges their costs and starts their cooldowns, which
-	// Decision.Revert takes back. Decisions about the same command are
-	// made one after another (requirements.md, B3). An error means it
-	// could not decide.
-	Apply(ctx context.Context, cmd command.Command, p Params) (Decision, error)
+	// Prepare prepares the check of the requirements of cmd for the run p
+	// (B10, B16): it does the work that may take long and changes nothing,
+	// e.g. looking up the users that arguments name, and returns the
+	// decision to make. The engine prepares several runs at the same time,
+	// each within DecisionTimeout, and makes their decisions one after
+	// another in the order of the triggers (requirements.md, B3). An error
+	// means it could not prepare.
+	Prepare(ctx context.Context, cmd command.Command, p Params) (Decide, error)
 	// Notify tells the user of p the reason of r (B11). The engine calls it
 	// only for a rejection with Tell, outside the error cooldown (B12).
 	Notify(ctx context.Context, cmd command.Command, p Params, r Rejection) error
@@ -238,60 +240,111 @@ type Result struct {
 }
 
 // Trigger runs req.Command automatically if it is enabled and its
-// requirements are met (B10 to B15, B82). A greeting is queued also while
-// greetings are paused, and starts when they are resumed (B41). The result says what became
-// of it. Trigger returns an error only if it could not handle the request:
-// ErrInvalidSource, an invalid command or parameters, ErrQueueFull,
-// ErrClosed while the core stops (except for event commands of
-// "app.stopping", B55), unreadable settings, or a requirement service that
-// failed or returned an invalid decision.
+// requirements are met (B10 to B16, B82). A greeting is queued also while
+// greetings are paused, and starts when they are resumed (B41). The result
+// says what became of it. Triggers that run at the same time prepare their
+// decisions at the same time and are decided and queued in the order in
+// which they called Trigger (B16). Trigger returns an error only if it
+// could not handle the request: ErrInvalidSource, an invalid command or
+// parameters, ErrQueueFull, ErrClosed while the core stops (except for
+// event commands of "app.stopping", B55), unreadable settings, or a
+// requirement service that failed, took longer than DecisionTimeout or
+// returned an invalid decision.
 func (e *Engine) Trigger(ctx context.Context, req Request) (Result, error) {
+	t, err := e.enter(ctx, req, nil)
+	if err != nil {
+		return Result{}, err
+	}
+	return t.finish(ctx)
+}
+
+// trigger is a trigger with its place in the queue and in the order of the
+// decisions (B15, B16).
+type trigger struct {
+	e    *Engine
+	req  Request
+	cfg  Config
+	adm  admission
+	turn *turn
+	// ended means the trigger has its result before its requirements, e.g.
+	// for a disabled command; it has no place then.
+	ended  bool
+	result Result
+}
+
+// enter checks req and takes its place in the queue and in the order of
+// the decisions. With a place, it calls start while e.mu is held, so that
+// a goroutine that start launches belongs to the engine before it can shut
+// down.
+func (e *Engine) enter(ctx context.Context, req Request, start func(*trigger)) (*trigger, error) {
 	cmd := req.Command
 	switch req.Source {
 	case SourceChat, SourceEvent, SourceTimer:
 	default:
-		return Result{}, fmt.Errorf("trigger command %q: %w: %q", cmd.Name, ErrInvalidSource, req.Source)
+		return nil, fmt.Errorf("trigger command %q: %w: %q", cmd.Name, ErrInvalidSource, req.Source)
 	}
 	if err := checkRun(cmd, req.Params); err != nil {
-		return Result{}, fmt.Errorf("trigger command %q: %w", cmd.Name, err)
+		return nil, fmt.Errorf("trigger command %q: %w", cmd.Name, err)
 	}
 	if !cmd.Enabled {
-		return Result{Outcome: OutcomeDisabled}, nil
+		return &trigger{e: e, req: req, ended: true, result: Result{Outcome: OutcomeDisabled}}, nil
 	}
 	cfg, err := e.readConfig(ctx)
 	if err != nil {
-		return Result{}, fmt.Errorf("trigger command %q: %w", cmd.Name, err)
+		return nil, fmt.Errorf("trigger command %q: %w", cmd.Name, err)
 	}
-	adm := admission{
+	t := &trigger{e: e, req: req, cfg: cfg, adm: admission{
 		whileStopping: req.Source == SourceEvent && req.Event == eventtype.AppStopping,
 		greeting:      req.Entrance || req.Source == SourceEvent && req.Event == eventtype.ChatUserEntrance,
 		queueSize:     cfg.Commands.QueueSize,
-	}
+	}}
 
 	e.mu.Lock()
-	err = e.reserveLocked(ctx, cmd, req.Source, adm)
-	e.mu.Unlock()
-	if err != nil {
-		return Result{}, err
+	defer e.mu.Unlock()
+	if err := e.reserveLocked(ctx, cmd, req.Source, t.adm); err != nil {
+		return nil, err
 	}
-	release := func() {
-		e.mu.Lock()
-		defer e.mu.Unlock()
-		e.reserved--
+	t.turn = e.takeTurnLocked()
+	if start != nil {
+		start(t)
 	}
+	return t, nil
+}
 
-	p := e.lookupTarget(ctx, req.Params)
-	d, err := e.decide(ctx, cmd, p)
+// release gives back the place in the queue of a trigger that queues
+// nothing.
+func (t *trigger) release() {
+	t.e.mu.Lock()
+	defer t.e.mu.Unlock()
+	t.e.reserved--
+}
+
+// finish prepares, decides and queues the trigger (B10 to B16). It decides
+// and queues in its turn and tells the user about a rejection after it.
+func (t *trigger) finish(ctx context.Context) (Result, error) {
+	if t.ended {
+		return t.result, nil
+	}
+	e, cmd, cfg := t.e, t.req.Command, t.cfg
+	defer t.turn.done()
+	p, decide, err := e.prepare(ctx, cmd, t.req.Params, true)
 	if err != nil {
-		release()
+		t.release()
+		return Result{}, fmt.Errorf("trigger command %q: %w", cmd.Name, err)
+	}
+	t.turn.wait()
+	d, err := e.decide(ctx, cmd, decide)
+	if err != nil {
+		t.release()
 		return Result{}, fmt.Errorf("trigger command %q: %w", cmd.Name, err)
 	}
 	switch d.Verdict {
 	case VerdictWaiting:
-		release()
+		t.release()
 		return Result{Outcome: OutcomeWaiting}, nil
 	case VerdictRejected:
-		release()
+		t.release()
+		t.turn.done()
 		e.reject(ctx, cmd, p, d.Rejection, cfg.Commands)
 		return Result{Outcome: OutcomeRejected, Rejection: d.Rejection}, nil
 	case VerdictMet:
@@ -300,9 +353,10 @@ func (e *Engine) Trigger(ctx context.Context, req Request) (Result, error) {
 	e.resetErrorCooldowns(cmd.ID) // B13
 	res := Result{Outcome: OutcomeQueued, Instances: make([]id.ID, 0, len(d.Runs))}
 	var dropErr error
+	adm := t.adm
 	for i, run := range d.Runs {
 		adm.reserved = i == 0
-		instanceID, err := e.enqueue(ctx, cmd, req.Source, run, cfg, adm, origin{})
+		instanceID, err := e.enqueue(ctx, cmd, t.req.Source, run, cfg, adm, origin{})
 		if err != nil {
 			dropErr = errors.Join(dropErr, err)
 			res.Dropped++
@@ -319,23 +373,6 @@ func (e *Engine) Trigger(ctx context.Context, req Request) (Result, error) {
 			"command", cmd.Name, "dropped", res.Dropped, "error", dropErr)
 	}
 	return res, nil
-}
-
-// decide applies the requirements of cmd for p and checks the decision. It
-// takes back what an invalid decision applied.
-func (e *Engine) decide(ctx context.Context, cmd command.Command, p Params) (Decision, error) {
-	if e.requirements == nil {
-		return Met(p), nil
-	}
-	d, err := e.requirements.Apply(ctx, cmd, p)
-	if err != nil {
-		return Decision{}, fmt.Errorf("check requirements: %w", err)
-	}
-	if err := d.validate(); err != nil {
-		e.revert(ctx, cmd, d)
-		return Decision{}, err
-	}
-	return d, nil
 }
 
 // revert takes back what the requirements applied for d, after none of its
