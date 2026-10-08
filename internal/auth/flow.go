@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package auth keeps the platform accounts of a profile (ADR-0014): it
-// starts and follows logins, stores the tokens encrypted in the vault,
-// refreshes them before they expire, and reports which accounts need a new
-// login.
+// Package auth keeps the platform accounts of a profile (ADR-0014,
+// ADR-0023): it starts and follows logins, stores the tokens encrypted
+// in the vault, refreshes them before they expire, and reports which
+// accounts need a new login.
 package auth
 
 import (
@@ -19,21 +19,28 @@ var (
 	// ErrCodeExpired is the device code expired before the user
 	// completed the login; the login must be started again.
 	ErrCodeExpired = errors.New("the device code expired")
+	// ErrLoginWindow is the login window of the authorization code flow
+	// closed before the user completed the login; the login must be
+	// started again (ADR-0023).
+	ErrLoginWindow = errors.New("the login window expired")
 	// ErrAccessDenied is the user denied the login at the prompt.
 	ErrAccessDenied = errors.New("the user denied the login")
+	// ErrTokenExpired is the refresh token is no longer valid: the login
+	// must be started again (ADR-0014).
+	ErrTokenExpired = errors.New("the token expired")
 )
 
 // Flow is the OAuth flow of a platform: start a login, wait for the user
 // to finish it, refresh and revoke tokens, and look up the account behind
-// a token. Each platform has one implementation (twitchFlow for Twitch,
-// ADR-0014); tests provide fakes.
+// a token. Each platform has one implementation (twitchFlow and
+// twitchCodeFlow for Twitch, ADR-0023); tests provide fakes.
 type Flow interface {
-	// Start begins a login and returns the device authorization response
-	// with the code the user must enter (PromptFrom).
-	Start(ctx context.Context) (*oauth2.DeviceAuthResponse, error)
-	// Wait blocks until the user completes the login, the code expires,
+	// Start begins a login and returns the handle to follow it with Wait
+	// and the prompt of what the user must do.
+	Start(ctx context.Context) (*Login, *Prompt, error)
+	// Wait blocks until the user completes the login, the login expires,
 	// or ctx ends (context.Canceled).
-	Wait(ctx context.Context, da *oauth2.DeviceAuthResponse) (*oauth2.Token, error)
+	Wait(ctx context.Context, l *Login) (*oauth2.Token, error)
 	// Refresh exchanges a refresh token for a new token; the granted
 	// scopes stay in the token's extra fields ("scope").
 	Refresh(ctx context.Context, refreshToken string) (*oauth2.Token, error)
@@ -45,14 +52,44 @@ type Flow interface {
 	User(ctx context.Context, token string) (id, login string, err error)
 }
 
-// Prompt is what the user must do to complete a login: enter the code at
-// the URL. Frontends render it as they like (text, browser, link).
+// Login is a running login of the flow: the in-memory handle Wait follows
+// up on. The device code flow holds the device authorization response, the
+// authorization code flow the loopback callback that receives the browser
+// redirect (ADR-0023). It is never persisted.
+type Login struct {
+	// device is the device authorization response of the device code
+	// flow.
+	device *oauth2.DeviceAuthResponse
+	// callback is the loopback callback of the authorization code flow.
+	callback *codeCallback
+}
+
+// Credentials are the app credentials of a login (ADR-0023): for the
+// authorization code flow the client ID and secret of the user's own
+// confidential app (BYO), for the device code flow the client ID of a
+// public app.
+type Credentials struct {
+	// ID is the client ID of the app; empty selects the project app for
+	// a device code login.
+	ID string
+	// Secret is the client secret of a confidential app; it is empty for
+	// a public client (device code flow).
+	Secret string
+	// DeviceFlow selects the device code flow for a public client
+	// instead of the authorization code flow.
+	DeviceFlow bool
+}
+
+// Prompt is what the user must do to complete a login: open the URL and,
+// for the device code flow, enter the code. Frontends render it as they
+// like (text, browser, link).
 type Prompt struct {
-	// URL is where the user enters the code.
+	// URL is where the user completes the login.
 	URL string
-	// Code is the code the user enters at the URL.
+	// Code is the code the user enters at the URL; it is empty for the
+	// authorization code flow, where the user only authorizes (ADR-0023).
 	Code string
-	// Expiry is when the code expires.
+	// Expiry is when the login expires and must be started again.
 	Expiry time.Time
 }
 
