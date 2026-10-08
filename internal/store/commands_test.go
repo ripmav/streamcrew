@@ -3,14 +3,19 @@
 package store_test
 
 import (
+	"context"
 	"encoding/json/jsontext"
+	json "encoding/json/v2"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ripmav/streamcrew/internal/capability"
 	"github.com/ripmav/streamcrew/internal/domain/command"
+	"github.com/ripmav/streamcrew/internal/domain/counter"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/domain/role"
@@ -18,12 +23,49 @@ import (
 	"github.com/ripmav/streamcrew/internal/store"
 )
 
-func commandService(t *testing.T) (*command.Service, *command.Codec) {
+func commandService(t *testing.T) (*commandSaver, *command.Codec) {
 	t.Helper()
 	codec, err := command.NewCodec()
 	require.NoError(t, err)
-	return command.NewService(openStore(t), codec), codec
+	return newCommandService(t, openStore(t), codec), codec
 }
+
+// commandSaver is a command service whose Save returns the stored command
+// and fails the test on warnings, which these tests do not expect.
+type commandSaver struct {
+	*command.Service
+	t *testing.T
+}
+
+func newCommandService(t *testing.T, s *store.Store, codec *command.Codec) *commandSaver {
+	t.Helper()
+	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: noNames{}, Types: noTypes{}, Roots: noRoots{}})
+	require.NoError(t, err)
+	return &commandSaver{Service: svc, t: t}
+}
+
+func (c *commandSaver) Save(ctx context.Context, cmd command.Command) (command.Command, error) {
+	res, err := c.Service.Save(ctx, cmd)
+	if err == nil {
+		assert.Empty(c.t, res.Warnings)
+	}
+	return res.Command, err
+}
+
+// noNames reserves no names.
+type noNames struct{}
+
+func (noNames) Reserved(string) (string, bool) { return "", false }
+
+// noTypes knows no action type that lacks a capability.
+type noTypes struct{}
+
+func (noTypes) Missing(string) []capability.Capability { return []capability.Capability{} }
+
+// noRoots releases no root for files.
+type noRoots struct{}
+
+func (noRoots) HasRoot(string) bool { return false }
 
 func chatCommand(name string, enabled bool, triggers ...string) command.Command {
 	return command.Command{Name: name, Kind: command.KindChat, Enabled: enabled, Triggers: triggers, ErrorPolicy: command.ErrorContinue}
@@ -193,4 +235,155 @@ func TestDeleteCommand(t *testing.T) {
 
 	_, err = svc.Save(ctx, chatCommand("hug again", true, "hug"))
 	require.NoError(t, err, "the trigger is free again")
+}
+
+// refAction is an action type for tests that refers to commands, groups,
+// counters and roots, sets result values and holds child actions.
+type refAction struct {
+	Commands []id.ID          `json:"commands,omitempty"`
+	Groups   []id.ID          `json:"groups,omitempty"`
+	Counters []string         `json:"counters,omitempty"`
+	Roots    []string         `json:"roots,omitempty"`
+	Names    []string         `json:"names,omitempty"`
+	Kids     []command.Action `json:"children,omitempty"`
+}
+
+func (refAction) DocType() string              { return "ref" }
+func (refAction) Validate() error              { return nil }
+func (a refAction) Children() []command.Action { return a.Kids }
+func (a refAction) ResultNames() []string      { return a.Names }
+
+func (a refAction) References() []command.Reference {
+	var refs []command.Reference
+	for _, cmdID := range a.Commands {
+		refs = append(refs, command.Reference{Kind: command.RefCommand, ID: cmdID})
+	}
+	for _, groupID := range a.Groups {
+		refs = append(refs, command.Reference{Kind: command.RefGroup, ID: groupID})
+	}
+	for _, name := range a.Counters {
+		refs = append(refs, command.Reference{Kind: command.RefCounter, Name: name})
+	}
+	for _, name := range a.Roots {
+		refs = append(refs, command.Reference{Kind: command.RefFileRoot, Name: name})
+	}
+	return refs
+}
+
+// fakeChecks are configurable checks for the command service.
+type fakeChecks struct {
+	reserved map[string]string
+	missing  map[string][]capability.Capability
+	roots    []string
+}
+
+func (f fakeChecks) Reserved(name string) (string, bool) {
+	builtIn, ok := f.reserved[name]
+	return builtIn, ok
+}
+
+func (f fakeChecks) Missing(actionType string) []capability.Capability {
+	return append([]capability.Capability{}, f.missing[actionType]...)
+}
+
+func (f fakeChecks) HasRoot(name string) bool { return slices.Contains(f.roots, name) }
+
+// TestSaveChecksActions covers Code-ADR-0013, point 7: saving checks the
+// references and result names of actions, also of child actions, creates
+// missing counters and warns about missing capabilities and unknown roots.
+func TestSaveChecksActions(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+	codec, err := command.NewCodec(polydoc.Entry[command.Action]{
+		Type: "ref", Version: 1,
+		Decode: func(data []byte, opts json.Options) (command.Action, error) {
+			return polydoc.Strict[refAction](data, opts)
+		},
+	})
+	require.NoError(t, err)
+	fake := fakeChecks{
+		reserved: map[string]string{"username": "username"},
+		missing:  map[string][]capability.Capability{"ref": {capability.HostFS}},
+		roots:    []string{"overlays"},
+	}
+	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: fake, Types: fake, Roots: fake})
+	require.NoError(t, err)
+
+	target, err := svc.Save(ctx, chatCommand("target", true, "target"))
+	require.NoError(t, err)
+	group, err := svc.SaveGroup(ctx, command.Group{Name: "fun"})
+	require.NoError(t, err)
+	_, err = s.CreateCounter(ctx, counter.Counter{Name: "Deaths"})
+	require.NoError(t, err)
+
+	caller := chatCommand("caller", true, "caller")
+	caller.Actions = []command.Action{refAction{
+		Commands: []id.ID{target.Command.ID},
+		Groups:   []id.ID{group.ID},
+		Counters: []string{"deaths", "wins"},
+		Roots:    []string{"overlays", "secret"},
+		Names:    []string{"answer"},
+		Kids:     []command.Action{refAction{Counters: []string{"wins", "losses"}}},
+	}}
+	saved, err := svc.Save(ctx, caller)
+	require.NoError(t, err)
+	assert.Equal(t, []command.Warning{
+		{Kind: command.WarnCapability, Path: []int{1}, ActionType: "ref", Subject: "host:fs"},
+		{Kind: command.WarnFileRoot, Path: []int{1}, ActionType: "ref", Subject: "secret"},
+		{Kind: command.WarnCapability, Path: []int{1, 1}, ActionType: "ref", Subject: "host:fs"},
+	}, saved.Warnings)
+
+	counters, err := s.Counters(ctx)
+	require.NoError(t, err)
+	var names []string
+	for _, c := range counters {
+		names = append(names, c.Name)
+		assert.Zero(t, c.Value)
+	}
+	assert.ElementsMatch(t, []string{"Deaths", "wins", "losses"}, names, "B41: missing counters are created once, regardless of case")
+
+	for name, tc := range map[string]struct {
+		action command.Action
+		want   string
+	}{
+		"unknown command":       {refAction{Commands: []id.ID{id.New()}}, "action 1 (ref): unknown command"},
+		"unknown group":         {refAction{Groups: []id.ID{id.New()}}, "unknown command group"},
+		"hidden identifier":     {refAction{Names: []string{"username"}}, `result name "username" hides $username`},
+		"invalid counter name":  {refAction{Counters: []string{"two words"}}, "action 1 (ref)"},
+		"unknown in a child":    {refAction{Kids: []command.Action{refAction{}, refAction{Commands: []id.ID{id.New()}}}}, "action 1.2 (ref): unknown command"},
+		"counter of a built-in": {refAction{Counters: []string{"username"}}, "action 1 (ref)"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cmd := chatCommand("bad "+name, true, "bad")
+			cmd.Actions = []command.Action{tc.action}
+			_, err := svc.Save(ctx, cmd)
+			require.ErrorIs(t, err, command.ErrInvalid)
+			assert.ErrorContains(t, err, tc.want)
+		})
+	}
+	all, err := svc.Commands(ctx)
+	require.NoError(t, err)
+	assert.Len(t, all, 2, "a command that fails the checks is not stored")
+}
+
+func TestNewServiceNeedsChecks(t *testing.T) {
+	t.Parallel()
+	s := openStore(t)
+	codec, err := command.NewCodec()
+	require.NoError(t, err)
+	full := command.Checks{Counters: s, Names: noNames{}, Types: noTypes{}, Roots: noRoots{}}
+	for name, change := range map[string]func(*command.Checks){
+		"counters": func(c *command.Checks) { c.Counters = nil },
+		"names":    func(c *command.Checks) { c.Names = nil },
+		"types":    func(c *command.Checks) { c.Types = nil },
+		"roots":    func(c *command.Checks) { c.Roots = nil },
+	} {
+		checks := full
+		change(&checks)
+		_, err := command.NewService(s, codec, checks)
+		assert.Error(t, err, name)
+	}
+	_, err = command.NewService(s, nil, full)
+	require.Error(t, err, "codec")
 }

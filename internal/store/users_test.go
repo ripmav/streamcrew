@@ -116,7 +116,7 @@ func TestUserDataAndStats(t *testing.T) {
 	s := openStore(t)
 	codec, err := command.NewCodec()
 	require.NoError(t, err)
-	entrance, err := command.NewService(s, codec).Save(ctx, command.Command{Name: "welcome", Kind: command.KindActionGroup, ErrorPolicy: command.ErrorContinue})
+	entrance, err := newCommandService(t, s, codec).Save(ctx, command.Command{Name: "welcome", Kind: command.KindActionGroup, ErrorPolicy: command.ErrorContinue})
 	require.NoError(t, err)
 
 	u, _, err := s.UpsertIdentity(ctx, twitchIdentity("1001", "ada"))
