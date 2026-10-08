@@ -33,7 +33,11 @@ type Config struct {
 	Addr string
 	// Dev serves pprof under /debug/pprof/. Only for loopback addresses.
 	Dev bool
-	// ShutdownTimeout limits the graceful shutdown of open connections.
+	// ShutdownTimeout limits the graceful shutdown of open connections;
+	// connections still open afterwards are closed. It must stay below the
+	// supervisor's shutdown timeout, because net/http waits up to 5 s for
+	// connections on which a client has not sent a request yet (e.g. browser
+	// preconnects).
 	ShutdownTimeout time.Duration
 }
 
@@ -116,7 +120,13 @@ func (s *Server) Run(ctx context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.cfg.ShutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return errors.Join(fmt.Errorf("shut down http server: %w", err), srv.Close())
+		if !errors.Is(err, context.DeadlineExceeded) {
+			return errors.Join(fmt.Errorf("shut down http server: %w", err), srv.Close())
+		}
+		s.logger.WarnContext(ctx, "closing http connections that did not finish in time", "timeout", s.cfg.ShutdownTimeout)
+		if err := srv.Close(); err != nil {
+			return fmt.Errorf("close http server: %w", err)
+		}
 	}
 	if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("serve http: %w", err)

@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/buildinfo"
@@ -142,7 +143,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	a.http = httpserver.New(httpserver.Config{
 		Addr:            cfg.Listen,
 		Dev:             cfg.Dev,
-		ShutdownTimeout: cfg.ShutdownTimeout,
+		ShutdownTimeout: httpShutdownTimeout(cfg.ShutdownTimeout),
 	}, component(logger, "http"), a.ready.Ready)
 	scheduler := backup.NewScheduler(a.store, backups,
 		backup.Request{ProfileID: a.profile.ID, ProfileName: a.profile.Name, AppVersion: a.version},
@@ -276,6 +277,13 @@ func (a *App) backupSchedule(ctx context.Context) (backup.Schedule, error) {
 		Policy:   backup.Policy{Daily: b.KeepDaily, Weekly: b.KeepWeekly, Monthly: b.KeepMonthly},
 		Location: loc,
 	}, nil
+}
+
+// httpShutdownTimeout is the part of the shutdown timeout the HTTP server
+// may use to finish requests: half of it, at most 5 s. The rest remains for
+// the other runnables and the forced close of lingering connections.
+func httpShutdownTimeout(total time.Duration) time.Duration {
+	return min(total/2, 5*time.Second)
 }
 
 func newLogger(cfg config.Config, console io.Writer) (*slog.Logger, io.Closer, error) {
