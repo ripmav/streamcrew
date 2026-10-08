@@ -449,6 +449,14 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
 
 ### 3.5 Commands als Code und Typkatalog
 
+Zuerst die Änderungen an Datenmodell und Engine aus den geklärten Fragen vom 2026-10-02 (Entscheidungen des Projektinhabers), damit das Format sie schon enthält:
+
+- [ ] Chat-Trigger: Schalter „`!` voranstellen“ je Command, Trigger mit Schreibweise, Eindeutigkeit in exakter Schreibweise, Platzhalter-Trigger ohne Schreibweise ([`commands.md`](spec/commands.md), B11, B13, B14) (S)
+- [ ] Feine Stufen der Rangordnung mit eigener Kennung je Stufe; gespeicherte Rollen und Rollen-Anforderungen mit den bisherigen Kennungen übernehmen, Meldung der Rollen-Anforderung ([`users-and-roles.md`](spec/users-and-roles.md), B20) (M)
+- [ ] Sperrmenge mit den Commands, die mit Warten aufgerufen werden ([`command-engine.md`](spec/command-engine.md), B22, B23) (S)
+- [ ] Counter mit Nachkommastellen: Code-ADR für den Dezimaltyp, Werte und Schrittweiten, Migration, Counter-Action, Ausgabe ([`counters-and-quotes.md`](spec/counters-and-quotes.md), B4, B5, B8) (M)
+- [ ] Namen mit Unicode-Buchstaben: Tokens der Template-Engine und Counter-Namen ([`template.md`](spec/template.md), B1; [`counters-and-quotes.md`](spec/counters-and-quotes.md), B7) (S)
+
 - [ ] Prüfen, ob die YAML-Bibliothek aus [Code-ADR-0005](adr/code/0005-konfiguration.md) (`go.yaml.in/yaml/v3`) für Commands als Code genügt, etwa bei Fehlermeldungen mit Zeile und Spalte; sonst ein neues Code-ADR (S)
 - [ ] Typkatalog als JSON-Schema exportieren (`schema export` → `schemas/`) (S)
 - [ ] YAML/JSON-Format (`apiVersion`, `kind`, `metadata`, `spec`) mit Import, Export und Validierung: `command validate|import|export` (M)
@@ -462,10 +470,13 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
   - generische plattformneutrale Events
   - Einmal-Events pro Nutzer
   - Deduplizierung
-  - Begrüßungen ([`command-engine.md`](spec/command-engine.md), B41): erste Nachricht in der Sitzung nur, solange der Stream live ist; Entrance-Command des Nutzers mit `engine.Request.Entrance`, Ereignis-Commands auf `chat.user.entrance` erkennt die Engine selbst; beim Stream-Ende `engine.Engine.CancelEntrance`
-- [ ] Trigger-Erkennung: `!`-Präfix, Wildcards, längster Treffer, Argumente inkl. Anführungszeichen (M)
+  - Begrüßungen ([`command-engine.md`](spec/command-engine.md), B41): erste Nachricht in der Sitzung nur, solange der Stream live ist; Entrance-Command des Nutzers mit `engine.Request.Entrance`, Ereignis-Commands auf `chat.user.entrance` erkennt die Engine selbst; beim Offline-Gehen `engine.Engine.CancelEntrance`
+  - Stream-Sitzung mit Karenzzeit für kurze Unterbrechungen, gespeichert über einen Neustart ([`events.md`](spec/events.md), B3, B8, B21)
+  - Schwelle der Sammelgeschenke als Einstellung, Standard 2 ([`events.md`](spec/events.md), B5)
+- [ ] Trigger-Erkennung: Schalter für das `!`, exakte Treffer vor eindeutigen ohne Schreibweise, längster Treffer, Platzhalter zuletzt, Argumente inkl. Anführungszeichen ([`commands.md`](spec/commands.md), B11, B13, B16) (M)
 - [ ] Command-Engine und Template-Engine in der Composition Root verdrahten: Engine als Runnable beim Supervisor, ihre Ereignistypen im Katalog, Settings, Ports; die Typ-Registry mit `App.Rights` als Quelle der Capabilities, die Wurzeln für `command.Roots` und die Datei-Action, die Umgebung aus `config.ProgramEnv` für externe Programme, `netguard.Dialer` mit `Protect` im Server-Modus und `App.Rights().Outbound` als Allowlist für den Web-Request (Code-ADR-0019); der Requirement-Service mit dem Katalog aus `internal/i18n`, der Sprache aus der Settings-Sektion „locale“, dem Store für Cooldowns und dem Nutzer des Streamer-Kontos je Plattform (`requirement.Streamer`) (S)
-- [ ] Settings-Sektion „locale“: Formate des Profils als neue Version (die Sprache kommt in 3.4, [ADR-0022](adr/0022-internationalisierung.md)); danach Datums-, Zeit- und Zahlenformate der Templates nach der Locale ([`template.md`](spec/template.md), B41) (S)
+- [ ] Settings-Sektion „locale“: Formate des Profils als neue Version (die Sprache kommt in 3.4, [ADR-0022](adr/0022-internationalisierung.md)), Standard `system` aus der Umgebung des Cores; danach Datums-, Zeit- und Zahlenformate der Templates nach der Locale ([`template.md`](spec/template.md), B41) (S)
+- [ ] Rechenfunktionen von Jace in `internal/expr`, die Zufallsfunktionen mit eingeschlossener Obergrenze ([`template.md`](spec/template.md), B53) (S)
 
 **Exit-Kriterien (M1):**
 
@@ -533,7 +544,7 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
   - Moderationsereignisse, Umfragen, Vorhersagen
 - [ ] Channel-Points-Commands: Belohnung ↔ Command, Einlösung abschließen oder erstatten (M)
 - [ ] Bits-Commands mit Schwellen und Bereichen (S) (P1)
-- [ ] Twitch-Action: Clip, Stream-Marker, Umfrage/Vorhersage, Werbung, Raid, Shoutout, Belohnungen verwalten (L)
+- [ ] Twitch-Action: Clip, Stream-Marker, Umfrage/Vorhersage (mit Unterliste nach dem Ende, `$pollchoice` und `$predictionoutcome`, [`events.md`](spec/events.md), A4), Werbung, Raid, Shoutout, Belohnungen verwalten (L)
 - [ ] Custom Power-Ups als Command-Typ (S) (P2)
 - [ ] Emote-Kataloge für Twitch, BetterTTV und FrankerFaceZ mit Cache (M) (P1)
 
@@ -571,7 +582,8 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
 ### 5.2 Nutzer
 
 - [ ] Aktive Nutzer (Join, Leave, Aktivität), Watchtime (nur während live), Statistiken wie Nachrichten, Commands und Tags (M)
-- [ ] Rollen plattformübergreifend, Regular-Regel (Watchtime-Schwelle), Follow- und Abo-Daten bei Bedarf mit Cache (M)
+- [ ] Rollen plattformübergreifend, Regular ab ganzen Stunden Watchtime (Standard 0 = aus, am Nutzer, sofort neu bewertet, [`users-and-roles.md`](spec/users-and-roles.md), B26), Follow- und Abo-Daten bei Bedarf mit Cache (M)
+- [ ] Titelregeln mit Name, Mindestrolle und Mindestmonaten, ohne Treffer „Kein Titel“ ([`users-and-roles.md`](spec/users-and-roles.md), B5) (S)
 - [ ] Konten verknüpfen und Nutzer zusammenführen (M) (P1)
 - [ ] Ausschlüsse von Bots und Streamer aus Ranglisten und Zufallsauswahl (S)
 - [ ] Nutzer-Service als Umsetzung der Ports aus Phase 3: Nutzer nach Login-Name (`UserByName` von Engine, Templates und Actions), Konten von Streamer und Bot (`template.Users`), über eine Plattform gefundene Nutzer speichern (`UpsertIdentity`, [`actions.md`](spec/actions.md), B91), Strikes ändern und zurücksetzen (`moderation.Strikes`, B84) (M)
@@ -889,6 +901,7 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
   - Typ-Mapping (`$type` → Typ-ID, numerische Event-IDs → Event-Strings aus `internal/domain/eventtype`; aus 2.2 übertragen)
   - Commands, Actions, Requirements, Nutzer, Währungen, Quotes, Counter
   - Overlays, soweit abbildbar
+  - Formeln: Trennzeichen und Obergrenzen der Zufallsfunktionen anpassen ([`template.md`](spec/template.md), A3)
   - Importbericht mit allem, was nicht übernommen wird (C#-Skripte, Tokens)
 - [ ] Testdaten für den Import aus einer eigenen Testinstallation erzeugen, nicht aus fremden Beständen (S)
 - [ ] Kompatibilitätsfassade für die Developer-API (Pfade `/api/v2/…`), nur nach rechtlicher Prüfung (M) (P3)
@@ -1298,3 +1311,4 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-02 | Requirement-Service begonnen (`internal/requirement` hinter `engine.Requirements`): Reihenfolge der Prüfungen, fehlerhafte und unbekannte Anforderungen, Rolle mit dem Streamer für Durchläufe ohne Nutzer, Meldungen über `internal/i18n` als Antwort oder mit `@Name`. `engine.Rejection.Reason` ist jetzt eine `i18n.Message`. Cooldowns, Argumente, Einstellungen und die Prüfung beim Speichern folgen. |
 | 2026-10-02 | Cooldowns im Requirement-Service: alle vier Arten, gespeichert in der Tabelle `cooldowns` (Migration 0008), damit sie einen Neustart überstehen; Entscheidungen nacheinander; der Streamer zählt bei Durchläufen ohne Nutzer über den Port `requirement.Streamer`, den die Composition Root in 3.6 bedient. Ein Command, der nach erfüllten Anforderungen nicht eingereiht wird, bekommt keinen Cooldown: Die Engine ruft dafür `engine.Decision.Revert` (Entscheidung des Projektinhabers). |
 | 2026-10-02 | Größe der Warteschlange einstellbar (`queueSize` in der Settings-Sektion „commands“, Version 3), Standard 1 000, von 1 bis 10 000; Entscheidung des Projektinhabers. |
+| 2026-10-02 | Offene Fragen von `commands.md`, `events.md`, `users-and-roles.md`, `command-engine.md`, `template.md` und `counters-and-quotes.md` vor 3.6 am Original geklärt und entschieden (Recherche-Agent, Entscheidungen des Projektinhabers; Einzelheiten in den Änderungshistorien der Spezifikationen). Neue Aufgaben am Anfang von 3.5 für Trigger, Rollenstufen, Sperrmenge, Counter mit Nachkommastellen und Unicode-Namen; in 3.6 Karenzzeit der Stream-Sitzung, Schwelle der Sammelgeschenke, Trigger-Erkennung nach B16, Standardformat aus der Umgebung und die Rechenfunktionen von Jace; in 4.4 die Unterliste der Umfrage- und Vorhersage-Action; in 5.2 Regular-Regel und Titelregeln. |
