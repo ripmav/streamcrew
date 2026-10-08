@@ -161,6 +161,13 @@ type instance struct {
 	parent id.ID
 	// chain has the commands from the first caller to this one (B73).
 	chain []id.ID
+	// greeting is the instance of the greeting this one belongs to: itself,
+	// or the greeting that called it and waits for it; zero if it is no
+	// greeting (B41, B43).
+	greeting id.ID
+	// mediaGap is the gap after the pictures and sounds of a greeting
+	// (B43).
+	mediaGap time.Duration
 	// start is closed when the instance gets its locks.
 	start chan struct{}
 	// cancel cancels the context of the instance.
@@ -196,6 +203,7 @@ func newInstance(cmd command.Command, src Source, p Params, cfg Config, locks []
 		locks:    locks,
 		parent:   org.parent,
 		chain:    append(slices.Clone(org.chain), cmd.ID),
+		mediaGap: cfg.Commands.EntranceMediaGap.Std(),
 		start:    make(chan struct{}),
 		state:    StatePending,
 		queuedAt: time.Now(),

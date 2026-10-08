@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Status** | Geprüft |
-| **Stand** | 2026-09-30 |
+| **Stand** | 2026-10-02 |
 | **Bezug** | Roadmap Phase 3.2; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0004](../adr/code/0004-nebenlaeufigkeit-und-supervisor.md), [Code-ADR-0011](../adr/code/0011-event-bus.md), [Code-ADR-0012](../adr/code/0012-template-engine.md); Plan §5, §6.8, §6.9; [`commands.md`](commands.md), [`template.md`](template.md), [`events.md`](events.md), [`users-and-roles.md`](users-and-roles.md) |
-| **Umsetzung** | Settings-Sektion `commands` in `internal/settings` (B90); Fehlerpolitik im Datenmodell der Commands (B71, `internal/domain/command`, Migration 0005). `internal/engine`: Instanzen und Zustände (B1–B4), Auslösen mit Anforderungen, Fehler-Cooldown und Grenze der Warteschlange (B10–B15), Sperren (B20–B29), Pause (B40–B42), Abbrechen, Wiederholen und Herunterfahren (B50, B51, B53–B55), Verlauf und Ereignisse (B60–B62), Ausführung mit Fehlerpolitik und Zeitlimit (B70–B72), dazu Schalter „aktiv“, Kind-Actions über `engine.Run.PerformChild` und Capabilities nach Code-ADR-0013, Parameter, Zielnutzer und Runner-Parameter (B80–B82). Aufrufe anderer Commands (B30–B36, B52, B73) über `engine.Run.Call`; Abbrechen aller Instanzen, Pause und Fortsetzen (B40–B42, B51) sowie das Starten von Cooldowns aus Actions über `engine.Run.CancelAll`, `Pause`, `Resume` und `StartCooldown`. Die einzelnen Anforderungen prüft der Requirement-Service (Roadmap 3.4) hinter dem Port `engine.Requirements`; die Grenze für Wiederholungen (B74) setzen die Actions `repeat`, `random` und `conditional` um (`internal/action/flow`). |
+| **Umsetzung** | Settings-Sektion `commands` in `internal/settings` (B90); Fehlerpolitik im Datenmodell der Commands (B71, `internal/domain/command`, Migration 0005). `internal/engine`: Instanzen und Zustände (B1–B4), Auslösen mit Anforderungen, Fehler-Cooldown und Grenze der Warteschlange (B10–B15), Sperren (B20–B29), Pause und Begrüßungen (B40–B43, mit `engine.Run.PlaybackEnds` und `engine.Engine.CancelEntrance`), Abbrechen, Wiederholen und Herunterfahren (B50, B51, B53–B55), Verlauf und Ereignisse (B60–B62), Ausführung mit Fehlerpolitik und Zeitlimit (B70–B72), dazu Schalter „aktiv“, Kind-Actions über `engine.Run.PerformChild` und Capabilities nach Code-ADR-0013, Parameter, Zielnutzer und Runner-Parameter (B80–B82). Aufrufe anderer Commands (B30–B36, B52, B73) über `engine.Run.Call`; Abbrechen aller Instanzen, Pause und Fortsetzen (B40–B42, B51) sowie das Starten von Cooldowns aus Actions über `engine.Run.CancelAll`, `Pause`, `Resume` und `StartCooldown`. Die einzelnen Anforderungen prüft der Requirement-Service (Roadmap 3.4) hinter dem Port `engine.Requirements`; die Grenze für Wiederholungen (B74) setzen die Actions `repeat`, `random` und `conditional` um (`internal/action/flow`). |
 
 ## Zweck und Umfang
 
@@ -33,6 +33,7 @@ Nicht Teil dieser Spezifikation:
 | Aufruf | eine Instanz startet einen anderen Command, etwa mit der Command-Action |
 | Verlauf | die zuletzt eingereihten Instanzen mit ihrem Zustand |
 | Wiederholen (Replay) | eine Instanz aus dem Verlauf mit denselben Parametern erneut starten |
+| Begrüßung | der Entrance-Command eines Nutzers oder ein Ereignis-Command auf `chat.user.entrance` (B41) |
 
 ## Verhalten
 
@@ -83,13 +84,14 @@ Nicht Teil dieser Spezifikation:
 | B35 | Ein Aufruf mit Warten teilt die Werte des Durchlaufs mit der aufrufenden Instanz ([`template.md`](template.md), B10): Was der aufgerufene Command setzt, sieht der Aufrufer danach. Ein Aufruf ohne Warten bekommt eine Kopie der Werte zum Zeitpunkt des Aufrufs. | A6 |
 | B36 | Endet ein Aufruf mit Warten als `failed` oder `canceled`, scheitert die aufrufende Action; die Fehlerpolitik des Aufrufers entscheidet (B71). | QP (§6.8) |
 
-### Pause
+### Pause und Begrüßungen
 
 | ID | Regel | Quellen |
 |---|---|---|
 | B40 | Die Engine lässt sich pausieren und fortsetzen, über Oberfläche, API und Command-Action. Während der Pause startet keine eingereihte Instanz, auch keine freigegebene; laufende Instanzen laufen weiter. Ausgelöste Commands werden weiter geprüft und eingereiht und starten nach dem Fortsetzen in ihrer Reihenfolge. | Q2, QP (§6.8), A5 |
-| B41 | Entrance-Commands ([`users-and-roles.md`](users-and-roles.md), B8) haben eine eigene Pause. Während sie gilt, werden Entrance-Commands nicht eingereiht; die erste Nachricht des Nutzers zählt trotzdem als seine erste in dieser Sitzung. | Q2, A7 |
+| B41 | Begrüßungen sind der Entrance-Command eines Nutzers ([`users-and-roles.md`](users-and-roles.md), B8) und die Ereignis-Commands auf `chat.user.entrance` ([`events.md`](events.md)). Sie lösen bei der ersten Nachricht des Nutzers in der Sitzung aus, die er schreibt, während der Stream auf mindestens einer Plattform live ist. Begrüßungen haben eine eigene Pause: Während sie gilt, werden Begrüßungen weiter geprüft und eingereiht, starten aber erst nach dem Fortsetzen, in ihrer Reihenfolge; andere Instanzen warten nicht auf sie. Die Nachricht zählt auch während der Pause als die erste. Endet der Stream, bricht der Core alle Begrüßungen ab, die noch nicht beendet sind (B50), auch eingereihte und solche, die auf ihren Abstand warten (B43). | Q2, Q6, A7 |
 | B42 | Beide Pausen gelten bis zum Fortsetzen oder bis der Core endet. Nach einem Start ist nichts pausiert. | A8 |
+| B43 | Mindestabstand bei Begrüßungen: In einer Begrüßung wartet jede Action, die Bild oder Ton ausgibt (B23), bis die Wiedergabe der vorigen solchen Action aus einer Begrüßung beendet und danach der Abstand vergangen ist; Standard 5 s, einstellbar von 1 s bis 60 s (B90). Das gilt auch zwischen zwei solchen Actions derselben Begrüßung. Die Actions kommen in der Reihenfolge an die Reihe, in der sie zu warten begannen. Das Ende der Wiedergabe meldet die Action; meldet sie keines, gilt das Ende der Action. Die Wartezeit zählt nicht zum Zeitlimit der Action (B72). Andere Actions, etwa Chat-Nachrichten, warten nicht. Eine wartende Begrüßung behält ihre Sperren (B20), sodass je nach Sperrmodus andere Instanzen auf sie warten. Commands, die eine Begrüßung mit Warten aufruft (B31), gehören zu ihr; Aufrufe ohne Warten, Starts von Hand und Wiederholungen sind keine Begrüßungen. | A7 |
 
 ### Abbrechen und Wiederholen
 
@@ -132,7 +134,7 @@ Nicht Teil dieser Spezifikation:
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B90 | Die Sektion `commands` enthält den Sperrmodus (B20, Standard `per_command_type`), die Art des Fehler-Cooldowns (B12, Standard `per_command`), seine Dauer (Standard 10 s) und das Trennzeichen der getrennten Argumente (Standard `\|`, [`template.md`](template.md), `$argdelimited…`). Änderungen gelten ab dem nächsten Einreihen. | Q1, QP (§6.8), Code-ADR-0009 |
+| B90 | Die Sektion `commands` enthält den Sperrmodus (B20, Standard `per_command_type`), die Art des Fehler-Cooldowns (B12, Standard `per_command`), seine Dauer (Standard 10 s) das Trennzeichen der getrennten Argumente (Standard `\|`, [`template.md`](template.md), `$argdelimited…`) und den Mindestabstand für Bild und Ton bei Begrüßungen (B43, Standard 5 s, von 1 s bis 60 s). Änderungen gelten ab dem nächsten Einreihen. | Q1, QP (§6.8), Code-ADR-0009 |
 
 ## Randfälle
 
@@ -148,6 +150,10 @@ Nicht Teil dieser Spezifikation:
 | B107 | Ein Command ohne Actions | endet sofort als `completed` (B29) | B29 |
 | B108 | Die Warteschlange ist voll, und ein Command mit Kosten wird ausgelöst | verworfen, ohne Kosten und Cooldown (B15) | B15 |
 | B109 | Eine Instanz wird abgebrochen, während ihre Action auf eine Plattform-API wartet | Die Action bekommt den abgebrochenen Kontext und endet; die Instanz endet als `canceled`, auch wenn die API danach antwortet. | B50, Code-ADR-0004 |
+| B110 | Begrüßungen und alle Commands sind pausiert; nur die Pause der Begrüßungen endet | Die Begrüßungen bleiben eingereiht, bis auch die Pause aller Commands endet. | B40, B41 |
+| B111 | Eine Begrüßung schreibt in den Chat, zeigt dann ein Bild und spielt einen Sound | Die Nachricht geht sofort raus; Bild und Sound kommen nacheinander, mit dem Abstand dazwischen. | B43 |
+| B112 | 20 Nutzer schreiben kurz nacheinander ihre erste Nachricht; jede Begrüßung spielt einen Sound von 8 s | Die Sounds folgen einander, je 8 s Wiedergabe und 5 s Abstand, ohne am Zeitlimit zu scheitern; wann die Nachrichten der Begrüßungen rausgehen, hängt vom Sperrmodus ab. | B20, B43, B72 |
+| B113 | Der Stream endet, während Begrüßungen eingereiht sind oder auf ihren Abstand warten | Sie enden als `canceled`. | B41, B50 |
 
 ## Abweichungen vom Original
 
@@ -159,7 +165,7 @@ Nicht Teil dieser Spezifikation:
 | A4 | Reihenfolge beim Warten auf mehrere Sperren nicht dokumentiert | Einreihungsreihenfolge, kein Überholen (B26) | kein Verhungern einzelner Instanzen, nachvollziehbare Reihenfolge |
 | A5 | nicht dokumentiert, ob freigegebene Commands in der Pause laufen | Pause hält auch freigegebene Commands an (B27, B40) | Pause soll alles anhalten, was noch nicht läuft; zu prüfen |
 | A6 | nicht dokumentiert, ob aufgerufene Commands Werte mit dem Aufrufer teilen | Teilen bei Warten, Kopie ohne Warten (B35) | Action-Gruppen sollen Werte liefern können; ohne Warten gäbe es Wettläufe |
-| A7 | nicht dokumentiert, was mit Entrance-Commands in ihrer Pause geschieht | werden nicht eingereiht (B41) | Begrüßungen nach dem Fortsetzen kämen zu spät; zu prüfen |
+| A7 | Begrüßungen werden in ihrer Pause gesammelt und laufen nach dem Fortsetzen in Ankunftsreihenfolge; „nur wenn live“ ist eine Option; kein Abstand zwischen Medien (Q6) | ebenso eingereiht (B41); immer nur live, beim Stream-Ende abgebrochen (B41); Mindestabstand für Bild und Ton (B43) | Entscheidung des Projektinhabers (2026-10-02): Begrüßungen sollen laufen, solange der Stream live ist; eine Flut von Chat-Nachrichten ist hinnehmbar, eine Flut von Sounds und Videos nicht |
 | A8 | nicht dokumentiert, ob eine Pause einen Neustart übersteht | nein (B42) | eine vergessene Pause soll den Core nicht dauerhaft stummschalten |
 | A9 | nicht dokumentiert, ob Kosten beim Abbrechen erstattet werden | keine Erstattung (B53) | Abbrechen ist eine Entscheidung des Streamers; Erstattung ließe sich ausnutzen; zu prüfen |
 | A10 | Wiederholen dokumentiert, Anforderungen dabei nicht | ohne Anforderungen, Kosten und Cooldowns, mit der aktuellen Fassung (B54) | Wiederholen ist eine Handlung des Streamers wie der Start von Hand |
@@ -175,7 +181,7 @@ Nicht Teil dieser Spezifikation:
 - [x] B10–B15: Anforderungen vor dem Einreihen, Cooldown ab dem Einreihen, Fehler-Cooldown in allen drei Arten und sein Zurücksetzen, Start von Hand ohne Anforderungen, volle Warteschlange; Zeit mit `testing/synctest`.
 - [x] B20–B29, B104: je Sperrmodus ein Test mit mehreren Instanzen und der Reihenfolge ihrer Starts; kein Überholen; freigegebene Commands; Wechsel des Modus.
 - [x] B30–B36, B105, B106: Aufrufe mit und ohne Warten, Sperren, Pause, geteilte und kopierte Werte, Fehler des Aufgerufenen.
-- [x] B40–B42: Pause und Fortsetzen, eigene Pause für Entrance-Commands.
+- [x] B40–B43, B110–B113: Pause und Fortsetzen; Pause der Begrüßungen mit Einreihen, ohne andere aufzuhalten, auch für Ereignis-Commands auf `chat.user.entrance`; Abbrechen beim Stream-Ende; Mindestabstand für Bild und Ton mit Ende der Wiedergabe, Reihenfolge, Sperren, Abbruch beim Warten, Aufrufen und Wartezeit außerhalb des Zeitlimits; Zeit mit `testing/synctest`.
 - [x] B50–B55, B109: Abbrechen eingereihter und laufender Instanzen samt wartender Aufrufe, alle abbrechen, Wiederholen, Herunterfahren.
 - [x] B60–B62: Verlauf als Ringpuffer; Ereignisse je Zustandswechsel in der richtigen Reihenfolge.
 - [x] B70–B74: Fehlerpolitik, Zeitlimit, Tiefe und Zyklen von Aufrufen.
@@ -188,8 +194,6 @@ Nicht Teil dieser Spezifikation:
 - B12, B90: Welche Dauer hat der Fehler-Cooldown im Original als Standard? streamcrew nimmt 10 s an.
 - B14/A2: Prüft der Start von Hand („Play“) im Original die Anforderungen?
 - B27/A5: Laufen freigegebene Commands im Original auch während der Pause?
-- B40: Werden im Original ausgelöste Commands während der Pause eingereiht oder verworfen?
-- B41/A7: Was geschieht im Original mit Entrance-Commands während ihrer Pause?
 - B53/A9: Erstattet das Original Kosten beim Abbrechen?
 - B71/A13: Läuft ein Command im Original nach einer gescheiterten Action weiter?
 - B22: Zählen im Original bei `per_action_type` auch die Actions in verschachtelten Actions?
@@ -204,6 +208,7 @@ Nicht Teil dieser Spezifikation:
 | Q3 | Doku | <https://mixitup.bot/docs/users> | Entrance-Command bei der ersten Nachricht im Chat; abgerufen 2026-09-30 |
 | Q4 | Doku | <https://mixitup.bot/docs/reference/special-identifiers> | Parameter eines Durchlaufs als Identifier, Zielnutzer; abgerufen 2026-09-29 |
 | Q5 | Doku | <https://mixitup.bot/docs/actions/repeat-action> | Wiederholen mit Anzahl aus Identifiern; keine Grenze dokumentiert; abgerufen 2026-09-30 |
+| Q6 | Original (Hilfestellung) | `MixItUp.Base/Services/CommandService.cs @ v1.8.200`, `MixItUp.Base/Services/ChatService.cs @ v1.8.200`, `MixItUp.Base/Services/EventService.cs @ v1.8.200`, `MixItUp.Base/Model/Actions/CommandActionModel.cs @ v1.8.200` | Beide Pausen sammeln ausgelöste Commands und führen sie nach dem Fortsetzen in Ankunftsreihenfolge aus; das gilt für den Entrance-Command des Nutzers und die allgemeine Begrüßung. Die erste Nachricht zählt sofort, auch in der Pause; mit der Option „nur wenn live“ zählt eine Nachricht offline nicht. Anforderungen gelten beim Auslösen. Gelesen 2026-10-02 von einem eigenen Recherche-Agenten, der nur das Verhalten in eigenen Worten weitergab |
 | QP | Projekt | [Plan](../plan.md) §5, §6.6, §6.8, §6.9, §6.13 | Command-Engine: Begriffe, Zustände, Sperrmodi, Steuerung, Schutzmechanismen, Fehler; Verlauf als P0 |
 
 ## Änderungshistorie
@@ -219,3 +224,4 @@ Nicht Teil dieser Spezifikation:
 | 2026-10-01 | Anschluss der Actions nach [Code-ADR-0013](../adr/code/0013-typ-registry.md), Punkt 8, umgesetzt; das Verhalten folgt [`actions.md`](actions.md), B1 und B7–B9. Festlegungen dabei: Jede ausführbare Action hat einen Schalter „aktiv“ (`engine.Performer.Enabled`); eine inaktive läuft nicht, samt ihrer Kind-Actions, und zählt bei `per_action_type` und `visual_audio` für keine Sperre (B22, B23). Unbekannte Typen behalten ihre eigene Sperre. Das Zeitlimit (B72) gilt für die eigene Zeit einer Action: Es steht, während sie eine Kind-Action ausführt oder auf einen aufgerufenen Command wartet, und läuft danach mit der verbleibenden Zeit weiter. Läuft es ab, bricht es den Kontext der Action mit `engine.ErrTimeLimit` als Ursache ab; eine Deadline hat der Kontext nicht. Eine Action setzt ihr Limit mit `engine.Run.LimitTo`, gemessen ab dem Aufruf; das bisherige statische `engine.TimeLimiter` entfällt. Kind-Actions laufen über `engine.Run.PerformChild` wie Actions auf oberster Ebene, mit Schalter, Capability-Prüfung, eigenem Zeitlimit und Fehlerpolitik; der Ausgang ist `next` oder `end`, und wie die Instanz endet, entscheidet die Engine, nicht die Rückgabe der umgebenden Action. Im Verlauf steht statt der Position (`position`) der Pfad (`path`), etwa `[3, 2]`; im Log steht er als `3.2`. Vor jeder Action fragt die Engine den Port `engine.ActionTypes`, welche Capabilities dem Typ fehlen; fehlt eine, scheitert die Action mit `engine.ErrCapability`, ohne zu laufen. Der Port ersetzt `engine.WithVisualAudio` und ist ein Pflichtparameter von `engine.New`, weil nur die Typ-Registry weiß, was ein Typ braucht. |
 | 2026-10-01 | B74 umgesetzt: `repeat` und `random` lehnen eine Anzahl über 1 000 ab, bevor sie eine Kind-Action ausführen; die Grenze gilt je Action, verschachtelte Wiederholungen dürfen sich vervielfachen ([`actions.md`](actions.md), B15, B202). |
 | 2026-10-01 | Die auslösende Nachricht unter den Parametern (B80) hat ihre ID auf der Plattform (`engine.Params.MessageID`), für Antworten der Chat-Action ([`actions.md`](actions.md), B64) und das Löschen der Auslösenachricht ([`requirements.md`](requirements.md)). Eine ID ohne Nachricht oder ohne Plattform lehnt die Engine ab (`engine.ErrInvalidParams`); aufgerufene Commands bekommen sie mit der Nachricht (B34). |
+| 2026-10-02 | B41 geändert, B43 und die Randfälle B110–B113 neu (Entscheidung des Projektinhabers): Begrüßungen, also der Entrance-Command eines Nutzers und die Ereignis-Commands auf `chat.user.entrance`, werden in ihrer Pause eingereiht statt verworfen und laufen nach dem Fortsetzen, wie im Original (Q6). Sie lösen nur aus, solange der Stream live ist, und werden beim Stream-Ende abgebrochen. Zwischen Bild- und Ton-Actions von Begrüßungen liegt ein Mindestabstand ab dem Ende der Wiedergabe, Standard 5 s, einstellbar von 1 s bis 60 s in der Settings-Sektion `commands` (B90). Die offenen Fragen zu B40 und B41 sind am Original geklärt: Es sammelt in beiden Pausen. Die Engine meldet keinen eigenen Ausgang „Begrüßungen pausiert“ mehr; Actions melden das Ende ihrer Wiedergabe mit `engine.Run.PlaybackEnds`, und `engine.Engine.CancelEntrance` bricht die Begrüßungen beim Stream-Ende ab. Welche Nachricht als erste zählt und wann der Stream endet, erkennt der Event-Service (Roadmap 3.6). |
