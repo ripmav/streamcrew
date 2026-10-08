@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/ripmav/streamcrew/internal/domain/id"
@@ -101,8 +103,26 @@ func (s *Service) Save(ctx context.Context, cmd Command) (Saved, error) {
 	return Saved{Command: stored, Warnings: warnings}, nil
 }
 
-// Delete deletes a command.
+// Delete deletes a command, unless the actions of another command refer to
+// it (B8): then it returns an *InUseError, and the command can be switched
+// off instead. A reference of the command to itself does not count.
 func (s *Service) Delete(ctx context.Context, commandID id.ID) error {
+	rec, err := s.repo.Command(ctx, commandID)
+	if err != nil {
+		return err
+	}
+	users, err := s.users(ctx, func(cmd Command) []string {
+		if cmd.ID == commandID {
+			return nil
+		}
+		return actionsReferring(cmd.Actions, commandID)
+	})
+	if err != nil {
+		return err
+	}
+	if len(users) > 0 {
+		return &InUseError{What: fmt.Sprintf("command %q", rec.Name), Users: users, Switch: true}
+	}
 	return s.repo.DeleteCommand(ctx, commandID)
 }
 
@@ -133,7 +153,22 @@ func (s *Service) SaveGroup(ctx context.Context, g Group) (Group, error) {
 }
 
 // DeleteGroup deletes a group; its commands stay without a group (B62).
+// If a command action of a command refers to it, it returns an
+// *InUseError (B8).
 func (s *Service) DeleteGroup(ctx context.Context, groupID id.ID) error {
+	g, err := s.repo.Group(ctx, groupID)
+	if err != nil {
+		return err
+	}
+	users, err := s.users(ctx, func(cmd Command) []string {
+		return actionsReferring(cmd.Actions, groupID)
+	})
+	if err != nil {
+		return err
+	}
+	if len(users) > 0 {
+		return &InUseError{What: fmt.Sprintf("command group %q", g.Name), Users: users}
+	}
 	return s.repo.DeleteGroup(ctx, groupID)
 }
 
@@ -165,10 +200,100 @@ func (s *Service) SaveCooldownGroup(ctx context.Context, g CooldownGroup) (Coold
 	return s.repo.CooldownGroup(ctx, g.ID)
 }
 
-// DeleteCooldownGroup deletes a cooldown group; commands whose cooldown
-// names it become faulty until another one is picked (B64).
+// DeleteCooldownGroup deletes a cooldown group, unless the cooldown of a
+// command names it: then it returns an *InUseError (B8, B64).
 func (s *Service) DeleteCooldownGroup(ctx context.Context, groupID id.ID) error {
+	g, err := s.repo.CooldownGroup(ctx, groupID)
+	if err != nil {
+		return err
+	}
+	users, err := s.users(ctx, func(cmd Command) []string {
+		for _, r := range cmd.Requirements {
+			if c, ok := r.(CooldownRequirement); ok && c.Group == groupID {
+				return []string{"cooldown"}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if len(users) > 0 {
+		return &InUseError{What: fmt.Sprintf("cooldown group %q", g.Name), Users: users}
+	}
 	return s.repo.DeleteCooldownGroup(ctx, groupID)
+}
+
+// ErrInUse is matched by an *InUseError: what was to be deleted is in use.
+var ErrInUse = errors.New("in use")
+
+// Usage is a command that refers to something, and where: e.g. "action
+// 2.1" (actions.md, B9) or "cooldown".
+type Usage struct {
+	CommandID id.ID
+	Name      string
+	Where     []string
+}
+
+// InUseError reports that the commands Users refer to what was to be
+// deleted (B8).
+type InUseError struct {
+	// What names it, e.g. `command "Wave"`.
+	What  string
+	Users []Usage
+	// Switch says that it can be switched off instead, as a command can.
+	Switch bool
+}
+
+// Error implements error, e.g. `command "Wave" is in use by "Hug" (action
+// 2), so it cannot be deleted; switch it off instead`.
+func (e *InUseError) Error() string {
+	users := make([]string, len(e.Users))
+	for i, u := range e.Users {
+		users[i] = fmt.Sprintf("%q (%s)", u.Name, strings.Join(u.Where, ", "))
+	}
+	msg := fmt.Sprintf("%s is in use by %s, so it cannot be deleted", e.What, strings.Join(users, ", "))
+	if e.Switch {
+		msg += "; switch it off instead"
+	}
+	return msg
+}
+
+// Is reports whether target is ErrInUse.
+func (e *InUseError) Is(target error) bool { return target == ErrInUse }
+
+// users returns the commands for which where finds places that refer to
+// something, in the order of the repository.
+func (s *Service) users(ctx context.Context, where func(Command) []string) ([]Usage, error) {
+	cmds, err := s.Commands(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var users []Usage
+	for _, cmd := range cmds {
+		if places := where(cmd); len(places) > 0 {
+			users = append(users, Usage{CommandID: cmd.ID, Name: cmd.Name, Where: places})
+		}
+	}
+	return users, nil
+}
+
+// actionsReferring returns the places of the actions in list and below
+// that refer to the command or group target, e.g. "action 2.1"; IDs are
+// unique across kinds.
+func actionsReferring(list []Action, target id.ID) []string {
+	var places []string
+	_ = eachAction(list, nil, func(path []int, a Action) error {
+		r, ok := a.(Referrer)
+		if !ok {
+			return nil
+		}
+		if slices.ContainsFunc(r.References(), func(ref Reference) bool { return ref.ID == target }) {
+			places = append(places, "action "+position(path))
+		}
+		return nil
+	})
+	return places
 }
 
 // stamps returns the creation and update time of a save, in UTC with the

@@ -474,7 +474,7 @@ Zuerst die Änderungen an Datenmodell und Engine aus den geklärten Fragen vom 2
     - [x] CLI mit denselben Prüfungen wie beim Speichern gegen eine Kopie des Profils, Konflikten der Trigger und Ereignistypen und Ausgabe als Text und JSON, erledigt 2026-10-03 (`app.CheckCommandFiles`, `commandfile.Apply`)
   - [x] `command import`: eine Transaktion, Ersetzen nach Namen, gestoppter Core, erledigt 2026-10-03 (`app.ImportCommandFiles`, `Store.Atomically`)
   - [x] `command export`: YAML und JSON, `--file`, `--dir` mit der Version im Dateinamen, Rundlauf, erledigt 2026-10-03 (`commandfile.Export`, `app.ExportCommands`)
-- [ ] Löschen verhindern, solange ein anderer Command auf Command, Command-Gruppe oder Cooldown-Gruppe verweist; Commands nur deaktivieren ([`commands.md`](spec/commands.md), B8) (S), Entscheidung des Projektinhabers vom 2026-10-04
+- [x] Löschen verhindern, solange ein anderer Command auf Command, Command-Gruppe oder Cooldown-Gruppe verweist; Commands nur deaktivieren ([`commands.md`](spec/commands.md), B8) (S), Entscheidung des Projektinhabers vom 2026-10-04, erledigt 2026-10-04: `command.InUseError` aus den Löschmethoden des Command-Service
 
 ### 3.6 Mock-Plattform und Event-Grundlagen
 
