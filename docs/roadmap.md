@@ -486,10 +486,10 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
   - Mock-Konsole statt eigener CLI-Befehle bis zur API (Plan §7.2)
   - Locale-Formate mit eigenen Mustern, Zahlen kanonisch ([`template.md`](spec/template.md), B41; [ADR-0022](adr/0022-internationalisierung.md), Punkt 7)
 - [x] `internal/connector/mock`: simulierte Nutzer, Chat, Stream und Events; Ausgaben ins Log und auf den Bus; Deduplizierung mit einem TTL-Cache für alle Adapter in `internal/connector` ([`events.md`](spec/events.md), B22; Code-ADR-0011, Punkt 5) (M), erledigt 2026-10-04: Eingangs-Port `connector.Receiver` mit `Incoming` und `Event`, Werte eines Ereignisses als `eventtype.Details`, `connector.Dedup`, Plattformname `mock`; `mock.Platform` mit `Say`, `Join`, `Simulate`, `GoLive` und `GoOffline`, Ausgaben als Ereignis `mock.output`
-- [ ] Trigger-Erkennung (M):
+- [x] Trigger-Erkennung (M), erledigt 2026-10-04:
   - [x] Schalter für das `!`, exakte Treffer vor eindeutigen ohne Schreibweise, längster Treffer, Platzhalter zuletzt, Argumente inkl. Anführungszeichen ([`commands.md`](spec/commands.md), B11, B13, B16), erledigt 2026-10-04: `command.TriggerIndex`, `command.SplitArgs`, im Command-Service `Recognize` und `EventCommand` mit einem Stand, den jede Änderung über den Service erneuert
-  - [ ] die Nachrichten in ihrer Reihenfolge über `engine.Engine.Submit` abgeben, ohne auf die Entscheidungen zu warten ([`command-engine.md`](spec/command-engine.md), B16), mit dem Event-Service
-- [ ] Event-Service, Grundlage, hinter dem Eingangs-Port der Adapter (M):
+  - [x] die Nachrichten in ihrer Reihenfolge über `engine.Engine.Submit` abgeben, ohne auf die Entscheidungen zu warten ([`command-engine.md`](spec/command-engine.md), B16), mit dem Event-Service, erledigt 2026-10-04
+- [x] Event-Service, Grundlage, hinter dem Eingangs-Port der Adapter (M), erledigt 2026-10-04: `internal/eventservice` setzt `connector.Receiver` um und veröffentlicht die Ereignisse der Anwendung (`Application`); Stream-Sitzungen in `internal/domain/stream` und im Store (Migration 0015 mit `stream_sessions`, `session_events`, `user_events`), Form der Nutzlast als `eventtype.Shape`, Settings-Sektion `events`:
   - Event → Event-Command ([`events.md`](spec/events.md), B12)
   - generische plattformneutrale Events mit ihrer Nutzlast (B2, B9)
   - Einmal-Events je Sitzung und je Nutzer (B3, B11)

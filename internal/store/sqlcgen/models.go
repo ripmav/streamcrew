@@ -94,10 +94,24 @@ type Secret struct {
 	UpdatedAt  int64
 }
 
+type SessionEvent struct {
+	Platform string
+	Type     string
+	UserID   string
+}
+
 type Setting struct {
 	Section   string
 	Document  string
 	UpdatedAt int64
+}
+
+type StreamSession struct {
+	Platform  string
+	StartedAt sql.NullInt64
+	State     string
+	Since     sql.NullInt64
+	SeenLive  sql.NullInt64
 }
 
 type User struct {
@@ -109,6 +123,11 @@ type User struct {
 	EntranceCommandID sql.NullString
 	CreatedAt         int64
 	UpdatedAt         int64
+}
+
+type UserEvent struct {
+	UserID string
+	Type   string
 }
 
 type UserIdentity struct {
