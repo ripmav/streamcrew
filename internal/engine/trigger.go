@@ -323,6 +323,11 @@ func (e *Engine) reject(ctx context.Context, cmd command.Command, p Params, r Re
 	if !r.Tell {
 		return
 	}
+	if cfg.ErrorCooldown == settings.ErrorCooldownSilent {
+		e.logger.DebugContext(ctx, "requirement not met, messages are off",
+			"command", cmd.Name, "requirement", r.Requirement)
+		return
+	}
 	send, err := e.takeErrorMessage(cmd.ID, r.Requirement, cfg)
 	if err != nil {
 		e.logger.ErrorContext(ctx, "error cooldown failed", "command", cmd.Name, "error", err)
