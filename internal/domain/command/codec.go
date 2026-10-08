@@ -11,10 +11,20 @@ import (
 	"github.com/ripmav/streamcrew/internal/polydoc"
 )
 
-// Action is a single step of a command (B4). The action types and how they
-// run follow with the engine (roadmap phase 3).
+// Action is a single step of a command (B4). The action types come from
+// the action type registry (internal/action, Code-ADR-0013); the engine
+// runs them.
 type Action interface {
 	polydoc.Document
+	// Validate checks the configuration of the action itself, without its
+	// child actions (Code-ADR-0013, point 7).
+	Validate() error
+}
+
+// Parent is an action with child actions, such as a condition
+// (Code-ADR-0013). Children returns them always in the same order.
+type Parent interface {
+	Children() []Action
 }
 
 // UnknownAction keeps an action this version cannot read; it is saved
@@ -23,6 +33,9 @@ type UnknownAction struct{ polydoc.Unknown }
 
 // DocType implements polydoc.Document.
 func (u UnknownAction) DocType() string { return u.Type }
+
+// Validate implements Action: an unknown action is kept as it is.
+func (UnknownAction) Validate() error { return nil }
 
 // RawJSON implements polydoc.Raw.
 func (u UnknownAction) RawJSON() jsontext.Value { return u.Raw }

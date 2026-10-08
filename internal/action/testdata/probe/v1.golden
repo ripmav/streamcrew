@@ -1,0 +1,8 @@
+{
+  "type": "probe",
+  "schemaVersion": 1,
+  "enabled": true,
+  "message": "Hi $username",
+  "seconds": 1.5,
+  "result": "x1"
+}

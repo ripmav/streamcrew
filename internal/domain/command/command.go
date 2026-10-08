@@ -13,6 +13,8 @@ import (
 	"encoding/json/jsontext"
 	"errors"
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -20,6 +22,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/event"
+	"github.com/ripmav/streamcrew/internal/polydoc"
 )
 
 // Kind says what triggers a command (B2).
@@ -183,12 +186,47 @@ func (c Command) Validate() error {
 			return fmt.Errorf("%w: requirement %q: %w", ErrInvalid, typ, err)
 		}
 	}
-	for _, a := range c.Actions {
+	return ValidateActions(c.Actions)
+}
+
+// ValidateActions checks the actions of list and their child actions, at
+// most polydoc.MaxDepth levels deep (Code-ADR-0013, points 5 and 7). An
+// error names the path of the action, e.g. "3.2".
+func ValidateActions(list []Action) error {
+	return validActions(list, nil)
+}
+
+// validActions checks the actions of list, which are at path, and their
+// child actions.
+func validActions(list []Action, path []int) error {
+	if len(path) >= polydoc.MaxDepth && len(list) > 0 {
+		return invalid("actions nested more than %d levels deep", polydoc.MaxDepth)
+	}
+	for i, a := range list {
+		at := append(slices.Clone(path), i+1)
 		if a == nil {
-			return invalid("empty action")
+			return invalid("empty action at %s", position(at))
+		}
+		if err := a.Validate(); err != nil {
+			return fmt.Errorf("%w: action %s (%s): %w", ErrInvalid, position(at), a.DocType(), err)
+		}
+		if p, ok := a.(Parent); ok {
+			if err := validActions(p.Children(), at); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// position writes the path of an action as in the spec, e.g. "3.2"
+// (actions.md B9).
+func position(path []int) string {
+	parts := make([]string, len(path))
+	for i, p := range path {
+		parts[i] = strconv.Itoa(p)
+	}
+	return strings.Join(parts, ".")
 }
 
 func noTriggers(h Header) error {

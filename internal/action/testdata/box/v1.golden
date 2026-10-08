@@ -1,0 +1,17 @@
+{
+  "type": "box",
+  "schemaVersion": 1,
+  "enabled": true,
+  "actions": [
+    {
+      "type": "box",
+      "schemaVersion": 1,
+      "enabled": false,
+      "actions": []
+    },
+    {
+      "type": "obs_scene",
+      "scene": "BRB"
+    }
+  ]
+}

@@ -35,6 +35,7 @@ type action struct {
 func (a action) DocType() string            { return a.typ }
 func (a action) Children() []command.Action { return a.children }
 func (a action) Enabled() bool              { return !a.disabled }
+func (a action) Validate() error            { return nil }
 func (a action) Perform(ctx context.Context, run *engine.Run) error {
 	if a.fn == nil {
 		return nil
@@ -65,6 +66,7 @@ func (t *actionTypes) Missing(actionType string) []capability.Capability {
 type unknown struct{ typ string }
 
 func (u unknown) DocType() string { return u.typ }
+func (u unknown) Validate() error { return nil }
 
 // journal records what the actions do, in order.
 type journal struct {
