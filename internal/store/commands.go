@@ -87,6 +87,7 @@ func (s *Store) PutCommand(ctx context.Context, rec command.Record) error {
 		err := q.PutCommand(ctx, sqlcgen.PutCommandParams{
 			ID:           cmdID,
 			Name:         rec.Name,
+			NameKey:      command.NameKey(rec.Name),
 			Kind:         string(rec.Kind),
 			Enabled:      flag(rec.Enabled),
 			Unlocked:     flag(rec.Unlocked),

@@ -85,11 +85,12 @@ func Open(ctx context.Context, path string, opts ...Option) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("migrations: %w", err)
 	}
-	return open(ctx, path, fsys, opts...)
+	return open(ctx, path, fsys, goMigrations(), opts...)
 }
 
-// open is Open with the migrations taken from fsys.
-func open(ctx context.Context, path string, fsys fs.FS, opts ...Option) (*Store, error) {
+// open is Open with the SQL migrations taken from fsys and the Go
+// migrations gos.
+func open(ctx context.Context, path string, fsys fs.FS, gos []*goose.Migration, opts ...Option) (*Store, error) {
 	o := options{logger: slog.New(slog.DiscardHandler)}
 	for _, opt := range opts {
 		opt(&o)
@@ -113,7 +114,7 @@ func open(ctx context.Context, path string, fsys fs.FS, opts ...Option) (*Store,
 	read.SetMaxIdleConns(readers)
 
 	s := &Store{path: path, write: write, read: read, logger: o.logger}
-	if err := s.migrate(ctx, fsys, o.beforeMigrate); err != nil {
+	if err := s.migrate(ctx, fsys, gos, o.beforeMigrate); err != nil {
 		return nil, errors.Join(err, s.Close())
 	}
 	return s, nil
@@ -175,11 +176,18 @@ func (s *Store) VacuumInto(ctx context.Context, dest string) error {
 	return nil
 }
 
-func (s *Store) migrate(ctx context.Context, fsys fs.FS, before func(ctx context.Context, s *Store, from, to int64) error) error {
-	provider, err := goose.NewProvider(goose.DialectSQLite3, s.write, fsys,
-		goose.WithDisableGlobalRegistry(true),
-		goose.WithSlog(s.logger),
-	)
+// newProvider returns the goose provider of the SQL migrations in fsys and
+// the Go migrations gos on db.
+func newProvider(db *sql.DB, fsys fs.FS, gos []*goose.Migration, logger *slog.Logger) (*goose.Provider, error) {
+	opts := []goose.ProviderOption{goose.WithDisableGlobalRegistry(true), goose.WithSlog(logger)}
+	if len(gos) > 0 {
+		opts = append(opts, goose.WithGoMigrations(gos...))
+	}
+	return goose.NewProvider(goose.DialectSQLite3, db, fsys, opts...)
+}
+
+func (s *Store) migrate(ctx context.Context, fsys fs.FS, gos []*goose.Migration, before func(ctx context.Context, s *Store, from, to int64) error) error {
+	provider, err := newProvider(s.write, fsys, gos, s.logger)
 	if err != nil {
 		return fmt.Errorf("migrations: %w", err)
 	}
@@ -265,13 +273,17 @@ func translate(err error) error {
 	return err
 }
 
-// knownVersions lists the migration numbers in ascending order.
+// knownVersions lists the migration numbers in ascending order, of the SQL
+// files and the Go migrations.
 func knownVersions() []int64 {
 	entries, err := fs.ReadDir(migrations, "migrations")
 	if err != nil {
 		return nil
 	}
 	var versions []int64
+	for _, m := range goMigrations() {
+		versions = append(versions, m.Version)
+	}
 	for _, e := range entries {
 		num, _, _ := strings.Cut(e.Name(), "_")
 		if v, err := strconv.ParseInt(num, 10, 64); err == nil {
