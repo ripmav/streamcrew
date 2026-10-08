@@ -1,0 +1,9 @@
+{
+  "type": "platform_message",
+  "schemaVersion": 1,
+  "enabled": true,
+  "platform": "youtube",
+  "message": "Hi $username",
+  "asStreamer": true,
+  "reply": true
+}

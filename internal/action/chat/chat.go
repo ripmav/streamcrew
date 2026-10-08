@@ -2,8 +2,8 @@
 
 // Package chat has the action types that write to the chat (spec
 // actions.md, B60 to B67): chat sends a message or a whisper on every
-// connected platform. They belong to the category "chat"
-// (Code-ADR-0013).
+// connected platform, platform_message a message on one platform. They
+// belong to the category "chat" (Code-ADR-0013).
 //
 // The actions reach the platforms through the ports of internal/connector;
 // adapters split long messages and keep to the rate limits (B65).
@@ -65,6 +65,9 @@ func (k Kind) Valid() bool {
 type Platforms interface {
 	// Connected returns the platforms that are connected now (B62).
 	Connected() []connector.Platform
+	// Platform returns the platform name; ok is false if the profile has
+	// none (B67).
+	Platform(name platform.Name) (p connector.Platform, ok bool)
 }
 
 // Ports are what the chat types need.
@@ -116,6 +119,14 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 				return Chat{}, false
 			}
 			return c, true
+		}),
+		action.Descriptor{
+			Type:     TypePlatformMessage,
+			Version:  1,
+			Category: action.CategoryChat,
+			Schema:   platformMessageSchema(),
+		}.WithNew(func() PlatformMessage {
+			return PlatformMessage{Common: action.On(), ports: ports}
 		}),
 	}, nil
 }
@@ -213,14 +224,13 @@ func (c Chat) Perform(ctx context.Context, run *engine.Run) error {
 		return err
 	}
 	text := rendered[0].Text
-	if strings.TrimSpace(text) == "" {
-		c.ports.Logger.DebugContext(ctx, "chat message not sent: empty after rendering",
-			"instance_id", run.InstanceID())
+	if c.ports.blank(ctx, run, text) {
 		return nil
 	}
 	switch c.Kind {
 	case KindMessage:
-		return c.send(ctx, run.Params(), targets, text)
+		return send(ctx, run.Params(), targets, connector.Message{Text: text}, delivery{
+			asStreamer: c.AsStreamer, reply: c.Chat.Reply})
 	case KindWhisper:
 		return c.whisper(ctx, targets, text, rendered[1].Text)
 	default:
@@ -228,20 +238,40 @@ func (c Chat) Perform(ctx context.Context, run *engine.Run) error {
 	}
 }
 
-// send sends text to the chat of each target at the same time (B61, B62,
-// B64); it fails if a target fails, and the others keep the message (B66).
-func (c Chat) send(ctx context.Context, p engine.Params, targets []connector.Platform, text string) error {
+// blank reports whether text is empty or white space after rendering; such
+// a message is not sent, and that is no failure (B65).
+func (p *ports) blank(ctx context.Context, run *engine.Run, text string) bool {
+	if strings.TrimSpace(text) != "" {
+		return false
+	}
+	p.Logger.DebugContext(ctx, "chat message not sent: empty after rendering", "instance_id", run.InstanceID())
+	return true
+}
+
+// delivery says how send delivers a message.
+type delivery struct {
+	// asStreamer sends from the streamer's account (B61).
+	asStreamer bool
+	// reply answers the triggering message where it can (B64).
+	reply bool
+}
+
+// send sends m to the chat of each target at the same time, from the
+// account B61 says (B62, B64, B67); it fails if a target fails, and the
+// others keep the message (B66).
+func send(ctx context.Context, p engine.Params, targets []connector.Platform, m connector.Message, d delivery) error {
 	errs := make([]error, len(targets))
 	var wg sync.WaitGroup
 	for i, target := range targets {
-		m := connector.Message{Text: text, From: target.Status().Sender(c.AsStreamer)}
+		msg := m
+		msg.From = target.Status().Sender(d.asStreamer)
 		chat := target.Chat()
 		wg.Go(func() {
-			if r, ok := chat.(connector.Replier); ok && c.replies(target.Name(), p) {
-				errs[i] = r.Reply(ctx, p.MessageID, m)
+			if r, ok := chat.(connector.Replier); ok && d.replies(target.Name(), p) {
+				errs[i] = r.Reply(ctx, p.MessageID, msg)
 				return
 			}
-			errs[i] = chat.Send(ctx, m)
+			errs[i] = chat.Send(ctx, msg)
 		})
 	}
 	wg.Wait()
@@ -251,8 +281,8 @@ func (c Chat) send(ctx context.Context, p engine.Params, targets []connector.Pla
 // replies reports whether the message answers the triggering message on
 // platform name (B64): the option is on, the run was triggered there by a
 // message, and the platform gave its ID.
-func (c Chat) replies(name platform.Name, p engine.Params) bool {
-	return c.Chat.Reply && name == p.Platform && p.MessageID != ""
+func (d delivery) replies(name platform.Name, p engine.Params) bool {
+	return d.reply && name == p.Platform && p.MessageID != ""
 }
 
 // whisper sends text privately to the recipient on each target that can
