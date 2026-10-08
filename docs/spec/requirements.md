@@ -15,7 +15,7 @@ Nicht Teil dieser Spezifikation:
 
 - das Datenmodell der Anforderungen ([`commands.md`](commands.md), B40–B47)
 - wann die Engine prüft, der Fehler-Cooldown und was eine Entscheidung für die Warteschlange heißt ([`command-engine.md`](command-engine.md), B10–B15)
-- wie Texte übersetzt werden (ADR-0022, Roadmap 3.4)
+- wie Texte übersetzt werden ([ADR-0022](../adr/0022-internationalisierung.md), Roadmap 3.4)
 - Währungen, Ränge und Inventare selbst (`economy.md`, Phase 8)
 
 ## Begriffe
@@ -108,7 +108,7 @@ Nicht Teil dieser Spezifikation:
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B70 | Jede Ablehnung hat eine Begründung in eigenen Worten, in der Sprache des Profils (ADR-0022), gebildet aus einem Schlüssel und Werten wie Rolle, Restzeit, Verwendung oder Betrag. Die Texte stammen nicht aus dem Original. | A9 |
+| B70 | Jede Ablehnung hat eine Begründung in eigenen Worten, in der Sprache des Profils ([ADR-0022](../adr/0022-internationalisierung.md)), gebildet aus einem Schlüssel und Werten wie Rolle, Restzeit, Verwendung oder Betrag. Die Texte stammen nicht aus dem Original. | A9 |
 | B71 | Der Nutzer erfährt eine Ablehnung (`Rejection.Tell`), wenn der Durchlauf eine auslösende Chatnachricht hat und die Anforderung Rolle, Cooldown, Argumente, Währung, Rang oder Inventar ist. Keine Meldung gibt es bei Durchläufen ohne Chatnachricht (Ereignisse, Timer), bei fehlerhaften und unbekannten Anforderungen und für gebannte Nutzer. Ob die Meldung dann gesendet wird, entscheidet der Fehler-Cooldown der Engine ([`command-engine.md`](command-engine.md), B12). | Q1, A10 |
 | B72 | Die Meldung geht auf der Plattform des Durchlaufs in den Chat, als Antwort auf die auslösende Nachricht, wo die Plattform das kann, sonst mit `@` und dem Namen des Nutzers davor. Absender wie bei der Chat-Action ([`actions.md`](actions.md), B61). | QP (§6.11), A10 |
 
@@ -159,7 +159,7 @@ Die Meldungen je Art:
 | A6 | ein Schalter für alle Argumente; der Identifier heißt wie das Argument, klein und ohne Leerzeichen | Identifier-Name je Argument ausdrücklich, der Import leitet ihn ab (B35, B36) | keine abgeleiteten Namen zur Laufzeit (Code-ADR-0017); der Name lässt sich beim Speichern prüfen |
 | A7 | Währung, Rang und Inventar gibt es von Anfang an | bis Phase 8 fehlerhaft, der Command läuft nicht (B40, B81) | Kosten dürfen nicht still entfallen |
 | A8 | Meldungen, Zurücksetzen und Kosten bei einer Schwelle nicht dokumentiert | keine Meldung, Verfall je Teilnahme, Neubeginn nach dem Erfüllen, Kosten je Durchlauf (B50–B54) | vorhersehbar; wartend ist keine Ablehnung ([`command-engine.md`](command-engine.md), B10); zu prüfen |
-| A9 | Texte der Meldungen | eigene Texte, übersetzt (B12, B70) | keine Übernahme von Texten (ADR-0001); Mehrsprachigkeit (ADR-0022) |
+| A9 | Texte der Meldungen | eigene Texte, übersetzt (B12, B70) | keine Übernahme von Texten (ADR-0001); Mehrsprachigkeit ([ADR-0022](../adr/0022-internationalisierung.md)) |
 | A10 | nicht dokumentiert, wer Meldungen bekommt und wie | nur bei einer auslösenden Chatnachricht, als Antwort (B71, B72) | Wer einem Kanal folgt oder raidet, soll keine Meldung über einen Cooldown bekommen |
 | A11 | nicht dokumentiert, was ohne Nutzer geschieht | nutzergebundene Anforderungen sind dann nicht erfüllt, mit Warnung beim Speichern (B4, B81) | keine stillen Ausnahmen; der Streamer sieht beim Speichern, dass der Command so nie läuft |
 

@@ -431,7 +431,9 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
   - Fehlermeldungen je Art, wann der Nutzer sie erfährt (`Rejection.Tell`), Schwelle als „wartend“
   - Argumente: Typen, Pflicht, Werte als Identifier ([`commands.md`](spec/commands.md), B45)
   - Währung, Rang und Inventar: wie sie bis Phase 8 behandelt werden, das sie liefert
-- [ ] ADR-0022 Internationalisierung; Grundgerüst mit EN und DE (S), aus 3.6 vorgezogen, weil die Fehlermeldungen der Anforderungen übersetzt werden
+- [x] [ADR-0022](adr/0022-internationalisierung.md) Internationalisierung (S), aus 3.6 vorgezogen, weil die Fehlermeldungen der Anforderungen übersetzt werden; akzeptiert 2026-10-02: ICU MessageFormat v1 im Teilumfang, eigener Parser und Renderer auf `golang.org/x/text`
+- [ ] `internal/i18n` nach [ADR-0022](adr/0022-internationalisierung.md): Parser und Renderer für den Teilumfang, Kataloge EN und DE, Dauern, Rückfall, Vollständigkeitstests und Fuzz-Test (M)
+- [ ] Settings-Sektion „locale“ mit der Sprache des Profils (`en`, `de`), aus 3.6 vorgezogen ([ADR-0022](adr/0022-internationalisierung.md), Punkt 7) (S)
 - [ ] Requirement-Service hinter `engine.Requirements`: Entscheidung (`met`, `waiting`, `rejected`) mit Kosten und Cooldowns, `Notify` mit übersetzter Meldung, `StartCooldown` für die Command-Action ([`actions.md`](spec/actions.md), B37), Set-Validierung beim Speichern (M)
 - [ ] Rolle, Cooldown (pro Nutzer, global, Gruppe), Argumente (Werte als Identifier des Durchlaufs), Einstellungen, z. B. Auslösenachricht löschen über den Chat-Port aus 3.3 (M)
 - [ ] Threshold: Mindestanzahl Nutzer im Zeitfenster, je Nutzer ein Durchlauf ([`command-engine.md`](spec/command-engine.md), B82) (S) (P1)
@@ -454,7 +456,7 @@ Reihenfolge wie in 3.3: erst die Doku (Spezifikation `requirements.md`, ADR-0022
   - Begrüßungen ([`command-engine.md`](spec/command-engine.md), B41): erste Nachricht in der Sitzung nur, solange der Stream live ist; Entrance-Command des Nutzers mit `engine.Request.Entrance`, Ereignis-Commands auf `chat.user.entrance` erkennt die Engine selbst; beim Stream-Ende `engine.Engine.CancelEntrance`
 - [ ] Trigger-Erkennung: `!`-Präfix, Wildcards, längster Treffer, Argumente inkl. Anführungszeichen (M)
 - [ ] Command-Engine und Template-Engine in der Composition Root verdrahten: Engine als Runnable beim Supervisor, ihre Ereignistypen im Katalog, Settings, Ports; die Typ-Registry mit `App.Rights` als Quelle der Capabilities, die Wurzeln für `command.Roots` und die Datei-Action, die Umgebung aus `config.ProgramEnv` für externe Programme, `netguard.Dialer` mit `Protect` im Server-Modus und `App.Rights().Outbound` als Allowlist für den Web-Request (Code-ADR-0019) (S)
-- [ ] Settings-Sektion „locale“ (Sprache und Formate des Profils), aus 3.2 verschoben; danach Datums-, Zeit- und Zahlenformate der Templates nach der Locale ([`template.md`](spec/template.md), B41) (S)
+- [ ] Settings-Sektion „locale“: Formate des Profils als neue Version (die Sprache kommt in 3.4, [ADR-0022](adr/0022-internationalisierung.md)); danach Datums-, Zeit- und Zahlenformate der Templates nach der Locale ([`template.md`](spec/template.md), B41) (S)
 
 **Exit-Kriterien (M1):**
 
@@ -1272,3 +1274,5 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-02 | Counter-Action: Ein beim Ausführen fehlender Counter wird angelegt ([`actions.md`](spec/actions.md), B41, Entscheidung des Projektinhabers); der Store legt ihn in derselben Transaktion an, in der er ihn ändert. |
 | 2026-10-02 | Moderation ohne Plattform des Durchlaufs wirkt mit Nutzer nur beim ersten Treffer, gesucht wird erst auf der Standardplattform Twitch ([`actions.md`](spec/actions.md), B82, Entscheidung des Projektinhabers). |
 | 2026-10-02 | Datei-Action: `/` und `\` trennen Verzeichnisse auf jedem System ([`actions.md`](spec/actions.md), B102, Entscheidung des Projektinhabers). |
+| 2026-10-02 | Phase 3.4 begonnen: [ADR-0022](adr/0022-internationalisierung.md) „Internationalisierung“ vorgeschlagen: Englisch und Deutsch; Kataloge in ICU MessageFormat v1 (Teilumfang), die auch die Frontends lesen; eigener Parser und Renderer in `internal/i18n` auf `golang.org/x/text`, weil die geprüften Go-Bibliotheken für ICU nicht taugen oder nur von einem Entwickler gepflegt werden (Entscheidung des Projektinhabers); Meldungen als Schlüssel mit Werten; Profilsprache schon in 3.4. |
+| 2026-10-02 | ADR-0022 vom Projektinhaber angenommen. Neue Aufgaben in 3.4: `internal/i18n` und die Sprache des Profils in der Settings-Sektion „locale“, deren Formate in 3.6 bleiben. Plan §6.22 und die Technologieliste nennen die Entscheidung. |

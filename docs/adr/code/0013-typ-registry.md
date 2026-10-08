@@ -83,7 +83,7 @@
 
      *Umgesetzt am 2026-10-01 mit einer Auflösung zu Punkt 4: Felder ohne Voreinstellung, etwa die Dauer beim Warten, fehlen im Dokument aus `New`. Es kann `Validate` deshalb nicht bestehen. Die Registry prüft stattdessen, dass `New` eine Action des Typs liefert, die sich kodieren lässt und deren Felder im Schema stehen; aus ihr setzt sie die `default`-Werte des Schemas, sodass beide nicht auseinanderlaufen. Schema und `Validate` prüft der Konformitätstest an Beispieldokumenten. `Descriptor.Schema` ist ein Zeiger (`*schema.Schema`); `Descriptor.WithNew` setzt `New` und `Decode` aus einer Konstruktorfunktion.*
    - Sie liefert die Einträge für `command.NewCodec`, die Descriptors in fester Reihenfolge für den Typkatalog (API, Phase 6) und `schema export` (Roadmap 3.5), und sie setzt den Port der Engine um (Punkt 8).
-   - Die i18n-Schlüssel folgen aus der Typ-ID und stehen deshalb nicht einzeln im Descriptor: `action.<typ>.name`, `action.<typ>.description`, `action.<typ>.field.<feld>`, `action.<typ>.kind.<art>` und `action.category.<kategorie>`. Der Typkatalog liefert sie ausgeschrieben mit. Die Texte kommen mit ADR-0022.
+   - Die i18n-Schlüssel folgen aus der Typ-ID und stehen deshalb nicht einzeln im Descriptor: `action.<typ>.name`, `action.<typ>.description`, `action.<typ>.field.<feld>`, `action.<typ>.kind.<art>` und `action.category.<kategorie>`. Der Typkatalog liefert sie ausgeschrieben mit. Die Texte kommen mit [ADR-0022](../0022-internationalisierung.md).
    - Anforderungen bekommen Descriptors derselben Form (Schema, UI-Hinweise, i18n), sobald der Typkatalog sie braucht (Roadmap 3.5). Capabilities und der Anschluss an die Engine betreffen nur Actions.
 
 4. **Konfiguration einer Action:**
