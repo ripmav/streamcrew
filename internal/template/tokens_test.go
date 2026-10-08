@@ -69,6 +69,35 @@ func TestEngine_RenderEach_B21(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
+// TestEngine_RenderParts_B30 renders templates for places with different
+// encodings in one render (actions.md B3, B71).
+func TestEngine_RenderParts_B30(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int64
+	family := template.Family{Name: "count", Identifiers: []template.Identifier{{Name: "score", Resolve: counting("21", &calls)}}}
+	e := template.New(newRegistry(t, family))
+	s := scope()
+	s.SetValue("text", template.TextValue(`a/../b&x="1"`))
+
+	got, err := e.RenderParts(t.Context(), []template.Part{
+		{Template: template.Parse("https://example.invalid/$text?s=$score"), Encoding: template.URL},
+		{Template: template.Parse(`{"t":"$text"}`), Encoding: template.JSON},
+		{Template: template.Parse("$text $score"), Encoding: template.Text},
+		{Template: template.Parse("<p>$text</p>"), Encoding: template.HTML},
+	}, &s)
+	require.NoError(t, err)
+	assert.Equal(t, []template.Rendered{
+		{Text: "https://example.invalid/a%2F..%2Fb%26x%3D%221%22?s=21", Replaced: true},
+		{Text: `{"t":"a/../b&x=\"1\""}`, Replaced: true},
+		{Text: `a/../b&x="1" 21`, Replaced: true},
+		{Text: "<p>a/../b&amp;x=&#34;1&#34;</p>", Replaced: true},
+	}, got)
+	assert.Equal(t, int64(1), calls.Load(), "all parts share one render")
+
+	_, err = e.RenderParts(t.Context(), []template.Part{{Template: template.Parse("x"), Encoding: template.Encoding(99)}}, &s)
+	require.ErrorContains(t, err, "unknown encoding 99")
+}
+
 // TestEngine_RenderEach_Replaced: a template counts as replaced if every
 // token got a value (B3, B4, B23; actions.md B24).
 func TestEngine_RenderEach_Replaced(t *testing.T) {

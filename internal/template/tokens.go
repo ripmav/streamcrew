@@ -41,13 +41,40 @@ type Rendered struct {
 // Like Render, it fails only for a scope that lacks what a render needs and
 // when ctx is done.
 func (e *Engine) RenderEach(ctx context.Context, ts []Template, s *Scope) ([]Rendered, error) {
+	parts := make([]Part, len(ts))
+	for i, t := range ts {
+		parts[i] = Part{Template: t, Encoding: Text}
+	}
+	return e.RenderParts(ctx, parts, s)
+}
+
+// Part is a template with the encoding of the place its text goes to
+// (B30, B31), e.g. the address of a web request with URL and its body with
+// JSON.
+type Part struct {
+	Template Template
+	Encoding Encoding
+}
+
+// RenderParts renders each part with its encoding, all in one render, so
+// each identifier is resolved at most once across them (B21). An action
+// whose templates go to places with different encodings uses it, e.g. the
+// web request (spec actions.md, B3, B71). It fails for an unknown
+// encoding, for a scope that lacks what a render needs and when ctx is
+// done.
+func (e *Engine) RenderParts(ctx context.Context, parts []Part, s *Scope) ([]Rendered, error) {
+	for _, p := range parts {
+		if !p.Encoding.valid() {
+			return nil, fmt.Errorf("render templates: unknown encoding %d", int(p.Encoding))
+		}
+	}
 	if err := s.check(); err != nil {
 		return nil, fmt.Errorf("render templates: %w", err)
 	}
 	s = s.forRender()
-	out := make([]Rendered, len(ts))
-	for i, t := range ts {
-		r, err := e.render(ctx, t, s, Text)
+	out := make([]Rendered, len(parts))
+	for i, p := range parts {
+		r, err := e.render(ctx, p.Template, s, p.Encoding)
 		if err != nil {
 			return nil, err
 		}
