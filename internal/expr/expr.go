@@ -7,8 +7,13 @@
 // Its own parser reads the language that B50 names: numbers, text in quotes
 // for comparisons and joining, true and false, + - * / % and the powers ^
 // and **, parentheses, comparisons, and, or, not (also &&, || and !), and
-// the functions abs, ceil, floor, round, min and max. Numbers are exact
-// decimals of internal/decimal (Code-ADR-0020): 0.1 + 0.2 == 0.3 holds.
+// the functions of B53: abs, acos, acot, asin, atan, avg, ceil, ceiling,
+// cos, cot, csc, floor, if, ifequal, ifless, ifmore, log10, loge, logn,
+// max, median, min, random, randomrange, round, sec, sin, sqrt, tan,
+// truncate, and the constants e and pi. random(n) and randomrange(a, b)
+// include their upper bound, random(6) gives 1 to 6; WithRandom injects
+// their source of the random numbers. Numbers are exact decimals of
+// internal/decimal (Code-ADR-0020): 0.1 + 0.2 == 0.3 holds.
 //
 // Compile turns each $ token into a variable. Eval resolves the identifiers
 // and passes their values, so a value never becomes part of the expression
@@ -20,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"math/rand/v2"
 	"strings"
 
 	"github.com/ripmav/streamcrew/internal/decimal"
@@ -43,6 +49,24 @@ type Expression struct {
 	src  string
 	vars []variableDef
 	tree node
+	// rnd draws the random numbers of random(n) and randomrange(a, b): a
+	// whole number from 1 to n, including both ends.
+	rnd func(n int) int
+}
+
+// options are the settings of Compile.
+type options struct {
+	rnd func(n int) int
+}
+
+// Option configures Compile.
+type Option func(*options)
+
+// WithRandom sets the source of the random numbers of random(n) and
+// randomrange(a, b): a function that returns a whole number from 1 to n,
+// including both ends. The default is a random source on math/rand/v2.
+func WithRandom(f func(n int) int) Option {
+	return func(o *options) { o.rnd = f }
 }
 
 // variableDef is a variable of an expression: a $ token, or text in quotes
@@ -54,13 +78,21 @@ type variableDef struct {
 	quoted bool
 }
 
-// Compile compiles text. Each $ token becomes a variable whose value Eval
-// provides. Text in quotes that contains $ tokens becomes one variable with
-// the rendered text, e.g. "$arg1text" or "Hi $username"; it must not contain
-// escape sequences. A "$" that starts no token outside quotes is an error.
-func Compile(text string) (*Expression, error) {
+// Compile compiles text with the options, none for the defaults. Each $
+// token becomes a variable whose value Eval provides. Text in quotes that
+// contains $ tokens becomes one variable with the rendered text, e.g.
+// "$arg1text" or "Hi $username"; it must not contain escape sequences. A
+// "$" that starts no token outside quotes is an error.
+func Compile(text string, opts ...Option) (*Expression, error) {
 	invalid := func(err error) error {
 		return fmt.Errorf("%w: %q: %w", ErrInvalid, text, err)
+	}
+	o := options{rnd: func(n int) int {
+		//nolint:gosec // not a cryptographic source, but the random numbers of the templates
+		return rand.IntN(n) + 1
+	}}
+	for _, opt := range opts {
+		opt(&o)
 	}
 	var (
 		tokens []token
@@ -104,7 +136,7 @@ func Compile(text string) (*Expression, error) {
 	if err != nil {
 		return nil, invalid(err)
 	}
-	return &Expression{src: text, vars: vars, tree: tree}, nil
+	return &Expression{src: text, vars: vars, tree: tree, rnd: o.rnd}, nil
 }
 
 // String returns the text x was compiled from.
@@ -149,7 +181,7 @@ func (x *Expression) EvalWithTexts(texts []string) (Result, error) {
 	if len(texts) != len(x.vars) {
 		return Result{}, fmt.Errorf("%w: %q: %d texts for %d identifiers", ErrEvaluation, x.src, len(texts), len(x.vars))
 	}
-	e := evaluator{vars: make([]value, len(texts))}
+	e := evaluator{vars: make([]value, len(texts)), rnd: x.rnd}
 	for i, text := range texts {
 		e.vars[i] = value{kind: Text, text: text}
 		if n, ok := ParseNumber(text); ok && !x.vars[i].quoted {
