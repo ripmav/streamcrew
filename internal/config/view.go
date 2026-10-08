@@ -18,6 +18,10 @@ type FileView struct {
 	LogFile           bool              `yaml:"log_file" json:"log_file"`
 	LogMaxSize        int               `yaml:"log_max_size" json:"log_max_size"`
 	LogMaxFiles       int               `yaml:"log_max_files" json:"log_max_files"`
+	Grant             []string          `yaml:"grant,omitempty" json:"grant,omitempty"`
+	Revoke            []string          `yaml:"revoke,omitempty" json:"revoke,omitempty"`
+	FileRoot          map[string]string `yaml:"file_root,omitempty" json:"file_root,omitempty"`
+	OutboundAllow     []string          `yaml:"outbound_allow,omitempty" json:"outbound_allow,omitempty"`
 }
 
 // View returns the configuration in the form of the configuration file.
@@ -35,5 +39,9 @@ func (c *Config) View() FileView {
 		LogFile:           c.Log.File,
 		LogMaxSize:        c.Log.MaxSize,
 		LogMaxFiles:       c.Log.MaxFiles,
+		Grant:             c.Grant,
+		Revoke:            c.Revoke,
+		FileRoot:          c.FileRoot,
+		OutboundAllow:     c.OutboundAllow,
 	}
 }

@@ -44,3 +44,12 @@ func TestZeroSetIsEmpty(t *testing.T) {
 	assert.Equal(t, []capability.Capability{}, s.List())
 	assert.Equal(t, []capability.Capability{capability.Script}, s.Missing([]capability.Capability{capability.Script}))
 }
+
+// TestSetIsSource: a set is a source that never changes (Code-ADR-0019).
+func TestSetIsSource(t *testing.T) {
+	t.Parallel()
+	s, err := capability.NewSet(capability.HostFS)
+	require.NoError(t, err)
+	var src capability.Source = s
+	assert.Equal(t, s.List(), src.Current().List())
+}

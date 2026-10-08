@@ -354,6 +354,35 @@ func TestRegistry(t *testing.T) {
 	_ = codec
 }
 
+// source is a source of capabilities that a test changes.
+type source struct {
+	set capability.Set
+}
+
+func (s *source) Current() capability.Set { return s.set }
+
+// TestRegistryFollowsSource covers Code-ADR-0019, point 5: the registry
+// asks its source at every check, so a changed configuration applies to the
+// next action.
+func TestRegistryFollowsSource(t *testing.T) {
+	t.Parallel()
+	src := &source{}
+	reg, err := action.NewRegistry(src, probeType())
+	require.NoError(t, err)
+	assert.Equal(t, []capability.Capability{capability.NetOutbound}, reg.Missing("probe"))
+
+	granted, err := capability.NewSet(capability.NetOutbound)
+	require.NoError(t, err)
+	src.set = granted
+	assert.Equal(t, []capability.Capability{}, reg.Missing("probe"))
+
+	src.set = capability.Set{}
+	assert.Equal(t, []capability.Capability{capability.NetOutbound}, reg.Missing("probe"))
+
+	_, err = action.NewRegistry(nil, probeType())
+	require.ErrorIs(t, err, action.ErrInvalid, "a registry needs a source")
+}
+
 // TestReserved covers actions.md B5: the registry reports the fixed result
 // names of the types, regardless of case, for saving.
 func TestReserved(t *testing.T) {
