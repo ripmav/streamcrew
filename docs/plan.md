@@ -1080,7 +1080,7 @@ Aus den globalen Regeln, verbindlich für alle Repos:
   - **Nur lesend:**
     - Der Workflow sammelt PR-Daten, Diff und vorhandene Inline-Kommentare vorab.
     - Claude bekommt nur Lese-Werkzeuge und das Werkzeug für Inline-Kommentare, keine Shell. Andere Werkzeuge bietet Claude Code gar nicht erst an (`--tools`), sonst versucht das Modell sie und die Aufrufe werden verweigert.
-    - Build, Lint und Tests kommen aus der CI des PRs: Der Workflow legt deren Stand als `checks.json` in den Kontext.
+    - Build, Lint und Tests kommen aus der CI des PRs: Der Workflow legt deren Stand als `checks.json` in den Kontext; dafür hat der Job die Leserechte `checks` und `statuses`. Lässt sich der Stand nicht lesen, steht das in der Datei und als Warnung im Log.
     - Inhalte des PRs gelten als Prüfmaterial, nie als Anweisung.
   - **Rückmeldung:**
     - Jede Anfrage bekommt sofort einen Fortschrittskommentar. Er wird durch das Ergebnis ersetzt: Zusammenfassung auf Deutsch und Befundliste mit Schweregrad (hoch, mittel, niedrig).

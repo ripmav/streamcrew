@@ -45,6 +45,8 @@ jobs:
       contents: read
       pull-requests: write # progress/result comment via GITHUB_TOKEN
       issues: read
+      checks: read # CI state for checks.json (gh pr checks)
+      statuses: read # commit statuses, also part of gh pr checks
       id-token: write # token exchange of claude-code-action
     env:
       GH_TOKEN: ${{ github.token }}
@@ -84,7 +86,13 @@ jobs:
             --jq '.[] | {path, line, author: .user.login, body}' | jq -s . > "$dir/inline-comments.json"
           # Build, vet, lint and tests run in the CI of the pull request; Claude
           # cannot run them and reads their state from here instead.
+          # gh pr checks may exit non-zero for failed or pending checks, so the
+          # result is judged by its output.
           gh pr checks "$PR" --repo "$REPO" --json name,workflow,state,bucket > "$dir/checks.json" || true
+          if ! jq -e 'type == "array"' "$dir/checks.json" > /dev/null 2>&1; then
+            echo "::warning::Could not read the CI checks; the review sees them as unknown."
+            echo '{"error": "the CI checks could not be read"}' > "$dir/checks.json"
+          fi
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
           wc -c "$dir"/*
 
