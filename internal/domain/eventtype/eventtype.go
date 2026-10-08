@@ -50,6 +50,15 @@ const (
 	AppStopping event.Type = "app.stopping"
 )
 
+// Authentication, app events for the frontends (roadmap 4.1, ADR-0014): the
+// auth service publishes them directly on the bus, and they never trigger a
+// command, so they are not in the spec catalog All().
+const (
+	AuthActionRequired event.Type = "auth.action_required"
+	AuthLoginCompleted event.Type = "auth.login_completed"
+	AuthLoginFailed    event.Type = "auth.login_failed"
+)
+
 // Channel, platform-neutral.
 const (
 	ChannelStreamStart          event.Type = "channel.stream.start"
