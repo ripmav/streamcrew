@@ -38,7 +38,7 @@ Die Regeln setzen [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-orig
 | Spezifikation | Fachgebiet | Roadmap | Status |
 |---|---|---|---|
 | [`users-and-roles.md`](users-and-roles.md) | Nutzer, Plattform-Identitäten, Statistiken, Rollen und ihre Rangordnung | Phase 2.2 | Geprüft, Rollen umgesetzt |
-| [`commands.md`](commands.md) | Datenmodell der Commands: Arten, Trigger, Gruppen, Anforderungen | Phase 2.2 | Geprüft |
+| [`commands.md`](commands.md) | Datenmodell der Commands: Arten, Trigger, Gruppen, Anforderungen | Phase 2.2 | Geprüft, Datenmodell umgesetzt |
 | [`counters-and-quotes.md`](counters-and-quotes.md) | Counter und Quotes | Phase 2.2 | Geprüft |
 | [`events.md`](events.md) | Ereigniskatalog: stabile Typnamen, Auslöseregeln | Phase 2.2 | Geprüft, Katalog umgesetzt |
 | `template.md` | `$`-Identifier-Engine: Syntax, Auflösung, Kodierung, Abweichungen | Phase 3 | geplant |

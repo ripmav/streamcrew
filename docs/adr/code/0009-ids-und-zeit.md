@@ -32,7 +32,7 @@
    | Go | `time.Time` in UTC, bei der Anzeige in die Zeitzone des Profils umgerechnet |
    | Datenbank | `INTEGER`, Unix-Millisekunden in UTC ([Code-ADR-0008](0008-datenbankzugriff.md)) |
    | JSON, YAML, API | RFC 3339 in UTC mit Millisekunden, z. B. `2026-09-29T10:00:00.000Z` |
-   | Dauern | in Go `time.Duration`; in der Datenbank `INTEGER` in Millisekunden; in YAML und Konfiguration als Go-Dauer (`30s`, `5m`) |
+   | Dauern | in Go `time.Duration`; in der Datenbank `INTEGER` in Millisekunden; in YAML und Konfiguration als Go-Dauer (`30s`, `5m`)\*\*\* |
 
    Millisekunden reichen für Chat und Ereignisse und bleiben in JavaScript-Frontends verlustfrei.
 5. **Zeitzonen:** Jedes Profil speichert eine IANA-Zeitzone (Standard: die des Systems beim Anlegen, sonst UTC).\*\* Zeitpläne wie tägliche Backups oder Timer laufen in dieser Zone; auch Sommerzeitwechsel richten sich nach ihr.
@@ -40,6 +40,8 @@
 *\* Redaktionell ergänzt am 2026-09-29: Der UUIDv7-Generator der Standardbibliothek ist prozessweit. Entsteht zwischen zwei IDs in einer Bubble eine ID mit echter Zeit, etwa in einem parallelen Test, wirkt das für den Generator wie ein Rücksprung der Uhr, und die IDs der Bubble sind nicht mehr aufsteigend (gemessen: 351 von 2000 Paaren). Tests, die die Reihenfolge von IDs prüfen, laufen deshalb nicht parallel zu anderen Tests, die IDs erzeugen. Im Betrieb gibt es keine Bubbles; die Entscheidung ändert sich nicht.*
 
 *\*\* Präzisiert am 2026-09-29, Entscheidung des Projektinhabers: Ohne gespeicherte Zone gilt die Zeitzone des Systems zur Laufzeit, nicht die beim Anlegen. Unter Windows lässt sich der IANA-Name der Systemzone nicht zuverlässig ermitteln. Kann weder die gespeicherte noch die Systemzone genutzt werden, gilt UTC; eine gespeicherte, aber nicht ladbare Zone wird im Log gemeldet.*
+
+*\*\*\* Präzisiert am 2026-09-29: Dauern in polymorphen Dokumenten ([Code-ADR-0010](0010-polymorphe-serialisierung.md)), etwa Cooldowns in Anforderungen, stehen auch im JSON der Datenbank als Go-Dauer (`polydoc.Duration`). So sehen JSON und YAML gleich aus, wie Code-ADR-0010 es verlangt; `INTEGER` in Millisekunden gilt für Spalten.*
 
 ## Betrachtete Alternativen
 

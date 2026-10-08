@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: MIT
+#
+# Golden files are compared byte for byte (Code-ADR-0006). Git must not
+# convert their line endings, e.g. with core.autocrlf on Windows.
+*.golden -text
