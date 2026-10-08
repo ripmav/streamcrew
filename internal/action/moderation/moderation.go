@@ -107,9 +107,6 @@ type Platforms interface {
 // Users are the users the core knows; the user service implements it
 // (roadmap 5.2).
 type Users interface {
-	// UserByName finds the user with the login name on platform p,
-	// regardless of case; ok is false if there is none.
-	UserByName(ctx context.Context, p platform.Name, name string) (u user.User, ok bool, err error)
 	// UpsertIdentity stores an account found over a platform like a newly
 	// seen one, or updates its names if the core knows it (spec
 	// users-and-roles.md, B4); it returns the user.
@@ -280,7 +277,7 @@ func (m Moderation) Perform(ctx context.Context, run *engine.Run) error {
 		return err
 	}
 	if m.Kind == KindAddStrike || m.Kind == KindRemoveStrike {
-		return m.strike(ctx, run.Params(), in.login)
+		return m.strike(ctx, run, in.login)
 	}
 	targets, err := m.targets(run.Params())
 	if err != nil {
@@ -291,7 +288,7 @@ func (m Moderation) Perform(ctx context.Context, run *engine.Run) error {
 			"instance_id", run.InstanceID(), "kind", m.Kind)
 		return nil
 	}
-	return m.moderate(ctx, run.Params(), targets, in)
+	return m.moderate(ctx, run, targets, in)
 }
 
 // inputs are the rendered members of an action.
@@ -368,7 +365,8 @@ func (m Moderation) targets(p engine.Params) ([]connector.Platform, error) {
 // user lets the action fail, because the first match may lie there. A
 // refusal of a platform lets the action fail with the reason of the
 // platform (B86).
-func (m Moderation) moderate(ctx context.Context, p engine.Params, targets []connector.Platform, in inputs) error {
+func (m Moderation) moderate(ctx context.Context, run *engine.Run, targets []connector.Platform, in inputs) error {
+	p := run.Params()
 	if !m.Kind.hasUser() {
 		errs := make([]error, len(targets))
 		for i, target := range targets {
@@ -378,7 +376,7 @@ func (m Moderation) moderate(ctx context.Context, p engine.Params, targets []con
 	}
 	for _, target := range targets {
 		on := []connector.Platform{target}
-		ident, err := connector.FindAccount(ctx, m.ports.Users, target, in.login)
+		ident, err := connector.FindAccount(ctx, run, target, in.login)
 		switch {
 		case errors.Is(err, connector.ErrUnknownUser):
 			continue
@@ -418,7 +416,8 @@ func (m Moderation) act(ctx context.Context, mod connector.Moderation, to *user.
 // but strikes are the core's own: on the platform of the run the known
 // users count even if it is not connected, and a user found only over a
 // platform is stored like a newly seen one.
-func (m Moderation) strike(ctx context.Context, p engine.Params, login string) error {
+func (m Moderation) strike(ctx context.Context, run *engine.Run, login string) error {
+	p := run.Params()
 	var names []platform.Name
 	if p.Platform != "" {
 		names = []platform.Name{p.Platform}
@@ -428,7 +427,7 @@ func (m Moderation) strike(ctx context.Context, p engine.Params, login string) e
 		}
 	}
 	for _, name := range names {
-		u, ok, err := m.find(ctx, name, login)
+		u, ok, err := m.find(ctx, run, name, login)
 		if err != nil {
 			return field("user", err)
 		}
@@ -454,13 +453,14 @@ func (m Moderation) addStrikes(ctx context.Context, userID id.ID) error {
 }
 
 // find returns the user with the login name on platform name: a known one,
-// or one the platform reports if it is connected, which is then stored; ok
-// is false if there is none.
-func (m Moderation) find(ctx context.Context, name platform.Name, login string) (u user.User, ok bool, err error) {
+// found through the lookup of the run (spec command-engine.md, B17), or one
+// the platform reports if it is connected, which is then stored; ok is
+// false if there is none.
+func (m Moderation) find(ctx context.Context, run *engine.Run, name platform.Name, login string) (u user.User, ok bool, err error) {
 	if login == "" {
 		return user.User{}, false, nil
 	}
-	if u, ok, err := m.ports.Users.UserByName(ctx, name, login); err != nil || ok {
+	if u, ok, err := run.UserByName(ctx, name, login); err != nil || ok {
 		return u, ok, err
 	}
 	target, ok := m.ports.Platforms.Platform(name)
