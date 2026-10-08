@@ -57,11 +57,15 @@ bleibt als Fallback.**
    Streamer- und Bot-Konto); es kommt nie ins Binary, nie in Logs und nie in
    die `accounts`-Tabelle. Die öffentliche Projekt-App „StreamCrew“
    (Client-ID als Konstante) dient nur noch dem Device-Code-Flow-Fallback.
-4. **Redirect-URL:** fest `http://127.0.0.1:8741` — exakt so in der App des
-   Nutzers zu registrieren („OAuth Redirect URLs“). Der Listener bindet nur an
-   `127.0.0.1` (nicht `localhost`, um die `::1`-Auflösung von Browsern zu
-   vermeiden). Port und Pfad sind in v1 nicht konfigurierbar; eine Änderung
-   erfordert die Neuregistrierung der Redirect-URL in der App des Nutzers.
+4. **Redirect-URL:** fest `http://localhost:8741` — exakt so in der App des
+   Nutzers zu registrieren („OAuth Redirect URLs“). Der Host ist `localhost`
+   und nicht die Loopback-IP: Die Twitch-Developer-Konsole lehnt
+   `http://127.0.0.1`-Adressen ab (Redirect-URIs müssen HTTPS nutzen) und
+   akzeptiert die `localhost`-Form, die auch die Doku von Twitch in ihren
+   Beispielen verwendet. Ein Browser kann `localhost` auf `127.0.0.1` oder
+   `::1` auflösen; der Listener bindet deshalb an beide Loopback-Adressen.
+   Port und Pfad sind in v1 nicht konfigurierbar; eine Änderung erfordert die
+   Neuregistrierung der Redirect-URL in der App des Nutzers.
 5. **Sicherheitsdetails:** `state` (32 zufällige Bytes, hex, nur im Speicher,
    Abgleich beim Redirect — CSRF-Schutz). Das Login-Fenster hat 10 Minuten
    (`auth.action_required.expires_at`), danach muss der Login neu gestartet
@@ -109,7 +113,8 @@ bleibt als Fallback.**
 - Jeder Nutzer muss einmalig eine eigene Confidential-App anlegen und die
   Redirect-URL registrieren; ohne App ist nur der DCF-Fallback möglich.
 - Ohne PKCE ist der Code-Flow nur so sicher wie sein Secret: Der Listener bindet
-  strikt an `127.0.0.1`, das Secret erreicht weder Logs noch Vault-nach außen;
+  strikt an die Loopback-Adressen (`127.0.0.1` und `::1`), das Secret erreicht
+  weder Logs noch Vault-nach außen;
   die Terminal-Historie des `--client-secret`-Aufrufs liegt beim Nutzer.
 - Der Loopback-Redirect funktioniert nur, wenn der Browser auf dem Rechner des
   Listeners läuft; Server-Betrieb braucht den DCF-Fallback (oder später:
