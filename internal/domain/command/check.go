@@ -170,7 +170,7 @@ func (s *Service) checkActions(ctx context.Context, cmd Command) ([]Warning, err
 	warnings := []Warning{}
 	err = eachAction(cmd.Actions, nil, func(path []int, a Action) error {
 		at := func(err error) error {
-			return fmt.Errorf("%w: action %s (%s): %w", ErrInvalid, position(path), a.DocType(), err)
+			return fmt.Errorf("%w: %w", ErrInvalid, &ActionError{Path: path, Type: a.DocType(), Err: err})
 		}
 		for _, c := range s.checks.Types.Missing(a.DocType()) {
 			warnings = append(warnings, Warning{Kind: WarnCapability, Path: path, ActionType: a.DocType(), Subject: string(c)})
@@ -214,7 +214,7 @@ func (s *Service) checkRequirements(ctx context.Context, cmd Command) ([]Warning
 	warnings := []Warning{}
 	for _, r := range cmd.Requirements {
 		at := func(err error) error {
-			return fmt.Errorf("%w: requirement %q: %w", ErrInvalid, r.DocType(), err)
+			return fmt.Errorf("%w: %w", ErrInvalid, &RequirementError{Type: r.DocType(), Err: err})
 		}
 		if setter, ok := r.(ResultSetter); ok {
 			for _, name := range setter.ResultNames() {
