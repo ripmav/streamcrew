@@ -74,7 +74,7 @@
 
 **Negativ und Risiken:**
 
-- Neue Abhängigkeit `github.com/expr-lang/expr` (MIT, ohne eigene Abhängigkeiten). Ihre Syntax weicht von Jace ab; importierte Rechnungen brauchen eine Abbildung (Roadmap 11.2).
+- Neue Abhängigkeit `github.com/expr-lang/expr` (MIT, ohne eigene Abhängigkeiten). Ihre Syntax weicht von Jace ab; importierte Rechnungen brauchen eine Abbildung (Roadmap 10.2).
 - Die Regel des längsten Präfixes über dynamische Namen kann überraschen, wenn ein Counter wie der Anfang eines eingebauten Identifiers heißt; das Anlegen solcher Namen wird abgelehnt (Spezifikation B12).
 - Randfälle der Kompatibilität (Plan §13, R9) zeigen sich erst mit echten Commands; Golden Files und Fuzzing fangen sie ein.
 - Die Engine rendert nacheinander; viele teure Werte in einem Template addieren ihre Laufzeiten, bis ein Vorladen nötig wird.

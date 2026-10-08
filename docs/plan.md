@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Kernentscheidungen getroffen (ADR-0001 bis ADR-0011), übrige Punkte im Entwurf |
-| **Stand** | 2026-09-27 |
+| **Stand** | 2026-09-30 |
 | **Grundlage** | [`starting.md`](starting.md), Audit von `../mixitup` (Mix It Up Desktop v1.8.200, Commit `c5a3497`), Dokumentation unter <https://mixitup.bot/docs> |
 | **Begleitdokumente** | [`roadmap.md`](roadmap.md): Phasen, Arbeitspakete, Exit-Kriterien · [`adr/`](adr/README.md): Entscheidungen |
 | **Lizenz** | MIT ([`LICENSE`](../LICENSE), ADR-0002) |
@@ -43,7 +43,7 @@ Anhang A: Inventar des Originals · Anhang B: Quellen
 - **Architektur:** Die Architektur ist hexagonal. Domäne und Engine liegen im Zentrum, Plattformen, Integrationen und Speicher sind Adapter. Die Frontends sprechen über einen einzigen, versionierten API-Vertrag mit dem Core (Empfehlung: ConnectRPC mit Protobuf). Ein Ereignisstrom liefert alle Live-Daten. Ein Typkatalog beschreibt alle konfigurierbaren Typen per Schema, sodass die Editoren generisch bleiben. So müssen 46 Action-, 22 Overlay- und 18 Spieltypen nicht in drei Frontends von Hand nachgebaut werden.
 - **Betriebsmodi (ADR-0003):** Der Core läuft **primär auf dem Streaming-PC**, als eigener Prozess, den die Desktop-App mitliefert und automatisch startet ([ADR-0005](adr/0005-core-in-desktop-builds.md)), oder als lokaler Daemon für CLI/TUI. **Zusätzlich** läuft er als Server-Anwendung, auch im Container. Was im Original als Dialog aufpoppt (Logins, Rückfragen), wird zu einer Aufforderung über die API.
 - **MVP (Meilenstein M2 „Headless-MVP“, ADR-0004):** Zum Start nur Twitch, mit Streamer- und Bot-Konto; Chat-, Event-, Timer- und Channel-Points-Commands; 16 Actions (plattformneutral plus Twitch); Requirements wie Rolle, Cooldown und Argumente; Nutzer mit Watchtime; Counter; Basis-Moderation; Persistenz mit Backups; API, CLI und TUI.
-- **Größenordnung:** Das Original umfasst rund 100.000 Zeilen C#-Logik und rund 65.000 Zeilen WPF (C# und XAML). Grob geschätzt braucht eine Person in Vollzeit 23–31 Personenwochen bis zum MVP und 54–74 bis Core 1.0. Die Frontends kommen jeweils dazu (Abschnitt 14). Deshalb wird streng nach P0–P3 priorisiert.
+- **Größenordnung:** Das Original umfasst rund 100.000 Zeilen C#-Logik und rund 65.000 Zeilen WPF (C# und XAML). Grob geschätzt braucht eine Person in Vollzeit 23–31 Personenwochen bis zum MVP und 47–64 bis Core 1.0; weitere Plattformen stehen im Backlog. Die Frontends kommen jeweils dazu (Abschnitt 14). Deshalb wird streng nach P0–P3 priorisiert.
 
 ### Getroffene Entscheidungen
 
@@ -61,6 +61,7 @@ Anhang A: Inventar des Originals · Anhang B: Quellen
 | 10 | API zwischen Core und Frontends: ConnectRPC mit Protobuf | [ADR-0010](adr/0010-api-protokoll.md) |
 | 11 | Keine Telemetrie; Fehlersuche über lokale Logs und Diagnose-Paket | [ADR-0011](adr/0011-keine-telemetrie.md) |
 | 12 | MVP-Umfang (M2) wie geplant bestätigt | Plan §5, Roadmap Phasen 4–6 |
+| 13 | Weitere Plattformen (YouTube, Kick, Multiplattform) nicht vor Core 1.0, sondern im Backlog; die übrigen Phasen bleiben in ihrer Reihenfolge und rücken nach (Entscheidung vom 2026-09-30) | Plan §5.1, §14; Roadmap, Backlog |
 
 ---
 
@@ -245,9 +246,10 @@ Ein schlanker, headless Streaming-Bot- und Automatisierungs-Core in Go. Er läuf
 **Prioritäten:**
 
 - **P0:** Pflicht für den MVP (M2)
-- **P1:** Pflicht für Core 1.0 (M8)
+- **P1:** Pflicht für Core 1.0 (M7)
 - **P2:** nach 1.0, für Parität
 - **P3:** nur bei Bedarf
+- **Backlog:** zurückgestellt; die Priorität wird festgelegt, wenn die Aufgabe wieder eingeplant wird (Roadmap, Abschnitt „Backlog“)
 - **–:** nicht geplant
 
 Eine Aufgabe darf früher umgesetzt werden, als ihre Priorität verlangt, wenn es sich anbietet.
@@ -258,8 +260,8 @@ Eine Aufgabe darf früher umgesetzt werden, als ihre Priorität verlangt, wenn e
 |---|---|---|---|
 | Twitch | P0 | Device Code Flow, EventSub-WebSocket, Helix | einzige Plattform zum Start (ADR-0004) |
 | Mock | P0 | simuliert | für Tests, Demos und Entwicklung ohne Live-Kanal |
-| YouTube | P1 | OAuth (Loopback + PKCE), `liveChatMessages.streamList` (gRPC), Data API v3 | Go/No-Go nach M2; Quota, Google-Verifizierung |
-| Kick | P1 | OAuth 2.1 + PKCE, Webhooks, REST | Go/No-Go nach M2; braucht eine öffentliche Webhook-URL |
+| YouTube | Backlog | OAuth (Loopback + PKCE), `liveChatMessages.streamList` (gRPC), Data API v3 | seit 2026-09-30 im Backlog der Roadmap; Priorität und Go/No-Go, wenn sie wieder eingeplant wird; Quota, Google-Verifizierung |
+| Kick | Backlog | OAuth 2.1 + PKCE, Webhooks, REST | seit 2026-09-30 im Backlog der Roadmap; Priorität und Go/No-Go, wenn sie wieder eingeplant wird; braucht eine öffentliche Webhook-URL |
 | Velora | P3 | laut Original OAuth + WebSocket/Socket.IO | Doku prüfen, nur bei Bedarf |
 | VPZone | P3 | laut Original OAuth + WebSocket | wie Velora |
 | Mixer, Trovo, Glimesh, Facebook | – | – | im Original obsolet |
@@ -1147,15 +1149,15 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0010 | `0010-api-protokoll.md` | Vertrag Core ↔ Frontends; lokaler Transport | 0 | **akzeptiert**: ConnectRPC + Protobuf |
 | 0011 | `0011-keine-telemetrie.md` | Telemetrie, Datenhaltung | 0 | **akzeptiert**: keine Telemetrie, Diagnose-Paket |
 | 0012 | `0012-persistenz.md` | Speicherung, Profile, Sperre, Backups, Secrets im Ruhezustand | 2 | **akzeptiert**: SQLite je Profil, `VACUUM INTO`-Backups, AES-256-GCM mit Schlüssel aus Umgebung, Schlüsselbund oder Datei |
-| 0013 | `0013-sicherheitsmodell.md` | Capabilities, API-Auth, Modi | 2 (Entwurf), 12 (final) | **akzeptiert** (Entwurf): Default-Deny im Server-Modus, Rechte nur lokal erweiterbar |
+| 0013 | `0013-sicherheitsmodell.md` | Capabilities, API-Auth, Modi | 2 (Entwurf), 11 (final) | **akzeptiert** (Entwurf): Default-Deny im Server-Modus, Rechte nur lokal erweiterbar |
 | 0014 | `0014-oauth-und-app-credentials.md` | Flows, BYO-Credentials, Token-Speicher | 4 | DCF (Twitch), PKCE + Loopback, BYO |
-| 0015 | `0015-eingehende-webhooks-und-relay.md` | Kick und Dienste mit Webhooks | 9 | Server-Modus + Tunnel; Relay optional |
-| 0016 | `0016-youtube-chat-streaming.md` | `streamList` vs. Polling | 9 | `streamList` mit Polling-Fallback |
-| 0017 | `0017-scripting.md` | Ersatz für C#-Skripte | 10 | goja (JavaScript) |
+| 0015 | `0015-eingehende-webhooks-und-relay.md` | Dienste mit Webhooks, später Kick | 9 | Server-Modus + Tunnel; Relay optional |
+| 0016 | `0016-youtube-chat-streaming.md` | `streamList` vs. Polling | Backlog | `streamList` mit Polling-Fallback |
+| 0017 | `0017-scripting.md` | Ersatz für C#-Skripte | 9 | goja (JavaScript) |
 | 0018 | `0018-web-frontend-technologie.md` | Web-Stack | W0 | TS-SPA + connect-web |
 | 0019 | `0019-overlay-architektur.md` | Server, Runtime, Protokoll | 7 | eigene Runtime, JSON über WebSocket |
 | 0020 | `0020-audio-ausgabe.md` | Audio-Sinks | 7 | Overlay als Standard, lokale Ausgabe P1 |
-| 0021 | `0021-import-von-mixitup-daten.md` | Interop-Import, `$`-Namen | 0 (Recht), 11 (Umsetzung) | nach rechtlicher Prüfung |
+| 0021 | `0021-import-von-mixitup-daten.md` | Interop-Import, `$`-Namen | 0 (Recht), 10 (Umsetzung) | nach rechtlicher Prüfung |
 | 0022 | `0022-internationalisierung.md` | i18n-Bibliothek, Sprachen | 3 | EN + DE |
 | 0023 | `0023-release-und-distribution.md` | goreleaser, Docker, Updates | 6 | GitHub-Releases, kein eigener Update-Server; Artefakte nach ADR-0007; Desktop-Pakete nach ADR-0005/0006 |
 | 0024 | `0024-endgueltiger-name-und-branding.md` | endgültiger Name nach Marken- und Domainprüfung | Gate O | `streamcrew` bestätigen oder umbenennen |
@@ -1194,12 +1196,12 @@ W = Wahrscheinlichkeit, A = Auswirkung (niedrig/mittel/hoch).
 | R2 | Markenkonflikt („Mix It Up“, „Mixie“) | mittel | mittel | neuer Name mit Markenrecherche, kein Branding übernehmen |
 | R3 | Umfang (~100k Zeilen Logik, 46 Actions, ~48 Integrationen) sprengt die Kapazität | hoch | hoch | strikte Priorisierung, MVP zuerst, Tiers, generische UI |
 | R4 | Plattform-APIs ändern sich, fallen aus oder werden abgekündigt | hoch | mittel | isolierte Adapter, Contract-Tests, Changelogs beobachten; Circuit Breaker je API (Code-ADR-0007) |
-| R5 | Kick braucht eine öffentliche Webhook-URL und kündigt Abos bei Fehlern automatisch | hoch | mittel | Server-Modus, Tunnel, optionaler Relay, automatisches Neuabonnieren |
-| R6 | YouTube: Quota, Google-Verifizierung, 7-Tage-Tokens im „Testing“-Modus | hoch | mittel | `streamList`, BYO-Credentials, Verifizierung nur bei Bedarf |
+| R5 | Kick (im Backlog) braucht eine öffentliche Webhook-URL und kündigt Abos bei Fehlern automatisch | hoch | mittel | Server-Modus, Tunnel, optionaler Relay, automatisches Neuabonnieren |
+| R6 | YouTube (im Backlog): Quota, Google-Verifizierung, 7-Tage-Tokens im „Testing“-Modus | hoch | mittel | `streamList`, BYO-Credentials, Verifizierung nur bei Bedarf |
 | R7 | Dreifacher UI-Aufwand (TUI, Desktop, Web) | hoch | hoch | Typkatalog und generische Editoren; GUI-Tracks bewusst takten |
 | R8 | Grenzen von Fyne bei komplexen Editoren und fehlender Web-Ansicht | mittel | mittel | Spike in D0, Overlay-Vorschau im externen Browser |
 | R9 | Randfälle der Template-Kompatibilität | mittel | mittel | Golden- und Fuzz-Tests, dokumentierte Abweichungen |
-| R10 | Sicherheit im Remote-/Server-Betrieb (RCE über ExternalProgram/Script/File, SSRF über WebRequest) | mittel | hoch | Capabilities, Default-Deny, Auth-Pflicht, Security-Review in Phase 12 |
+| R10 | Sicherheit im Remote-/Server-Betrieb (RCE über ExternalProgram/Script/File, SSRF über WebRequest) | mittel | hoch | Capabilities, Default-Deny, Auth-Pflicht, Security-Review in Phase 11 |
 | R11 | Kein Keyring auf Headless-Servern | mittel | mittel | Key-Datei oder Umgebungsvariable, Dateirechte, Dokumentation |
 | R12 | CGO (Audio, Eingabe, Fyne) erschwert Cross-Builds | mittel | niedrig | Core CGO-frei, CGO nur in Desktop und Agent, fyne-cross |
 | R13 | Kleine Plattformen (Velora, VPZone) mit knapper oder instabiler Doku | mittel | niedrig | P3, Go/No-Go-Entscheidung |
@@ -1222,16 +1224,18 @@ Die Aufwände sind **grobe Schätzungen in Personenwochen (PW) für eine Person 
 | **M2** Headless-MVP (Twitch) | Phasen 4–6 | echter Twitch-Kanal ohne GUI betreibbar; API `v1alpha1`, CLI, TUI, Releases | 13–17 | 23–31 |
 | **M3** Overlays und Medien | Phase 7 | Alerts mit Bild, Ton und TTS in OBS; Szenenwechsel per Command | 5–7 | 28–38 |
 | **M4** Economy und Community | Phase 8 (P1) | Währung, Ränge, 5 Spiele, Giveaways, Queue, Quotes | 8–11 | 36–49 |
-| **M5** Multiplattform | Phase 9 (P1) | Twitch + YouTube + Kick gleichzeitig | 8–11 | 44–60 |
-| **M6** Integrationen Tier 1 | Phase 10 (P1) | Spenden (Streamlabs, StreamElements, Ko-fi), Discord, Scripting | 4–6 | 48–66 |
-| **M7** Offen und erweiterbar | Phase 11 (P1) | Developer-API, MCP, eingehende Webhooks, Bundles | 3–4 | 51–70 |
-| **M8** Core 1.0 | Phase 12 | alle P1 erledigt; Security-, Last- und Chaos-Tests bestanden; API `v1` | 3–4 | **54–74** |
+| **M5** Integrationen Tier 1 | Phase 9 (P1) | Spenden (Streamlabs, StreamElements, Ko-fi), Discord, Scripting, gemeinsamer Webhook-Eingang | 5–7 | 41–56 |
+| **M6** Offen und erweiterbar | Phase 10 (P1) | Developer-API, MCP, eingehende Webhooks, Bundles | 3–4 | 44–60 |
+| **M7** Core 1.0 | Phase 11 | alle P1 erledigt; Security-, Last- und Chaos-Tests bestanden; API `v1` | 3–4 | **47–64** |
+
+Weitere Plattformen standen bis zum 2026-09-30 als Phase 9 mit dem Meilenstein „M5 Multiplattform“ (8–11 PW) im Plan. Sie liegen jetzt im Backlog der Roadmap; die übrigen Phasen und Meilensteine rücken in derselben Reihenfolge nach. Der gemeinsame Webhook-Eingang aus der früheren Phase 9 ist in die Integrationen gewandert, weil Dienste und Webhook-Commands ihn brauchen.
 
 **Weitere Tracks:**
 
 | Track | Umfang | Aufwand |
 |---|---|---:|
 | Core P2/P3 nach 1.0 | weitere Overlay-Widgets, Spiele Welle 2, Stream Pass/Store, Integrationen Tier 2/3, Agent, Import, Velora/VPZone | 27–42 |
+| Weitere Plattformen (Backlog) | YouTube, Kick, Multiplattform-Betrieb; Priorität und Zeitpunkt offen | 7–10 |
 | Desktop D0–D7 | ab M2 möglich | 16–26 |
 | Web W0–W7 | ab M2 möglich | 16–20 |
 | Relay R0–R2 | optional | 2–3 |
@@ -1265,8 +1269,8 @@ Die Aufwände sind **grobe Schätzungen in Personenwochen (PW) für eine Person 
 
 **Noch offen**, vor der jeweiligen Phase zu klären. Beim Abschluss von Phase 0 (2026-09-29) wurden die Fragen den Stellen in der Roadmap zugeordnet, an denen sie fällig werden:
 
-1. **Weitere Plattformen:** Welche außer Twitch werden für Core 1.0 wirklich gebraucht? Entscheidung nach M2 (ADR-0004, Roadmap 9.0).
-2. **Import:** Wie wichtig ist die Übernahme bestehender Mix-It-Up-Daten? Gibt es einen eigenen Datenbestand? Zu klären vor ADR-0021 (Umsetzung), Roadmap 11.2.
+1. **Weitere Plattformen:** beantwortet am 2026-09-30: Für Core 1.0 wird außer Twitch keine gebraucht. YouTube, Kick und der Multiplattform-Betrieb stehen im Backlog der Roadmap; das Go/No-Go je Plattform (ADR-0004) fällt, wenn sie wieder eingeplant werden.
+2. **Import:** Wie wichtig ist die Übernahme bestehender Mix-It-Up-Daten? Gibt es einen eigenen Datenbestand? Zu klären vor ADR-0021 (Umsetzung), Roadmap 10.2.
 3. **Zielsysteme der Desktop-App:** Windows, macOS, Linux? Sind Code-Signierung und Notarisierung nötig? Zu klären in Desktop D0.
 4. **Kapazität:** Wie viel Zeit steht pro Woche zur Verfügung? Ohne diese Angabe lassen sich die Aufwände nicht in Termine übersetzen. Spätestens zur Kalibrierung nach M1.
 5. **Web-Frontend:** Gibt es eine Präferenz für einen Stack (TS-SPA, templ/htmx, Go-WASM)? Zu klären in Web W0 (ADR-0018).
