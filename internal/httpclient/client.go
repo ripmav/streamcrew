@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 
 // Package httpclient is the resilient HTTP client for external APIs
 // (Code-ADR-0014): a retry loop with an attempt count and a total wait
