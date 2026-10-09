@@ -93,7 +93,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
 | Phase 3: Engine, Templates, Actions, Mock | abgeschlossen 2026-10-07, M1 erreicht (PR #143, CI grün); vertagt: die Schwelle der Sammelgeschenke (3.4, P1) |
-| Phase 4: Twitch | offen |
+| Phase 4: Twitch | in Arbeit: 4.1 (Authentifizierung) und 4.2 (Helix-Client) abgeschlossen (4.2 in Stack #162, Merging ausstehend), 4.3 (EventSub) folgt |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
 | Phase 7: Overlays und Medien | offen |
