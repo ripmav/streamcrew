@@ -265,17 +265,23 @@ func TestDoRemainingZeroDelaysNextRequest(t *testing.T) {
 func TestDoOpenBreakerMakesNoRequest(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		br := newBreaker()
-		c := newClient(t, nil, br, nil)
-		// Open the breaker with five consecutive failures.
-		for range 5 {
-			err := br.Execute(t.Context(), func(context.Context) error {
-				return &httpclient.StatusError{StatusCode: http.StatusInternalServerError}
-			})
+		var calls atomic.Int64
+		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			calls.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer srv.Close()
+		c := newClient(t, srv.Client(), newBreaker(), nil)
+		// Five consecutive 5xx answers open the breaker (Code-ADR-0007,
+		// point 4); each attempt of Do counts separately, so two Do
+		// calls are enough.
+		for range 2 {
+			_, err := c.Do(t.Context(), newGetRequest(t.Context(), srv.URL))
 			require.Error(t, err)
 		}
-		_, err := c.Do(t.Context(), newGetRequest(t.Context(), "http://example.com/helix/users"))
+		_, err := c.Do(t.Context(), newGetRequest(t.Context(), srv.URL))
 		assert.ErrorIs(t, err, breaker.ErrUnavailable)
+		assert.Equal(t, int64(5), calls.Load(), "the open breaker makes no request")
 	})
 }
 
