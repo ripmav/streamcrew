@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-10-09 |
-| **Entscheidung durch** | … (Vorgabe des Projektinhabers vom 2026-10-09: Middleware per Bibliotheken, kein `hashicorp/go-retryablehttp`; Abnahme des ADR ausstehend) |
+| **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Plan §12.2 (ADR-Backlog, 0014); Roadmap Phase 4.2; [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0003](0003-fehler-und-logging.md), [Code-ADR-0006](0006-teststrategie.md), [Code-ADR-0007](0007-circuit-breaker.md), [Code-ADR-0018](0018-json-v2.md), [Code-ADR-0019](0019-host-rechte-in-der-startkonfiguration.md) |
 
 ## Kontext
@@ -155,4 +155,4 @@
 - [ ] `internal/auth`: Token-Aufrufe (Token holen, erneuern, widerrufen) auf den httpclient mit dem Breaker `twitch.auth`, Code-Austausch mit `WithoutRetry` (Code-ADR-0007, Folgearbeit; Roadmap 4.2)
 - [ ] Helix-Endpunkte auf dem httpclient mit dem Breaker `twitch.helix` (Roadmap 4.2)
 - [ ] Standardwerte mit dem Test-Stream (Phase 4) und den Chaos-Tests (Phase 11) überprüfen
-- [ ] Abnahme dieses ADR durch den Projektinhaber (dann Status setzen und Index in [`README.md`](README.md) anpassen)
+- [x] Abnahme durch den Projektinhaber, Status gesetzt und Index in [`README.md`](README.md) angepasst, erledigt 2026-10-09
