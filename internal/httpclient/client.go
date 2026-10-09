@@ -200,7 +200,8 @@ func (c *Client) Do(ctx context.Context, req *http.Request) (*Response, error) {
 	st := &retryState{}
 	var resp *Response
 	err := retry.Do(ctx, c.backoff(st, withoutRetry(ctx)), func(ctx context.Context) error {
-		r, err := c.attempt(ctx, req)
+		//nolint:bodyclose // the body is closed by statusErrorFrom in attempt (non-2xx) or by the Do caller (2xx)
+		r, wait, err := c.attempt(ctx, req)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -209,34 +210,32 @@ func (c *Client) Do(ctx context.Context, req *http.Request) (*Response, error) {
 				// A disturbed API is not retried (point 4).
 				return err
 			}
+			se, isStatus := errors.AsType[*StatusError](err)
+			if isStatus {
+				switch {
+				case se.StatusCode == http.StatusTooManyRequests:
+					st.override = wait
+					if st.override > 0 {
+						// The server names the time: log it, wait
+						// without jitter (point 4).
+						st.limited = true
+						c.log.InfoContext(ctx, "rate limited", "api", c.name, "wait", st.override)
+					}
+				case se.StatusCode >= 500:
+				default:
+					// 4xx other than 429: the service works, no retry
+					// (point 4).
+					return se
+				}
+				st.last = se
+				return retry.RetryableError(se)
+			}
 			st.last = err
 			return retry.RetryableError(err)
 		}
-		rl, hasLimit := rateLimitFromHeaders(r.Header)
-		if hasLimit {
-			c.noteRateLimit(rl)
-		}
-		if r.StatusCode/100 == 2 {
-			resp = &Response{Response: r, RateLimit: rl}
-			return nil
-		}
-		se := statusErrorFrom(r)
-		switch {
-		case r.StatusCode == http.StatusTooManyRequests:
-			st.override = waitUntilRateLimit(r.Header)
-			if st.override > 0 {
-				// The server names the time: log it, wait without
-				// jitter (point 4).
-				st.limited = true
-				c.log.InfoContext(ctx, "rate limited", "api", c.name, "wait", st.override)
-			}
-		case r.StatusCode >= 500:
-		default:
-			// 4xx other than 429: the service works, no retry (point 4).
-			return se
-		}
-		st.last = se
-		return retry.RetryableError(se)
+		rl, _ := rateLimitFromHeaders(r.Header)
+		resp = &Response{Response: r, RateLimit: rl}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -255,26 +254,35 @@ func (c *Client) DoJSON(ctx context.Context, req *http.Request, v any) error {
 	return json.UnmarshalRead(resp.Body, v)
 }
 
-// attempt runs one request through the breaker and the rate limiter
-// (Code-ADR-0014, point 2).
-func (c *Client) attempt(ctx context.Context, req *http.Request) (*http.Response, error) {
+// attempt runs one request through the breaker (Code-ADR-0014, point 2)
+// and returns the 2xx response. The breaker sees the typed result, so its
+// evaluation counts 5xx as failures and excludes 429 (Code-ADR-0007,
+// point 5). wait is the server-named 429 wait (until x-ratelimit-reset,
+// fallback Retry-After), for the backoff override.
+func (c *Client) attempt(ctx context.Context, req *http.Request) (*http.Response, time.Duration, error) {
 	var resp *http.Response
-	send := func(ctx context.Context) error {
-		var err error
-		//nolint:bodyclose // the body is closed by the Do caller (2xx) or by statusErrorFrom (non-2xx)
-		resp, err = c.send(ctx, req)
-		return err
+	var wait time.Duration
+	fn := func(ctx context.Context) error {
+		r, err := c.send(ctx, req)
+		if err != nil {
+			return err
+		}
+		if rl, hasLimit := rateLimitFromHeaders(r.Header); hasLimit {
+			c.noteRateLimit(rl)
+		}
+		if r.StatusCode/100 == 2 {
+			resp = r
+			return nil
+		}
+		wait = waitUntilRateLimit(r.Header)
+		// The typed error is closed by statusErrorFrom and is what the
+		// breaker evaluates.
+		return statusErrorFrom(r)
 	}
-	var err error
 	if c.brk != nil {
-		err = c.brk.Execute(ctx, send)
-	} else {
-		err = send(ctx)
+		return resp, wait, c.brk.Execute(ctx, fn)
 	}
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
+	return resp, wait, fn(ctx)
 }
 
 // send waits for the rate limit and performs a single request with a
