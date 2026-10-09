@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 
 // Package breaker is the thin layer over github.com/sony/gobreaker/v2
 // (Code-ADR-0007): one named circuit breaker per external service API, with
