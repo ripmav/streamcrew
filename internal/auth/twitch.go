@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"golang.org/x/oauth2"
+
+	"github.com/ripmav/streamcrew/internal/httpclient"
 )
 
 const (
@@ -111,12 +113,15 @@ var Scopes = []string{
 }
 
 // NewTwitch returns the Twitch flow (ADR-0014, ADR-0023) for the given
-// credentials and HTTP client: the authorization code flow for a
-// confidential client (the user's own app, BYO), or the device code flow
-// for a public client (DeviceFlow). A nil client gets the default
-// timeout; in server mode it must honor the outbound allow list
-// (Code-ADR-0019).
-func NewTwitch(c Credentials, client *http.Client) (Flow, error) {
+// credentials: the authorization code flow for a confidential client (the
+// user's own app, BYO), or the device code flow for a public client
+// (DeviceFlow). The token calls (exchange, device code polling, refresh,
+// revoke) run through the httpclient of the twitch.auth API, and the
+// account lookup through the one of the twitch.helix API, which the
+// composition root builds with the breakers of the APIs (Code-ADR-0002,
+// Code-ADR-0007, Code-ADR-0014). A nil client gets the default timeout;
+// in server mode it must honor the outbound allow list (Code-ADR-0019).
+func NewTwitch(c Credentials, client *http.Client, twitchAuth, twitchHelix *httpclient.Client) (Flow, error) {
 	if !c.DeviceFlow && (c.ID == "" || c.Secret == "") {
 		return nil, errors.New("the authorization code flow needs a client ID and a client secret")
 	}
@@ -126,9 +131,14 @@ func NewTwitch(c Credentials, client *http.Client) (Flow, error) {
 	if client == nil {
 		client = &http.Client{Timeout: timeout}
 	}
+	if twitchAuth == nil || twitchHelix == nil {
+		return nil, errors.New("the twitch flow needs the httpclients of the twitch.auth and the twitch.helix APIs")
+	}
 	base := twitchBase{
 		clientID:  c.ID,
 		client:    client,
+		auth:      twitchAuth,
+		helix:     twitchHelix,
 		tokenURL:  tokenURL,
 		revokeURL: revokeURL,
 		usersURL:  usersURL,
@@ -148,46 +158,42 @@ func NewTwitch(c Credentials, client *http.Client) (Flow, error) {
 
 // twitchBase is what the device code flow and the authorization code flow
 // share: the HTTP plumbing, the account lookup and the token revocation
-// (ADR-0023).
+// (ADR-0023). The token calls run through the httpclient with the breaker
+// twitch.auth, and the account lookup through the one with the breaker
+// twitch.helix (Code-ADR-0014, Code-ADR-0007); client is only for the
+// device code request, which golang.org/x/oauth2 performs itself.
 type twitchBase struct {
 	clientID  string
 	client    *http.Client
+	auth      *httpclient.Client
+	helix     *httpclient.Client
 	tokenURL  string
 	revokeURL string
 	usersURL  string
 }
 
-// post sends v to target and returns the body and status of the answer;
-// err is set for a transport failure.
-func (b *twitchBase) post(ctx context.Context, target string, v url.Values) (body []byte, status int, err error) {
+// post sends v to target through the auth client (breaker twitch.auth)
+// and returns the body of the 2xx answer (Code-ADR-0014). A non-2xx
+// answer is a *httpclient.StatusError, a transport failure a standard Go
+// error, and an open breaker a breaker.ErrUnavailable.
+func (b *twitchBase) post(ctx context.Context, target string, v url.Values) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(v.Encode()))
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return b.do(req)
-}
-
-// do sends req and returns the body and status of the answer; err is set
-// for a transport failure. The requests target the Twitch endpoints above,
-// which are set from constants.
-func (b *twitchBase) do(req *http.Request) (body []byte, status int, err error) {
-	//nolint:gosec // G704: the request targets the endpoints of this file
-	r, err := b.client.Do(req)
+	resp, err := b.auth.Do(ctx, req)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	defer r.Body.Close()
-	body, err = io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		return nil, 0, err
-	}
-	return body, r.StatusCode, nil
+	defer resp.Body.Close()
+	return io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 }
 
 // revoke revokes a token; Twitch answers 400 for a token that is already
 // revoked, which counts as success (ADR-0014). A confidential client
-// sends its secret (ADR-0023).
+// sends its secret (ADR-0023). The call is idempotent, so the httpclient
+// may repeat it (Code-ADR-0014).
 func (b *twitchBase) revoke(ctx context.Context, token, secret string) error {
 	v := url.Values{
 		"client_id": {b.clientID},
@@ -201,26 +207,22 @@ func (b *twitchBase) revoke(ctx context.Context, token, secret string) error {
 		return fmt.Errorf("revoke token: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	r, err := b.client.Do(req)
+	resp, err := b.auth.Do(ctx, req)
 	if err != nil {
+		if se, ok := errors.AsType[*httpclient.StatusError](err); ok && se.StatusCode == http.StatusBadRequest {
+			return nil
+		}
 		return fmt.Errorf("revoke token: %w", err)
 	}
-	defer r.Body.Close()
-	if _, err := io.Copy(io.Discard, io.LimitReader(r.Body, 1<<20)); err != nil {
+	if err := resp.Body.Close(); err != nil {
 		return fmt.Errorf("revoke token: %w", err)
 	}
-	switch {
-	case r.StatusCode >= 200 && r.StatusCode < 300:
-		return nil
-	case r.StatusCode == http.StatusBadRequest:
-		return nil
-	default:
-		return fmt.Errorf("revoke token: %s", r.Status)
-	}
+	return nil
 }
 
-// User looks up the account behind a token with the Helix user endpoint:
-// without arguments it returns the account of the token itself.
+// User looks up the account behind a token with the Helix user endpoint
+// (breaker twitch.helix): without arguments it returns the account of the
+// token itself.
 func (b *twitchBase) User(ctx context.Context, token string) (string, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.usersURL, nil)
 	if err != nil {
@@ -229,20 +231,13 @@ func (b *twitchBase) User(ctx context.Context, token string) (string, string, er
 	req.Header.Set("Authorization", "Bearer "+token)
 	// Helix asks for the client ID in every request (ADR-0014).
 	req.Header.Set("Client-Id", b.clientID)
-	body, status, err := b.do(req)
-	if err != nil {
-		return "", "", fmt.Errorf("look up account: %w", err)
-	}
-	if status < 200 || status > 299 {
-		return "", "", fmt.Errorf("look up account: %s", snippet(body))
-	}
 	var resp struct {
 		Data []struct {
 			ID    string `json:"id"`
 			Login string `json:"login"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(body, &resp); err != nil {
+	if err := b.helix.DoJSON(ctx, req, &resp); err != nil {
 		return "", "", fmt.Errorf("look up account: %w", err)
 	}
 	if len(resp.Data) == 0 {
@@ -273,9 +268,11 @@ func (f *twitchFlow) config() *oauth2.Config {
 	}
 }
 
-// clientContext carries f.client for the oauth2 calls; without it they
-// would use the default HTTP client and miss the outbound allow list in
-// server mode (Code-ADR-0019).
+// clientContext carries f.client for the device code request, which
+// golang.org/x/oauth2 performs itself (not a token call, so it does not
+// run through the httpclient); without it the request would use the
+// default HTTP client and miss the outbound allow list in server mode
+// (Code-ADR-0019).
 func (f *twitchFlow) clientContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, oauth2.HTTPClient, f.client)
 }
@@ -322,16 +319,13 @@ func (f *twitchFlow) Wait(ctx context.Context, l *Login) (*oauth2.Token, error) 
 			return nil, fmt.Errorf("wait for login: %w", ctx.Err())
 		case <-ticker.C:
 		}
-		body, status, err := f.post(ctx, f.tokenURL, url.Values{
+		body, err := f.post(ctx, f.tokenURL, url.Values{
 			"client_id":   {f.clientID},
 			"grant_type":  {"urn:ietf:params:oauth:grant-type:device_code"},
 			"device_code": {l.device.DeviceCode},
 			"scope":       {strings.Join(Scopes, " ")},
 		})
-		if err != nil {
-			return nil, fmt.Errorf("wait for login: %w", err)
-		}
-		if status >= 200 && status <= 299 {
+		if err == nil {
 			tok, err := tokenFromBody(body, "")
 			if err != nil {
 				return nil, fmt.Errorf("wait for login: %w", err)
@@ -339,7 +333,14 @@ func (f *twitchFlow) Wait(ctx context.Context, l *Login) (*oauth2.Token, error) 
 			setExpiry(tok)
 			return normalizeScope(tok), nil
 		}
-		switch code := devicePollCode(body); code {
+		se, ok := errors.AsType[*httpclient.StatusError](err)
+		if !ok {
+			// A transport failure, or the breaker twitch.auth is open
+			// (breaker.ErrUnavailable; the service maps it for the
+			// frontends).
+			return nil, fmt.Errorf("wait for login: %w", err)
+		}
+		switch code := devicePollCode([]byte(se.Snippet)); code {
 		case "authorization_pending":
 			// The user has not authorized yet; keep polling.
 		case "slow_down":
@@ -352,9 +353,9 @@ func (f *twitchFlow) Wait(ctx context.Context, l *Login) (*oauth2.Token, error) 
 		case "access_denied":
 			return nil, ErrAccessDenied
 		case "":
-			return nil, fmt.Errorf("wait for login: %s: %s", http.StatusText(status), snippet(body))
+			return nil, fmt.Errorf("wait for login: %s: %s", http.StatusText(se.StatusCode), se.Snippet)
 		default:
-			return nil, fmt.Errorf("wait for login: %s: %s", code, snippet(body))
+			return nil, fmt.Errorf("wait for login: %s: %s", code, se.Snippet)
 		}
 	}
 }
@@ -387,12 +388,9 @@ func (f *twitchFlow) Refresh(ctx context.Context, refreshToken string) (*oauth2.
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
 	}
-	body, status, err := f.post(ctx, f.tokenURL, v)
+	body, err := f.post(ctx, f.tokenURL, v)
 	if err != nil {
-		return nil, fmt.Errorf("refresh token: %w", err)
-	}
-	if status < 200 || status > 299 {
-		return nil, fmt.Errorf("refresh token: %w", tokenError(body))
+		return nil, tokenCallError("refresh token", err)
 	}
 	tok, err := tokenFromBody(body, refreshToken)
 	if err != nil {
@@ -486,12 +484,9 @@ func (f *twitchCodeFlow) Refresh(ctx context.Context, refreshToken string) (*oau
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
 	}
-	body, status, err := f.post(ctx, f.tokenURL, v)
+	body, err := f.post(ctx, f.tokenURL, v)
 	if err != nil {
-		return nil, fmt.Errorf("refresh token: %w", err)
-	}
-	if status < 200 || status > 299 {
-		return nil, fmt.Errorf("refresh token: %w", tokenError(body))
+		return nil, tokenCallError("refresh token", err)
 	}
 	tok, err := tokenFromBody(body, refreshToken)
 	if err != nil {
@@ -520,7 +515,8 @@ func (f *twitchCodeFlow) authorizeURL(state string) string {
 }
 
 // exchange trades the authorization code for the tokens of the login
-// (ADR-0023).
+// (ADR-0023). The code is single-use, so the call runs without retry
+// (Code-ADR-0014): a repeat would fail anyway.
 func (f *twitchCodeFlow) exchange(ctx context.Context, code string) (*oauth2.Token, error) {
 	v := url.Values{
 		"client_id":     {f.clientID},
@@ -529,12 +525,9 @@ func (f *twitchCodeFlow) exchange(ctx context.Context, code string) (*oauth2.Tok
 		"code":          {code},
 		"redirect_uri":  {f.redirect},
 	}
-	body, status, err := f.post(ctx, f.tokenURL, v)
+	body, err := f.post(httpclient.WithoutRetry(ctx), f.tokenURL, v)
 	if err != nil {
-		return nil, fmt.Errorf("exchange the code: %w", err)
-	}
-	if status < 200 || status > 299 {
-		return nil, fmt.Errorf("exchange the code: %w", tokenError(body))
+		return nil, tokenCallError("exchange the code", err)
 	}
 	tok, err := tokenFromBody(body, "")
 	if err != nil {
@@ -654,6 +647,23 @@ func setExpiry(tok *oauth2.Token) {
 	if tok.Expiry.IsZero() && tok.ExpiresIn > 0 {
 		tok.Expiry = time.Now().UTC().Add(time.Duration(tok.ExpiresIn) * time.Second)
 	}
+}
+
+// tokenCallError maps the error of a token endpoint call (code exchange,
+// refresh) to the 4.1 messages: a 401 or 403 means the grant is gone
+// (ErrTokenExpired, the login must be started again), the other answers
+// keep the error code in the message (tokenError). A transport failure or
+// an open breaker is wrapped unchanged; the service maps
+// breaker.ErrUnavailable for the frontends.
+func tokenCallError(what string, err error) error {
+	se, ok := errors.AsType[*httpclient.StatusError](err)
+	if !ok {
+		return fmt.Errorf("%s: %w", what, err)
+	}
+	if se.StatusCode == http.StatusUnauthorized || se.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("%s: %w: %s", what, ErrTokenExpired, se.Error())
+	}
+	return fmt.Errorf("%s: %w", what, tokenError([]byte(se.Snippet)))
 }
 
 // tokenError maps a Twitch token error response: an answer that says the

@@ -24,6 +24,7 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/ripmav/streamcrew/internal/breaker"
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
@@ -690,6 +691,10 @@ func failureReason(err error) string {
 		return "the login window expired"
 	case errors.Is(err, ErrAccessDenied):
 		return "the user denied the login"
+	case errors.Is(err, breaker.ErrUnavailable):
+		// The platform's API is down behind an open breaker
+		// (Code-ADR-0007); the login can be tried again later.
+		return "the Twitch API is currently unavailable"
 	case errors.Is(err, context.Canceled):
 		return "the login was aborted"
 	default:

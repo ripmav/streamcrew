@@ -36,6 +36,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/values"
 	"github.com/ripmav/streamcrew/internal/auth"
 	"github.com/ripmav/streamcrew/internal/backup"
+	"github.com/ripmav/streamcrew/internal/breaker"
 	"github.com/ripmav/streamcrew/internal/buildinfo"
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/connector"
@@ -44,6 +45,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/eventservice"
+	"github.com/ripmav/streamcrew/internal/httpclient"
 	"github.com/ripmav/streamcrew/internal/httpserver"
 	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/lockfile"
@@ -217,10 +219,25 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		}
 		authClient.Transport = &http.Transport{DialContext: dialer.DialContext}
 	}
+	// The token calls run through the resilient HTTP client (Code-ADR-0014)
+	// with one breaker per API (Code-ADR-0007); the Helix endpoints of
+	// phase 4.2 join the same instances (roadmap 4.2).
+	twitchAuth := httpclient.New(httpclient.Options{
+		Name:    "twitch.auth",
+		Base:    authClient,
+		Breaker: breaker.New("twitch.auth", component(logger, "auth"), httpclient.Evaluator),
+		Logger:  component(logger, "auth"),
+	})
+	twitchHelix := httpclient.New(httpclient.Options{
+		Name:    "twitch.helix",
+		Base:    authClient,
+		Breaker: breaker.New("twitch.helix", component(logger, "auth"), httpclient.Evaluator),
+		Logger:  component(logger, "auth"),
+	})
 	if a.auth, err = auth.New(auth.Ports{
 		Store:     a.store,
 		Vault:     func(repo vault.Repository) *vault.Vault { return vault.New(repo, ks) },
-		Flows:     authFlows(authClient),
+		Flows:     authFlows(authClient, twitchAuth, twitchHelix),
 		Publisher: a.bus,
 		Logger:    component(logger, "auth"),
 	}); err != nil {
