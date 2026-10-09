@@ -1,6 +1,6 @@
 # Plan: Roadmap 4.2 — Helix-Client
 
-**Status:** in Ausführung (Tasks 1–4 erledigt, Tasks 5–9 offen)
+**Status:** in Ausführung (Tasks 1–5 erledigt, Tasks 6–9 offen)
 **Stand:** 2026-10-09, `main` bei `1c082fd` (4.1 gemerged, Stack #146)
 **Scope:** nur 4.2. 4.3 (EventSub-WebSocket) und 4.4 (Funktionen) bleiben offen;
 dieser Plan legt die Fugen, die sie brauchen (`helix.Client`, Subscription-Endpunkte).
@@ -237,7 +237,10 @@ bzw. mit echtem Breaker).
 
 ### Task 5 — `internal/helix`: Fundament + Users, Channels, Streams
 
-**Status:** offen
+**Status:** erledigt, PR #163 (2026-10-10; `TokenFunc`-Fuge als injizierte
+Funktion, `GetChannel` gibt bei leerem `data` `(nil, nil)`, `UpdateChannel`
+akzeptiert 204 ohne Body; `broadcaster_type` ist kein Helix-Schreib-Parameter
+und fehlt in `UpdateChannelInput`)
 **Zweig:** `feat/helix-core` (auf Task 4)
 **PR:** `feat(helix): client foundation and user, channel and stream endpoints`
 
