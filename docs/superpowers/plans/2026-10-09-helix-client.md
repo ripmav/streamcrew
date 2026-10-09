@@ -74,6 +74,9 @@ dieser Plan legt die Fugen, die sie brauchen (`helix.Client`, Subscription-Endpu
 
 - **Zweig pro Task**, nie auf `main`; Namensschema `docs/…`, `feat/…`
   (Kleinbuchstaben, Bindestriche). Zweige bauen aufeinander (Stack).
+- **Merging:** Der Nutzer merged den ganzen Stack am Stück, von unten nach
+  oben (nach Prüfung/E2E). ADR-/Docs-PRs sind Teil des Phasen-Stacks und
+  werden mit ihm gemerged — während der Phase wird kein einzelnes PR gemerged.
 - Vor **jedem** Commit `scripts/check.sh` (gofmt, lint, Tests in Sandbox).
 - Commits **englisch**, Conventional Commits, **GPG-signiert**
   (`commit.gpgsign=true`; Agent-Cache prüfen:
