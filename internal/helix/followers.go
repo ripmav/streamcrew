@@ -115,7 +115,7 @@ type Subscription struct {
 // GetSubscriptions lists the active subscriptions of the broadcaster
 // (Helix GET /subscriptions, scope subscriptions:read), walking all
 // pages.
-func (c *Client) GetSubscriptions(ctx context.Context, broadcasterID string) ([]Subscription, error) {
+func (c *Client) GetChannelSubscriptions(ctx context.Context, broadcasterID string) ([]Subscription, error) {
 	q := url.Values{"broadcaster_id": {broadcasterID}}
 	req, err := c.request(ctx, "GET", "/subscriptions", q, nil)
 	if err != nil {
