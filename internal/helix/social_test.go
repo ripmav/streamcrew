@@ -74,7 +74,7 @@ func TestGetFollows(t *testing.T) {
 	})
 }
 
-func TestGetSubscriptions(t *testing.T) {
+func TestGetChannelSubscriptions(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -84,7 +84,7 @@ func TestGetSubscriptions(t *testing.T) {
 		}))
 		defer srv.Close()
 		c := newClient(t, srv, "tok")
-		subs, err := c.GetSubscriptions(t.Context(), "7")
+		subs, err := c.GetChannelSubscriptions(t.Context(), "7")
 		require.NoError(t, err)
 		require.Len(t, subs, 1)
 		assert.Equal(t, "prime", subs[0].ForeignType)
