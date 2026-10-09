@@ -1,6 +1,6 @@
 # Plan: Roadmap 4.2 — Helix-Client
 
-**Status:** in Ausführung (Task 1 erledigt, Tasks 2–9 offen)
+**Status:** in Ausführung (Tasks 1–2 erledigt, Tasks 3–9 offen)
 **Stand:** 2026-10-09, `main` bei `1c082fd` (4.1 gemerged, Stack #146)
 **Scope:** nur 4.2. 4.3 (EventSub-WebSocket) und 4.4 (Funktionen) bleiben offen;
 dieser Plan legt die Fugen, die sie brauchen (`helix.Client`, Subscription-Endpunkte).
@@ -84,9 +84,8 @@ dieser Plan legt die Fugen, die sie brauchen (`helix.Client`, Subscription-Endpu
   Footer in jedem Commit: `Assisted-by: Qwen3.8-27B (xHigh) via OpenCode`
 - **PRs:** Titel englisch, Body deutsch mit den Abschnitten
   `## Worum geht es`, `## Änderungen`, `## Bitte prüfen (meine Festlegungen)`, `## Tests`.
-- **GitHub-Stack:** neu für Phase 4.2 (zuerst `GET /repos/ripmav/streamcrew/stacks`
-  gegenprüfen; der 4.1-Stack #146 ist gemerged und geschlossen). Stack erstellen und
-  **jedes** PR per `POST /repos/ripmav/streamcrew/stacks/{n}/add` mit
+- **GitHub-Stack:** #162 (Phase 4.2; der 4.1-Stack #146 ist gemerged und
+  geschlossen). **Jedes** PR per `POST /repos/ripmav/streamcrew/stacks/{n}/add` mit
   `{"pull_requests":[…]}` (geordnet vom Stack-Top aufwärts) registrieren —
   `gh pr create --base` reicht nicht.
 - Roadmap: erledigte Punkte sofort abhaken + Änderungshistorie pflegen
@@ -123,7 +122,7 @@ kein `hashicorp/go-retryablehttp`.
 
 ### Task 2 — `internal/breaker`
 
-**Status:** offen
+**Status:** erledigt, PR #154
 **Zweig:** `feat/breaker` (auf Task 1)
 **PR:** `feat(breaker): circuit breaker layer for external APIs`
 
