@@ -7,6 +7,7 @@ require (
 	github.com/cockroachdb/apd/v3 v3.2.3
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
+	github.com/sony/gobreaker/v2 v2.4.0
 	github.com/stretchr/testify v1.12.1
 	github.com/zalando/go-keyring v0.2.8
 	go.yaml.in/yaml/v3 v3.0.5
