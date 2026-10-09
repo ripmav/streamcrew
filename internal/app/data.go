@@ -18,6 +18,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/eventservice"
+	"github.com/ripmav/streamcrew/internal/httpclient"
 	"github.com/ripmav/streamcrew/internal/lockfile"
 	"github.com/ripmav/streamcrew/internal/profile"
 	"github.com/ripmav/streamcrew/internal/store"
@@ -55,12 +56,15 @@ func newCatalog() (*event.Catalog, error) {
 }
 
 // authFlows returns the login flows of the platforms (roadmap 4.1); only
-// Twitch has one so far.
-func authFlows(client *http.Client) func(p platform.Name, c auth.Credentials) (auth.Flow, error) {
+// Twitch has one so far. Its token calls run through the resilient HTTP
+// client (Code-ADR-0014) with the breakers twitch.auth and twitch.helix
+// (Code-ADR-0007); the Helix endpoints of phase 4.2 join the same
+// instances.
+func authFlows(client *http.Client, twitchAuth, twitchHelix *httpclient.Client) func(p platform.Name, c auth.Credentials) (auth.Flow, error) {
 	return func(p platform.Name, c auth.Credentials) (auth.Flow, error) {
 		switch p {
 		case platform.Twitch:
-			return auth.NewTwitch(c, client)
+			return auth.NewTwitch(c, client, twitchAuth, twitchHelix)
 		default:
 			return nil, fmt.Errorf("no login flow for platform %q", p)
 		}
