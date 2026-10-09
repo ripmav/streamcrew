@@ -1,6 +1,6 @@
 # Plan: Roadmap 4.2 — Helix-Client
 
-**Status:** in Ausführung (Tasks 1–3 erledigt, Tasks 4–9 offen)
+**Status:** in Ausführung (Tasks 1–4 erledigt, Tasks 5–9 offen)
 **Stand:** 2026-10-09, `main` bei `1c082fd` (4.1 gemerged, Stack #146)
 **Scope:** nur 4.2. 4.3 (EventSub-WebSocket) und 4.4 (Funktionen) bleiben offen;
 dieser Plan legt die Fugen, die sie brauchen (`helix.Client`, Subscription-Endpunkte).
@@ -194,7 +194,9 @@ nach Reset; Budget erschöpft → `ErrTooManyRequests`; offener Breaker →
 
 ### Task 4 — `internal/auth` auf dem httpclient (Breaker `twitch.auth`)
 
-**Status:** offen
+**Status:** erledigt, PR #157 (2026-10-09; 401/403 am Token-Endpunkt →
+`ErrTokenExpired` → `ErrLoginRequired`, Device-Code-Anfrage bleibt plain via
+oauth2; Breaker-Evaluierungs-Fix nachgezogen in PR #156, Commit `4041f97`)
 **Zweig:** `feat/auth-on-httpclient` (auf Task 3)
 **PR:** `feat(auth): run token calls through the resilient HTTP client`
 
@@ -216,9 +218,21 @@ nach Reset; Budget erschöpft → `ErrTooManyRequests`; offener Breaker →
   `login_required`); `ErrUnavailable` erscheint als „Twitch-API derzeit nicht
   erreichbar“ im Login-Verlauf.
 
+**Umgesetzt:** 401/403 → `ErrTokenExpired` (läuft über `Token()`/`Status()` auf
+`ErrLoginRequired`); `ErrUnavailable` → `failureReason` „the Twitch API is
+currently unavailable“ (Englisch, wie die übrigen Login-Gründe).
+`NewTwitch(c, client, twitchAuth, twitchHelix)` — die Composition Roots (Core
+und CLI) bauen beide Clients mit `httpclient.Evaluator` am `breaker.New`;
+gemeinsamer Base-Client (Outbound-Allowlist im Server-Modus). Die
+Device-Code-Anfrage (DCF-Start) läuft weiter über `golang.org/x/oauth2` mit
+dem plain Client — keine Token-Antwort, nicht im Plan-Auftrag.
+
 **Tests:** bestehende Auth-Tests laufen weiter (Fake-Server antwortet unverändert);
 neu: offener Breaker → `ErrUnavailable` im Login-Verlauf; Code-Austausch ohne
-Wiederholung (Zähler am Fake-Server).
+Wiederholung (Zähler am Fake-Server); 401 am Token-Endpunkt → `ErrTokenExpired`.
+Die Fake-Flows nutzen `Retry: Attempts: 1` (keine Backoff-Wartezeit); der
+No-Retry-Test und der Breaker-Test bauen gezielt eigene Clients (wiederholend
+bzw. mit echtem Breaker).
 **Commit:** `feat(auth): run token calls through the resilient HTTP client`
 
 ### Task 5 — `internal/helix`: Fundament + Users, Channels, Streams
@@ -346,13 +360,14 @@ Limit-Verstoß (400) → `StatusError` mit Snippet.
    Client für 4.3/4.4 (mehrere Konte, Bot) brauchbar; in Task 5 festlegen.
 5. **4.1-Fugen:** `twitchBase.post`/`do` nach Task 4 entfernen (ersetzt);
    `scopeList` und der String-Vertrag der Scopes bleiben (4.1 R7).
+   (erledigt, PR #157: Fugen entfernt, `scopeList`/Scopes unverändert)
 
 ## 8. Exit von 4.2
 
 - [x] Code-ADR-0014 (PR Task 1; Status nach Abnahme: Akzeptiert)
 - [x] `internal/breaker` mit Tests (Folgearbeit Code-ADR-0007, PR #154)
 - [x] `internal/httpclient` mit Tests (Folgearbeit Code-ADR-0014, PR #156)
-- [ ] `internal/auth` auf dem httpclient mit Breakern `twitch.auth`/`twitch.helix`
+- [x] `internal/auth` auf dem httpclient mit Breakern `twitch.auth`/`twitch.helix` (PR #157)
 - [ ] Helix-Endpunkte: Users/Channels/Streams, Chat/Moderation,
   Follower/Abos/Kategorien, EventSub-Subscriptions — alle mit Tests
 - [ ] Doku: README, Roadmap 4.2 abgehakt, Historie, ADR-Index
