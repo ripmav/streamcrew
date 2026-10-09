@@ -112,7 +112,7 @@ type Subscription struct {
 	GifterName string `json:"gifter_name,omitempty"`
 }
 
-// GetSubscriptions lists the active subscriptions of the broadcaster
+// GetChannelSubscriptions lists the active subscriptions of the broadcaster
 // (Helix GET /subscriptions, scope subscriptions:read), walking all
 // pages.
 func (c *Client) GetChannelSubscriptions(ctx context.Context, broadcasterID string) ([]Subscription, error) {
