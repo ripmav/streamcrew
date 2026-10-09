@@ -1,14 +1,15 @@
 # Plan: Roadmap 4.2 — Helix-Client
 
-**Status:** in Ausführung (Task 1 läuft, Tasks 2–9 offen)
+**Status:** in Ausführung (Task 1 erledigt, Tasks 2–9 offen)
 **Stand:** 2026-10-09, `main` bei `1c082fd` (4.1 gemerged, Stack #146)
 **Scope:** nur 4.2. 4.3 (EventSub-WebSocket) und 4.4 (Funktionen) bleiben offen;
 dieser Plan legt die Fugen, die sie brauchen (`helix.Client`, Subscription-Endpunkte).
 
 ## 1. Was 4.2 liefert (Roadmap)
 
-- [x] Code-ADR-0014 HTTP-Client: Retry mit Backoff, Rate-Limit-Header, Paginierung,
+- [ ] Code-ADR-0014 HTTP-Client: Retry mit Backoff, Rate-Limit-Header, Paginierung,
   typisierte Fehler; Reihenfolge Wiederholung → Circuit Breaker → Rate-Limiter → Anfrage (S)
+  — ADR akzeptiert (Task 1); abgehakt, wenn `internal/httpclient` umgesetzt ist (Task 3)
 - [ ] `internal/breaker` nach [Code-ADR-0007](../../adr/code/0007-circuit-breaker.md):
   `sony/gobreaker/v2` mit Standardwerten, Fehlerbewertung, Logging und `ErrUnavailable`;
   Breaker `twitch.helix` und `twitch.auth` (S)
@@ -92,7 +93,7 @@ dieser Plan legt die Fugen, die sie brauchen (`helix.Client`, Subscription-Endpu
 
 ### Task 1 — Code-ADR-0014 (Docs-PR, unterstes PR im Stack)
 
-**Status:** läuft (dieser PR)
+**Status:** erledigt, PR #158 (ADR am 2026-10-09 vom Projektinhaber akzeptiert, ohne Änderungen)
 **Zweig:** `docs/code-adr-0014-http-client` (von `main`)
 **PR:** `docs(adr): HTTP client for external APIs (Code-ADR-0014)`
 
@@ -320,7 +321,8 @@ Limit-Verstoß (400) → `StatusError` mit Snippet.
 ## 7. Offene Punkte (vor/am Anfang der Ausführung)
 
 1. **Abnahme von Code-ADR-0014** durch den Projektinhaber (nach PR-Review von
-   Task 1; falls Änderungen: Tasks 2–3 entsprechend anpassen).
+   Task 1; falls Änderungen: Tasks 2–3 entsprechend anpassen):
+   **erledigt 2026-10-09** — akzeptiert ohne Änderungen (PR #158).
 2. **`x/time/rate` + `testing/synctest`:** Verträglichkeit mit der Fake-Uhr im
    ersten Test-Lauf von Task 3 prüfen; Fallback: dünnes eigenes Token-Bucket
    oder ein Test mit echter Zeit (Code-ADR-0014, Punkt 5).
