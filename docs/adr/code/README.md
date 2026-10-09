@@ -21,6 +21,7 @@ Es gelten dieselben Konventionen und dieselbe Vorlage ([`../TEMPLATE.md`](../TEM
 | [0011](0011-event-bus.md) | Event-Bus | Akzeptiert | 2026-09-29 |
 | [0012](0012-template-engine.md) | Template-Engine | Akzeptiert | 2026-09-29 |
 | [0013](0013-typ-registry.md) | Typ-Registry für Actions | Akzeptiert | 2026-10-01 |
+| [0014](0014-http-client.md) | HTTP-Client für externe APIs: Retry, Rate-Limits, Paginierung, typisierte Fehler | Akzeptiert | 2026-10-09 |
 | [0017](0017-klare-signale-statt-magischer-werte.md) | Klar definierte Signale statt magischer Werte | Vorgeschlagen | 2026-09-30 |
 | [0018](0018-json-v2.md) | JSON mit `encoding/json/v2` | Akzeptiert | 2026-09-30 |
 | [0019](0019-host-rechte-in-der-startkonfiguration.md) | Host-Rechte in der Startkonfiguration | Akzeptiert | 2026-10-01 |
