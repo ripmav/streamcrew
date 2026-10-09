@@ -1,6 +1,6 @@
 # Plan: Roadmap 4.2 — Helix-Client
 
-**Status:** in Ausführung (Tasks 1–5 erledigt, Tasks 6–9 offen)
+**Status:** abgeschlossen (alle 9 Tasks erledigt, PR #158–#161, #163–#167, Stack #162)
 **Stand:** 2026-10-09, `main` bei `1c082fd` (4.1 gemerged, Stack #146)
 **Scope:** nur 4.2. 4.3 (EventSub-WebSocket) und 4.4 (Funktionen) bleiben offen;
 dieser Plan legt die Fugen, die sie brauchen (`helix.Client`, Subscription-Endpunkte).
@@ -14,12 +14,9 @@ dieser Plan legt die Fugen, die sie brauchen (`helix.Client`, Subscription-Endpu
   `sony/gobreaker/v2` mit Standardwerten, Fehlerbewertung, Logging und `ErrUnavailable`;
   Breaker `twitch.helix` und `twitch.auth` (S) — umgesetzt (Task 2, PR #154); die
   Breaker-Instanzen entstehen mit Tasks 4–5
-- [ ] Endpunkte (L):
-  - Users, Channels (lesen/aktualisieren), Streams
-  - Chat: Nachricht senden, löschen, Einstellungen, Ankündigung, Shoutout
-  - Moderation: Bann/Timeout/Entbannen, Mods, VIPs
-  - Follower, Abos, Kategorien
-  - EventSub-Subscriptions
+- [x] Endpunkte (L) — `internal/helix` mit allen Endpunkten der Aufgabe
+  (Tasks 5–8, PR #163–#166); die Instanz `twitch.helix` wird in 4.4/4.5
+  an den Service übergeben, die Token-Fuge ist ein `TokenFunc`
 
 ## 2. Befunde der Recherche (verifiziert 2026-10-09)
 
@@ -265,7 +262,8 @@ und fehlt in `UpdateChannelInput`)
 
 ### Task 6 — `internal/helix`: Chat und Moderation
 
-**Status:** offen
+**Status:** erledigt, PR #164 (2026-10-10; `UpdateChatSettings` mit
+Pointer-Booleans — nil = unverändert; 204er geben nur `error` zurück)
 **Zweig:** `feat/helix-chat` (auf Task 5)
 **PR:** `feat(helix): chat and moderation endpoints`
 
@@ -284,7 +282,10 @@ und fehlt in `UpdateChannelInput`)
 
 ### Task 7 — `internal/helix`: Follower, Abos, Kategorien
 
-**Status:** offen
+**Status:** erledigt, PR #165 (2026-10-10; `SearchGames` ohne
+Paginierung — max. 25 Treffer in einer Antwort; `GetSubscriptions` der
+Kanal-Abos nach Task 8 zu `GetChannelSubscriptions` umbenannt, weil
+seine EventSub-Liste den simplen Namen trägt)
 **Zweig:** `feat/helix-social` (auf Task 6)
 **PR:** `feat(helix): follower, subscription and category endpoints`
 
@@ -300,7 +301,9 @@ Abos des Senders, Kategorien lesen/suchen.
 
 ### Task 8 — `internal/helix`: EventSub-Subscriptions
 
-**Status:** offen
+**Status:** erledigt, PR #166 (2026-10-10; Transport immer websocket,
+das Webhook-Transport ist deprecated und wird nicht gesendet;
+`SubscriptionCondition` als Struct mit genau einem von vier Feldern)
 **Zweig:** `feat/helix-eventsub` (auf Task 7)
 **PR:** `feat(helix): EventSub subscription endpoints`
 
@@ -317,7 +320,8 @@ Limit-Verstoß (400) → `StatusError` mit Snippet.
 
 ### Task 9 — Doku: README, Roadmap (Docs-PR, oberstes PR)
 
-**Status:** offen
+**Status:** erledigt, PR #167 (2026-10-10; Code-ADR-0014 war schon
+Akzeptiert, keine Statusänderung mehr nötig)
 **Zweig:** `docs/helix-docs` (auf Task 8)
 **PR:** `docs: the Helix client of phase 4.2`
 
@@ -371,9 +375,11 @@ Limit-Verstoß (400) → `StatusError` mit Snippet.
 - [x] `internal/breaker` mit Tests (Folgearbeit Code-ADR-0007, PR #154)
 - [x] `internal/httpclient` mit Tests (Folgearbeit Code-ADR-0014, PR #156)
 - [x] `internal/auth` auf dem httpclient mit Breakern `twitch.auth`/`twitch.helix` (PR #157)
-- [ ] Helix-Endpunkte: Users/Channels/Streams, Chat/Moderation,
+- [x] Helix-Endpunkte: Users/Channels/Streams, Chat/Moderation,
   Follower/Abos/Kategorien, EventSub-Subscriptions — alle mit Tests
-- [ ] Doku: README, Roadmap 4.2 abgehakt, Historie, ADR-Index
+  (Tasks 5–8, PR #163–#166)
+- [x] Doku: README, Roadmap 4.2 abgehakt, Historie, ADR-Index (Task 9,
+  PR #167)
 
 ## 9. Stack-Aufbau (Zusammenfassung)
 
