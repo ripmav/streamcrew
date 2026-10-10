@@ -8,18 +8,18 @@ die Twitch-CLI) bleibt offen.
 
 ## 1. Was 4.4 liefert (Roadmap)
 
-- [ ] Spezifikation `docs/spec/twitch-events.md`: Event-Zuordnung und
+- [x] Spezifikation `docs/spec/twitch-events.md`: Event-Zuordnung und
   Identifier je Event (S)
-- [ ] Chat senden, löschen, leeren; Moderation; Titel und Kategorie
+- [x] Chat senden, löschen, leeren; Moderation; Titel und Kategorie
   setzen (S)
-- [ ] Event-Commands (M): Stream Start/Stop, Follow, Raid (ein- und
+- [x] Event-Commands (M): Stream Start/Stop, Follow, Raid (ein- und
   ausgehend), Abo, Resub, Geschenk, Massengeschenk, Cheer, Channel
   Points, Hype Train, Werbung, Shoutout, Ziele, Charity;
   Moderationsereignisse (Umfragen und Vorhersagen: keine Events, A4)
-- [ ] Channel-Points-Commands: Belohnung ↔ Command, Einlösung
+- [x] Channel-Points-Commands: Belohnung ↔ Command, Einlösung
   abschließen oder erstatten (M)
-- [ ] Bits-Commands mit Schwellen und Bereichen (S) (P1)
-- [ ] Twitch-Action: Clip, Stream-Marker, Umfrage/Vorhersage (mit
+- [x] Bits-Commands mit Schwellen und Bereichen (S) (P1)
+- [x] Twitch-Action: Clip, Stream-Marker, Umfrage/Vorhersage (mit
   Unterliste nach dem Ende, `$pollchoice`/`$predictionoutcome`, A4),
   Werbung, Raid, Shoutout, Belohnungen verwalten (L)
 - [ ] Custom Power-Ups als Command-Typ (S) (P2)
@@ -263,13 +263,13 @@ der Chat-Nachricht (Backlog, 4.4/5.x).
 
 ## 7. Exit von 4.4
 
-- [ ] Spezifikation `twitch-events.md` (Event-Zuordnung + Identifier)
-- [ ] Chat senden/löschen/leeren, Moderation, Titel/Kategorie
-- [ ] Event-Commands für die 4.4-Typen mit Identifier
-- [ ] Channel-Points-Commands (Belohnung ↔ Command, abschließen/
+- [x] Spezifikation `twitch-events.md` (Event-Zuordnung + Identifier)
+- [x] Chat senden/löschen/leeren, Moderation, Titel/Kategorie
+- [x] Event-Commands für die 4.4-Typen mit Identifier
+- [x] Channel-Points-Commands (Belohnung ↔ Command, abschließen/
   erstatten)
-- [ ] Bits-Commands (Schwellen, Bereiche)
-- [ ] Twitch-Action (Clip, Marker, Umfrage/Vorhersage mit Unterliste,
+- [x] Bits-Commands (Schwellen, Bereiche)
+- [x] Twitch-Action (Clip, Marker, Umfrage/Vorhersage mit Unterliste,
   Werbung, Raid, Shoutout, Belohnungen)
 - [ ] Custom Power-Ups als Command-Typ
 - [ ] Emote-Kataloge (Twitch, BTTV, FFZ) mit Cache
