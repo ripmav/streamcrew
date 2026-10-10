@@ -43,6 +43,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
+	"github.com/ripmav/streamcrew/internal/emote"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/eventservice"
@@ -140,6 +141,9 @@ type App struct {
 	// twitchHelix is the resilient HTTP client of the Helix API, shared by
 	// the Twitch platform and the twitch action's operations (roadmap 4.4).
 	twitchHelix *httpclient.Client
+	// emotes is the emote catalog the Twitch platform resolves chat emotes
+	// with (roadmap 4.4, task 9).
+	emotes *emote.Catalog
 }
 
 // New builds the core from a resolved configuration (config.Config.Resolve).
@@ -240,6 +244,24 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Logger:  component(logger, "auth"),
 	})
 	a.twitchHelix = twitchHelix
+	// The emote catalog (roadmap 4.4, task 9) resolves the emote IDs of
+	// the chat messages: Twitch via Helix, BetterTTV and FrankerFaceZ over
+	// their own resilient clients (own allow list names, Code-ADR-0019).
+	emoteClient := func(name string) *httpclient.Client {
+		return httpclient.New(httpclient.Options{
+			Name:    name,
+			Base:    authClient,
+			Breaker: breaker.New(name, component(logger, "emote"), httpclient.Evaluator),
+			Logger:  component(logger, "emote"),
+		})
+	}
+	a.emotes = emote.New([]emote.Source{
+		emote.NewTwitchSource(func(ctx context.Context, _ string) ([]emote.Emote, error) {
+			return a.twitchEmotes(ctx)
+		}),
+		emote.NewBTTVSource(emoteClient("emote.bttv"), ""),
+		emote.NewFFZSource(emoteClient("emote.ffz"), ""),
+	}, time.Hour, component(logger, "emote"))
 	if a.auth, err = auth.New(auth.Ports{
 		Store:     a.store,
 		Vault:     func(repo vault.Repository) *vault.Vault { return vault.New(repo, ks) },
@@ -375,6 +397,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 				Auth:       twitchStreamAuth{s: a.auth},
 				Helix:      twitchHelix,
 				DialClient: authClient,
+				Emotes:     a.emotes,
 				Logger:     component(b.Logger, "twitch"),
 			}), nil
 		}

@@ -12,6 +12,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/auth"
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
+	"github.com/ripmav/streamcrew/internal/emote"
 	"github.com/ripmav/streamcrew/internal/helix"
 	"github.com/ripmav/streamcrew/internal/twitch"
 )
@@ -62,6 +63,24 @@ func (a twitchStreamAuth) ClientID(ctx context.Context) (string, error) {
 // and a Helix client are resolved per call from the auth service.
 type twitchOps struct {
 	app *App
+}
+
+// twitchEmotes lists the emotes of the streamer's channel via Helix
+// (roadmap 4.4, task 9); the emote catalog caches them.
+func (a *App) twitchEmotes(ctx context.Context) ([]emote.Emote, error) {
+	c, me, err := twitchOps{app: a}.client(ctx)
+	if err != nil {
+		return nil, err
+	}
+	emotes, err := c.GetEmotes(ctx, me)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]emote.Emote, 0, len(emotes))
+	for _, e := range emotes {
+		out = append(out, emote.Emote{ID: e.ID, Code: e.Name, Image: e.Image})
+	}
+	return out, nil
 }
 
 // client returns a Helix client bound to the streamer and the streamer's
