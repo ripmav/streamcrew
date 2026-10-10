@@ -391,6 +391,7 @@ func TestTwitchEventValues(t *testing.T) {
 	assert.Equal(t, template.TextValue("p1"), v[template.EventCustomPowerUp])
 	assert.Equal(t, template.TextValue("a hug"), v[template.EventMessage])
 }
+
 // command-engine.md: a short break keeps the session, a long one ends it
 // after the grace period, and greetings stop when the stream goes offline.
 func TestStreamSession(t *testing.T) {
