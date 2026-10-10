@@ -785,6 +785,30 @@ func TestAppStopping(t *testing.T) {
 	})
 }
 
+// TestCustomPowerUpRedemptionTriggers covers 4.4 task 8: the redemption of
+// a custom power up (twitch.custom_power_up.redeem) is a triggerable event,
+// so an event command on it fires when the redemption arrives.
+func TestCustomPowerUpRedemptionTriggers(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.LockPerCommandType)
+		defer f.stop()
+
+		cmd := f.command("power-up", command.KindEvent, f.journal.note("power-up fired"))
+		res, err := f.engine.Trigger(t.Context(), engine.Request{
+			Command: cmd,
+			Source:  engine.SourceEvent,
+			Event:   eventtype.TwitchCustomPowerUpRedeem,
+		})
+		require.NoError(t, err)
+		require.Equal(t, engine.OutcomeQueued, res.Outcome)
+		synctest.Wait()
+
+		assert.Equal(t, engine.StateCompleted, f.state(res.Instances[0]))
+		assert.Equal(t, []string{"power-up fired"}, f.journal.get())
+	})
+}
+
 // TestTriggerSettingsError: without its settings, a command is not queued,
 // and its place in the queue is given back.
 func TestTriggerSettingsError(t *testing.T) {
