@@ -1200,7 +1200,7 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0012 | `0012-template-engine.md` | Tokenizer, Präfixregel, Kodierung, Ausdrücke mit `expr-lang/expr` (Bibliothek ersetzt durch Code-ADR-0020); **akzeptiert** | 3 |
 | 0013 | `0013-typ-registry.md` | Descriptors, Schemas, Capabilities; Typ-IDs, Kind-Actions, Anschluss an die Engine; **akzeptiert** | 3 |
 | 0014 | `0014-http-client.md` | Retry, Rate-Limits, Fehlerklassen; Einbau des Circuit Breakers (Code-ADR-0007); **akzeptiert** | 4 |
-| 0015 | `0015-websocket-bibliothek.md` | Auswahl und Reconnect-Muster | 4 |
+| 0015 | `0015-websocket-bibliothek.md` | Auswahl und Reconnect-Muster; **vorgeschlagen** | 4 |
 | 0016 | `0016-codegenerierung.md` | buf, esbuild in `go generate`; die sqlc-Konventionen stehen in Code-ADR-0008 | 6 |
 | 0017 | `0017-klare-signale-statt-magischer-werte.md` | Werte ohne Doppelbedeutung, benannte Ausgänge, Fehler nur für Fehler; **vorgeschlagen** | 3 |
 | 0018 | `0018-json-v2.md` | `encoding/json/v2` für alles JSON, strenges Lesen, reproduzierbares Schreiben; ergänzt Code-ADR-0010; **akzeptiert** | 3 |
