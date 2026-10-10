@@ -31,9 +31,10 @@ wenn eine Aufgabe wieder eingeplant wird.
 
 - Auf `go.yaml.in/yaml/v4` wechseln, sobald es stabil ist: Syntaxfehler in YAML nennen dann auch die Spalte ([Code-ADR-0005](adr/code/0005-konfiguration.md), Punkt 3; Entscheidung des Projektinhabers vom 2026-10-03) (S)
 
-**Build / Container:**
+**Build / CI:**
 
 - Docker-Image mit Alpine als Build-Basis bauen (aktuell `golang:<version>-trixie`): Build-Stage auf `golang:<version>-alpine` (weiterhin Digest-Pin, Renovate) umziehen, `ca-certificates` aus dem Alpine-Paket in das Scratch-Image kopieren und `scripts/docker-smoke.sh` grün halten (S) (Vorgabe des Projektinhabers vom 2026-10-09)
+- CI-Job „Tests (race detector, short fuzz runs)“ für kürzere Laufzeit optimieren (aktuell rund 7–8 min): `scripts/fuzz.sh` läuft die 12 Fuzz-Targets je 20 s nacheinander (rund 4 min), dazu `go test -race -shuffle=on ./...`; zum Beispiel Parallelisierung der Fuzz-Läufe oder Sharding der Pakete über mehrere Runner prüfen (S) (Vorgabe des Projektinhabers vom 2026-10-09)
 
 **Anforderungen** (in Roadmap 3.4 zurückgestellt, Entscheidung des Projektinhabers vom 2026-10-02):
 

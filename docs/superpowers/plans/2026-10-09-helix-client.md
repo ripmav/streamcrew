@@ -1,18 +1,19 @@
 # Plan: Roadmap 4.2 — Helix-Client
 
-**Status:** in Ausführung (Tasks 1–2 erledigt, Tasks 3–9 offen)
+**Status:** in Ausführung (Tasks 1–3 erledigt, Tasks 4–9 offen)
 **Stand:** 2026-10-09, `main` bei `1c082fd` (4.1 gemerged, Stack #146)
 **Scope:** nur 4.2. 4.3 (EventSub-WebSocket) und 4.4 (Funktionen) bleiben offen;
 dieser Plan legt die Fugen, die sie brauchen (`helix.Client`, Subscription-Endpunkte).
 
 ## 1. Was 4.2 liefert (Roadmap)
 
-- [ ] Code-ADR-0014 HTTP-Client: Retry mit Backoff, Rate-Limit-Header, Paginierung,
+- [x] Code-ADR-0014 HTTP-Client: Retry mit Backoff, Rate-Limit-Header, Paginierung,
   typisierte Fehler; Reihenfolge Wiederholung → Circuit Breaker → Rate-Limiter → Anfrage (S)
-  — ADR akzeptiert (Task 1); abgehakt, wenn `internal/httpclient` umgesetzt ist (Task 3)
-- [ ] `internal/breaker` nach [Code-ADR-0007](../../adr/code/0007-circuit-breaker.md):
+  — ADR akzeptiert (Task 1); `internal/httpclient` umgesetzt (Task 3, PR #160)
+- [x] `internal/breaker` nach [Code-ADR-0007](../../adr/code/0007-circuit-breaker.md):
   `sony/gobreaker/v2` mit Standardwerten, Fehlerbewertung, Logging und `ErrUnavailable`;
-  Breaker `twitch.helix` und `twitch.auth` (S)
+  Breaker `twitch.helix` und `twitch.auth` (S) — umgesetzt (Task 2, PR #159); die
+  Breaker-Instanzen entstehen mit Tasks 4–5
 - [ ] Endpunkte (L):
   - Users, Channels (lesen/aktualisieren), Streams
   - Chat: Nachricht senden, löschen, Einstellungen, Ankündigung, Shoutout
@@ -22,17 +23,22 @@ dieser Plan legt die Fugen, die sie brauchen (`helix.Client`, Subscription-Endpu
 
 ## 2. Befunde der Recherche (verifiziert 2026-10-09)
 
-1. **`github.com/sethvargo/go-retry` v0.4.0** (MIT, bereits indirekt im Modulgraph via
-   `pressly/goose`):
+1. **`github.com/sethvargo/go-retry` v0.5.0** (MIT, bereits indirekt im Modulgraph via
+   `pressly/goose`; auf v0.5.0 gezogen, weil v0.5.0 (2026-10-05) die neueste Version ist
+   und die in v0.4.0 noch fehlenden Obergrenzen bringt):
    - `Do(ctx, b Backoff, f RetryFunc) error` / `DoValue[T]` — die Schleife wartet auf Timer,
      prüft `context.Cause` zu jedem Durchlauf; Abbruch erscheint als Kontextfehler.
+     Bei Stopp liefert `DoValue` den typisierten Fehler (`rerr.Unwrap()`).
    - Wiederholbarkeit wird am Fehler markiert: `retry.RetryableError(err)`; alles andere
      bricht sofort ab.
    - `Backoff` ist eine pull-Schnittstelle: `Next() (wartet, stoppen)`; geliefert sind
      `NewConstant`, `NewExponential(base)` (1, 2, 4, 8 …, ohne Obergrenze),
      `NewFibonacci`, dazu `WithJitter`, `WithJitterPercent`, `WithFullJitter`.
-   - **Keine Versuchs- und Zeit-Obergrenze** — die dünne eigene Hülle kommt daraus
-     (Code-ADR-0014, Punkt 4).
+   - Versuchs-Obergrenze (`WithMaxRetries(max)`, zählt die `Next()`-Aufrufe =
+     Versuche − 1) und Gesamtwartebudget (`WithMaxDuration(timeout)`, best-effort,
+     cappt den letzten Wait auf den Rest).
+   - Die eigene Backoff-Hülle (Code-ADR-0014, Punkt 4) setzt damit nur noch die
+     429-Override-Wartezeit und das Wiederholungs-Logging.
 2. **`golang.org/x/time/rate`** (Token-Bucket): `NewLimiter(rate.Limit, burst)`,
    `Wait(ctx)`. Verträglichkeit mit der `testing/synctest`-Fake-Uhr wird im ersten
    Test-PR geprüft (Code-ADR-0014, Punkt 5).
@@ -152,7 +158,8 @@ Logging der Wechsel.
 
 ### Task 3 — `internal/httpclient`
 
-**Status:** offen
+**Status:** erledigt, PR #160 (2026-10-09; go-retry v0.5.0 statt v0.4.0,
+ADR-0014 entsprechend faktual aktualisiert)
 **Zweig:** `feat/httpclient` (auf Task 2)
 **PR:** `feat(httpclient): resilient HTTP client with retry, breaker and rate limits`
 
@@ -171,8 +178,12 @@ Logging der Wechsel.
 - Rate-Limit: `x/time/rate` (4/s Burst 8 Standard) + gespeiste Header-Werte
   (Punkt 5); `RateLimit` auf der `Response`.
 - `EachPage` nach Helix-Muster (Punkt 7), 200-Seiten-Obergrenze.
-- **Prüfung:** `x/time/rate` mit der synctest-Fake-Uhr (Punkt 5/Folgearbeit;
-  bei Problemen: dünnes eigenes Token-Bucket oder ein Test mit echter Zeit).
+- **Prüfung erledigt:** `x/time/rate` ist mit der synctest-Fake-Uhr verträglich
+  (`WaitN` nutzt `time.NewTimer` + `time.Now()`, beides im Bubble gefaket).
+  **Testaufbau-Befund:** Tests nutzen `httptest.NewTestServer` (Go-1.27-In-Memory-Netzwerk)
+  mit `srv.Client()` als Base-Transport — ein Loopback-Server (`NewServer`) hält die
+  Fake-Uhr an (Server-Goroutine im Netzwerk-I/O), und sein `Close` via `t.Cleanup`
+  (außerhalb der Bubble) schließt Kanäle, die in der Bubble erstellt wurden (fatal).
 
 **Tests (synctest + httptest):** 500→200 Erfolg nach Backoff; 400 ohne Wiederholung;
 Netzwerkfehler → Wiederholung; 429 wartet bis Reset; `remaining = 0` → nächste Anfrage
@@ -339,8 +350,8 @@ Limit-Verstoß (400) → `StatusError` mit Snippet.
 ## 8. Exit von 4.2
 
 - [x] Code-ADR-0014 (PR Task 1; Status nach Abnahme: Akzeptiert)
-- [ ] `internal/breaker` mit Tests (Folgearbeit Code-ADR-0007)
-- [ ] `internal/httpclient` mit Tests (Folgearbeit Code-ADR-0014)
+- [x] `internal/breaker` mit Tests (Folgearbeit Code-ADR-0007, PR #159)
+- [x] `internal/httpclient` mit Tests (Folgearbeit Code-ADR-0014, PR #160)
 - [ ] `internal/auth` auf dem httpclient mit Breakern `twitch.auth`/`twitch.helix`
 - [ ] Helix-Endpunkte: Users/Channels/Streams, Chat/Moderation,
   Follower/Abos/Kategorien, EventSub-Subscriptions — alle mit Tests
@@ -352,7 +363,7 @@ Limit-Verstoß (400) → `StatusError` mit Snippet.
 main (1c082fd)
  └ PR 1  docs/code-adr-0014-http-client  (ADR-0014, plan, index, roadmap)
  └ PR 2  feat/breaker                    (internal/breaker, gobreaker v2.4.0)
- └ PR 3  feat/httpclient                 (internal/httpclient, go-retry, x/time)
+ └ PR 3  feat/httpclient                 (internal/httpclient, go-retry v0.5.0, x/time v0.16.0)
  └ PR 4  feat/auth-on-httpclient         (internal/auth auf dem Client, twitch.auth)
  └ PR 5  feat/helix-core                 (Fundament, users, channels, streams)
  └ PR 6  feat/helix-chat                 (chat, moderation)
