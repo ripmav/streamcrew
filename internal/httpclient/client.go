@@ -18,6 +18,7 @@ import (
 	"context"
 	json "encoding/json/v2"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -292,17 +293,39 @@ func (c *Client) send(ctx context.Context, req *http.Request) (*http.Response, e
 		return nil, err
 	}
 	rctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
 	r := req.Clone(rctx)
 	if req.Body != nil {
 		b, err := req.GetBody()
 		if err != nil {
+			cancel()
 			return nil, err
 		}
 		r.Body = b
 	}
 	//nolint:gosec // G704: the request targets the URL given by the caller of Do
-	return c.base.Do(r)
+	resp, err := c.base.Do(r)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	// The request's context must live as long as the response body:
+	// canceling it when the headers arrive makes the transport close
+	// the connection while the caller still reads the body. The 10 s
+	// timeout (point 8) covers the whole request, including the body.
+	resp.Body = &timeoutBody{ReadCloser: resp.Body, cancel: cancel}
+	return resp, nil
+}
+
+// timeoutBody releases the request's timeout when the body is closed.
+type timeoutBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *timeoutBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
 }
 
 // backoff composes the backoff of the retry loop (Code-ADR-0014, point 4):

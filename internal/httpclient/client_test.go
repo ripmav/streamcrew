@@ -60,6 +60,29 @@ func mustParseURL(u string) *url.URL {
 	return parsed
 }
 
+// TestTimeoutLivesAsLongAsTheBody guards against canceling the request
+// context when the headers arrive: a canceled context makes the transport
+// close the connection while the caller still reads the body, and the read
+// fails with "context canceled" or "use of closed network connection". The
+// body is larger than the server buffer (chunked), so the read outlasts an
+// early cancellation.
+func TestTimeoutLivesAsLongAsTheBody(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(strings.Repeat("x", 8192)))
+		}))
+		defer srv.Close()
+		c := newClient(t, srv.Client(), newBreaker(), nil)
+		resp, err := c.Do(t.Context(), newGetRequest(t.Context(), srv.URL))
+		require.NoError(t, err)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Len(t, body, 8192)
+	})
+}
+
 func TestDoReturnsResponseWithRateLimit(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
