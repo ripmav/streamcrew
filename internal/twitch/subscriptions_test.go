@@ -125,7 +125,7 @@ func TestReconcileCreatesTheMissingSubscriptions(t *testing.T) {
 	m := newManager(t, f, 0)
 	require.NoError(t, m.Reconcile(t.Context()))
 
-	require.Len(t, f.created, 13)
+	require.Len(t, f.created, 25)
 	// The exact table: versions and conditions.
 	got := map[string]struct {
 		version string
@@ -148,7 +148,7 @@ func TestReconcileCreatesTheMissingSubscriptions(t *testing.T) {
 
 	// The second run: nothing to do.
 	require.NoError(t, m.Reconcile(t.Context()))
-	assert.Len(t, f.created, 13)
+	assert.Len(t, f.created, 25)
 	assert.Empty(t, f.revoked)
 }
 
@@ -187,7 +187,7 @@ func TestReconcileSkipsThe400(t *testing.T) {
 	_, hasCheer := f.subs["id-channel.cheer"]
 	f.mu.Unlock()
 	assert.False(t, hasCheer)
-	assert.Len(t, f.created, 13)
+	assert.Len(t, f.created, 25)
 }
 
 func TestRunReconcilesAtTheStartAndOnTheInterval(t *testing.T) {
