@@ -249,7 +249,7 @@ Ein schlanker, headless Streaming-Bot- und Automatisierungs-Core in Go. Er läuf
 - **P1:** Pflicht für Core 1.0 (M7)
 - **P2:** nach 1.0, für Parität
 - **P3:** nur bei Bedarf
-- **Backlog:** zurückgestellt; die Priorität wird festgelegt, wenn die Aufgabe wieder eingeplant wird (Roadmap, Abschnitt „Backlog“)
+- **Backlog:** zurückgestellt; die Priorität wird festgelegt, wenn die Aufgabe wieder eingeplant wird (Roadmap; seit 2026-10-09 in [`docs/backlog.md`](backlog.md))
 - **–:** nicht geplant
 
 Eine Aufgabe darf früher umgesetzt werden, als ihre Priorität verlangt, wenn es sich anbietet.
