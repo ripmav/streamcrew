@@ -48,9 +48,9 @@ Twitch-Actions (Roadmap 4.4, A4 für Umfragen und Vorhersagen).
 | B10 | `channel.goal.progress`/`complete` tragen den aktuellen und den Zielbetrag mit Währung; `complete` ist zugleich die vollständige Erreichung. | Q1, Q3 |
 | B11 | `channel.hype_train.progress`/`start`/`end` tragen Stufe, Fortschritt, Ziel, erreichte Belohnungsstufen und bei `end` das Ergebnis. | Q1, Q3 |
 | B12 | `channel.ad.started` trägt Dauer und optional die Nachricht der Werbeeinschaltung. | Q1, Q3 |
-| B13 | `channel.shoutout.received` trägt den shoutenden Kanal (als Zielnutzer) und dessen Zuschauerzahl. | Q1, Q3 |
-| B14 | `channel.charity.progress`/`complete` tragen den aktuellen und den Zielbetrag der Charity-Sammlung mit Währung und Prozentsatz. | Q1, Q3 |
-| B15 | Channel Points: `channel.channel_points_custom_reward.redemption.add` (Custom Power-Up) und `channel.channel_points_automatic_reward.redemption.add` (automatische Belohnung) lösen die Channel-Points-Commands aus (Roadmap 4.4); sie tragen die Belohnung und den einlösenden Nutzer. `channel.channel_points_custom_reward.add`/`remove` sind Ereignis-Typen des Katalogs, aber keine Ereignis-Commands; sie dienen dem Verwalten der Belohnungen. | Q1, Q3, Q4 |
+| B13 | `channel.shoutout.received` trägt den shoutenden Kanal als Nutzer und dessen Zuschauerzahl. | Q1, Q3 |
+| B14 | `channel.charity.progress`/`complete` tragen den aktuellen und den Zielbetrag der Charity-Sammlung mit Währung. | Q1, Q3 |
+| B15 | Channel Points: `channel.channel_points_custom_reward.redemption.add` (Custom Power-Up) und `channel.channel_points_automatic_reward.redemption.add` (automatische Belohnung) lösen die Channel-Points-Commands aus (Roadmap 4.4); sie tragen die Belohnung und den einlösenden Nutzer. | Q1, Q3, Q4 |
 | B16 | `channel.channel_update` ist kein Ereignis; der Adapter meldet damit nur den Stream-Zustand ([`events.md`](events.md), B11). | Q1, Q3 |
 
 ### Umfragen und Vorhersagen
@@ -74,15 +74,15 @@ Twitch-Actions (Roadmap 4.4, A4 für Umfragen und Vorhersagen).
 | `channel.subscription` | Abonnent | Streamer | `$usersubplan`, `$usersubplanname`, `$message` |
 | `channel.subscription.gift` | Schenker | Beschenkter | `$usersubplan`, `$usersubplanname`, `$subsgiftedamount` |
 | `channel.subscription.gift.mass` | Initiator | — | `$usersubplan`, `$usersubplanname`, `$subsgiftedamount` |
-| `bits.cheer` | Cheerer | Streamer | `$cheerbits`, `$cheermessage` (B4) |
-| `chat.user.moderate.timeout`/`.ban` | Moderierter | Streamer | `$moderateduration`, `$moderationreason` (B7) |
+| `bits.cheer` | Cheerer | Streamer | `$cheerbits` (B4); die Nachricht ist `$message` |
+| `chat.user.moderate.timeout`/`.ban` | Moderierter | Streamer | `$moderationmessage` (B7) |
 | `twitch.goal.progress`/`.complete` | — | Streamer | `$goalcurrentamount`, `$goaltargetamount`, `$goalcurrency` (B10) |
 | `twitch.hype_train.start`/`.progress`/`.end` | — | Streamer | `$hypetrainlevel`, `$hypetrainprogress`, `$hypetraingoal`, `$hypetrainrewardlevel`, `$hypetrainoutcome` (B11) |
 | `twitch.ad.started` | — | Streamer | `$adbreakduration`, `$adbreakmessage` (B12) |
-| `twitch.shoutout.received` | Streamer | shoutender Kanal | `$shoutoutviewers` (B13) |
-| `twitch.charity.progress`/`.complete` | — | Streamer | `$donationcurrentamount`, `$donationtargetamount`, `$donationcurrency`, `$donationpercent` (B14) |
-| Channel-Points-Commands (B15) | Einlösender | Streamer | `$channelpointsamount`, `$channelpointsreward`, `$channelpointsrewardname` |
-| Custom Power-Up-Command (B15) | Einlösender | Streamer | `$custompowerupname` |
+| `twitch.shoutout.received` | shoutender Kanal | — | `$shoutoutviewers` (B13) |
+| `twitch.charity.progress`/`.complete` | — | Streamer | `$donationcurrentamount`, `$donationtargetamount`, `$donationcurrency` (B14) |
+| Channel-Points-Command (B15) | Einlösender | Streamer | `$channelpointsamount`, `$channelpointsreward` |
+| Custom Power-Up-Command (B15) | Einlösender | Streamer | `$custompowerup`; die Nachricht des Einlösenden ist `$message` |
 
 ### Abweichungen und Verwerfungen
 
@@ -114,3 +114,4 @@ Twitch-Actions (Roadmap 4.4, A4 für Umfragen und Vorhersagen).
 | Datum | Änderung |
 |---|---|
 | 2026-10-10 | Erstellt für Phase 4.4: Zuordnung (B1–B16), Umfragen/Vorhersagen (B17), Identifier je Ereignis (B18–B19), Verwerfungen (B20–B22). |
+| 2026-10-10 | Identifier an die Implementierung angepasst (Task 4): ein `$moderationmessage` statt Dauer/Grund (die Plattform nennt beides in einem Feld), die Cheer-Nachricht ist das allgemeine `$message`, Shoutout trägt den shoutenden Kanal als Nutzer, kein `$channelpointsrewardname`/`$custompowerupname` (die Nutzlasten nennen nur die ID) und kein `$donationpercent` (die Plattform sendet keinen Prozentsatz). |
