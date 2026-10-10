@@ -18,6 +18,25 @@ type Details struct {
 	// Gift is the gift of channel.subscription.gift and
 	// channel.subscription.mass_gift.
 	Gift *Gift `json:"gift,omitempty"`
+	// Bits is the bits of twitch.bits.cheer.
+	Bits *Bits `json:"bits,omitempty"`
+	// SharedChat is the shared chat session of the twitch.shared_chat
+	// events.
+	SharedChat *SharedChat `json:"shared_chat,omitempty"`
+}
+
+// Bits is the bits of a cheer (twitch.bits.cheer).
+type Bits struct {
+	// Amount is the number of bits cheered; not negative.
+	Amount int64 `json:"amount"`
+}
+
+// SharedChat is the session of a shared chat (twitch.shared_chat.*).
+type SharedChat struct {
+	// SessionID is the chat session (chat_session_id); not empty.
+	SessionID string `json:"session_id"`
+	// Title is the title of the session; empty for the end.
+	Title string `json:"title,omitempty"`
 }
 
 // Message is a chat message, or the message of a subscription.
