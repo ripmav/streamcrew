@@ -100,7 +100,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchChannelFollow,
-			User:     ptr(identity(p.user())),
+			User:     new(identity(p.user())),
 		})
 	case "channel.raid":
 		var p raid
@@ -110,7 +110,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchChannelRaid,
-			User:     ptr(identity(p.user())),
+			User:     new(identity(p.user())),
 			Details:  eventtype.Details{Raid: &eventtype.Raid{Viewers: p.ViewerCount}},
 		})
 	case "channel.chat.notification":
@@ -131,7 +131,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchBitsCheer,
-			User:     ptr(identity(p.user())),
+			User:     new(identity(p.user())),
 			Details: eventtype.Details{
 				Bits:    &eventtype.Bits{Amount: p.Bits},
 				Message: &eventtype.Message{Text: p.Message},
@@ -149,7 +149,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     typ,
-			User:     ptr(identity(p.user())),
+			User:     new(identity(p.user())),
 		})
 	case "channel.chat.message_delete":
 		var p messageDelete
@@ -159,7 +159,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.ChatMessageDelete,
-			User:     ptr(identity(p.user())),
+			User:     new(identity(p.user())),
 			Details:  eventtype.Details{Message: &eventtype.Message{ID: p.ID}},
 		})
 	case "user.whisper.message":
@@ -170,7 +170,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.ChatWhisper,
-			User:     ptr(identity(p.user())),
+			User:     new(identity(p.user())),
 			Details:  eventtype.Details{Message: &eventtype.Message{Text: p.Message}},
 		})
 	case "channel.shared_chat.begin", "channel.shared_chat.update", "channel.shared_chat.end":
@@ -256,7 +256,8 @@ func identity(u chatUser) user.Identity {
 	}
 }
 
-func ptr[T any](v T) *T { return &v }
+//go:fix inline
+func ptr[T any](v T) *T { return new(v) }
 
 // emote is a marked emote in a chat message.
 type emote struct {
@@ -361,14 +362,14 @@ func (p chatNotification) event() (connector.Event, error) {
 		return connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchChannelSubscribe,
-			User:     ptr(identity(p.giver())),
+			User:     new(identity(p.giver())),
 			Details:  eventtype.Details{Subscription: sub},
 		}, nil
 	case "resubscription":
 		ev := connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchChannelResubscribe,
-			User:     ptr(identity(p.giver())),
+			User:     new(identity(p.giver())),
 			Details:  eventtype.Details{Subscription: sub},
 		}
 		if p.GiftMessage != "" {
@@ -379,14 +380,14 @@ func (p chatNotification) event() (connector.Event, error) {
 		ev := connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchSubscriptionGift,
-			Target:   ptr(identity(chatUser{ID: p.ToUserID, Login: p.ToUserLogin, DisplayName: p.ToUserLogin})),
+			Target:   new(identity(chatUser{ID: p.ToUserID, Login: p.ToUserLogin, DisplayName: p.ToUserLogin})),
 			Details: eventtype.Details{
 				Subscription: sub,
 				Gift:         &eventtype.Gift{Anonymous: p.Anonymous, Count: 1},
 			},
 		}
 		if !p.Anonymous {
-			ev.User = ptr(identity(p.giver()))
+			ev.User = new(identity(p.giver()))
 		}
 		return ev, nil
 	case "mass_gift":
@@ -399,7 +400,7 @@ func (p chatNotification) event() (connector.Event, error) {
 			},
 		}
 		if !p.Anonymous {
-			ev.User = ptr(identity(p.giver()))
+			ev.User = new(identity(p.giver()))
 		}
 		// The platform names the recipients by login only; the login
 		// stands in for the platform user ID until the user service

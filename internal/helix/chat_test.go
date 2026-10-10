@@ -16,9 +16,6 @@ import (
 	"github.com/ripmav/streamcrew/internal/httpclient"
 )
 
-//go:fix inline
-func boolPtr(b bool) *bool { return new(b) }
-
 func TestSendChatMessage(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
