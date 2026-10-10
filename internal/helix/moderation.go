@@ -203,3 +203,47 @@ func (c *Client) RemoveVIP(ctx context.Context, broadcasterID, moderatorID, from
 	}
 	return c.doAnswer(ctx, req)
 }
+
+// ClearChat removes every message from the chat (Helix POST
+// /moderation/chat_delete, answers 204).
+func (c *Client) ClearChat(ctx context.Context, broadcasterID, moderatorID string) error {
+	q := url.Values{
+		"broadcaster_id": {broadcasterID},
+		"moderator_id":   {moderatorID},
+	}
+	req, err := c.request(ctx, "POST", "/moderation/chat_delete", q, nil)
+	if err != nil {
+		return err
+	}
+	return c.doAnswer(ctx, req)
+}
+
+// AddMod makes a user a moderator of the channel (Helix POST
+// /moderation/moderators, answers 204).
+func (c *Client) AddMod(ctx context.Context, broadcasterID, moderatorID, fromID string) error {
+	q := url.Values{
+		"broadcaster_id": {broadcasterID},
+		"moderator_id":   {moderatorID},
+		"from_id":        {fromID},
+	}
+	req, err := c.request(ctx, "POST", "/moderation/moderators", q, nil)
+	if err != nil {
+		return err
+	}
+	return c.doAnswer(ctx, req)
+}
+
+// RemoveMod takes the moderator role from a user (Helix DELETE
+// /moderation/moderators, answers 204).
+func (c *Client) RemoveMod(ctx context.Context, broadcasterID, moderatorID, fromID string) error {
+	q := url.Values{
+		"broadcaster_id": {broadcasterID},
+		"moderator_id":   {moderatorID},
+		"from_id":        {fromID},
+	}
+	req, err := c.request(ctx, "DELETE", "/moderation/moderators", q, nil)
+	if err != nil {
+		return err
+	}
+	return c.doAnswer(ctx, req)
+}
