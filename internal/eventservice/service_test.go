@@ -302,7 +302,6 @@ func TestEventData(t *testing.T) {
 	assert.Empty(t, f.engine.runs())
 }
 
-
 // TestChannelPointsCommand covers roadmap 4.4: a redemption runs the
 // command the reward is mapped to, with the values of the redemption;
 // a reward without a mapping runs nothing.
