@@ -155,6 +155,9 @@ func TestValidation(t *testing.T) {
 		settings.Events{MassGiftThreshold: 1001, StreamGracePeriod: 0},
 		settings.Events{MassGiftThreshold: 2, StreamGracePeriod: -1},
 		settings.Events{MassGiftThreshold: 2, StreamGracePeriod: polydoc.Duration(time.Hour + time.Millisecond)},
+		settings.ChannelPoints{Rewards: []settings.ChannelPointReward{{RewardID: "r1"}}},
+		settings.ChannelPoints{Rewards: []settings.ChannelPointReward{{Command: "c"}}},
+		settings.ChannelPoints{Rewards: []settings.ChannelPointReward{{RewardID: "r1", Command: "c"}, {RewardID: "r1", Command: "d"}}},
 	} {
 		assert.Error(t, settings.Save(ctx, svc, s), "%+v", s)
 	}

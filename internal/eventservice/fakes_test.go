@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -174,6 +175,15 @@ func (c commands) EventCommand(_ context.Context, t event.Type) (command.Command
 	return command.Command{}, false, nil
 }
 
+func (c commands) CommandByName(_ context.Context, name string) (command.Command, bool, error) {
+	for _, cmd := range c.list {
+		if strings.EqualFold(cmd.Name, name) {
+			return cmd, true, nil
+		}
+	}
+	return command.Command{}, false, nil
+}
+
 func (c commands) Command(_ context.Context, commandID id.ID) (command.Command, error) {
 	for _, cmd := range c.list {
 		if cmd.ID == commandID {
@@ -277,6 +287,18 @@ func (s *eventSettings) get(context.Context) (settings.Events, error) {
 	return s.cfg, s.err
 }
 
+// channelPointsSettings is the fake of the channel points section.
+type channelPointsSettings struct {
+	mu  sync.Mutex
+	cfg settings.ChannelPoints
+}
+
+func (s *channelPointsSettings) get(context.Context) (settings.ChannelPoints, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cfg, nil
+}
+
 func (s *eventSettings) set(change func(*settings.Events)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -289,6 +311,7 @@ type fixture struct {
 	engine   *fakeEngine
 	pub      *publisher
 	settings *eventSettings
+	points   *channelPointsSettings
 	cmds     commands
 	service  *eventservice.Service
 }
@@ -306,6 +329,7 @@ func newFixture(t *testing.T, cmds ...command.Command) *fixture {
 		engine:   &fakeEngine{},
 		pub:      &publisher{catalog: catalog},
 		settings: &eventSettings{cfg: settings.DefaultEvents()},
+		points:   &channelPointsSettings{cfg: settings.DefaultChannelPoints()},
 		cmds:     commands{list: cmds},
 	}
 	f.service = f.restart(t)
@@ -318,6 +342,7 @@ func (f *fixture) restart(t *testing.T) *eventservice.Service {
 	t.Helper()
 	svc, err := eventservice.New(t.Context(), eventservice.Ports{
 		Store: f.store, Commands: f.cmds, Engine: f.engine, Publisher: f.pub, Settings: f.settings.get,
+		ChannelPoints: f.points.get,
 	})
 	require.NoError(t, err)
 	return svc

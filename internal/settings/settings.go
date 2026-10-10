@@ -52,6 +52,7 @@ func New(repo Repository) (*Service, error) {
 		{Type: sectionCommands, Version: 4, Decode: decode[Commands], Migrations: []polydoc.Migration{migrateCommandsV1, migrateCommandsV2, migrateCommandsV3}},
 		{Type: sectionLocale, Version: 2, Decode: decode[Locale], Migrations: []polydoc.Migration{migrateLocaleV1}},
 		{Type: sectionEvents, Version: 1, Decode: decode[Events]},
+		{Type: sectionChannelPoints, Version: 1, Decode: decode[ChannelPoints]},
 	} {
 		if err := r.Register(e); err != nil {
 			return nil, err
@@ -108,11 +109,12 @@ func (u unknown) RawJSON() jsontext.Value { return u.Raw }
 func (unknown) validate() error           { return errors.New("unknown settings section") }
 
 const (
-	sectionBackups  = "backups"
-	sectionTime     = "time"
-	sectionCommands = "commands"
-	sectionLocale   = "locale"
-	sectionEvents   = "events"
+	sectionBackups       = "backups"
+	sectionTime          = "time"
+	sectionCommands      = "commands"
+	sectionLocale        = "locale"
+	sectionEvents        = "events"
+	sectionChannelPoints = "channelPoints"
 )
 
 // Limits of the section "events" (spec events.md, B5, B8, B10).
@@ -166,6 +168,53 @@ func (e Events) validate() error {
 	}
 	if grace := e.StreamGracePeriod.Std(); grace < 0 || grace > MaxStreamGracePeriod {
 		return fmt.Errorf("stream grace period %s is not between 0 and %s", grace, MaxStreamGracePeriod)
+	}
+	return nil
+}
+
+// ChannelPoints maps the channel points rewards of the channel to the
+// commands that run when they are redeemed (roadmap 4.4). A reward
+// without an entry is left to the platform.
+type ChannelPoints struct {
+	// Rewards are the mappings, in the order they were added.
+	Rewards []ChannelPointReward `json:"rewards"`
+}
+
+// ChannelPointReward maps one reward to one command.
+type ChannelPointReward struct {
+	// RewardID is the ID of the reward on the platform; not empty.
+	RewardID string `json:"reward"`
+	// Command is the name of the command that runs on a redemption; not
+	// empty.
+	Command string `json:"command"`
+}
+
+// DefaultChannelPoints returns the default of the section: no mapping.
+func DefaultChannelPoints() ChannelPoints {
+	return ChannelPoints{}
+}
+
+// DocType implements polydoc.Document.
+func (ChannelPoints) DocType() string { return sectionChannelPoints }
+
+// Validate checks the section.
+func (c ChannelPoints) Validate() error {
+	return c.validate()
+}
+
+func (c ChannelPoints) validate() error {
+	rewards := make(map[string]string, len(c.Rewards))
+	for _, r := range c.Rewards {
+		if r.RewardID == "" {
+			return errors.New("a channel points reward without an ID")
+		}
+		if r.Command == "" {
+			return fmt.Errorf("the channel points reward %s has no command", r.RewardID)
+		}
+		if other, ok := rewards[r.RewardID]; ok {
+			return fmt.Errorf("the channel points reward %s maps to both %q and %q", r.RewardID, other, r.Command)
+		}
+		rewards[r.RewardID] = r.Command
 	}
 	return nil
 }
