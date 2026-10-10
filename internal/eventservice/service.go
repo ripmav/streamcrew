@@ -279,12 +279,16 @@ func (s *Service) submit(ctx context.Context, req engine.Request) {
 var _ connector.Receiver = (*Service)(nil)
 
 // RegisterEvents adds the platform events the service publishes to c: the
-// platform-neutral types and the platform-specific ones with a neutral
-// type, each with the payload eventtype.Payload (B9).
+// platform-neutral types, the platform-specific ones with a neutral type
+// and the platform-specific ones without one, each with the payload
+// eventtype.Payload (B9); the application events carry their own payload
+// and the core registers them.
 func RegisterEvents(c *event.Catalog) error {
 	var errs []error
 	for _, d := range eventtype.All() {
-		if _, ok := eventtype.ShapeOf(d.Type); ok {
+		switch d.Type {
+		case eventtype.AppStarted, eventtype.AppStopping:
+		default:
 			errs = append(errs, event.Register[eventtype.Payload](c, d.Type))
 		}
 	}

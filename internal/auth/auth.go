@@ -491,6 +491,20 @@ func putClient(ctx context.Context, v *vault.Vault, p platform.Name, c Credentia
 	return v.Put(ctx, clientName(p), logging.Secret(data))
 }
 
+// ClientID returns the client ID of the app the account is logged in
+// with, for the headers of its API calls (roadmap 4.3); ok is false
+// without an account.
+func (s *Service) ClientID(ctx context.Context, p platform.Name, r connector.Account) (string, bool, error) {
+	row, found, err := s.ports.Store.Account(ctx, string(p), string(r))
+	if err != nil {
+		return "", false, fmt.Errorf("client ID %s %s: %w", p, r, err)
+	}
+	if !found {
+		return "", false, nil
+	}
+	return FromStore(row).ClientID, true, nil
+}
+
 // resolveApp fills in the app of a login (ADR-0023): for the
 // authorization code flow it uses the app of the last login of the
 // platform when the caller gives none, for a device code login the project
