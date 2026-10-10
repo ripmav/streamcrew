@@ -32,10 +32,11 @@ type Spec struct {
 }
 
 // desired is the table of the subscriptions of this adapter: exactly
-// the event types that the mapping (task 4) handles, nothing else
+// the event types that the mapping (map.go) handles, nothing else
 // (plan 2026-10-10-eventsub-websocket.md, open point 3: the manager
 // must not subscribe to events without a handler). The reference is
-// plan appendix A.2; the rest of it is for 4.4.
+// plan appendix A.2 (4.3) and the specification twitch-events.md
+// (4.4, B1, B15).
 //
 //nolint:gochecknoglobals // the static desired state; it carries the account ID nowhere
 var desired = []Spec{
@@ -51,6 +52,18 @@ var desired = []Spec{
 	{EventType: "channel.shared_chat.begin", Version: "1"},
 	{EventType: "channel.shared_chat.update", Version: "1"},
 	{EventType: "channel.shared_chat.end", Version: "1"},
+	{EventType: "channel.hype_train.start", Version: "1"},
+	{EventType: "channel.hype_train.progress", Version: "1"},
+	{EventType: "channel.hype_train.end", Version: "1"},
+	{EventType: "channel.ad.started", Version: "1"},
+	{EventType: "channel.shoutout.received", Version: "1"},
+	{EventType: "channel.goal.start", Version: "1"},
+	{EventType: "channel.goal.progress", Version: "1"},
+	{EventType: "channel.goal.complete", Version: "1"},
+	{EventType: "channel.charity.progress", Version: "1"},
+	{EventType: "channel.charity.complete", Version: "1"},
+	{EventType: "channel.channel_points_automatic_reward_redemption.add", Version: "1"},
+	{EventType: "channel.channel_points_custom_reward_redemption.add", Version: "1"},
 	{EventType: "user.whisper.message", Version: "1", User: true},
 }
 

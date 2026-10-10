@@ -292,7 +292,6 @@ func TestEventData(t *testing.T) {
 		"stream start":        {Platform: platform.Mock, Type: eventtype.ChannelStreamStart},
 		"derived":             {Platform: platform.Mock, Type: eventtype.ChatUserEntrance, User: &ada},
 		"type of Twitch":      {Platform: platform.Mock, Type: eventtype.TwitchChannelFollow, User: &ada},
-		"no payload yet":      {Platform: platform.Twitch, Type: eventtype.TwitchBitsCheer},
 		"application":         {Platform: platform.Mock, Type: eventtype.AppStarted},
 		"account of Twitch":   {Platform: platform.Mock, Type: eventtype.ChannelFollow, User: new(account(platform.Twitch, "ada"))},
 		"unknown type":        {Platform: platform.Mock, Type: "channel.nothing"},
@@ -304,6 +303,94 @@ func TestEventData(t *testing.T) {
 }
 
 // TestStreamSession covers B8, B24 and B25 of events.md and B41 of
+
+// TestTwitchEventValues covers B18 and B19 of twitch-events.md: the
+// values of the twitch events the identifiers of the event commands
+// can use.
+func TestTwitchEventValues(t *testing.T) {
+	t.Parallel()
+	ada := account(platform.Twitch, "8")
+	f := newFixture(t,
+		on(eventtype.TwitchBitsCheer),
+		on(eventtype.ChatUserBan),
+		on(eventtype.TwitchHypeTrainEnd),
+		on(eventtype.TwitchAdStart),
+		on(eventtype.TwitchShoutoutReceive),
+		on(eventtype.TwitchGoalEnd),
+		on(eventtype.TwitchCharityDonation),
+		on(eventtype.TwitchChannelPointsRedeem),
+		on(eventtype.TwitchCustomPowerUpRedeem),
+	)
+	ctx := t.Context()
+	require.NoError(t, f.service.Event(ctx, connector.Event{
+		Platform: platform.Twitch, Type: eventtype.TwitchBitsCheer, User: &ada,
+		Details: eventtype.Details{Bits: &eventtype.Bits{Amount: 100}, Message: &eventtype.Message{Text: "cheer"}},
+	}))
+	require.NoError(t, f.service.Event(ctx, connector.Event{
+		Platform: platform.Twitch, Type: eventtype.ChatUserBan, User: &ada,
+		Details: eventtype.Details{Moderation: &eventtype.Moderation{Message: "no spam"}},
+	}))
+	require.NoError(t, f.service.Event(ctx, connector.Event{
+		Platform: platform.Twitch, Type: eventtype.TwitchHypeTrainEnd,
+		Details: eventtype.Details{HypeTrain: &eventtype.HypeTrain{Level: 3, Progress: 12000, Goal: 10000, RewardLevel: 2, Outcome: "goal_reached"}},
+	}))
+	require.NoError(t, f.service.Event(ctx, connector.Event{
+		Platform: platform.Twitch, Type: eventtype.TwitchAdStart,
+		Details: eventtype.Details{AdBreak: &eventtype.AdBreak{Duration: 30, Message: "break"}},
+	}))
+	require.NoError(t, f.service.Event(ctx, connector.Event{
+		Platform: platform.Twitch, Type: eventtype.TwitchShoutoutReceive, User: &ada,
+		Details: eventtype.Details{Shoutout: &eventtype.Shoutout{Viewers: 7}},
+	}))
+	require.NoError(t, f.service.Event(ctx, connector.Event{
+		Platform: platform.Twitch, Type: eventtype.TwitchGoalEnd,
+		Details: eventtype.Details{Goal: &eventtype.Goal{Current: 100, Target: 100, Currency: "USD"}},
+	}))
+	require.NoError(t, f.service.Event(ctx, connector.Event{
+		Platform: platform.Twitch, Type: eventtype.TwitchCharityDonation,
+		Details: eventtype.Details{Charity: &eventtype.Charity{Current: 50, Target: 200, Currency: "EUR"}},
+	}))
+	require.NoError(t, f.service.Event(ctx, connector.Event{
+		Platform: platform.Twitch, Type: eventtype.TwitchChannelPointsRedeem, User: &ada,
+		Details: eventtype.Details{ChannelPoints: &eventtype.ChannelPoints{Amount: 100, Reward: "r1"}},
+	}))
+	require.NoError(t, f.service.Event(ctx, connector.Event{
+		Platform: platform.Twitch, Type: eventtype.TwitchCustomPowerUpRedeem, User: &ada,
+		Details: eventtype.Details{CustomPowerUp: &eventtype.CustomPowerUp{Reward: "p1"}, Message: &eventtype.Message{Text: "a hug"}},
+	}))
+	reqs := f.engine.take()
+	require.Len(t, reqs, 9)
+	v := reqs[0].Params.Values
+	assert.Equal(t, template.NumberValue(decimal.New(100)), v[template.EventCheerBits])
+	assert.Equal(t, template.TextValue("cheer"), v[template.EventMessage])
+	v = reqs[1].Params.Values
+	assert.Equal(t, template.TextValue("no spam"), v[template.EventModerationMessage])
+	v = reqs[2].Params.Values
+	assert.Equal(t, template.NumberValue(decimal.New(3)), v[template.EventHypeTrainLevel])
+	assert.Equal(t, template.NumberValue(decimal.New(12000)), v[template.EventHypeTrainProgress])
+	assert.Equal(t, template.NumberValue(decimal.New(10000)), v[template.EventHypeTrainGoal])
+	assert.Equal(t, template.NumberValue(decimal.New(2)), v[template.EventHypeTrainReward])
+	assert.Equal(t, template.TextValue("goal_reached"), v[template.EventHypeTrainOutcome])
+	v = reqs[3].Params.Values
+	assert.Equal(t, template.NumberValue(decimal.New(30)), v[template.EventAdBreakDuration])
+	assert.Equal(t, template.TextValue("break"), v[template.EventAdBreakMessage])
+	v = reqs[4].Params.Values
+	assert.Equal(t, template.NumberValue(decimal.New(7)), v[template.EventShoutoutViewers])
+	v = reqs[5].Params.Values
+	assert.Equal(t, template.NumberValue(decimal.New(100)), v[template.EventGoalCurrentAmount])
+	assert.Equal(t, template.NumberValue(decimal.New(100)), v[template.EventGoalTargetAmount])
+	assert.Equal(t, template.TextValue("USD"), v[template.EventGoalCurrency])
+	v = reqs[6].Params.Values
+	assert.Equal(t, template.NumberValue(decimal.New(50)), v[template.EventDonationCurrent])
+	assert.Equal(t, template.NumberValue(decimal.New(200)), v[template.EventDonationTarget])
+	assert.Equal(t, template.TextValue("EUR"), v[template.EventDonationCurrency])
+	v = reqs[7].Params.Values
+	assert.Equal(t, template.NumberValue(decimal.New(100)), v[template.EventChannelPoints])
+	assert.Equal(t, template.TextValue("r1"), v[template.EventChannelPointsID])
+	v = reqs[8].Params.Values
+	assert.Equal(t, template.TextValue("p1"), v[template.EventCustomPowerUp])
+	assert.Equal(t, template.TextValue("a hug"), v[template.EventMessage])
+}
 // command-engine.md: a short break keeps the session, a long one ends it
 // after the grace period, and greetings stop when the stream goes offline.
 func TestStreamSession(t *testing.T) {

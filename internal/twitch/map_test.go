@@ -327,3 +327,92 @@ func TestMapDropsTheUnknown(t *testing.T) {
 	assert.Empty(t, r.events)
 	assert.Empty(t, r.streams)
 }
+
+func TestMapHypeTrain(t *testing.T) {
+	r := &fakeReceiver{}
+	m := mapperFor(t, r, "")
+	handle(t, m, "channel.hype_train.start", `{"current_level": 1, "progress": 0, "goal": 10000, "reward_interval": 5000}`, "id-1")
+	ev := r.lastEvent(t)
+	assert.Equal(t, eventtype.TwitchHypeTrainStart, ev.Type)
+	assert.Equal(t, &eventtype.HypeTrain{Level: 1, Progress: 0, Goal: 10000}, ev.Details.HypeTrain)
+
+	handle(t, m, "channel.hype_train.progress", `{"current_level": 2, "progress": 6000, "goal": 10000, "reward_interval": 5000}`, "id-2")
+	ev = r.lastEvent(t)
+	assert.Equal(t, eventtype.TwitchHypeTrainProgress, ev.Type)
+	assert.Equal(t, 1, ev.Details.HypeTrain.RewardLevel)
+
+	handle(t, m, "channel.hype_train.end", `{"current_level": 3, "progress": 12000, "goal": 10000, "reward_interval": 5000, "end_reason": "goal_reached"}`, "id-3")
+	ev = r.lastEvent(t)
+	assert.Equal(t, eventtype.TwitchHypeTrainEnd, ev.Type)
+	assert.Equal(t, "goal_reached", ev.Details.HypeTrain.Outcome)
+}
+
+func TestMapAdStart(t *testing.T) {
+	r := &fakeReceiver{}
+	m := mapperFor(t, r, "")
+	handle(t, m, "channel.ad.started", `{"length": 30, "message": "take a break"}`, "id-1")
+	ev := r.lastEvent(t)
+	assert.Equal(t, eventtype.TwitchAdStart, ev.Type)
+	assert.Equal(t, &eventtype.AdBreak{Duration: 30, Message: "take a break"}, ev.Details.AdBreak)
+}
+
+func TestMapShoutout(t *testing.T) {
+	r := &fakeReceiver{}
+	m := mapperFor(t, r, "")
+	handle(t, m, "channel.shoutout.received", `{"from_user_id": "5", "from_user_login": "shouter", "from_user_display_name": "Shouter", "from_user_viewers": 7, "to_user_id": "7"}`, "id-1")
+	ev := r.lastEvent(t)
+	assert.Equal(t, eventtype.TwitchShoutoutReceive, ev.Type)
+	require.NotNil(t, ev.User)
+	assert.Equal(t, "5", ev.User.PlatformUserID)
+	assert.Equal(t, &eventtype.Shoutout{Viewers: 7}, ev.Details.Shoutout)
+}
+
+func TestMapGoal(t *testing.T) {
+	r := &fakeReceiver{}
+	m := mapperFor(t, r, "")
+	handle(t, m, "channel.goal.start", `{"current_amount": 0, "target_amount": 100, "currency": "USD"}`, "id-1")
+	assert.Equal(t, eventtype.TwitchGoalStart, r.lastEvent(t).Type)
+	handle(t, m, "channel.goal.complete", `{"current_amount": 100, "target_amount": 100, "currency": "USD"}`, "id-2")
+	ev := r.lastEvent(t)
+	assert.Equal(t, eventtype.TwitchGoalEnd, ev.Type)
+	assert.Equal(t, &eventtype.Goal{Current: 100, Target: 100, Currency: "USD"}, ev.Details.Goal)
+}
+
+func TestMapCharity(t *testing.T) {
+	r := &fakeReceiver{}
+	m := mapperFor(t, r, "")
+	handle(t, m, "channel.charity.progress", `{"current_amount": 50, "target_amount": 200, "currency": "EUR"}`, "id-1")
+	ev := r.lastEvent(t)
+	assert.Equal(t, eventtype.TwitchCharityDonation, ev.Type)
+	assert.Equal(t, &eventtype.Charity{Current: 50, Target: 200, Currency: "EUR"}, ev.Details.Charity)
+}
+
+func TestMapChannelPointsRedemption(t *testing.T) {
+	r := &fakeReceiver{}
+	m := mapperFor(t, r, "")
+	handle(t, m, "channel.channel_points_automatic_reward_redemption.add", `{"automatic_reward_id": "r1", "automatic_reward_cost": 100, "user_id": "8", "user_login": "alice"}`, "id-1")
+	ev := r.lastEvent(t)
+	assert.Equal(t, eventtype.TwitchChannelPointsRedeem, ev.Type)
+	require.NotNil(t, ev.User)
+	assert.Equal(t, "alice", ev.User.Login)
+	assert.Equal(t, &eventtype.ChannelPoints{Amount: 100, Reward: "r1"}, ev.Details.ChannelPoints)
+}
+
+func TestMapCustomPowerUpRedemption(t *testing.T) {
+	r := &fakeReceiver{}
+	m := mapperFor(t, r, "")
+	handle(t, m, "channel.channel_points_custom_reward_redemption.add", `{"custom_reward_id": "p1", "custom_reward_cost": 50, "custom_reward_user_input": "a hug", "user_id": "8", "user_login": "alice"}`, "id-1")
+	ev := r.lastEvent(t)
+	assert.Equal(t, eventtype.TwitchCustomPowerUpRedeem, ev.Type)
+	assert.Equal(t, &eventtype.CustomPowerUp{Reward: "p1"}, ev.Details.CustomPowerUp)
+	assert.Equal(t, "a hug", ev.Details.Message.Text)
+}
+
+func TestMapModerationMessage(t *testing.T) {
+	r := &fakeReceiver{}
+	m := mapperFor(t, r, "")
+	handle(t, m, "channel.moderate", `{"moderation_action": "ban", "moderation_message": "no spam", "target_user_id": "8", "target_user_login": "alice"}`, "id-1")
+	ev := r.lastEvent(t)
+	assert.Equal(t, eventtype.ChatUserBan, ev.Type)
+	assert.Equal(t, &eventtype.Moderation{Message: "no spam"}, ev.Details.Moderation)
+}
