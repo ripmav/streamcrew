@@ -93,7 +93,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
 | Phase 3: Engine, Templates, Actions, Mock | abgeschlossen 2026-10-07, M1 erreicht (PR #143, CI grün); vertagt: die Schwelle der Sammelgeschenke (3.4, P1) |
-| Phase 4: Twitch | in Arbeit: 4.1 (Authentifizierung) und 4.2 (Helix-Client) abgeschlossen (4.2 in Stack #162, Merging ausstehend), 4.3 (EventSub) folgt |
+| Phase 4: Twitch | in Arbeit: 4.1 (Authentifizierung), 4.2 (Helix-Client) und 4.3 (EventSub) abgeschlossen (4.2 in Stack #162, 4.3 in Stack #170; Merging ausstehend), 4.4 (Funktionen) folgt |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
 | Phase 7: Overlays und Medien | offen |
@@ -535,17 +535,18 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 
 ### 4.3 EventSub
 
-- [ ] Code-ADR-0015 WebSocket-Bibliothek (S)
-- [ ] WebSocket-Client (L):
-  - Welcome-Nachricht, Keepalive-Überwachung
-  - `session_reconnect` ohne Eventverlust
-  - Revocation
-  - Deduplizierung per `message_id`
-- [ ] Subscription-Manager (M):
-  - Sollzustand nach Plan Anhang A.2
-  - Abgleich mit bestehenden Subscriptions
-  - Versionen, Bedingungen, Limits
-- [ ] Abbildung auf kanonische Events und das Chat-Modell: Fragmente, Emotes, Cheermotes, Badges, Antworten, Shared Chat (L)
+- [x] Code-ADR-0015 WebSocket-Bibliothek (S), erledigt 2026-10-10 (vorgeschlagen; Annahme durch den Projektinhaber steht aus)
+- [x] WebSocket-Client (L), erledigt 2026-10-10 (`internal/twitch` auf `coder/websocket` nach [Code-ADR-0015](adr/code/0015-websocket-bibliothek.md):
+  - [x] Welcome-Nachricht, Keepalive-Überwachung
+  - [x] `session_reconnect` ohne Eventverlust
+  - [x] Revocation
+  - [x] Deduplizierung per `message_id`
+- [x] Subscription-Manager (M), erledigt 2026-10-10 (`internal/twitch`:
+  - [x] Sollzustand nach Plan Anhang A.2 (nur die Typen, die die Abbildung behandelt; der Rest gehört zu 4.4)
+  - [x] Abgleich mit bestehenden Subscriptions
+  - [x] Versionen, Bedingungen, Limits (400 → überspringen und WARN-Log)
+- [x] Abbildung auf kanonische Events und das Chat-Modell: Fragmente, Emotes, Cheermotes, Badges, Shared Chat (L), erledigt 2026-10-10 (Antworten verworfen: die kanonische Nachricht hat kein Antwort-Feld, [Backlog](backlog.md))
+- [x] Einbau in die Composition Root: der Adapter läuft mit dem Core, tokenabhängig (Streamer-Konto), Stream-Zustand nach jedem Verbinden (B11), geordnetes Herunterfahren; Chat/Moderation/Users bleiben `ErrNotImplemented` bis 4.4 (M)
 
 ### 4.4 Funktionen
 
@@ -1339,3 +1340,4 @@ Eigene Datei seit 2026-10-09: [backlog.md](backlog.md).
 | 2026-10-10 | `internal/helix` Follower, Abos, Kategorien (4.2, Task 7): `GetFollowers` (paginiert, optionaler Follower-Filter), `GetFollows` (Follows des Senders, paginiert), `GetChannelSubscriptions` (aktive Abos, paginiert, inkl. Gifter-Felder), `GetGames` (IDs/Name, paginiert) und `SearchGames` (max. 25 Treffer, keine Paginierung). 6 synctest-Tests. (PR #165; Stack #162 [158, 159, 160, 161, 163, 164, 165].) |
 | 2026-10-10 | `internal/helix` EventSub-Subscriptions (4.2, Task 8, Fundament für den 4.3-Subscription-Manager): `CreateSubscription` (201; Condition mit genau einem Feld, Transport immer websocket — das Webhook-Transport ist deprecated), `RevokeSubscription` (204), `GetSubscriptions` (paginiert); die Antwort trägt Status und Transport für den 4.3-Abgleich. `GetSubscriptions` der Kanal-Abos (Task 7) wird zu `GetChannelSubscriptions` (Helix-Name). 4 synctest-Tests (Anlage mit Condition, 400-Limit, Widerruf, Paginierung). Damit sind alle 4.2-Endpunkte umgesetzt; Phase 4.3 (EventSub-WebSocket) folgt. (PR #166; Stack #162 [158, 159, 160, 161, 163, 164, 165, 166].) |
 | 2026-10-10 | Code-ADR-0015 (WebSocket-Bibliothek) vorgeschlagen: `github.com/coder/websocket` v1.8.15 (ISC, in der Allowlist; die aktiv gepflegte Fortsetzung von `nhooyr/websocket`) mit Kontext-API statt `gorilla/websocket` (stagnant, Deadlines statt Kontext). Keepalive auf Nachrichten-Ebene (Twitch PING/PONG-Texte) bleibt eigene Logik; Reconnect über `session_reconnect` mit Session-ID, ungeplante Abbrüche mit exponentiellem Backoff (die Werte des HTTP-Client). Dazu der Plan 4.3 (EventSub-WebSocket) und der eigene 4.3-Stack. |
+| 2026-10-10 | Phase 4.3 (EventSub) abgeschlossen (Stack #170 [168, 169, 171, 172, 173]): der Twitch-Adapter in `internal/twitch` verbindet das EventSub-WebSocket (Welcome/`hello`, Keepalive-Überwachung, `session_reconnect` ohne Eventverlust, Revocation, Deduplizierung per `message_id`), hält die EventSub-Subscriptions am Soll-Zustand (nur die Typen, die die Abbildung behandelt; 400 → überspringen und WARN) und mappt die Ereignisse auf das Event-Modell (Chat-Nachrichten mit Emotes und Badges-Rollen, Abo/Resub/Geschenk über `channel.chat.notification`, Cheer, Moderate, Whisper, Shared Chat mit neuen Katalog-Typen `twitch.shared_chat.*`). Der Adapter läuft mit dem Core, tokenabhängig am Streamer-Konto, und meldet den Stream-Zustand nach jedem Verbinden (B11); Chat/Moderation/Users bleiben `ErrNotImplemented` bis 4.4. Antwort-Felder in der Chat-Nachricht verworfen (die kanonische Nachricht hat keins; Backlog). ADR-0015 bleibt „Vorgeschlagen“ bis zur Annahme durch den Projektinhaber. |
