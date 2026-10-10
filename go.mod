@@ -5,6 +5,7 @@ go 1.27.2
 require (
 	github.com/alecthomas/kong v1.16.1
 	github.com/cockroachdb/apd/v3 v3.2.3
+	github.com/coder/websocket v1.8.15
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/sethvargo/go-retry v0.5.0
@@ -20,7 +21,6 @@ require (
 )
 
 require (
-	github.com/coder/websocket v1.8.15 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
