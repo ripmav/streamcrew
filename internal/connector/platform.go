@@ -36,6 +36,10 @@ var (
 	// streamer; the error text has the reason of the platform (actions.md
 	// B86).
 	ErrRefused = errors.New("refused by the platform")
+	// ErrNotImplemented is returned by a platform for a capability its
+	// roadmap phase does not provide yet, e.g. the Twitch chat and
+	// moderation operations before roadmap 4.4.
+	ErrNotImplemented = errors.New("not implemented")
 )
 
 // Account is an account of the channel on a platform. The platform is
