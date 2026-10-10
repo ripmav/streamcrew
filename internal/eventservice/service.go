@@ -81,6 +81,9 @@ type Commands interface {
 	// EventCommand returns the event command of type t; ok is false if
 	// there is none (commands.md, B20).
 	EventCommand(ctx context.Context, t event.Type) (cmd command.Command, ok bool, err error)
+	// CommandByName returns the command with the name, case-insensitively;
+	// ok is false if there is none.
+	CommandByName(ctx context.Context, name string) (cmd command.Command, ok bool, err error)
 	// Command returns a command, e.g. the entrance command of a user.
 	Command(ctx context.Context, commandID id.ID) (command.Command, error)
 }
@@ -109,6 +112,10 @@ type Ports struct {
 	// Settings reads the settings section "events" (B10) whenever a rule
 	// needs it, so changes apply at once.
 	Settings func(ctx context.Context) (settings.Events, error)
+	// ChannelPoints reads the settings section "channelPoints": the
+	// mapping of the channel points rewards to their commands (roadmap
+	// 4.4), whenever a redemption needs it.
+	ChannelPoints func(ctx context.Context) (settings.ChannelPoints, error)
 }
 
 // Option configures a Service. An option without a valid value makes New

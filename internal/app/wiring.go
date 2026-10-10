@@ -431,3 +431,8 @@ func (l localeLanguage) Language(ctx context.Context) (i18n.Language, error) {
 func (a *App) eventsSettings(ctx context.Context) (settings.Events, error) {
 	return settings.Load(ctx, a.settings, settings.DefaultEvents())
 }
+
+// channelPointsSettings reads the section "channelPoints" (roadmap 4.4).
+func (a *App) channelPointsSettings(ctx context.Context) (settings.ChannelPoints, error) {
+	return settings.Load(ctx, a.settings, settings.DefaultChannelPoints())
+}

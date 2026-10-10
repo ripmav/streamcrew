@@ -4,26 +4,29 @@ package command
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/ripmav/streamcrew/internal/event"
 )
 
 // snapshot is what the service derives from all commands for chat messages
-// and events: the triggers of the enabled chat commands (B16) and the event
-// command of each event type (B20).
+// and events: the triggers of the enabled chat commands (B16), the event
+// command of each event type (B20) and the command of each name.
 type snapshot struct {
 	triggers *TriggerIndex
 	events   map[event.Type]Command
+	byName   map[string]Command
 }
 
 // newSnapshot derives the snapshot of cmds.
 func newSnapshot(cmds []Command) *snapshot {
-	s := &snapshot{triggers: NewTriggerIndex(cmds), events: make(map[event.Type]Command)}
+	s := &snapshot{triggers: NewTriggerIndex(cmds), events: make(map[event.Type]Command), byName: make(map[string]Command, len(cmds))}
 	for _, cmd := range cmds {
 		if cmd.Kind == KindEvent {
 			s.events[cmd.Event] = cmd
 		}
+		s.byName[strings.ToLower(cmd.Name)] = cmd
 	}
 	return s
 }
@@ -90,5 +93,16 @@ func (s *Service) EventCommand(ctx context.Context, t event.Type) (cmd Command, 
 		return Command{}, false, err
 	}
 	cmd, ok = snap.events[t]
+	return cmd, ok, nil
+}
+
+// CommandByName returns the command with the name, case-insensitively,
+// enabled or not; ok is false if there is none.
+func (s *Service) CommandByName(ctx context.Context, name string) (cmd Command, ok bool, err error) {
+	snap, err := s.snapshot(ctx)
+	if err != nil {
+		return Command{}, false, err
+	}
+	cmd, ok = snap.byName[strings.ToLower(name)]
 	return cmd, ok, nil
 }
