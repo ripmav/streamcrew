@@ -16,7 +16,8 @@ import (
 	"github.com/ripmav/streamcrew/internal/httpclient"
 )
 
-func boolPtr(b bool) *bool { return &b }
+//go:fix inline
+func boolPtr(b bool) *bool { return new(b) }
 
 func TestSendChatMessage(t *testing.T) {
 	t.Parallel()
@@ -118,7 +119,7 @@ func TestUpdateChatSettings(t *testing.T) {
 		s, err := c.UpdateChatSettings(t.Context(), helix.UpdateChatSettingsInput{
 			BroadcasterID:    "7",
 			ModeratorID:      "9",
-			SlowMode:         boolPtr(true),
+			SlowMode:         new(true),
 			SlowModeWaitTime: 30,
 		})
 		require.NoError(t, err)
