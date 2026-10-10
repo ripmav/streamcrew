@@ -104,8 +104,8 @@
 **Folgearbeiten:**
 
 - [x] Nach der Annahme den Status setzen und den Index in [`README.md`](README.md) anpassen, erledigt 2026-09-29
-- [ ] `internal/breaker` mit Standardwerten, Fehlerbewertung, Logging und Übersetzung in `ErrUnavailable` umsetzen (Roadmap Phase 4.2)
-- [ ] Im Code-ADR zum HTTP-Client die Reihenfolge Wiederholung → Breaker → Rate-Limiter → Anfrage festhalten und den Breaker einbauen (Roadmap Phase 4.2)
-- [ ] Breaker für `twitch.helix` und `twitch.auth` (Roadmap Phase 4.1 und 4.2), später für die übrigen Plattformen und Integrationen
+- [x] `internal/breaker` mit Standardwerten, Fehlerbewertung, Logging und Übersetzung in `ErrUnavailable` umsetzen (Roadmap Phase 4.2), erledigt 2026-10-09 (PR #154)
+- [x] Im Code-ADR zum HTTP-Client die Reihenfolge Wiederholung → Breaker → Rate-Limiter → Anfrage festhalten und den Breaker einbauen (Roadmap Phase 4.2), erledigt 2026-10-09 (Code-ADR-0014, PR #153; `internal/httpclient` PR #156)
+- [x] Breaker für `twitch.helix` und `twitch.auth` (Roadmap Phase 4.1 und 4.2), später für die übrigen Plattformen und Integrationen, erledigt 2026-10-09: beide Instanzen entstehen in den Composition Roots (Core, CLI) und werden von `internal/auth` (PR #157) und `internal/helix` (PR #163) geteilt
 - [ ] Zustandswechsel als Ereignis auf den Event-Bus legen und in API und Frontends anzeigen (Roadmap Phase 4 bzw. 6)
 - [ ] Standardwerte nach dem Test-Stream (Phase 4) und den Chaos-Tests (Phase 11) überprüfen
