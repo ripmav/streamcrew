@@ -57,6 +57,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/store"
 	"github.com/ripmav/streamcrew/internal/supervisor"
 	"github.com/ripmav/streamcrew/internal/template"
+	"github.com/ripmav/streamcrew/internal/twitch"
 	"github.com/ripmav/streamcrew/internal/vault"
 )
 
@@ -358,6 +359,20 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	// can still deliver its pending instances to it; on start the
 	// supervisor runs the runnables at the same time, so the platforms are
 	// connected when the core is ready and "app.started" goes out.
+	// Unless the option gives a platform (the mock console), it is the
+	// Twitch platform (ADR-0004: Twitch at the start); it connects when
+	// the streamer account has a token (roadmap 4.3, task 5).
+	if o.platform == nil {
+		o.platform = func(_ context.Context, b PlatformBuilder) (connector.Platform, error) {
+			return twitch.NewPlatform(twitch.PlatformOptions{
+				Receiver:   b.Receiver,
+				Auth:       twitchStreamAuth{s: a.auth},
+				Helix:      twitchHelix,
+				DialClient: authClient,
+				Logger:     component(b.Logger, "twitch"),
+			}), nil
+		}
+	}
 	if o.platform != nil {
 		err = errors.Join(err, a.addPlatform(ctx, o.platform))
 	}

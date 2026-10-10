@@ -5,6 +5,7 @@ package twitch_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -263,4 +264,30 @@ func TestRunNoKeepaliveClosesAndReconnects(t *testing.T) {
 	})
 	cancel()
 	<-done
+}
+
+func TestRunMissingTokenEndsWithoutBackoff(t *testing.T) {
+	var dials atomic.Int64
+	srv := wsServer(t, func(_ *testing.T, _ *http.Request, conn *websocket.Conn) {
+		dials.Add(1)
+		hold(conn)
+	})
+	defer srv.Close()
+
+	c := twitch.New(twitch.Options{
+		Base:       srv.URL + "/",
+		Token:      func(context.Context) (string, error) { return "", errors.New("login required") },
+		HTTPClient: srv.Client(),
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- c.Run(ctx, newTestHandler()) }()
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, twitch.ErrToken)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not end")
+	}
+	assert.Zero(t, dials.Load())
 }
