@@ -239,13 +239,16 @@ func (p *Platform) session(ctx context.Context, st AccountState) error {
 		Logger:     p.log,
 	})
 
-	p.setConnected(true)
 	p.log.InfoContext(ctx, "the twitch platform connected", "streamer", st.Login)
 	defer func() {
 		p.setConnected(false)
 		p.log.InfoContext(ctx, "the twitch platform disconnected")
 	}()
 	p.streamState(ctx, hc, st.AccountID)
+	// The status goes up only after the initial stream state was
+	// handed over, so a connected status never precedes the state
+	// event.
+	p.setConnected(true)
 
 	mgrCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
