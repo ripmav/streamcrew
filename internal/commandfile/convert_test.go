@@ -322,3 +322,31 @@ func TestReferencesAtTop(t *testing.T) {
 		})
 	}
 }
+
+// TestConvertBitsRequirement covers the bits requirement (roadmap 4.4): it is
+// decoded from the command file like the other requirement types, and an
+// amount below 1 is a problem.
+func TestConvertBitsRequirement(t *testing.T) {
+	t.Parallel()
+	plan, problems := convert(t, commandfile.Existing{}, "bits.yaml", head+`kind: ChatCommand
+metadata: {name: BitHug}
+spec:
+  triggers: [bithug]
+  requirements: {bits: {amount: 100}}
+  actions: [{type: chat, kind: message, message: "thanks for the bits!"}]
+`)
+	require.Empty(t, problems)
+	require.Len(t, plan.Commands, 1)
+	hug := plan.Commands[0].Value
+	require.Len(t, hug.Requirements, 1)
+	assert.Equal(t, command.BitsRequirement{Amount: 100}, hug.Requirements[0])
+
+	_, problems = convert(t, commandfile.Existing{}, "bits.yaml", head+`kind: ChatCommand
+metadata: {name: BitHug}
+spec:
+  triggers: [bithug]
+  requirements: {bits: {amount: 0}}
+  actions: [{type: chat, kind: message, message: "x"}]
+`)
+	require.Len(t, problems, 1)
+}

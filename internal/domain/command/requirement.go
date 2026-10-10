@@ -31,6 +31,7 @@ const (
 	TypeArguments = "arguments"
 	TypeThreshold = "threshold"
 	TypeSettings  = "settings"
+	TypeBits      = "bits"
 )
 
 // requirementTypes lists the requirement types of this package.
@@ -44,6 +45,7 @@ func requirementTypes() []polydoc.Entry[Requirement] {
 		{Type: TypeArguments, Version: 1, Decode: decodeRequirement[ArgumentsRequirement]},
 		{Type: TypeThreshold, Version: 1, Decode: decodeRequirement[ThresholdRequirement]},
 		{Type: TypeSettings, Version: 1, Decode: decodeRequirement[SettingsRequirement]},
+		{Type: TypeBits, Version: 1, Decode: decodeRequirement[BitsRequirement]},
 	}
 }
 
@@ -478,6 +480,29 @@ func (SettingsRequirement) DocType() string { return TypeSettings }
 
 // Validate implements Requirement.
 func (SettingsRequirement) Validate() error { return nil }
+
+// BitsRequirement lets a command run only when the run the command is
+// triggered by carries at least Amount bits, e.g. a cheer of a
+// twitch.bits.cheer event command (roadmap 4.4). A run without bits, e.g.
+// a plain chat command, never meets it.
+// shortcut: only the bits of the triggering run are counted; there is no
+// cumulative/total scope. Add a stored per-user bits counter if a total
+// scope is asked for.
+type BitsRequirement struct {
+	// Amount is the minimum number of bits, at least 1.
+	Amount int64 `json:"amount"`
+}
+
+// DocType implements polydoc.Document.
+func (BitsRequirement) DocType() string { return TypeBits }
+
+// Validate implements Requirement.
+func (r BitsRequirement) Validate() error {
+	if r.Amount < 1 {
+		return fmt.Errorf("bits amount %d is not at least 1", r.Amount)
+	}
+	return nil
+}
 
 // UnknownRequirement keeps a requirement this version cannot read; it is
 // saved unchanged and never met (Code-ADR-0010).

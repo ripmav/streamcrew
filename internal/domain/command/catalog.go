@@ -25,6 +25,9 @@ func RequirementCatalog() []RequirementDescriptor {
 		{Type: TypeRole, Schema: schema.Object(
 			schema.Property{Name: "role", Schema: schema.Choice(roleIDs()...), Required: true},
 		)},
+		{Type: TypeBits, Schema: schema.Object(
+			schema.Property{Name: "amount", Schema: count(1), Required: true},
+		)},
 		{Type: TypeCooldown, Schema: schema.Pick("scope", nil,
 			schema.Alternative{
 				Values: []string{string(CooldownStandard), string(CooldownPerUser)},

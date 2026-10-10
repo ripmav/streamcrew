@@ -40,6 +40,13 @@ func requirementExamples() map[string][]requirementExample {
 			{`{}`, false},
 			{`{"role":"follower","extra":1}`, false},
 		},
+		command.TypeBits: {
+			{`{"amount":100}`, true},
+			{`{"amount":1}`, true},
+			{`{"amount":0}`, false},
+			{`{}`, false},
+			{`{"amount":100,"extra":1}`, false},
+		},
 		command.TypeCooldown: {
 			{`{"scope":"standard","duration":"30s"}`, true},
 			{`{"scope":"per_user","duration":"1m30s"}`, true},
