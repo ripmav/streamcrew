@@ -4,6 +4,7 @@
 |---|---|
 | **Status** | Akzeptiert |
 | **Datum** | 2026-10-09 |
+| **Aktualisiert** | 2026-10-09: `sethvargo/go-retry` ist auf v0.5.0 gezogen (Latest-Regel); `WithMaxRetries`/`WithMaxDuration` ersetzen die eigene Zählung im Backoff — Kontext, Punkt 1 und Punkt 4 angepasst |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Plan §12.2 (ADR-Backlog, 0014); Roadmap Phase 4.2; [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0003](0003-fehler-und-logging.md), [Code-ADR-0006](0006-teststrategie.md), [Code-ADR-0007](0007-circuit-breaker.md), [Code-ADR-0018](0018-json-v2.md), [Code-ADR-0019](0019-host-rechte-in-der-startkonfiguration.md) |
 
@@ -15,7 +16,7 @@
 - Der Circuit Breaker ist entschieden (Code-ADR-0007): `sony/gobreaker/v2` in einer dünnen Schicht `internal/breaker`, ein Breaker je Dienst-API (`twitch.helix`, `twitch.auth`), einheitliche Fehlerbewertung (Netzwerk/5xx Fehler, 4xx Erfolg, 429 und `context.Canceled` ausgeschlossen), Übersetzung in den Domänenfehler `ErrUnavailable`.
 - Der Projektinhaber hat am 2026-10-09 entschieden: die Middleware (Wiederholung, Drosselung) kommt per Bibliotheken, aber nicht von HashiCorp (kein `hashicorp/go-retryablehttp`).
 - Bibliotheken (Stand 2026-10-09, alle MIT bzw. `golang.org/x`):
-  - `github.com/sethvargo/go-retry` (v0.4.0): Wiederholungs-Schleife mit Backoff, kontextbewusst (prüft `context.Cause`, wartet auf Timer), Wiederholbarkeit wird am Fehler markiert (`RetryableError`), das Backoff wird pull-artig abgefragt (`Backoff.Next() (wartet, stoppen)`), mit `NewExponential(base)` (1, 2, 4, 8 …) und `WithFullJitter`. Ohne Versuchs- und Zeit-Obergrenze — dazu kommt eine dünne eigene Hülle. Liegt bereits im Modulgraph (indirekt via `pressly/goose`).
+  - `github.com/sethvargo/go-retry` (v0.5.0): Wiederholungs-Schleife mit Backoff, kontextbewusst (prüft `context.Cause`, wartet auf Timer), Wiederholbarkeit wird am Fehler markiert (`RetryableError`), das Backoff wird pull-artig abgefragt (`Backoff.Next() (wartet, stoppen)`), mit `NewExponential(base)` (1, 2, 4, 8 …), `WithFullJitter`, Versuchs-Obergrenze (`WithMaxRetries`) und Gesamtwartebudget (`WithMaxDuration`). Die dünne eigene Hülle über dem Backoff setzt damit nur noch die 429-Wartezeit und das Wiederholungs-Logging. Liegt bereits im Modulgraph (indirekt via `pressly/goose`).
   - `golang.org/x/time/rate`: Token-Bucket (`NewLimiter(rate, burst)`, `Wait(ctx)`), der Standard-Rate-Limiter der `golang.org/x`-Familie (das Projekt nutzt bereits `x/oauth2`, `x/sys`, `x/text`).
   - `github.com/sony/gobreaker/v2` (v2.4.0): durch Code-ADR-0007 festgelegt.
 - Twitch drosselt pro Client-ID und antwortet (offizielle Doku) mit den Headern `x-ratelimit-remaining` (verbleibende Anfragen) und `x-ratelimit-reset` (Unix-Zeitstempel in Sekunden); die Grenzen sind je Endpunkt unterschiedlich (viele Lese-Endpunkte 30 Anfragen je 5 s, insgesamt 800/min). Ein konservativer Client-Rate-Limiter plus serverseitiges 429-Verhalten decken das ab.
@@ -28,7 +29,7 @@
    - Wiederholungs-Schleife und Backoff: `github.com/sethvargo/go-retry`
    - Clientseitige Drosselung (Token-Bucket): `golang.org/x/time/rate`
    - Circuit Breaker: `github.com/sony/gobreaker/v2` über `internal/breaker` (Code-ADR-0007)
-   - Eigener Code bleibt dünn: Backoff-Hülle mit Versuchs- und Zeitbegrenzung, Bewertung der Wiederholbarkeit, Auswertung der Rate-Limit-Header, Paginierung, typisierte Fehler. Die Kombination und Reihenfolge der Schichten ist der eigene Anteil.
+   - Eigener Code bleibt dünn: Backoff-Hülle (429-Override-Wartezeit und Wiederholungs-Logging; die Versuchs- und Zeitbegrenzung kommen per `WithMaxRetries`/`WithMaxDuration` aus der Bibliothek), Bewertung der Wiederholbarkeit, Auswertung der Rate-Limit-Header, Paginierung, typisierte Fehler. Die Kombination und Reihenfolge der Schichten ist der eigene Anteil.
    - Die Schichten sind **kein** `http.RoundTripper`, sondern Wrapper um `Do` (Punkt 2): Die Wiederholung muss die Antwort (Status und Header) sehen, um Wartezeit und Abbruch zu entscheiden — das ist als Wrapper klarer und testbarer als im Transport. Der Breaker läuft je Versuch mit zusammengehörigem Anfang und Ende in `Execute`, daher braucht es `TwoStepCircuitBreaker` (Code-ADR-0007, Punkt 4) nicht.
 
 2. **Aufbau und Reihenfolge** (Code-ADR-0007, Punkt 6, konkretisiert):
@@ -81,7 +82,7 @@
    | abgelaufener oder abgebrochener Kontext | nicht wiederholbar: der Kontextfehler erscheint |
 
    - **Budget:** höchstens 3 Versuche und höchstens 30 s Gesamtwartezeit (Backoff- und 429-Wartezeiten zusammen); wird es überschritten, erscheint der letzte typisierte Fehler (bei 429: `ErrTooManyRequests` mit `RateLimit`-Angaben). Der Aufrufer entscheidet über einen späteren Versuch (Command-Warteschlange); eine Anfrage blockiert nicht ohne Grenzen.
-   - **Backoff-Implementierung:** `retry.NewExponential(1s)` mit `retry.WithFullJitter`, umhüllt von einer dünnen `Backoff`-Hülle, die die Versuchszahl zählt und das 30-s-Budget als `stop`-Bedingung führt (die Bibliothek kennt beides nicht).
+   - **Backoff-Implementierung:** `retry.NewExponential(1s)` mit `retry.WithFullJitter`, begrenzt per `retry.WithMaxRetries` (Versuche − 1) und `retry.WithMaxDuration` (30 s), umhüllt von einer dünnen `Backoff`-Hülle, die die 429-Override-Wartezeit setzt (servergenannte Zeit, ohne Jitter) und jede Wiederholung loggt.
    - **Logging** (Code-ADR-0003): je Wiederholung `WARN` (Versuch, Status oder Fehler, Wartezeit), je 429 `INFO` (Warten bis Reset); keine Anfrage-Protokollierung pro Erfolg.
 
 5. **Rate-Limit (zwei Ebenen, beide lesen die Antwort-Header):**
@@ -143,7 +144,7 @@
 **Negativ und Risiken:**
 
 - Eine neue direkte Abhängigkeit: `golang.org/x/time` (go-retry liegt bereits indirekt im Graph und wird direkt; gobreaker ist durch Code-ADR-0007 festgelegt).
-- `sethvargo/go-retry` ist jung (v0.x): Die API kann sich mit einer Hauptversion ändern. Der Nutzen ist auf `Do`, `NewExponential`, `WithFullJitter` und das `Backoff`-Interface begrenzt, der Wechsel bleibt lokal.
+- `sethvargo/go-retry` ist jung (v0.x): Die API kann sich mit einer Hauptversion ändern. Der Nutzen ist auf `Do`, `NewExponential`, `WithFullJitter`, `WithMaxRetries`, `WithMaxDuration` und das `Backoff`-Interface begrenzt, der Wechsel bleibt lokal.
 - Die Standardwerte (3 Versuche, Basis 1 s, Budget 30 s, 4/s Burst 8, Timeout 10 s) sind Schätzungen; sie werden mit dem Test-Stream aus Phase 4 und den Chaos-Tests aus Phase 11 überprüft (analog Code-ADR-0007).
 - Die Verträglichkeit von `x/time/rate` mit der synctest-Fake-Uhr muss sich im Test zeigen; fällt sie aus, kommt ein dünnes eigenes Token-Bucket oder ein Test mit echter Zeit.
 - Das 429-Handling setzt die `x-ratelimit-*`-Header voraus (von Twitch dokumentiert); ohne sie greifen `Retry-After` bzw. der Backoff.
