@@ -1,6 +1,6 @@
 # Plan: Roadmap 4.3 — EventSub-WebSocket
 
-**Status:** in Ausführung (Tasks 1–6 offen)
+**Status:** abgeschlossen (Tasks 1–6 erledigt, Stack #170)
 **Stand:** 2026-10-10, `main` bei `56cfdeb`; 4.2 steht in Stack #162
 (PR #158–#161, #163–#167, Merging ausstehend)
 **Scope:** nur 4.3. 4.4 (Funktionen, inkl. der Spezifikation
@@ -9,18 +9,18 @@ den Adapter, der die Ereignisse an den Event-Service übergibt.
 
 ## 1. Was 4.3 liefert (Roadmap)
 
-- [ ] Code-ADR-0015 WebSocket-Bibliothek (S)
-- [ ] WebSocket-Client (L):
-  - Welcome-Nachricht, Keepalive-Überwachung
-  - `session_reconnect` ohne Eventverlust
-  - Revocation
-  - Deduplizierung per `message_id`
-- [ ] Subscription-Manager (M):
-  - Sollzustand nach Plan Anhang A.2
-  - Abgleich mit bestehenden Subscriptions
-  - Versionen, Bedingungen, Limits
-- [ ] Abbildung auf kanonische Events und das Chat-Modell: Fragmente,
-  Emotes, Cheermotes, Badges, Antworten, Shared Chat (L)
+- [x] Code-ADR-0015 WebSocket-Bibliothek (S)
+- [x] WebSocket-Client (L):
+  - [x] Welcome-Nachricht, Keepalive-Überwachung
+  - [x] `session_reconnect` ohne Eventverlust
+  - [x] Revocation
+  - [x] Deduplizierung per `message_id`
+- [x] Subscription-Manager (M):
+  - [x] Sollzustand nach Plan Anhang A.2
+  - [x] Abgleich mit bestehenden Subscriptions
+  - [x] Versionen, Bedingungen, Limits
+- [x] Abbildung auf kanonische Events und das Chat-Modell: Fragmente,
+  Emotes, Cheermotes, Badges, Shared Chat (L); Antworten verworfen (Backlog)
 
 ## 2. Befunde der Recherche (verifiziert 2026-10-10)
 
@@ -254,15 +254,15 @@ Shared Chat, Doku.
 
 ## 8. Exit von 4.3
 
-- [ ] Code-ADR-0015 WebSocket-Bibliothek
-- [ ] WebSocket-Client mit Keepalive, `session_reconnect`, Revocation
+- [x] Code-ADR-0015 WebSocket-Bibliothek (vorgeschlagen; Annahme steht aus)
+- [x] WebSocket-Client mit Keepalive, `session_reconnect`, Revocation
   und Dedup (alle mit Tests)
-- [ ] Subscription-Manager mit Soll-Zustand, Abgleich und
+- [x] Subscription-Manager mit Soll-Zustand, Abgleich und
   Limit-Verhalten
-- [ ] Abbildung auf `connector.Receiver` mit Chat-Modell (Emotes,
+- [x] Abbildung auf `connector.Receiver` mit Chat-Modell (Emotes,
   Badges, Shared Chat), Dedup nach Reconnects
-- [ ] Einbau: der Adapter läuft mit dem Core, Token-abhängig
-- [ ] Doku: README, Roadmap 4.3 abgehakt, Historie
+- [x] Einbau: der Adapter läuft mit dem Core, Token-abhängig
+- [x] Doku: README, Roadmap 4.3 abgehakt, Historie
 
 ## 9. Stack-Aufbau (Zusammenfassung)
 
