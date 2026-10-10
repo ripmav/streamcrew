@@ -16,6 +16,9 @@ const (
 	// KeyRequirementRole tells that the command needs the role role or a
 	// higher one (requirements.md, B12).
 	KeyRequirementRole Key = "requirement.role"
+	// KeyRequirementBits tells that the command needs at least the amount
+	// of bits the run carried (roadmap 4.4).
+	KeyRequirementBits Key = "requirement.bits"
 	// KeyRequirementArgumentsUsage shows how to use the command, its
 	// trigger and arguments as usage (requirements.md, B32).
 	KeyRequirementArgumentsUsage Key = "requirement.arguments.usage"

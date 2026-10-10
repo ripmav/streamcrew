@@ -6,6 +6,7 @@
   "requirement.arguments.type": "{argument} muss {type, select, text {ein Text} number {eine Zahl} integer {eine ganze Zahl} user {ein Nutzer} other {{type}}} sein.",
   "requirement.arguments.usage": "Verwendung: {usage}",
   "requirement.arguments.user": "Für {argument} gibt es keinen Nutzer {name}.",
+  "requirement.bits": "Dieser Command braucht mindestens {amount} Bits.",
   "requirement.cooldown.all": "Dieser Command ist in {remaining} wieder verfügbar.",
   "requirement.cooldown.user": "Du kannst diesen Command in {remaining} wieder nutzen.",
   "requirement.faulty": "Dieser Command kann nicht laufen, weil eine seiner Anforderungen fehlerhaft ist.",
