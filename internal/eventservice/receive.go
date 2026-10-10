@@ -191,6 +191,10 @@ func (s *Service) Event(ctx context.Context, e connector.Event) error {
 	if single, ok := eventtype.SingleGift(e.Type); ok {
 		return s.massGiftLocked(ctx, e, single, payload)
 	}
+	if e.Type == eventtype.TwitchChannelPointsRedeem {
+		s.fireChannelPoints(ctx, payload)
+		return nil
+	}
 	if d.Once == eventtype.PerUserSession && payload.User != nil {
 		neutral := cmp.Or(d.Neutral, d.Type)
 		first, err := s.ports.Store.FirstInSession(ctx, e.Platform, neutral, payload.User.ID)
@@ -313,6 +317,45 @@ func (s *Service) fire(ctx context.Context, p platform.Name, t event.Type, paylo
 		s.publish(ctx, event.New(src, typ, payload))
 		s.triggerEvent(ctx, typ, params(typ, payload))
 	}
+}
+
+// fireChannelPoints publishes a channel points redemption and triggers
+// the command the reward is mapped to (roadmap 4.4); a reward without a
+// mapping is logged and left to the platform. s.mu is held.
+func (s *Service) fireChannelPoints(ctx context.Context, payload eventtype.Payload) {
+	src := event.Source{Kind: event.SourcePlatform, Name: string(payload.Platform)}
+	s.publish(ctx, event.New(src, eventtype.TwitchChannelPointsRedeem, payload))
+	cp := payload.Details.ChannelPoints
+	if cp == nil {
+		return
+	}
+	cfg, err := s.ports.ChannelPoints(ctx)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "reading the channel points settings failed", "error", err)
+		return
+	}
+	for _, r := range cfg.Rewards {
+		if r.RewardID != cp.Reward {
+			continue
+		}
+		cmd, ok, err := s.ports.Commands.CommandByName(ctx, r.Command)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "finding the channel points command failed", "command", r.Command, "error", err)
+			return
+		}
+		if !ok {
+			s.logger.ErrorContext(ctx, "the channel points command is missing", "command", r.Command)
+			return
+		}
+		s.submit(ctx, engine.Request{
+			Command: cmd,
+			Source:  engine.SourceEvent,
+			Params:  params(eventtype.TwitchChannelPointsRedeem, payload),
+			Event:   eventtype.TwitchChannelPointsRedeem,
+		})
+		return
+	}
+	s.logger.WarnContext(ctx, "no command for the channel points reward", "reward", cp.Reward)
 }
 
 // params returns the parameters of the event command of an event of type
