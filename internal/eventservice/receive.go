@@ -223,15 +223,23 @@ func (s *Service) checkEvent(e connector.Event) (eventtype.Descriptor, error) {
 	case eventtype.ChannelFollow, eventtype.ChannelRaid, eventtype.ChannelSubscribe, eventtype.ChannelResubscribe,
 		eventtype.ChannelSubscriptionGift, eventtype.ChannelSubscriptionMassGift, eventtype.ChatWhisper,
 		eventtype.ChatMessageDelete, eventtype.ChatUserLeave, eventtype.ChatUserTimeout, eventtype.ChatUserBan:
+		// the twitch-specific types without a neutral one: their payload
+		// is decided by phase 4 (spec twitch-events.md)
+	case eventtype.TwitchBitsCheer, eventtype.TwitchSharedChatStart, eventtype.TwitchSharedChatUpdate,
+		eventtype.TwitchSharedChatEnd, eventtype.TwitchHypeTrainStart, eventtype.TwitchHypeTrainProgress,
+		eventtype.TwitchHypeTrainEnd, eventtype.TwitchAdStart, eventtype.TwitchShoutoutReceive,
+		eventtype.TwitchGoalStart, eventtype.TwitchGoalProgress, eventtype.TwitchGoalEnd,
+		eventtype.TwitchCharityDonation, eventtype.TwitchChannelPointsRedeem,
+		eventtype.TwitchCustomPowerUpRedeem:
 	default:
 		return d, fmt.Errorf("%w: chat messages, joins and the stream have their own ways, and the core derives the other types itself", ErrNotReceived)
 	}
-	sh, ok := eventtype.ShapeOf(e.Type)
-	if !ok {
-		return d, fmt.Errorf("%w: its payload is not specified yet", ErrNotReceived)
-	}
-	if err := sh.Check(e.Type, e.User != nil, e.Target != nil, e.Details); err != nil {
-		return d, err
+	// The platform-specific types without a neutral one have no shape; their
+	// payload their phase decides (spec events.md, purpose and scope).
+	if sh, ok := eventtype.ShapeOf(e.Type); ok {
+		if err := sh.Check(e.Type, e.User != nil, e.Target != nil, e.Details); err != nil {
+			return d, err
+		}
 	}
 	for _, who := range append([]*user.Identity{e.User, e.Target}, refs(e.Recipients)...) {
 		if who != nil {
@@ -347,6 +355,55 @@ func values(t event.Type, d eventtype.Details) map[string]template.Value {
 		if _, mass := eventtype.SingleGift(t); mass {
 			v[template.EventGiftedSubs] = template.NumberValue(decimal.New(int64(g.Count)))
 		}
+	}
+	if b := d.Bits; b != nil {
+		v[template.EventCheerBits] = template.NumberValue(decimal.New(b.Amount))
+	}
+	if mo := d.Moderation; mo != nil && mo.Message != "" {
+		v[template.EventModerationMessage] = template.TextValue(mo.Message)
+	}
+	if h := d.HypeTrain; h != nil {
+		v[template.EventHypeTrainLevel] = template.NumberValue(decimal.New(int64(h.Level)))
+		v[template.EventHypeTrainProgress] = template.NumberValue(decimal.New(h.Progress))
+		v[template.EventHypeTrainGoal] = template.NumberValue(decimal.New(h.Goal))
+		if h.RewardLevel > 0 {
+			v[template.EventHypeTrainReward] = template.NumberValue(decimal.New(int64(h.RewardLevel)))
+		}
+		if h.Outcome != "" {
+			v[template.EventHypeTrainOutcome] = template.TextValue(h.Outcome)
+		}
+	}
+	if a := d.AdBreak; a != nil {
+		v[template.EventAdBreakDuration] = template.NumberValue(decimal.New(int64(a.Duration)))
+		if a.Message != "" {
+			v[template.EventAdBreakMessage] = template.TextValue(a.Message)
+		}
+	}
+	if s := d.Shoutout; s != nil {
+		v[template.EventShoutoutViewers] = template.NumberValue(decimal.New(s.Viewers))
+	}
+	if g := d.Goal; g != nil {
+		v[template.EventGoalCurrentAmount] = template.NumberValue(decimal.New(g.Current))
+		v[template.EventGoalTargetAmount] = template.NumberValue(decimal.New(g.Target))
+		if g.Currency != "" {
+			v[template.EventGoalCurrency] = template.TextValue(g.Currency)
+		}
+	}
+	if c := d.Charity; c != nil {
+		v[template.EventDonationCurrent] = template.NumberValue(decimal.New(c.Current))
+		v[template.EventDonationTarget] = template.NumberValue(decimal.New(c.Target))
+		if c.Currency != "" {
+			v[template.EventDonationCurrency] = template.TextValue(c.Currency)
+		}
+	}
+	if cp := d.ChannelPoints; cp != nil {
+		v[template.EventChannelPoints] = template.NumberValue(decimal.New(cp.Amount))
+		if cp.Reward != "" {
+			v[template.EventChannelPointsID] = template.TextValue(cp.Reward)
+		}
+	}
+	if pu := d.CustomPowerUp; pu != nil && pu.Reward != "" {
+		v[template.EventCustomPowerUp] = template.TextValue(pu.Reward)
 	}
 	return v
 }
