@@ -110,6 +110,9 @@ func (s *Service) Prepare(ctx context.Context, cmd command.Command, p engine.Par
 	if r, ok := checkRole(cmd, p); ok {
 		return decided(cmd, r, nil)
 	}
+	if r, ok := checkBits(cmd, p); ok {
+		return decided(cmd, r, nil)
+	}
 	pr := &prepared{s: s, cmd: cmd, p: p, run: p}
 	pr.cooldown, pr.hasCooldown = find[command.CooldownRequirement](cmd)
 	if pr.hasCooldown {
