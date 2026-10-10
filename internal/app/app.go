@@ -363,7 +363,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	// Twitch platform (ADR-0004: Twitch at the start); it connects when
 	// the streamer account has a token (roadmap 4.3, task 5).
 	if o.platform == nil {
-		o.platform = func(ctx context.Context, b PlatformBuilder) (connector.Platform, error) {
+		o.platform = func(_ context.Context, b PlatformBuilder) (connector.Platform, error) {
 			return twitch.NewPlatform(twitch.PlatformOptions{
 				Receiver:   b.Receiver,
 				Auth:       twitchStreamAuth{s: a.auth},
