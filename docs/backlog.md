@@ -27,6 +27,10 @@ wenn eine Aufgabe wieder eingeplant wird.
 
 - Herunterfahren ohne Verlust: Eine Nachricht, die die Plattform dem Core schon übergeben hat, kann ihren Command verlieren, wenn die Command-Engine vor dem Auslösen durch das Ereignis-Service stoppt (in der CI von PR #140 beobachtet: der Trigger scheiterte mit „command engine is shut down“). Das Ereignis-Service soll vor der Command-Engine aufhören zu lösen und die Engine die schon anstehenden Instanzen noch abarbeiten (S)
 
+**Chat:**
+
+- Antworten in der Chat-Nachricht: Die EventSub-Felder `reply_parent_message_*` von `channel.chat.message` werden in 4.3 verworfen, weil die kanonische Nachricht (`eventtype.Message`) kein Antwort-Feld hat. Abbilden mit Spec-Nachtrag (Antwort-ID, -Autor, -Text) und `reply`-Aktion (Roadmap 4.4/5.x) (M)
+
 **Abhängigkeiten:**
 
 - Auf `go.yaml.in/yaml/v4` wechseln, sobald es stabil ist: Syntaxfehler in YAML nennen dann auch die Spalte ([Code-ADR-0005](adr/code/0005-konfiguration.md), Punkt 3; Entscheidung des Projektinhabers vom 2026-10-03) (S)
