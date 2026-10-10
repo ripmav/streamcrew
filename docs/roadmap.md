@@ -83,7 +83,7 @@ Gate O kann frühestens nach M2 stattfinden. Es schafft nur die Voraussetzungen:
 | **M6** Offen und erweiterbar | 10 (P1) | Developer-API, MCP-Server, eingehende Webhooks, Command-Bundles | 3–4 | 44–60 |
 | **M7** Core 1.0 | 11 | alle P1-Aufgaben erledigt; Security-, Last- und Chaos-Tests bestanden; API `v1` eingefroren | 3–4 | **47–64** |
 
-Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 im [Backlog](#backlog-später-oder-nicht-geplant) (Entscheidung des Projektinhabers); ihr früherer Meilenstein „M5 Multiplattform“ entfällt, die folgenden Meilensteine rücken nach.
+Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 im [Backlog](backlog.md) (Entscheidung des Projektinhabers); ihr früherer Meilenstein „M5 Multiplattform“ entfällt, die folgenden Meilensteine rücken nach.
 
 ### Statusübersicht
 
@@ -1173,61 +1173,9 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 
 ---
 
-## Backlog: später oder nicht geplant
+## Backlog
 
-**Weitere Plattformen** (bis 2026-09-30 Phase 9; ins Backlog verschoben durch Entscheidung des Projektinhabers). Priorität und Go/No-Go je Plattform ([ADR-0004](adr/0004-plattformumfang-zum-start.md)) werden festgelegt, wenn sie wieder eingeplant werden; dann wird daraus eine eigene Phase. Der gemeinsame Webhook-Eingang und ADR-0015 sind nach Phase 9.1 gewandert. Grobe Schätzung: 7–10 PW für YouTube, Kick und den Multiplattform-Betrieb, 4–6 PW für Velora und VPZone (P3). ADR-0016 (YouTube-Chat-Streaming) gehört dazu.
-
-- Multiplattform:
-  - Standardplattform einstellbar (bis dahin fest Twitch als `platform.Default`, [ADR-0004](adr/0004-plattformumfang-zum-start.md); genutzt etwa von der Moderation ohne Plattform des Durchlaufs, [`actions.md`](spec/actions.md), B82), Senden an alle oder bestimmte Plattformen, Plattformfilter in Commands und Requirements, Rollen-Mapping (M)
-- YouTube:
-  - ADR-0016 Chat-Streaming; Anleitung für eigene Google-Cloud-Credentials (S)
-  - OAuth: Loopback + PKCE, Server-Callback, Einfügen des Codes als Fallback (M)
-  - Chat-Empfang (L): Livestream-Erkennung; gRPC-Client für `liveChatMessages.streamList`, generiert aus `stream_list.proto`; quota-schonender Polling-Fallback
-  - Chat senden und löschen, Timeout und Bann, Mitgliedschaften, Super Chats und Super Stickers, Jewels (L)
-  - YouTube-Action, Events, Quota-Überwachung (M)
-- Kick:
-  - OAuth 2.1 + PKCE; Anleitung für eine eigene Kick-App (M)
-  - Webhook-Empfang über den gemeinsamen Eingang (9.1): Kick-Signaturprüfung, Deduplizierung, erneutes Abonnieren nach automatischer Kündigung durch Kick (M)
-  - REST-Client (L): Chat senden, Moderation, Kanal aktualisieren, Belohnungen; Events: Follow, Abos, Geschenke, Belohnungen, Kicks, Livestream-Status
-  - Kick-Action sowie Kick-Channel-Points- und Kick-Kicks-Commands (M)
-- Velora und VPZone (P3): offizielle API-Dokumentation sichten, Aufwand schätzen, Go/No-Go (S); Adapter umsetzen (je L), falls Go
-- Exit-Kriterien, wenn die Plattformen eingeplant werden: Ein gleichzeitiger Stream auf Twitch, YouTube und Kick läuft mit gemeinsamen Commands und gemeinsamer Währung; plattformübergreifend verknüpfte Nutzer werden korrekt zusammengeführt.
-
-**Robustheit:**
-
-- Herunterfahren ohne Verlust: Eine Nachricht, die die Plattform dem Core schon übergeben hat, kann ihren Command verlieren, wenn die Command-Engine vor dem Auslösen durch das Ereignis-Service stoppt (in der CI von PR #140 beobachtet: der Trigger scheiterte mit „command engine is shut down“). Das Ereignis-Service soll vor der Command-Engine aufhören zu lösen und die Engine die schon anstehenden Instanzen noch abarbeiten (S)
-
-**Abhängigkeiten:**
-
-- Auf `go.yaml.in/yaml/v4` wechseln, sobald es stabil ist: Syntaxfehler in YAML nennen dann auch die Spalte ([Code-ADR-0005](adr/code/0005-konfiguration.md), Punkt 3; Entscheidung des Projektinhabers vom 2026-10-03) (S)
-
-**Anforderungen** (in Roadmap 3.4 zurückgestellt, Entscheidung des Projektinhabers vom 2026-10-02):
-
-- Rollen-Anforderung wie im Original: mehrere Rollen (eine davon genau), Beschränkung auf eine Plattform, Stufen bei Abonnenten (mit den Twitch-Stufen aus Phase 4), global „exakte Rollen“ ([`requirements.md`](spec/requirements.md), A12) (S)
-
-**P3 (nur bei Bedarf):**
-
-- Integrationen aus Tier 3
-- Discord Reactive Voice
-- Musik-Player, Alejo-Pronomen
-- Kompatibilitätsfassade für die Developer-API
-
-**Ideen ohne Priorität:**
-
-- Mehrere gleichzeitig aktive Profile
-- Plugin-System für Integrationen (z. B. per WASM)
-- Geteilter Katalog für Command-Bundles
-- Mobile Moderations-App auf Basis der Web-API
-
-**Nicht geplant (Plan §4.3):**
-
-- Nachbau der WPF-Oberfläche
-- C#-Skripte
-- Funktionen, die Blazing-Cacti-Server brauchen
-- Mixer, Trovo, Glimesh, Facebook, Twitter, OvrStream, InfiniteAlbum
-- Overlay v1/v2
-- Inoffizielle Schnittstellen (Edge-TTS, TikTok-TTS, Kick-Pusher)
-- SaaS-Betrieb für Dritte
+Eigene Datei seit 2026-10-09: [backlog.md](backlog.md).
 
 ---
 
@@ -1386,4 +1334,6 @@ Diese Punkte gelten dauerhaft und werden nicht abgehakt:
 | 2026-10-08 | E2E 4.1 (Device Code Flow-Fallback): Die DCF-Anmeldung brach nach dem ersten Poll ab — der echte Token-Endpunkt antwortet auf den Poll mit `{"status":400,"message":"authorization_pending"}` ohne das RFC-8628-Feld `error`. Das Polling von `golang.org/x/oauth2` (`DeviceAccessToken`) erkennt nur das `error`-Feld und hält unbekannte 400-Antworten für fatal, die CLI endete direkt nach der Code-Anzeige. Fix: `twitchFlow.Wait` pollt den Token-Endpunkt selbst im Intervall der Geräte-Autorisierungsantwort (RFC 8628 §3.2, `slow_down` +5 s), erkennt beide Feldformen (`error` und `message`) und bildet `expired_token`/`access_denied` auf die Flow-Fehler ab; die Bibliothek bleibt für `DeviceAuth` (Code + URL) (Plan R8, PR #152). |
 | 2026-10-08 | E2E 4.1 abgeschlossen: Code-Flow (BYO-App: erster Login mit `--client-id`/`--client-secret`, Re-Login ohne Flags aus dem Vault, Bot-Konto) und DCF-Fallback (Device-Code-Eingabe, Polling bis zur Autorisierung) jeweils mit Login, `auth status` `ok` (41 Scopes) und Logout mit erfolgreichem Widerruf; dabei wurden die beiden Bugs aus den E2E-Befunden gefunden und gefixt (R7 Scope-Array, R8 DCF-Polling). Stack #146 [144, 145, 147, 148, 149, 150, 151, 152] ist grün und von unten nach oben mergebar. |
 | 2026-10-09 | Code-ADR-0014 (HTTP-Client) vorgeschlagen: `internal/httpclient` kombiniert drei Bibliotheken in einer dünnen Schicht — `sethvargo/go-retry` (Wiederholung, exponentieller Backoff mit vollem Jitter, 3 Versuche, 30-s-Budget), `golang.org/x/time/rate` (Token-Bucket, 4/s Burst 8) und der Breaker von [Code-ADR-0007](adr/code/0007-circuit-breaker.md) — in der Reihenfolge Wiederholung → Breaker → Rate-Limiter → Anfrage; die Rate-Limit-Header (`x-ratelimit-remaining`/`-reset`) steuern Limiter und 429-Wartezeit, die Paginierung folgt dem Helix-Cursor-Muster (`after`/`first`), jede nicht-2xx-Antwort wird zur typisierten `StatusError`. (Vorgabe des Projektinhabers: Middleware per Bibliotheken, kein `hashicorp/go-retryablehttp`.) Dazu der Plan 4.2 (Helix-Client): `internal/breaker`, `internal/httpclient`, Auth-Migration auf den Breaker `twitch.auth`, danach die Helix-Endpunkte. |
-| 2026-10-09 | Code-ADR-0014 (HTTP-Client) vom Projektinhaber akzeptiert (PR #153), ohne Änderungen: `internal/httpclient` aus `sethvargo/go-retry` (Wiederholung, exponentieller Backoff mit vollem Jitter), `golang.org/x/time/rate` (Token-Bucket) und dem Breaker von [Code-ADR-0007](adr/code/0007-circuit-breaker.md) in der Reihenfolge Wiederholung → Breaker → Rate-Limiter → Anfrage; `x-ratelimit-*`-Header, Helix-Paginierung, typisierte `StatusError`, `WithoutRetry` für Einmal-Verbrauch. Standardwerte (3 Versuche, 1-s-Basis, 30-s-Budget, 4/s Burst 8, 10-s-Timeout) werden mit dem Test-Stream (Phase 4) und den Chaos-Tests (Phase 11) überprüft. |
+| 2026-10-09 | Code-ADR-0014 (HTTP-Client) vom Projektinhaber akzeptiert (PR #158), ohne Änderungen: `internal/httpclient` aus `sethvargo/go-retry` (Wiederholung, exponentieller Backoff mit vollem Jitter), `golang.org/x/time/rate` (Token-Bucket) und dem Breaker von [Code-ADR-0007](adr/code/0007-circuit-breaker.md) in der Reihenfolge Wiederholung → Breaker → Rate-Limiter → Anfrage; `x-ratelimit-*`-Header, Helix-Paginierung, typisierte `StatusError`, `WithoutRetry` für Einmal-Verbrauch. Standardwerte (3 Versuche, 1-s-Basis, 30-s-Budget, 4/s Burst 8, 10-s-Timeout) werden mit dem Test-Stream (Phase 4) und den Chaos-Tests (Phase 11) überprüft. |
+| 2026-10-09 | `internal/breaker` nach [Code-ADR-0007](adr/code/0007-circuit-breaker.md): dünne Schicht über `sony/gobreaker/v2` v2.4.0 (neue direkte Abhängigkeit) mit je einem benannten Breaker pro externe API. Standardwerte (60-s-rollierendes Fenster in 10-s-Schritten; Auslösen bei 5 Fehlern in Folge oder 50 % von mindestens 10 Anfragen; offen 30 s; im halb offenen Zustand maximal 3 Probe-Anfragen, ein Fehler öffnet sofort wieder); die Ergebnisbewertung ist injizierbar (`EvalSuccess`/`EvalError`/`EvalExcluded`, die HTTP-Standardbewertung, die `StatusError.StatusCode` liest, kommt ab Task 3 in `internal/httpclient`); Zustandswechsel werden geloggt (WARN bei offen, INFO bei geschlossen, `breaker`-Attribut); abgelehnte Anfragen werden in den Domänenfehler `ErrUnavailable` übersetzt (API-Name, bei offen zusätzlich der früheste Zeitpunkt für einen Neuvorlauf). 12 Unit-Tests mit `testing/synctest` (u. a. der Grenzfall „halb offen erst nach mehr als 30 s, nicht bei genau 30 s“). Daneben `go`-Directive 1.27.1 → 1.27.2: Go 1.27.1 hat Stdlib-Lücken (GO-2026-6611, GO-2026-6612, GO-2026-6613, GO-2026-6617), die den CI-govulncheck auf allen PRs rot machen. (PR #159; Stack #162 [158, 159] erstellt.) |
+| 2026-10-09 | Das Backlog wurde aus der Roadmap in das eigene Dokument [backlog.md](backlog.md) ausgelagert (Roadmap verlinkt dorthin). Neuer Backlog-Eintrag „Build / Container“: das Docker-Image soll mit Alpine als Build-Basis gebaut werden (Vorgabe des Projektinhabers). |
