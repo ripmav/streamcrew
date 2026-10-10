@@ -107,6 +107,9 @@ const (
 	TwitchCustomPowerUpRedeem     event.Type = "twitch.custom_power_up.redeem"
 	TwitchChannelPointsRedeem     event.Type = "twitch.channel_points.redeem"
 	TwitchBitsCheer               event.Type = "twitch.bits.cheer"
+	TwitchSharedChatStart         event.Type = "twitch.shared_chat.start"
+	TwitchSharedChatUpdate        event.Type = "twitch.shared_chat.update"
+	TwitchSharedChatEnd           event.Type = "twitch.shared_chat.end"
 	TwitchAdUpcoming              event.Type = "twitch.ad.upcoming"
 	TwitchAdStart                 event.Type = "twitch.ad.start"
 	TwitchAdEnd                   event.Type = "twitch.ad.end"
@@ -178,6 +181,9 @@ func All() []Descriptor {
 		twitch(TwitchCustomPowerUpRedeem, "", Always),
 		twitch(TwitchChannelPointsRedeem, "", Always),
 		twitch(TwitchBitsCheer, "", Always),
+		twitch(TwitchSharedChatStart, "", Always),
+		twitch(TwitchSharedChatUpdate, "", Always),
+		twitch(TwitchSharedChatEnd, "", Always),
 		twitch(TwitchAdUpcoming, "", Always),
 		twitch(TwitchAdStart, "", Always),
 		twitch(TwitchAdEnd, "", Always),
