@@ -16,8 +16,6 @@ import (
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/ripmav/streamcrew/internal/connector"
-
 	"github.com/ripmav/streamcrew/internal/httpclient"
 	"github.com/ripmav/streamcrew/internal/twitch"
 )
@@ -209,17 +207,4 @@ func TestPlatformStopsOnTokenLoss(t *testing.T) {
 	})
 	cancel()
 	<-done
-}
-
-func TestPlatformNotYet(t *testing.T) {
-	r := &fakeReceiver{}
-	a := &fakeAuth{token: "tok"}
-	p := platformFor(t, r, a, &keepAliveServer{})
-	ctx := t.Context()
-	_, err := p.Channel(ctx)
-	assert.ErrorIs(t, err, connector.ErrNotImplemented)
-	assert.ErrorIs(t, p.Chat().Send(ctx, connector.Message{}), connector.ErrNotImplemented)
-	assert.ErrorIs(t, p.Moderation().ClearChat(ctx), connector.ErrNotImplemented)
-	_, err = p.Users().UserByLogin(ctx, "x")
-	assert.ErrorIs(t, err, connector.ErrNotImplemented)
 }

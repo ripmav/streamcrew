@@ -5,6 +5,7 @@ package twitch
 import (
 	"context"
 	"log/slog"
+	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -43,12 +44,12 @@ type AccountState struct {
 	Ready bool
 }
 
-// Platform is the Twitch platform (roadmap 4.3): it connects the
+// Platform is the Twitch platform (roadmap 4.3 and 4.4): it connects the
 // EventSub WebSocket when the streamer account has a token, hands the
 // mapped events to the Receiver, keeps the subscriptions in line, and
-// reports the state of the stream after every connect (B11). The chat
-// and moderation operations and the user lookup come with roadmap 4.4;
-// until then they return connector.ErrNotImplemented.
+// reports the state of the stream after every connect (B11). It also
+// carries the chat, moderation, user lookup and the channel
+// information of the channel through Helix.
 type Platform struct {
 	receiver   connector.Receiver
 	auth       Auth
@@ -59,8 +60,9 @@ type Platform struct {
 	log        *slog.Logger
 	poll       time.Duration
 
-	mu        sync.Mutex
-	connected bool
+	mu          sync.Mutex
+	connected   bool
+	lastAccount AccountState
 }
 
 // PlatformOptions configures NewPlatform.
@@ -122,27 +124,56 @@ func (p *Platform) Status() connector.Status {
 	return connector.Status{Streamer: p.connected}
 }
 
-// Chat implements connector.Platform; the operations come with roadmap
-// 4.4.
+// Chat implements connector.Platform.
 func (p *Platform) Chat() connector.Chat {
-	return notYet{}
+	return chat{p: p}
 }
 
-// Moderation implements connector.Platform; the operations come with
-// roadmap 4.4.
+// Moderation implements connector.Platform.
 func (p *Platform) Moderation() connector.Moderation {
-	return notYet{}
+	return moderation{p: p}
 }
 
-// Users implements connector.Platform; the lookup comes with roadmap 4.4.
+// Users implements connector.Platform.
 func (p *Platform) Users() connector.Users {
-	return notYet{}
+	return users{p: p}
 }
 
-// Channel implements connector.Platform; the channel information comes
-// with roadmap 4.4.
-func (p *Platform) Channel(context.Context) (connector.ChannelInfo, error) {
-	return connector.ChannelInfo{}, connector.ErrNotImplemented
+// Channel implements connector.Platform: the channel information from
+// Helix, live while the account has a stream.
+func (p *Platform) Channel(ctx context.Context) (connector.ChannelInfo, error) {
+	st, err := p.account(ctx)
+	if err != nil {
+		return connector.ChannelInfo{}, err
+	}
+	hc, err := p.ops(ctx)
+	if err != nil {
+		return connector.ChannelInfo{}, err
+	}
+	info := connector.ChannelInfo{}
+	ch, err := hc.GetChannel(ctx, st.AccountID)
+	if err != nil {
+		return connector.ChannelInfo{}, err
+	}
+	if ch != nil {
+		info.Title = ch.Title
+		info.Game = ch.GameName
+	}
+	streams, err := hc.GetStreams(ctx, []string{st.AccountID}, nil)
+	if err != nil {
+		return connector.ChannelInfo{}, err
+	}
+	if len(streams) > 0 {
+		info.Live = true
+		info.StartedAt = streams[0].CreatedAt
+		viewers := min(streams[0].ViewerCount, math.MaxInt64)
+		view := int64(viewers)
+		info.Viewers = &view
+		if streams[0].Title != "" {
+			info.Title = streams[0].Title
+		}
+	}
+	return info, nil
 }
 
 // Run implements supervisor.Runnable: it polls the state of the streamer
@@ -158,9 +189,12 @@ func (p *Platform) Run(ctx context.Context) error {
 		st, err := p.auth.Streamer(ctx)
 		if err != nil {
 			p.log.WarnContext(ctx, "the state of the streamer account is unknown", "error", err)
-		} else if st.Ready {
-			if err := p.session(ctx, st); ctx.Err() == nil && err != nil {
-				p.log.WarnContext(ctx, "the eventsub session ended", "error", err)
+		} else {
+			p.setAccount(st)
+			if st.Ready {
+				if err := p.session(ctx, st); ctx.Err() == nil && err != nil {
+					p.log.WarnContext(ctx, "the eventsub session ended", "error", err)
+				}
 			}
 		}
 		p.setConnected(false)
@@ -243,56 +277,23 @@ func (p *Platform) setConnected(v bool) {
 	p.connected = v
 }
 
-// notYet is a capability of the platform that roadmap 4.4 provides:
-// every operation returns connector.ErrNotImplemented.
-type notYet struct{}
-
-var (
-	_ connector.Chat       = notYet{}
-	_ connector.Moderation = notYet{}
-	_ connector.Users      = notYet{}
-)
-
-func (notYet) Send(context.Context, connector.Message) error {
-	return connector.ErrNotImplemented
+func (p *Platform) setAccount(st AccountState) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.lastAccount = st
 }
 
-func (notYet) Delete(context.Context, string) error {
-	return connector.ErrNotImplemented
-}
-
-func (notYet) Timeout(context.Context, user.Identity, time.Duration, string) error {
-	return connector.ErrNotImplemented
-}
-
-func (notYet) Purge(context.Context, user.Identity) error {
-	return connector.ErrNotImplemented
-}
-
-func (notYet) ClearChat(context.Context) error {
-	return connector.ErrNotImplemented
-}
-
-func (notYet) Ban(context.Context, user.Identity, string) error {
-	return connector.ErrNotImplemented
-}
-
-func (notYet) Unban(context.Context, user.Identity) error {
-	return connector.ErrNotImplemented
-}
-
-func (notYet) Mod(context.Context, user.Identity) error {
-	return connector.ErrNotImplemented
-}
-
-func (notYet) Unmod(context.Context, user.Identity) error {
-	return connector.ErrNotImplemented
-}
-
-func (notYet) UserByLogin(context.Context, string) (user.Identity, error) {
-	return user.Identity{}, connector.ErrNotImplemented
-}
-
-func (notYet) UserByID(context.Context, string) (user.Identity, error) {
-	return user.Identity{}, connector.ErrNotImplemented
+// Identity implements connector.Identities: the streamer from the last
+// seen account state; the bot account is not connected in phase 4.
+func (p *Platform) Identity(a connector.Account) (user.Identity, bool) {
+	if a != connector.AccountStreamer {
+		return user.Identity{}, false
+	}
+	p.mu.Lock()
+	st := p.lastAccount
+	p.mu.Unlock()
+	if st.AccountID == "" {
+		return user.Identity{}, false
+	}
+	return userIdentity(helix.User{ID: st.AccountID, Login: st.Login, DisplayName: st.Login}), true
 }
