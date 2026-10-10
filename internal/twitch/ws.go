@@ -26,6 +26,11 @@ import (
 // defaultBase is the official EventSub WebSocket base URL.
 const defaultBase = "wss://eventsub.wss.twitch.tv/ws"
 
+// ErrToken wraps the error of a connection whose access token could not
+// be fetched; Run ends without a backoff, the platform polls the account
+// again.
+var ErrToken = errors.New("eventsub: the access token is unavailable")
+
 // dialTimeout bounds the handshake of a connection.
 const dialTimeout = 10 * time.Second
 
@@ -109,6 +114,9 @@ func (c *Client) Run(ctx context.Context, h Handler) error {
 			return nil //nolint:nilerr // the canceled context ends Run; the drop error does not matter
 		}
 		c.log.WarnContext(ctx, "the eventsub connection is down", "error", err)
+		if next.fatal {
+			return err
+		}
 		dialURL, sessionID = next.url, next.sessionID
 		if !next.immediately {
 			d, _ := backoff.Next()
@@ -127,6 +135,8 @@ type next struct {
 	url         string
 	sessionID   string
 	immediately bool
+	// fatal ends Run without a backoff (a missing token).
+	fatal bool
 }
 
 // session runs one connection at the given URL (base with the access
@@ -140,7 +150,9 @@ func (c *Client) session(ctx context.Context, h Handler, dialURL, sessionID stri
 	}
 	tok, err := c.token(ctx)
 	if err != nil {
-		return next{}, err
+		// The token is gone: a backoff would only repeat the failure;
+		// the platform polls the account again.
+		return next{fatal: true}, fmt.Errorf("%w: %w", ErrToken, err)
 	}
 	q.Set("access_token", tok)
 	u := dialURL + "?" + q.Encode()
