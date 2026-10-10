@@ -5,13 +5,14 @@ package requirement_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/role"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/template"
-	"github.com/stretchr/testify/require"
 )
 
 // cheer returns the parameters of a run triggered by a cheer carrying n bits.
