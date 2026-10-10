@@ -146,11 +146,15 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		if p.Action == "ban" {
 			typ = eventtype.ChatUserBan
 		}
-		return m.rec.Event(ctx, connector.Event{
+		ev := connector.Event{
 			Platform: platform.Twitch,
 			Type:     typ,
 			User:     new(identity(p.user())),
-		})
+		}
+		if p.Message != "" {
+			ev.Details = eventtype.Details{Moderation: &eventtype.Moderation{Message: p.Message}}
+		}
+		return m.rec.Event(ctx, ev)
 	case "channel.chat.message_delete":
 		var p messageDelete
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
@@ -190,6 +194,104 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			Type:     typ,
 			Details:  eventtype.Details{SharedChat: &eventtype.SharedChat{SessionID: p.ChatSessionID, Title: p.Title}},
 		})
+	case "channel.hype_train.start", "channel.hype_train.progress", "channel.hype_train.end":
+		var p hypeTrain
+		if err := jsonv2.Unmarshal(body, &p); err != nil {
+			return err
+		}
+		typ := eventtype.TwitchHypeTrainStart
+		switch e.Event.EventType {
+		case "channel.hype_train.progress":
+			typ = eventtype.TwitchHypeTrainProgress
+		case "channel.hype_train.end":
+			typ = eventtype.TwitchHypeTrainEnd
+		}
+		train := &eventtype.HypeTrain{Level: p.CurrentLevel, Progress: p.Progress, Goal: p.Goal}
+		if p.RewardInterval > 0 {
+			train.RewardLevel = int(p.Progress / p.RewardInterval)
+		}
+		if e.Event.EventType == "channel.hype_train.end" {
+			train.Outcome = p.EndReason
+		}
+		return m.rec.Event(ctx, connector.Event{
+			Platform: platform.Twitch,
+			Type:     typ,
+			Details:  eventtype.Details{HypeTrain: train},
+		})
+	case "channel.ad.started":
+		var p adStarted
+		if err := jsonv2.Unmarshal(body, &p); err != nil {
+			return err
+		}
+		return m.rec.Event(ctx, connector.Event{
+			Platform: platform.Twitch,
+			Type:     eventtype.TwitchAdStart,
+			Details:  eventtype.Details{AdBreak: &eventtype.AdBreak{Duration: p.Length, Message: p.Message}},
+		})
+	case "channel.shoutout.received":
+		var p shoutout
+		if err := jsonv2.Unmarshal(body, &p); err != nil {
+			return err
+		}
+		return m.rec.Event(ctx, connector.Event{
+			Platform: platform.Twitch,
+			Type:     eventtype.TwitchShoutoutReceive,
+			User:     new(identity(p.user())),
+			Details:  eventtype.Details{Shoutout: &eventtype.Shoutout{Viewers: p.FromUserViewers}},
+		})
+	case "channel.goal.start", "channel.goal.progress", "channel.goal.complete":
+		var p goal
+		if err := jsonv2.Unmarshal(body, &p); err != nil {
+			return err
+		}
+		typ := eventtype.TwitchGoalStart
+		switch e.Event.EventType {
+		case "channel.goal.progress":
+			typ = eventtype.TwitchGoalProgress
+		case "channel.goal.complete":
+			typ = eventtype.TwitchGoalEnd
+		}
+		return m.rec.Event(ctx, connector.Event{
+			Platform: platform.Twitch,
+			Type:     typ,
+			Details:  eventtype.Details{Goal: &eventtype.Goal{Current: p.CurrentAmount, Target: p.TargetAmount, Currency: p.Currency}},
+		})
+	case "channel.charity.progress", "channel.charity.complete":
+		var p charity
+		if err := jsonv2.Unmarshal(body, &p); err != nil {
+			return err
+		}
+		return m.rec.Event(ctx, connector.Event{
+			Platform: platform.Twitch,
+			Type:     eventtype.TwitchCharityDonation,
+			Details:  eventtype.Details{Charity: &eventtype.Charity{Current: p.CurrentAmount, Target: p.TargetAmount, Currency: p.Currency}},
+		})
+	case "channel.channel_points_automatic_reward_redemption.add":
+		var p autoRedemption
+		if err := jsonv2.Unmarshal(body, &p); err != nil {
+			return err
+		}
+		return m.rec.Event(ctx, connector.Event{
+			Platform: platform.Twitch,
+			Type:     eventtype.TwitchChannelPointsRedeem,
+			User:     new(identity(p.user())),
+			Details:  eventtype.Details{ChannelPoints: &eventtype.ChannelPoints{Amount: p.Cost, Reward: p.RewardID}},
+		})
+	case "channel.channel_points_custom_reward_redemption.add":
+		var p customRedemption
+		if err := jsonv2.Unmarshal(body, &p); err != nil {
+			return err
+		}
+		ev := connector.Event{
+			Platform: platform.Twitch,
+			Type:     eventtype.TwitchCustomPowerUpRedeem,
+			User:     new(identity(p.user())),
+			Details:  eventtype.Details{CustomPowerUp: &eventtype.CustomPowerUp{Reward: p.RewardID}},
+		}
+		if p.UserInput != "" {
+			ev.Details.Message = &eventtype.Message{Text: p.UserInput}
+		}
+		return m.rec.Event(ctx, ev)
 	default:
 		return fmt.Errorf("eventsub: no mapping for %s", e.Event.EventType)
 	}
@@ -443,7 +545,8 @@ func (p cheer) user() chatUser {
 
 // moderate is the payload of channel.moderate.
 type moderate struct {
-	Action string `json:"moderation_action"`
+	Action  string `json:"moderation_action"`
+	Message string `json:"moderation_message"`
 
 	TargetUserID          string `json:"target_user_id"`
 	TargetUserLogin       string `json:"target_user_login"`
@@ -489,4 +592,74 @@ func (p whisper) user() chatUser {
 type sharedChat struct {
 	ChatSessionID string `json:"chat_session_id"`
 	Title         string `json:"title"`
+}
+
+// hypeTrain is the payload of the channel.hype_train events.
+type hypeTrain struct {
+	CurrentLevel   int    `json:"current_level"`
+	Progress       int64  `json:"progress"`
+	Goal           int64  `json:"goal"`
+	RewardInterval int64  `json:"reward_interval"`
+	EndReason      string `json:"end_reason"`
+}
+
+// adStarted is the payload of channel.ad.started.
+type adStarted struct {
+	Length  int    `json:"length"`
+	Message string `json:"message"`
+}
+
+// shoutout is the payload of channel.shoutout.received.
+type shoutout struct {
+	FromUserID          string `json:"from_user_id"`
+	FromUserLogin       string `json:"from_user_login"`
+	FromUserDisplayName string `json:"from_user_display_name"`
+	FromUserViewers     int64  `json:"from_user_viewers"`
+}
+
+func (p shoutout) user() chatUser {
+	return chatUser{ID: p.FromUserID, Login: p.FromUserLogin, DisplayName: p.FromUserDisplayName}
+}
+
+// goal is the payload of the channel.goal events.
+type goal struct {
+	CurrentAmount int64  `json:"current_amount"`
+	TargetAmount  int64  `json:"target_amount"`
+	Currency      string `json:"currency"`
+}
+
+// charity is the payload of the channel.charity events.
+type charity struct {
+	CurrentAmount int64  `json:"current_amount"`
+	TargetAmount  int64  `json:"target_amount"`
+	Currency      string `json:"currency"`
+}
+
+// autoRedemption is the payload of
+// channel.channel_points_automatic_reward_redemption.add.
+type autoRedemption struct {
+	Cost        int64  `json:"automatic_reward_cost"`
+	RewardID    string `json:"automatic_reward_id"`
+	UserID      string `json:"user_id"`
+	UserLogin   string `json:"user_login"`
+	UserDisplay string `json:"user_name"`
+}
+
+func (p autoRedemption) user() chatUser {
+	return chatUser{ID: p.UserID, Login: p.UserLogin, DisplayName: p.UserDisplay}
+}
+
+// customRedemption is the payload of
+// channel.channel_points_custom_reward_redemption.add.
+type customRedemption struct {
+	Cost      int64  `json:"custom_reward_cost"`
+	RewardID  string `json:"custom_reward_id"`
+	UserInput string `json:"custom_reward_user_input"`
+	UserID    string `json:"user_id"`
+	UserLogin string `json:"user_login"`
+	UserDisp  string `json:"user_display_name"`
+}
+
+func (p customRedemption) user() chatUser {
+	return chatUser{ID: p.UserID, Login: p.UserLogin, DisplayName: p.UserDisp}
 }

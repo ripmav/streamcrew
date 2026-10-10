@@ -23,6 +23,24 @@ type Details struct {
 	// SharedChat is the shared chat session of the twitch.shared_chat
 	// events.
 	SharedChat *SharedChat `json:"shared_chat,omitempty"`
+	// Moderation is the moderation of chat.user.timeout and
+	// chat.user.ban (the message the platform shows with the action).
+	Moderation *Moderation `json:"moderation,omitempty"`
+	// HypeTrain is the hype train of the twitch.hype_train events.
+	HypeTrain *HypeTrain `json:"hype_train,omitempty"`
+	// AdBreak is the ad break of twitch.ad.start.
+	AdBreak *AdBreak `json:"ad_break,omitempty"`
+	// Shoutout is the shoutout of twitch.shoutout.receive.
+	Shoutout *Shoutout `json:"shoutout,omitempty"`
+	// Goal is the goal of the twitch.goal events.
+	Goal *Goal `json:"goal,omitempty"`
+	// Charity is the charity collection of the twitch.charity events.
+	Charity *Charity `json:"charity,omitempty"`
+	// ChannelPoints is the redemption of twitch.channel_points.redeem.
+	ChannelPoints *ChannelPoints `json:"channel_points,omitempty"`
+	// CustomPowerUp is the redemption of
+	// twitch.custom_power_up.redeem.
+	CustomPowerUp *CustomPowerUp `json:"custom_power_up,omitempty"`
 }
 
 // Bits is the bits of a cheer (twitch.bits.cheer).
@@ -37,6 +55,77 @@ type SharedChat struct {
 	SessionID string `json:"session_id"`
 	// Title is the title of the session; empty for the end.
 	Title string `json:"title,omitempty"`
+}
+
+// Moderation is the moderation of chat.user.timeout and chat.user.ban;
+// the platform shows the message with the action, e.g. the reason of
+// the ban or the text of the timeout.
+type Moderation struct {
+	// Message is the message the platform shows; empty if the platform
+	// names none.
+	Message string `json:"message,omitempty"`
+}
+
+// HypeTrain is the hype train of the twitch.hype_train events.
+type HypeTrain struct {
+	// Level is the current level of the train.
+	Level int `json:"level"`
+	// Progress is the channel points raised so far; Goal the points the
+	// level wants to reach.
+	Progress int64 `json:"progress"`
+	Goal     int64 `json:"goal"`
+	// RewardLevel is the number of rewards reached so far.
+	RewardLevel int `json:"reward_level"`
+	// Outcome is the end reason of twitch.hype_train.end, e.g.
+	// "goal_reached" or "time_reached"; empty while the train runs.
+	Outcome string `json:"outcome,omitempty"`
+}
+
+// AdBreak is the ad break of twitch.ad.start.
+type AdBreak struct {
+	// Duration is the length of the break, in seconds (30 or 60).
+	Duration int `json:"duration"`
+	// Message is the message of the break; empty if the platform names
+	// none.
+	Message string `json:"message,omitempty"`
+}
+
+// Shoutout is the shoutout of twitch.shoutout.receive.
+type Shoutout struct {
+	// Viewers is the number of viewers of the shouting channel.
+	Viewers int64 `json:"viewers"`
+}
+
+// Goal is the goal of the twitch.goal events.
+type Goal struct {
+	// Current is the amount reached so far; Target the wanted amount, in
+	// Currency.
+	Current  int64  `json:"current"`
+	Target   int64  `json:"target"`
+	Currency string `json:"currency"`
+}
+
+// Charity is the charity collection of the twitch.charity events.
+type Charity struct {
+	// Current is the amount raised so far; Target the wanted amount, in
+	// Currency.
+	Current  int64  `json:"current"`
+	Target   int64  `json:"target"`
+	Currency string `json:"currency"`
+}
+
+// ChannelPoints is the redemption of twitch.channel_points.redeem.
+type ChannelPoints struct {
+	// Amount is the channel points the redemption costs.
+	Amount int64 `json:"amount"`
+	// Reward is the ID of the redeemed reward.
+	Reward string `json:"reward"`
+}
+
+// CustomPowerUp is the redemption of twitch.custom_power_up.redeem.
+type CustomPowerUp struct {
+	// Reward is the ID of the redeemed power up.
+	Reward string `json:"reward"`
 }
 
 // Message is a chat message, or the message of a subscription.
