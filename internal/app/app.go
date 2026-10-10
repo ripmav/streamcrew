@@ -549,6 +549,11 @@ func (a *App) Run(ctx context.Context) (err error) {
 	// shutdown, so it is never published after "app.stopping".
 	select {
 	case <-a.ready.Done():
+		// The engine reports to the supervisor when its goroutine is
+		// started, but it takes instances only once Run ran: wait for
+		// the engine, so the event commands of "app.started" are not
+		// dropped while it is still idle.
+		<-a.engine.Ready()
 		if ctx.Err() == nil {
 			if err := a.ready.publishStarted(func() error {
 				return a.events.Application(ctx, eventtype.AppStarted, Started{Version: a.version, Mode: string(a.cfg.Mode), Profile: a.profile.ID})
