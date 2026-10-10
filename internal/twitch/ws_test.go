@@ -106,10 +106,12 @@ func newClient(t *testing.T, srv *httptest.Server) *twitch.Client {
 	})
 }
 
-// waitFor polls f until it returns a value other than zero.
-func waitFor(t *testing.T, f func() int64) {
+// waitFor polls f until it returns a value other than zero, giving
+// up after horizon (in the fake clock's time when the test runs in
+// the synctest bubble).
+func waitFor(t *testing.T, horizon time.Duration, f func() int64) {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(horizon)
 	for f() == 0 {
 		if time.Now().After(deadline) {
 			t.Fatal("the condition was never met")
@@ -176,7 +178,7 @@ func TestRunSessionReconnectKeepsTheSession(t *testing.T) {
 		defer close(done)
 		assert.NoError(t, c.Run(ctx, newTestHandler()))
 	}()
-	waitFor(t, reconnects.Load)
+	waitFor(t, 10*time.Second, reconnects.Load)
 	cancel()
 	<-done
 }
@@ -219,7 +221,7 @@ func TestRunRevocationReconnectsWithAFreshToken(t *testing.T) {
 		defer close(done)
 		assert.NoError(t, c.Run(ctx, h))
 	}()
-	waitFor(t, func() int64 {
+	waitFor(t, 10*time.Second, func() int64 {
 		if fresh.Load() {
 			return 1
 		}
@@ -253,7 +255,7 @@ func TestRunNoKeepaliveClosesAndReconnects(t *testing.T) {
 		defer close(done)
 		assert.NoError(t, c.Run(ctx, newTestHandler()))
 	}()
-	waitFor(t, func() int64 {
+	waitFor(t, 10*time.Second, func() int64 {
 		if upgrades.Load() > 1 {
 			return 1
 		}
