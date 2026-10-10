@@ -302,6 +302,39 @@ func TestEventData(t *testing.T) {
 	assert.Empty(t, f.engine.runs())
 }
 
+
+// TestChannelPointsCommand covers roadmap 4.4: a redemption runs the
+// command the reward is mapped to, with the values of the redemption;
+// a reward without a mapping runs nothing.
+func TestChannelPointsCommand(t *testing.T) {
+	t.Parallel()
+	cmd := command.Command{ID: id.New(), Name: "reward-command", Kind: command.KindChat, Enabled: true,
+		TriggerMode: command.TriggerExclamation, Triggers: []string{"rc"}, ErrorPolicy: command.ErrorContinue}
+	f := newFixture(t, cmd)
+	f.points.cfg = settings.ChannelPoints{Rewards: []settings.ChannelPointReward{{RewardID: "r1", Command: "reward-command"}}}
+	ctx := t.Context()
+	ada := account(platform.Twitch, "8")
+	require.NoError(t, f.service.Event(ctx, connector.Event{
+		Platform: platform.Twitch, Type: eventtype.TwitchChannelPointsRedeem, User: &ada,
+		Details: eventtype.Details{ChannelPoints: &eventtype.ChannelPoints{Amount: 100, Reward: "r1"}},
+	}))
+	reqs := f.engine.take()
+	require.Len(t, reqs, 1)
+	assert.Equal(t, cmd.ID, reqs[0].Command.ID)
+	assert.Equal(t, eventtype.TwitchChannelPointsRedeem, reqs[0].Event)
+	assert.Equal(t, template.NumberValue(decimal.New(100)), reqs[0].Params.Values[template.EventChannelPoints])
+	assert.Equal(t, template.TextValue("r1"), reqs[0].Params.Values[template.EventChannelPointsID])
+	assert.Equal(t, "8", reqs[0].Params.User.Identities[0].PlatformUserID)
+
+	// a reward without a mapping: published, but nothing runs
+	require.NoError(t, f.service.Event(ctx, connector.Event{
+		Platform: platform.Twitch, Type: eventtype.TwitchChannelPointsRedeem, User: &ada,
+		Details: eventtype.Details{ChannelPoints: &eventtype.ChannelPoints{Amount: 100, Reward: "r2"}},
+	}))
+	assert.Empty(t, f.engine.take())
+	assert.Contains(t, f.pub.types(), eventtype.TwitchChannelPointsRedeem)
+}
+
 // TestStreamSession covers B8, B24 and B25 of events.md and B41 of
 
 // TestTwitchEventValues covers B18 and B19 of twitch-events.md: the
@@ -321,6 +354,10 @@ func TestTwitchEventValues(t *testing.T) {
 		on(eventtype.TwitchChannelPointsRedeem),
 		on(eventtype.TwitchCustomPowerUpRedeem),
 	)
+	// the redemption runs through its own mapping (roadmap 4.4)
+	f.points.cfg = settings.ChannelPoints{Rewards: []settings.ChannelPointReward{
+		{RewardID: "r1", Command: "twitch.channel_points.redeem"},
+	}}
 	ctx := t.Context()
 	require.NoError(t, f.service.Event(ctx, connector.Event{
 		Platform: platform.Twitch, Type: eventtype.TwitchBitsCheer, User: &ada,

@@ -326,11 +326,12 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		return a, err
 	}
 	a.events, err = eventservice.New(ctx, eventservice.Ports{
-		Store:     a.store,
-		Commands:  a.commands,
-		Engine:    a.engine,
-		Publisher: a.bus,
-		Settings:  a.eventsSettings,
+		Store:         a.store,
+		Commands:      a.commands,
+		Engine:        a.engine,
+		Publisher:     a.bus,
+		Settings:      a.eventsSettings,
+		ChannelPoints: a.channelPointsSettings,
 	}, eventservice.WithLogger(component(logger, "events")))
 	if err != nil {
 		return a, err
