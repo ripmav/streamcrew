@@ -161,12 +161,15 @@ func TestRunSessionReconnectKeepsTheSession(t *testing.T) {
 			writeText(t, conn, `{"type":"session_reconnect","payload":{"reconnect_url":"/re","session_id":"s2","reason":"server reboot"}}`)
 			hold(conn)
 		case "/re":
-			reconnects.Store(1)
 			assert.Equal(t, "s2", r.URL.Query().Get("eventsub-session-id"))
 			assert.Equal(t, "tok", r.URL.Query().Get("access_token"))
 			writeText(t, conn, helloJSON("s2", "10"))
 			writeText(t, conn, `{"type":"PING"}`)
 			assert.Equal(t, "PONG", frameType(t, conn))
+			// The flag goes up only after the handshake, so the test's
+			// cancel() cannot race the PING answer of the new
+			// connection.
+			reconnects.Store(1)
 			hold(conn)
 		}
 	})
@@ -192,12 +195,16 @@ func TestRunRevocationReconnectsWithAFreshToken(t *testing.T) {
 		want := "tok1"
 		if n > 1 {
 			want = "tok2"
-			fresh.Store(true)
 		}
 		assert.Equal(t, want, r.URL.Query().Get("access_token"))
 		writeText(t, conn, helloJSON("s1", "10"))
 		writeText(t, conn, `{"type":"PING"}`)
 		assert.Equal(t, "PONG", frameType(t, conn))
+		if n > 1 {
+			// After the handshake, so the test's cancel() cannot race
+			// the PING answer of the fresh connection.
+			fresh.Store(true)
+		}
 		if n == 1 {
 			writeText(t, conn, `{"type":"revocation","payload":{"reason":"token revoked"}}`)
 		}
