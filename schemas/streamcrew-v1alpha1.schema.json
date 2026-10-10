@@ -519,6 +519,9 @@
         "role": {
           "$ref": "#/$defs/requirement.role"
         },
+        "bits": {
+          "$ref": "#/$defs/requirement.bits"
+        },
         "cooldown": {
           "$ref": "#/$defs/requirement.cooldown"
         },
@@ -4164,6 +4167,19 @@
       },
       "required": [
         "role"
+      ],
+      "additionalProperties": false
+    },
+    "requirement.bits": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "amount"
       ],
       "additionalProperties": false
     },

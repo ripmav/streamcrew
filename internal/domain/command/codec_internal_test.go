@@ -37,6 +37,7 @@ func requirementExamples() map[string]Requirement {
 	ref := id.MustParse("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d")
 	return map[string]Requirement{
 		"role.v2":      RoleRequirement{Role: role.KickOG},
+		"bits.v1":      BitsRequirement{Amount: 100},
 		"cooldown.v2":  CooldownRequirement{Scope: CooldownPerUserGrouped, Group: ref},
 		"currency.v1":  CurrencyRequirement{Currency: ref, Mode: CurrencyRange, Amount: 10, Maximum: 100},
 		"rank.v1":      RankRequirement{Rank: ref, Match: RankAtLeast},
