@@ -19,6 +19,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
+
+	"github.com/ripmav/streamcrew/internal/breaker"
+	"github.com/ripmav/streamcrew/internal/httpclient"
 )
 
 // tokenReply is the answer of one call of the token endpoint of the fake.
@@ -70,10 +73,46 @@ func newOAuthFake(t *testing.T) *oauthFake {
 	return f
 }
 
+// authClient returns the httpclient the fake flow uses for the token
+// calls (Code-ADR-0014): the twitch.auth breaker and a single attempt, so
+// the tests never wait for the backoff.
+func (f *oauthFake) authClient() *httpclient.Client {
+	return httpclient.New(httpclient.Options{
+		Name:    "twitch.auth",
+		Base:    f.srv.Client(),
+		Breaker: breaker.New("twitch.auth", nil, httpclient.Evaluator),
+		Retry:   httpclient.RetryPolicy{Attempts: 1},
+	})
+}
+
+// helixClient returns the httpclient the fake flow uses for the account
+// lookup: the twitch.helix breaker and a single attempt.
+func (f *oauthFake) helixClient() *httpclient.Client {
+	return httpclient.New(httpclient.Options{
+		Name:    "twitch.helix",
+		Base:    f.srv.Client(),
+		Breaker: breaker.New("twitch.helix", nil, httpclient.Evaluator),
+		Retry:   httpclient.RetryPolicy{Attempts: 1},
+	})
+}
+
+// retryingAuthClient returns the twitch.auth client with the standard
+// retry policy, for the test that the code exchange runs without retry.
+func (f *oauthFake) retryingAuthClient() *httpclient.Client {
+	return httpclient.New(httpclient.Options{
+		Name:    "twitch.auth",
+		Base:    f.srv.Client(),
+		Breaker: breaker.New("twitch.auth", nil, httpclient.Evaluator),
+		Retry:   httpclient.RetryPolicy{Attempts: 3, Base: time.Millisecond, Budget: 100 * time.Millisecond},
+	})
+}
+
 func (f *oauthFake) twitchFlow() *twitchFlow {
 	return &twitchFlow{
 		clientID:  "test-client",
 		client:    f.srv.Client(),
+		auth:      f.authClient(),
+		helix:     f.helixClient(),
 		tokenURL:  f.srv.URL + "/token",
 		revokeURL: f.srv.URL + "/revoke",
 		usersURL:  f.srv.URL + "/users",
@@ -85,6 +124,8 @@ func (f *oauthFake) twitchCodeFlow() *twitchCodeFlow {
 	return &twitchCodeFlow{
 		clientID:  "test-client",
 		client:    f.srv.Client(),
+		auth:      f.authClient(),
+		helix:     f.helixClient(),
 		tokenURL:  f.srv.URL + "/token",
 		revokeURL: f.srv.URL + "/revoke",
 		usersURL:  f.srv.URL + "/users",
@@ -201,14 +242,24 @@ func (f *oauthFake) handleUsers(w http.ResponseWriter, r *http.Request) {
 func TestNewTwitch(t *testing.T) {
 	t.Parallel()
 
+	// clients is the httpclients NewTwitch needs; without a Base they use
+	// a plain client, which is fine for the construction tests.
+	clients := func() (*httpclient.Client, *httpclient.Client) {
+		return httpclient.New(httpclient.Options{Name: "twitch.auth"}),
+			httpclient.New(httpclient.Options{Name: "twitch.helix"})
+	}
+
 	t.Run("the device code flow gets the project client ID", func(t *testing.T) {
 		t.Parallel()
-		flow, err := NewTwitch(Credentials{DeviceFlow: true}, nil)
+		a, h := clients()
+		flow, err := NewTwitch(Credentials{DeviceFlow: true}, nil, a, h)
 		require.NoError(t, err)
 		f, ok := flow.(*twitchFlow)
 		require.True(t, ok)
 		assert.Equal(t, ClientID, f.clientID)
 		assert.Equal(t, timeout, f.client.Timeout)
+		assert.Same(t, a, f.auth)
+		assert.Same(t, h, f.helix)
 		assert.Equal(t, deviceURL, f.deviceURL)
 		assert.Equal(t, tokenURL, f.tokenURL)
 		assert.Equal(t, revokeURL, f.revokeURL)
@@ -217,24 +268,36 @@ func TestNewTwitch(t *testing.T) {
 
 	t.Run("a user device client ID overrides the project one", func(t *testing.T) {
 		t.Parallel()
-		flow, err := NewTwitch(Credentials{ID: "other", DeviceFlow: true}, nil)
+		a, h := clients()
+		flow, err := NewTwitch(Credentials{ID: "other", DeviceFlow: true}, nil, a, h)
 		require.NoError(t, err)
 		f, ok := flow.(*twitchFlow)
 		require.True(t, ok)
 		assert.Equal(t, "other", f.clientID)
 	})
 
+	t.Run("the flows need the httpclients", func(t *testing.T) {
+		t.Parallel()
+		a, h := clients()
+		_, err := NewTwitch(Credentials{DeviceFlow: true}, nil, nil, h)
+		require.Error(t, err)
+		_, err = NewTwitch(Credentials{DeviceFlow: true}, nil, a, nil)
+		require.Error(t, err)
+	})
+
 	t.Run("the authorization code flow needs credentials", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewTwitch(Credentials{}, nil)
+		a, h := clients()
+		_, err := NewTwitch(Credentials{}, nil, a, h)
 		require.Error(t, err)
-		_, err = NewTwitch(Credentials{ID: "only-id"}, nil)
+		_, err = NewTwitch(Credentials{ID: "only-id"}, nil, a, h)
 		require.Error(t, err, "without a secret there is no confidential client")
 	})
 
 	t.Run("the authorization code flow", func(t *testing.T) {
 		t.Parallel()
-		flow, err := NewTwitch(Credentials{ID: "other", Secret: "s3cret"}, nil)
+		a, h := clients()
+		flow, err := NewTwitch(Credentials{ID: "other", Secret: "s3cret"}, nil, a, h)
 		require.NoError(t, err)
 		f, ok := flow.(*twitchCodeFlow)
 		require.True(t, ok)
@@ -498,6 +561,26 @@ func TestCodeWait(t *testing.T) {
 		assert.Equal(t, "at-1", tok.AccessToken)
 	})
 
+	t.Run("the code exchange is not retried", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		f := newOAuthFake(t)
+		flow := f.twitchCodeFlow()
+		// The standard retry policy: a 500 would be retried twice more,
+		// if the exchange did not run with WithoutRetry (the code is
+		// single-use).
+		flow.auth = f.retryingAuthClient()
+		f.tokenScript = []tokenReply{{http.StatusInternalServerError, `{"error":"internal"}`}}
+
+		l, p, err := flow.Start(ctx)
+		require.NoError(t, err)
+		t.Cleanup(func() { l.callback.close(context.Background()) })
+		redirect(ctx, t, l, url.Values{"code": {"auth-code-1"}, "state": {queryState(t, p.URL)}})
+		_, err = flow.Wait(ctx, l)
+		require.Error(t, err)
+		assert.Len(t, f.tokenReqs(), 1, "the exchange makes a single request")
+	})
+
 	t.Run("the user denies", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
@@ -623,6 +706,16 @@ func TestRefresh(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid_grant")
 	})
 
+	t.Run("a 401 means the login is required again", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		f := newOAuthFake(t)
+		flow := f.twitchFlow()
+		f.tokenScript = []tokenReply{{http.StatusUnauthorized, `{"error":"invalid_token","error_description":"The token is invalid"}`}}
+		_, err := flow.Refresh(ctx, "rt-1")
+		require.ErrorIs(t, err, ErrTokenExpired, "a rejected grant must not be retried into the login")
+	})
+
 	t.Run("a server error", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
@@ -746,4 +839,27 @@ func TestUser(t *testing.T) {
 		_, _, err := flow.User(ctx, "at-1")
 		require.Error(t, err)
 	})
+}
+
+func TestBreakerUnavailable(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newOAuthFake(t)
+	flow := f.twitchFlow()
+	f.tokenScript = []tokenReply{{http.StatusInternalServerError, `{"error":"internal"}`}}
+
+	// Five consecutive 5xx answers open the breaker (Code-ADR-0007);
+	// the fake flow makes one attempt per call.
+	for i := range 5 {
+		_, err := flow.Refresh(ctx, "rt-1")
+		require.Error(t, err, "the %d-th failure", i+1)
+	}
+	_, err := flow.Refresh(ctx, "rt-1")
+	require.ErrorIs(t, err, breaker.ErrUnavailable, "the open breaker rejects the call without a request")
+
+	// The login polling meets the open breaker the same way.
+	l, _, err := flow.Start(ctx)
+	require.NoError(t, err)
+	_, err = flow.Wait(ctx, l)
+	require.ErrorIs(t, err, breaker.ErrUnavailable)
 }

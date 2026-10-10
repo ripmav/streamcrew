@@ -20,9 +20,11 @@ import (
 
 	"github.com/ripmav/streamcrew/internal/app"
 	"github.com/ripmav/streamcrew/internal/auth"
+	"github.com/ripmav/streamcrew/internal/breaker"
 	"github.com/ripmav/streamcrew/internal/buildinfo"
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
+	"github.com/ripmav/streamcrew/internal/httpclient"
 	"github.com/ripmav/streamcrew/internal/profile"
 	"github.com/ripmav/streamcrew/internal/store"
 	"github.com/ripmav/streamcrew/internal/vault"
@@ -274,13 +276,26 @@ func authService(st auth.Store, ks *vault.KeySet, flows func(p platform.Name, c 
 
 // realFlows returns the login flows of the platforms for their
 // credentials; only Twitch has one so far (roadmap 4.1), like the flows of
-// the core.
+// the core. The token calls run through the resilient HTTP client
+// (Code-ADR-0014) with the breakers twitch.auth and twitch.helix
+// (Code-ADR-0007); the CLI logs neither the retries nor the breaker
+// states, like the rest of the auth commands.
 func realFlows() func(p platform.Name, c auth.Credentials) (auth.Flow, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
+	twitchAuth := httpclient.New(httpclient.Options{
+		Name:    "twitch.auth",
+		Base:    client,
+		Breaker: breaker.New("twitch.auth", nil, httpclient.Evaluator),
+	})
+	twitchHelix := httpclient.New(httpclient.Options{
+		Name:    "twitch.helix",
+		Base:    client,
+		Breaker: breaker.New("twitch.helix", nil, httpclient.Evaluator),
+	})
 	return func(p platform.Name, c auth.Credentials) (auth.Flow, error) {
 		switch p {
 		case platform.Twitch:
-			return auth.NewTwitch(c, client)
+			return auth.NewTwitch(c, client, twitchAuth, twitchHelix)
 		default:
 			return nil, fmt.Errorf("no login flow for platform %q", p)
 		}
