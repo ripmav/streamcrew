@@ -254,6 +254,3 @@ func ident(login, display, id string, roles ...role.Role) *user.Identity {
 		Roles:          role.NewSet(roles...),
 	}
 }
-
-//go:fix inline
-func ptr[T any](v T) *T { return new(v) }
