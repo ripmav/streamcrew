@@ -29,7 +29,7 @@ doppeln.
 1. **Bibliothek:** `github.com/coder/websocket` v1.8.15. Die ISC-Lizenz steht in der Allowlist (Code-ADR-0001); die Bibliothek ist die aktiv gepflegte Fortsetzung des `nhooyr/websocket`-Kodes.
 2. **Kontext-API:** Verbindung, Lesen und Schreiben laufen mit dem Aufrufer-Kontext (`Dial(ctx, …)`, `Read(ctx)`, `Write(ctx, …)`); das Herunterfahren schließt die Verbindung geordnet (`Close(1000, …)`). Deadlines pro Verbindung (das `gorilla`-Muster) werden nicht verwendet.
 3. **Keepalive selbst:** Der Client antwortet auf die PING-Texte von Twitch mit PONG-Texten im vorgegebenen Intervall (`keepalive_interval_seconds` aus `hello`) und schließt die Verbindung, wenn die eigene Antwort nicht mehr passt (Code-ADR-0003: Log-Eintrag). Ein WS-eigenes Ping (z. B. `Conn.Ping`) kommt nicht dazu.
-4. **Reconnect:** `session_reconnect` wird mit der mitgelieferten `reconnect_url` und der Session-ID neu verbunden (Ereignisse seit dem letzten verarbeiteten `message_id` kommen erneut — die Deduplizierung per `message_id` von Roadmap 4.3/B22 wirft die Wiederholungen weg). Ungeplante Abbrüche verbinden mit exponentiellem Backoff neu (Basis 1 s, volles Jitter, 30-s-Budget — die Werte des HTTP-Client, Code-ADR-0014, Punkt 4).
+4. **Reconnect:** `session_reconnect` wird mit der mitgelieferten `reconnect_url` und der Session-ID neu verbunden (Wiederholungen liefert die Plattform erneut — die Deduplizierung (B22) wirft sie weg). Ungeplante Abbrüche verbinden mit exponentiellem Backoff neu (Basis 1 s, volles Jitter, 30-s-Budget — die Werte des HTTP-Client, Code-ADR-0014, Punkt 4).
 5. **JSON:** Die Protokoll-Nachrichten und die Ereignis-`event`-Objekte werden mit `encoding/json/v2` gelesen (Code-ADR-0018); das innere `event`-Feld bleibt als `jsontext.Value` liegen, bis die Abbildung (Roadmap 4.3) es typisiert ausliest.
 
 ## Betrachtete Alternativen
@@ -62,7 +62,7 @@ gegen twitch-cli v1.1.24 und die EventSub-WebSocket-Dokumentation):
 
 - Alle Frames sind `{"metadata":{"message_id","message_type",…},"payload":{…}}`; die Typen sind `session_welcome`, `session_keepalive`, `notification`, `session_reconnect`, `revocation`.
 - Der Server hält die Verbindung mit `session_keepalive`-Frames lebendig (im 10-s-Takt), nicht mit `PING`-Texten; der Client sendet gar keine Anwendungsnachrichten (der Mock schließt Clients mit Close-Code 4001, die Inbound-Traffic senden), und jede empfangene Frame hält die Verbindung lebendig (WS-Ping/pong läuft transparent über die Bibliothek).
-- Die Ereignisse kommen als `notification` mit `payload` = EventsubResponse (`subscription` mit `type`/`version` + `event`); die Wiederholungen nach Reconnects (B22) werden anhand des Nutzlast-Inhalts verworfen.
+- Die Ereignisse kommen als `notification` mit `payload` = EventsubResponse (`subscription` mit `type`/`version` + `event`); die Wiederholungen nach Reconnects (B22) werden anhand des Inhalts des Event-Objekts verworfen — die Subscription-Shell (Session-ID, created_at) ändert sich pro Session, das Event-Objekt (mit der Nachrichten-ID) bleibt gleich.
 - `session_reconnect` trägt `payload.session` mit `status: "reconnecting"` und der `reconnect_url` (selbsttragend, inkl. Reconnect-Identität); `revocation` kommt als `payload.revocation.reason`.
 
 Umgesetzt in `internal/twitch` (Plan 4.5, Aufgabe 4); die 4.3-Tests
