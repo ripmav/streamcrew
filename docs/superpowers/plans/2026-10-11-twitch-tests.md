@@ -1,18 +1,20 @@
 # Plan: Roadmap 4.5 — Twitch-Tests
 
-**Status:** offen
+**Status:** abgeschlossen (2026-10-11, Stack #190 [188, 189, 191, 192, 193, 194,
+195, 196, 197]); offen bleibt nur das Exit-Kriterium des manuellen
+4-h-Test-Streams (Projektinhaber)
 **Stand:** 2026-10-11, `main` bei `42f0273`; 4.1–4.4 sind gemerged
 **Scope:** nur 4.5 (Tests + Dry-Run-Modus). Der `$emote…`-Identifier
 (4.4, offener Punkt 5) bleibt offen.
 
 ## 1. Was 4.5 liefert (Roadmap)
 
-- [ ] Fixtures aus der offiziellen Doku bzw. eigenen Test-Streams
+- [x] Fixtures aus der offiziellen Doku bzw. eigenen Test-Streams
   (anonymisiert) und Contract-Tests (M)
-- [ ] Integrationstests gegen den Mock-EventSub-Server der Twitch CLI (M)
-- [ ] Reconnect- und Chaos-Tests: Verbindungsabbruch, Keepalive-Timeout,
+- [x] Integrationstests gegen den Mock-EventSub-Server der Twitch CLI (M)
+- [x] Reconnect- und Chaos-Tests: Verbindungsabbruch, Keepalive-Timeout,
   Session-Reconnect (S)
-- [ ] **Dry-Run-Modus** (M): der Core verbindet sich mit einem echten
+- [x] **Dry-Run-Modus** (M): der Core verbindet sich mit einem echten
   Channel, liest und verarbeitet wie gewöhnlich, führt aber keine
   schreibende Aktion aus — stattdessen zeichnet er sie als Debug-Logs
   auf, was er machen würde (Zweck: Funktionen in echt testen ohne
