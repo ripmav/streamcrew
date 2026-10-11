@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"testing"
 	"time"
 
@@ -113,9 +114,9 @@ func (r *fakeReceiver) lastEventOfType(t *testing.T, typ event.Type) connector.E
 	t.Helper()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for i := len(r.events) - 1; i >= 0; i-- {
-		if r.events[i].Type == typ {
-			return r.events[i]
+	for _, v := range slices.Backward(r.events) {
+		if v.Type == typ {
+			return v
 		}
 	}
 	t.Fatal("no event of the type received")
