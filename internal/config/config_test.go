@@ -71,6 +71,7 @@ func TestParseDefaults(t *testing.T) {
 	assert.Equal(t, config.ModeDaemon, cfg.Mode)
 	assert.Equal(t, "127.0.0.1:8740", cfg.Listen)
 	assert.False(t, cfg.Dev)
+	assert.False(t, cfg.DryRun)
 	assert.Equal(t, 15*time.Second, cfg.ShutdownTimeout)
 	assert.Equal(t, config.LogConfig{Level: "info", Format: "text", File: true, MaxSize: 10, MaxFiles: 5}, cfg.Log)
 	assert.Equal(t, filepath.Join(dataDir, "logs"), cfg.LogDir())
@@ -217,7 +218,7 @@ func TestViewRoundTrip(t *testing.T) {
 	want, file := parse(t, config.Defaults{DataDir: dataDir},
 		"--profile=second", "--mode=server", "--listen=:9001", "--shutdown-timeout=7s", "--log-level=debug",
 		"--log-component-level=supervisor=warn", "--log-format=json", "--no-log-file",
-		"--log-max-size=3", "--log-max-files=1")
+		"--log-max-size=3", "--log-max-files=1", "--dry-run")
 	require.NoError(t, file.Err())
 
 	// The output of "config show" is a valid configuration file for the same

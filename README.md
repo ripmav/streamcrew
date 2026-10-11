@@ -81,6 +81,7 @@ Die Startkonfiguration kommt aus Flags, Umgebungsvariablen und einer optionalen 
 | `--mode` | `STREAMCREW_MODE` | `mode` | `daemon`; außerdem `desktop` und `server` ([ADR-0003](docs/adr/0003-betriebsmodi.md)) |
 | `--listen` | `STREAMCREW_LISTEN` | `listen` | `127.0.0.1:8740`, im Server-Modus `:8740` |
 | `--dev` | `STREAMCREW_DEV` | `dev` | aus |
+| `--dry-run` | `STREAMCREW_DRY_RUN` | `dry_run` | aus: die Plattformen lesen den Channel und loggen, was sie machen würden, statt es zu tun (Chat, Moderation, Twitch-Aktionen) |
 | `--shutdown-timeout` | `STREAMCREW_SHUTDOWN_TIMEOUT` | `shutdown_timeout` | `15s` |
 | `--log-level` | `STREAMCREW_LOG_LEVEL` | `log_level` | `info` |
 | `--log-component-level` | `STREAMCREW_LOG_COMPONENT_LEVEL` | `log_component_level` | – |
