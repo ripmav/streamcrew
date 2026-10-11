@@ -91,6 +91,31 @@ func TestRunStartsReportsReadyAndStops(t *testing.T) {
 	assert.True(t, info.IsDir())
 }
 
+// TestDryRunLogsOn verifies the dry-run flag reaches the composition root:
+// the core logs it at start (plan 4.5, task 2).
+func TestDryRunLogsOn(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	cfg.DryRun = true
+	require.NoError(t, cfg.Resolve())
+	var console bytes.Buffer
+	a, err := app.New(t.Context(), cfg, app.WithConsole(&console), app.WithKeyring(nil))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	errC := make(chan error, 1)
+	go func() { errC <- a.Run(ctx) }()
+	select {
+	case <-a.HTTPServer().Listening():
+	case err := <-errC:
+		t.Fatalf("Run returned early: %v", err)
+	}
+	cancel()
+	require.NoError(t, <-errC)
+
+	assert.Contains(t, console.String(), "dry run is on")
+}
+
 // TestRights covers Code-ADR-0019: the core has the rights of its mode and
 // the configuration, and gives them to their users through App.Rights.
 func TestRights(t *testing.T) {

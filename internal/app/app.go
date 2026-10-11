@@ -43,6 +43,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
+	"github.com/ripmav/streamcrew/internal/dryrun"
 	"github.com/ripmav/streamcrew/internal/emote"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
@@ -477,7 +478,7 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches)
 	}))
 	add(twitchaction.Descriptors(twitchaction.Ports{
 		Templates: a.templates,
-		Ops:       twitchOps{app: a},
+		Ops:       a.twitchOps(),
 		Logger:    component(a.logger, "action"),
 	}))
 	if err := errors.Join(errs...); err != nil {
@@ -493,6 +494,9 @@ func (a *App) addPlatform(ctx context.Context, build func(ctx context.Context, b
 	p, err := build(ctx, PlatformBuilder{Receiver: a.events, Publisher: a.bus, Logger: a.logger})
 	if err != nil {
 		return fmt.Errorf("build platform: %w", err)
+	}
+	if a.cfg.DryRun {
+		p = dryrun.NewPlatform(p, component(a.logger, "dryrun"))
 	}
 	r, ok := any(p).(supervisor.Runnable)
 	if !ok {
@@ -568,6 +572,9 @@ func (a *App) Run(ctx context.Context) (err error) {
 	a.logger.InfoContext(ctx, "streamcrew starting",
 		"version", a.version, "mode", a.cfg.Mode, "profile", a.profile.ID,
 		"data_dir", a.cfg.DataDir, "pid", os.Getpid())
+	if a.cfg.DryRun {
+		a.logger.InfoContext(ctx, "dry run is on: the platforms record their side effects instead of causing them")
+	}
 	if a.cfg.Dev {
 		a.logger.WarnContext(ctx, "developer mode is on: pprof is served under /debug/pprof/")
 	}
