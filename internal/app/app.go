@@ -32,6 +32,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/host"
 	"github.com/ripmav/streamcrew/internal/action/moderation"
 	"github.com/ripmav/streamcrew/internal/action/network"
+	twitchaction "github.com/ripmav/streamcrew/internal/action/twitch"
 	"github.com/ripmav/streamcrew/internal/action/users"
 	"github.com/ripmav/streamcrew/internal/action/values"
 	"github.com/ripmav/streamcrew/internal/auth"
@@ -136,6 +137,9 @@ type App struct {
 	engine       *engine.Engine
 	events       *eventservice.Service
 	catalog      *event.Catalog
+	// twitchHelix is the resilient HTTP client of the Helix API, shared by
+	// the Twitch platform and the twitch action's operations (roadmap 4.4).
+	twitchHelix *httpclient.Client
 }
 
 // New builds the core from a resolved configuration (config.Config.Resolve).
@@ -235,6 +239,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Breaker: breaker.New("twitch.helix", component(logger, "auth"), httpclient.Evaluator),
 		Logger:  component(logger, "auth"),
 	})
+	a.twitchHelix = twitchHelix
 	if a.auth, err = auth.New(auth.Ports{
 		Store:     a.store,
 		Vault:     func(repo vault.Repository) *vault.Vault { return vault.New(repo, ks) },
@@ -446,6 +451,11 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches)
 		Templates: a.templates,
 		Counters:  a.store,
 		Globals:   globals,
+	}))
+	add(twitchaction.Descriptors(twitchaction.Ports{
+		Templates: a.templates,
+		Ops:       twitchOps{app: a},
+		Logger:    component(a.logger, "action"),
 	}))
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
