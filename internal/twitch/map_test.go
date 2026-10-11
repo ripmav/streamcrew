@@ -19,6 +19,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/role"
 	"github.com/ripmav/streamcrew/internal/domain/user"
+	"github.com/ripmav/streamcrew/internal/emote"
 	"github.com/ripmav/streamcrew/internal/twitch"
 )
 
@@ -116,7 +117,7 @@ func TestMapChatMessage(t *testing.T) {
 	msg := r.lastMessage(t)
 	assert.Equal(t, "m-1", msg.Message.ID)
 	assert.Equal(t, "hi :Kappa: there", msg.Message.Text)
-	assert.Equal(t, []string{"25"}, msg.Message.Emotes)
+	assert.Equal(t, []string{":Kappa"}, msg.Message.Emotes)
 	assert.Equal(t, "8", msg.Author.PlatformUserID)
 	assert.Equal(t, "alice", msg.Author.Login)
 	assert.Equal(t, "Alice", msg.Author.DisplayName)
@@ -124,6 +125,38 @@ func TestMapChatMessage(t *testing.T) {
 	assert.False(t, msg.Author.Roles.Has(role.Streamer))
 	assert.False(t, msg.FromBot)
 }
+
+func TestMapChatMessageResolvesEmotes(t *testing.T) {
+	r := &fakeReceiver{}
+	catalog := emote.New([]emote.Source{fixedSource{emotes: []emote.Emote{{ID: "25", Code: "Kappa", Image: "img"}}}}, time.Hour, nil)
+	catalog.Refresh(t.Context(), "chan")
+	dedup, err := connector.NewDedup(time.Minute)
+	require.NoError(t, err)
+	m := twitch.NewMapper(twitch.MapperOptions{Receiver: r, Dedup: dedup, BotID: "9", Emotes: catalog, EmoteChannel: "chan"})
+	handle(t, m, "channel.chat.message", `{
+		"id": "m-1",
+		"message": "hi :Kappa: there",
+		"emotes": [{"id": "25", "start": 3, "end": 9}],
+		"user_id": "8",
+		"user_login": "alice",
+		"user_display_name": "Alice",
+		"badges": [{"set_id": "moderator/1"}]
+	}`, "id-1")
+
+	msg := r.lastMessage(t)
+	// The catalog resolves the ID to its canonical code, overriding the
+	// code marked in the text.
+	assert.Equal(t, []string{"Kappa"}, msg.Message.Emotes)
+}
+
+// fixedSource is a Source that lists one fixed set of emotes.
+type fixedSource struct {
+	emotes []emote.Emote
+}
+
+func (fixedSource) Name() string { return "test" }
+
+func (f fixedSource) Emotes(context.Context, string) ([]emote.Emote, error) { return f.emotes, nil }
 
 func TestMapChatMessageFromBot(t *testing.T) {
 	r := &fakeReceiver{}

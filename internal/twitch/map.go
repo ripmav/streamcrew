@@ -16,6 +16,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/role"
 	"github.com/ripmav/streamcrew/internal/domain/user"
+	emotecat "github.com/ripmav/streamcrew/internal/emote"
 )
 
 // Mapper is the mapping of the received EventSub events onto the event
@@ -29,6 +30,11 @@ type Mapper struct {
 	botID     string
 	onRevoked func(context.Context)
 	log       *slog.Logger
+	// emotes resolves the emote IDs of a chat message to their code
+	// (roadmap 4.4, task 9); nil without a catalog, then the code is
+	// read from the marked text.
+	emotes       *emotecat.Catalog
+	emoteChannel string
 }
 
 // MapperOptions configures NewMapper.
@@ -43,6 +49,11 @@ type MapperOptions struct {
 	// Logger logs the dropped events (Code-ADR-0003); if nil, the log
 	// is discarded.
 	Logger *slog.Logger
+	// Emotes resolves the emote IDs of a chat message to their code
+	// (roadmap 4.4, task 9); nil for the raw code from the text.
+	Emotes *emotecat.Catalog
+	// EmoteChannel is the login the emote catalog is resolved for.
+	EmoteChannel string
 }
 
 // NewMapper creates a Mapper.
@@ -51,7 +62,7 @@ func NewMapper(o MapperOptions) *Mapper {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Mapper{rec: o.Receiver, dedup: o.Dedup, botID: o.BotID, log: log}
+	return &Mapper{rec: o.Receiver, dedup: o.Dedup, botID: o.BotID, log: log, emotes: o.Emotes, emoteChannel: o.EmoteChannel}
 }
 
 // WithRevoked sets the revocation callback, called once when the
@@ -305,7 +316,7 @@ func (m *Mapper) incoming(p chatMessage) connector.Incoming {
 		Platform: platform.Twitch,
 		Author:   author,
 		FromBot:  p.UserID != "" && p.UserID == m.botID,
-		Message:  eventtype.Message{ID: p.ID, Text: p.Message, Emotes: p.emoteCodes()},
+		Message:  eventtype.Message{ID: p.ID, Text: p.Message, Emotes: m.emoteCodes(p)},
 	}
 }
 
@@ -365,17 +376,32 @@ type emote struct {
 	End   int    `json:"end"`
 }
 
-// emoteCodes is the emote IDs in the order of the text; the cheer
-// motes stay text, the amount of the bits is carried by the separate
-// channel.cheer event.
-func emoteCodes(emotes, emoji []emote) []string {
-	all := append(append([]emote{}, emotes...), emoji...)
+// emoteCodes are the emote codes in the order of the text; each ID is
+// resolved to its code with the catalog (roadmap 4.4, task 9), falling
+// back to the code marked in the text. The cheer motes stay text, the
+// amount of the bits is carried by the separate channel.cheer event.
+func (m *Mapper) emoteCodes(p chatMessage) []string {
+	all := append(append([]emote{}, p.Emotes...), p.Emoji...)
 	sort.Slice(all, func(i, j int) bool { return all[i].Start < all[j].Start })
 	codes := make([]string, 0, len(all))
 	for _, e := range all {
-		codes = append(codes, e.ID)
+		codes = append(codes, m.emoteCode(p, e))
 	}
 	return codes
+}
+
+// emoteCode is the code of one marked emote: from the catalog if it
+// resolves, else the code marked in the text.
+func (m *Mapper) emoteCode(p chatMessage, e emote) string {
+	if m.emotes != nil {
+		if got, ok := m.emotes.Resolve(m.emoteChannel, e.ID); ok && got.Code != "" {
+			return got.Code
+		}
+	}
+	if e.Start >= 0 && e.End > e.Start && e.End <= len(p.Message) {
+		return p.Message[e.Start:e.End]
+	}
+	return e.ID
 }
 
 // chatMessage is the payload of channel.chat.message.
@@ -402,10 +428,6 @@ func (p chatMessage) user() chatUser {
 		Avatar:      p.Avatar,
 		Badges:      p.Badges,
 	}
-}
-
-func (p chatMessage) emoteCodes() []string {
-	return emoteCodes(p.Emotes, p.Emoji)
 }
 
 // follow is the payload of channel.follow.
