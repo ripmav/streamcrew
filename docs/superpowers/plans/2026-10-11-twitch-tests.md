@@ -99,6 +99,28 @@ Letztrelease v1.1.24, `go 1.20`) bietet zwei Mock-Server:
    Konsequenz: der 4.3-Client (hypothetisches `{type, payload}`-
    Format mit `hello`/PING/`event_type`) spricht das echte Protokoll
    nicht — Aufgabe 4 stellt das um.
+4. **Subscriptions über REST (verifiziert 2026-10-11 gegen den
+   laufenden Mock und die CLI-Quelle):**
+   - Der Mock verlangt im Body von `POST /eventsub/subscriptions`
+     `transport.method: "websocket"` **und** ein gültiges
+     `transport.session_id` (Format `<ServerId>_<ClientName>`, die ID
+     der verbundenen EventSub-Session aus dem `session_welcome`;
+     unbekannt → 400). Die Subscriptions müssen also erst nach der
+     Verbindung angelegt werden und tragen die Session-Id — der
+     4.3-Manager tat beides nicht (zweiter Befund neben dem
+     Frame-Format).
+   - Feldname: der Mock liest/antwortet das Eventthema unter
+     `"type"`, die Production-Helix-API tut es unter `"eventtype"`.
+     Der Helix-Client schickt beide Felder mit und falt sie beim
+     Antworten auf `EventType` zusammen.
+   - Der Mock lehnt `channel.chat.message` (400/410) ab — der
+     Subscriptions-Manager skippt das Thema wie geplant (400 ist
+     kein Fehler).
+   - `channel.cheer` trägt in Production die feiernde Person unter
+     `from_user_id`/`from_user_login`/`from_user_display_name` und
+     den Betrag unter `cumulative_bits` (nicht `user_id`/`bits`);
+     der Mapper war auf die falschen Namen geschrieben —
+     Integrationsbefund, in Aufgabe 5 behoben.
 
 **Konsequenzen für die Testarchitektur:**
 
@@ -128,7 +150,7 @@ Letztrelease v1.1.24, `go 1.20`) bietet zwei Mock-Server:
 
 Auf `main`, ein PR pro Aufgabe, gestapelt.
 
-- [ ] **1. Test-Harness für die Twitch CLI** (S)
+- [x] **1. Test-Harness für die Twitch CLI** (S)
   `internal/twitch/twitchmock/`: verwaltet den Lebenszyklus beider
   Mock-Server für Go-Tests —
   - `twitch`-Binary auflösen (`LookPath`), fehlend → `Skip`.
@@ -148,7 +170,7 @@ Auf `main`, ein PR pro Aufgabe, gestapelt.
   Verifikation: `go test ./internal/twitch/twitchmock/` mit einer
   Selbsttest-Suite (Server starten, connect, Event fire, empfangen).
 
-- [ ] **2. Dry-Run-Modus** (M)
+- [x] **2. Dry-Run-Modus** (M)
   `internal/dryrun/`: Wrapper um die Plattform-, damit der Core in
   einen echten Channel integriert werden kann, ohne dort irgendetwas
   auszulösen — das Bot liest und verarbeitet wie gewöhnlich, und
@@ -176,7 +198,7 @@ Auf `main`, ein PR pro Aufgabe, gestapelt.
   und gibt den richtigen Wert, Lese-Ports durch), App-Test (dry run
   an/aus) und Config-Test für das neue Flag.
 
-- [ ] **3. Fixtures und Contract-Tests des Event-Adapters** (M)
+- [x] **3. Fixtures und Contract-Tests des Event-Adapters** (M)
   - `internal/twitch/testdata/`: je Event-Typ des `desired`-Katalogs
     (23 Typen) eine **vollständige, anonymisierte Payload** aus der
     offiziellen Eventsub-Doku als JSON-Datei (statt der heute
@@ -207,26 +229,28 @@ Auf `main`, ein PR pro Aufgabe, gestapelt.
   Verifikation: `go test ./internal/twitch/` (Unit) — und die
   Integrationstests (Aufgabe 5) gegen den echten Mock bestätigen es.
 
-- [ ] **5. Integrationstests gegen den Mock-EventSub-Server** (M)
-  `internal/twitch/integration_test.go` (Harness aus Aufgabe 1):
-  - **Verbindung + Subscriptions:** der Adapter verbindet,
-    `session_welcome` wird angenommen, die akzeptierbaren
-    Subscriptions (stream.online, stream.offline, channel.follow,
-    channel.raid, channel.cheer,
-    channel.channel_points_custom_reward_redemption.add) entstehen über
-    REST gegen den Mock (202) und erscheinen in der GET-Liste.
-  - **Eventfluss (end-to-end):** `Fire` einer Chat-Nachricht
-    (`channel.chat.message` v2, handgefertigter Body — der CLI-Mock
-    kennt das Thema nicht) → Adapter mappt → Receiver erhält das
-    `connector.Event` mit korrektem Typ, `$user…`/`$message…`-
-    Entitäten und dedupliziertem ID; ebenso `stream.online`,
-    `channel.cheer` und eine Channel-Points-Einlösung
-    (`channel.channel_points_custom_reward_redemption.add`) als
+- [x] **5. Integrationstests gegen den Mock-EventSub-Server** (M)
+  `internal/twitch/integration_test.go` (Harness aus Aufgabe 1);
+  erledigt (PR #194):
+  - **Verbindung + Subscriptions:** der Adapter verbindet
+    (`session_welcome` wird angenommen), die Subscriptions entstehen
+    über REST gegen den Mock mit der Session-Id im Transport (Befund
+    4) und erscheinen in der GET-Liste; das abgelehnte Thema
+    `channel.chat.message` wird vom Manager übersprungen.
+  - **Eventfluss (end-to-end):** `Fire` von `stream.online` (Stream-
+    Zustand), `channel.chat.message` v2 (handgefertigter Body — der
+    Mock kennt das Thema nicht; Emote-Code und Autor landen korrekt,
+    die identische Wiederholung wirft der B22-Dedup), `channel.cheer`
+    (Production-Form mit `from_user_*`/`cumulative_bits`) und
+    `channel.channel_points_custom_reward_redemption.add` als
     dokumentierte Voll-Body.
-  - **Aktion gegen die Mock API:** ein Chat-Command auf ein
-    getriggertes Event sendet über Helix `POST /mock/chat/messages`
-    (Token + Client-ID aus dem generate-Output) — die Antwort 200 mit
-    Message-ID wird vom Adapter bestätigt.
+  - **Keine Aktion gegen die Mock API:** der generierte Token trägt
+    keine Scopes (Mock-`generate`, `Scopes: ""`), und jede Mock-
+    Schreib-Endpunkte verlangt einen (401) — es gibt kein
+    schreibbares Ziel (offener Punkt 3, entschieden: aus dem Test
+    gestrichen, Moderation bleibt Unit- und Produktions-geprüft).
+  Verifikation: `go test ./internal/twitch/ -run TestPlatformAgainstTheMock`
+  (Skip ohne die twitch-Binary); `go test -race ./...` grün.
 
 - [ ] **6. Reconnect- und Chaos-Tests** (S)
   (Harness aus Aufgabe 1; `internal/twitch/integration_test.go`)
@@ -279,11 +303,13 @@ Auf `main`, ein PR pro Aufgabe, gestapelt.
    Job pro Runner. Lokale Kollisionen (zwei Testläufe nebeneinander)
    sind möglich — dann die zweite Suite überspringen oder sequenziell
    laufen (Doku im Harness-Kommentar).
-3. **Mock-API-Scopes:** der vorgefertigte Token trägt die Scopes des
-   generierten Users; wenn ein Helix-Call im Integrationstest mit 401
-   „Missing required scope" scheitert, prüft der Test die
-   generate-Scopes und notiert sie im Plan (oder der Router gibt einen
-   Scope-vollen Token über `POST /mock/…` — nicht vorgesehen).
+3. **Mock-API-Scopes (entschieden 2026-10-11):** der vorgefertigte
+   Token trägt keine Scopes (`generate` schreibt `Scopes: ""`), und
+   jede Mock-Schreib-Endpunkte (POST/PUT) verlangt mindestens einen
+   (sonst 401) — verifiziert gegen alle 58 Mock-Endpunkte. Eine
+   Aktion gegen die Mock API ist daher nicht testbar; sie ist aus
+   Aufgabe 5 gestrichen. Moderation/Chat-Commands bleiben Unit- und
+   Produktions-geprüft (Exit-Kriterium 4-h-Test-Stream).
 4. **Anonymisierung der Fixtures:** die offizielle Doku nutzt
    Beispiel-IDs/-Logins; wir übernehmen die Strukturen und ersetzen
    IDs/Logins durch durchgehend fiktive Werte (keine echten Accounts).

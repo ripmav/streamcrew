@@ -4,6 +4,7 @@ package twitch
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math"
 	"net/http"
@@ -17,6 +18,55 @@ import (
 	"github.com/ripmav/streamcrew/internal/helix"
 	"github.com/ripmav/streamcrew/internal/httpclient"
 )
+
+// sessionState hands the EventSub session ID from the WebSocket
+// client to the subscription manager: the client reports the ID of
+// every connection, the manager waits for the first and reads the
+// current one afterwards (the ID changes on every session
+// reconnect, the subscriptions ride along with the session).
+type sessionState struct {
+	mu     sync.Mutex
+	id     string
+	notify chan struct{}
+}
+
+func newSessionState() *sessionState {
+	return &sessionState{notify: make(chan struct{})}
+}
+
+// report is the Session callback of the WebSocket client.
+func (s *sessionState) report(id string) {
+	s.mu.Lock()
+	s.id = id
+	n := s.notify
+	s.notify = nil
+	s.mu.Unlock()
+	if n != nil {
+		close(n)
+	}
+}
+
+// current blocks until the first session ID is reported and returns
+// the current ID after that.
+func (s *sessionState) current(ctx context.Context) (string, error) {
+	s.mu.Lock()
+	id, n := s.id, s.notify
+	s.mu.Unlock()
+	if id != "" {
+		return id, nil
+	}
+	if n == nil {
+		return "", errors.New("eventsub: the session is gone")
+	}
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case <-n:
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.id, nil
+}
 
 // pollInterval is how often the platform asks for the state of the
 // streamer account while it is not connected (roadmap 4.3).
@@ -231,7 +281,8 @@ func (p *Platform) session(ctx context.Context, st AccountState) error {
 		Token:    token,
 		BaseURL:  p.helixBase,
 	})
-	mgr := NewManager(ManagerOptions{Helix: hc, AccountID: st.AccountID, Logger: p.log})
+	sessions := newSessionState()
+	mgr := NewManager(ManagerOptions{Helix: hc, AccountID: st.AccountID, Logger: p.log, SessionID: sessions.current})
 	dedup, err := connector.NewDedup(connector.DefaultDedupTTL)
 	if err != nil {
 		return err
@@ -249,6 +300,7 @@ func (p *Platform) session(ctx context.Context, st AccountState) error {
 		Token:      token,
 		HTTPClient: p.dialClient,
 		Logger:     p.log,
+		Session:    sessions.report,
 	})
 
 	p.log.InfoContext(ctx, "the twitch platform connected", "streamer", st.Login)
