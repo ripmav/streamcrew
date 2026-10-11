@@ -93,7 +93,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 1: Fundament | abgeschlossen 2026-09-29, M0 erreicht (PR #12, CI grün); der Cache wurde in Phase 2 neu bewertet |
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
 | Phase 3: Engine, Templates, Actions, Mock | abgeschlossen 2026-10-07, M1 erreicht (PR #143, CI grün); vertagt: die Schwelle der Sammelgeschenke (3.4, P1) |
-| Phase 4: Twitch | in Arbeit: 4.1 (Authentifizierung), 4.2 (Helix-Client) und 4.3 (EventSub) abgeschlossen (4.2 in Stack #162, 4.3 in Stack #170; Merging ausstehend), 4.4 (Funktionen) folgt |
+| Phase 4: Twitch | 4.1 (Authentifizierung), 4.2 (Helix-Client), 4.3 (EventSub) und 4.4 (Funktionen) abgeschlossen; 4.5 (Tests) folgt |
 | Phase 5: Core-Services | offen |
 | Phase 6: API, CLI, TUI | offen |
 | Phase 7: Overlays und Medien | offen |
@@ -550,18 +550,18 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 
 ### 4.4 Funktionen
 
-- [ ] Spezifikation `docs/spec/twitch-events.md`: Event-Zuordnung und Identifier je Event (S)
-- [ ] Chat senden, löschen, leeren; Moderation; Titel und Kategorie setzen (S)
-- [ ] Event-Commands (M):
+- [x] Spezifikation `docs/spec/twitch-events.md`: Event-Zuordnung und Identifier je Event (S)
+- [x] Chat senden, löschen, leeren; Moderation; Titel und Kategorie setzen (S)
+- [x] Event-Commands (M):
   - Stream Start/Stop, Follow, Raid (ein- und ausgehend)
   - Abo, Resub, Geschenk, Massengeschenk
   - Cheer, Channel Points, Hype Train, Werbung, Shoutout, Ziele, Charity
   - Moderationsereignisse, Umfragen, Vorhersagen
-- [ ] Channel-Points-Commands: Belohnung ↔ Command, Einlösung abschließen oder erstatten (M)
-- [ ] Bits-Commands mit Schwellen und Bereichen (S) (P1)
-- [ ] Twitch-Action: Clip, Stream-Marker, Umfrage/Vorhersage (mit Unterliste nach dem Ende, `$pollchoice` und `$predictionoutcome`, [`events.md`](spec/events.md), A4), Werbung, Raid, Shoutout, Belohnungen verwalten (L)
-- [ ] Custom Power-Ups als Command-Typ (S) (P2)
-- [ ] Emote-Kataloge für Twitch, BetterTTV und FrankerFaceZ mit Cache (M) (P1)
+- [x] Channel-Points-Commands: Belohnung ↔ Command, Einlösung abschließen oder erstatten (M)
+- [x] Bits-Commands mit Schwellen und Bereichen (S) (P1)
+- [x] Twitch-Action: Clip, Stream-Marker, Umfrage/Vorhersage (mit Unterliste nach dem Ende, `$pollchoice` und `$predictionoutcome`, [`events.md`](spec/events.md), A4), Werbung, Raid, Shoutout, Belohnungen verwalten (L)
+- [x] Custom Power-Ups als Command-Typ (S) (P2)
+- [x] Emote-Kataloge für Twitch, BetterTTV und FrankerFaceZ mit Cache (M) (P1)
 
 ### 4.5 Tests
 
@@ -1342,3 +1342,4 @@ Eigene Datei seit 2026-10-09: [backlog.md](backlog.md).
 | 2026-10-10 | Code-ADR-0015 (WebSocket-Bibliothek) vorgeschlagen: `github.com/coder/websocket` v1.8.15 (ISC, in der Allowlist; die aktiv gepflegte Fortsetzung von `nhooyr/websocket`) mit Kontext-API statt `gorilla/websocket` (stagnant, Deadlines statt Kontext). Keepalive auf Nachrichten-Ebene (Twitch PING/PONG-Texte) bleibt eigene Logik; Reconnect über `session_reconnect` mit Session-ID, ungeplante Abbrüche mit exponentiellem Backoff (die Werte des HTTP-Client). Dazu der Plan 4.3 (EventSub-WebSocket) und der eigene 4.3-Stack. |
 | 2026-10-10 | Phase 4.3 (EventSub) abgeschlossen (Stack #170 [168, 169, 171, 172, 173]): der Twitch-Adapter in `internal/twitch` verbindet das EventSub-WebSocket (Welcome/`hello`, Keepalive-Überwachung, `session_reconnect` ohne Eventverlust, Revocation, Deduplizierung per `message_id`), hält die EventSub-Subscriptions am Soll-Zustand (nur die Typen, die die Abbildung behandelt; 400 → überspringen und WARN) und mappt die Ereignisse auf das Event-Modell (Chat-Nachrichten mit Emotes und Badges-Rollen, Abo/Resub/Geschenk über `channel.chat.notification`, Cheer, Moderate, Whisper, Shared Chat mit neuen Katalog-Typen `twitch.shared_chat.*`). Der Adapter läuft mit dem Core, tokenabhängig am Streamer-Konto, und meldet den Stream-Zustand nach jedem Verbinden (B11); Chat/Moderation/Users bleiben `ErrNotImplemented` bis 4.4. Antwort-Felder in der Chat-Nachricht verworfen (die kanonische Nachricht hat keins; Backlog). ADR-0015 bleibt „Vorgeschlagen“ bis zur Annahme durch den Projektinhaber. |
 | 2026-10-10 | Phase 4.4 (Funktionen) begonnen: der Plan 4.4 (10 Tasks, eigener 4.4-Stack) und die Spezifikation `twitch-events.md` (Entwurf): Zuordnung der EventSub-Ereignisse auf den Katalog (inkl. Channel Points, Hype Train, Werbung, Shoutout, Ziele, Charity), die Identifier je Ereignis (neue Twitch-Namen unter Vorbehalt von Gate O) und die Verwerfungen (keine Umfrage-/Vorhersage-Ereignisse, A4; Antwort-Felder der Chatnachricht). |
+| 2026-10-10 | Phase 4.4 (Funktionen) abgeschlossen: Tasks 1–6 in Stack #177 [175, 176, 178, 179, 180, 181], Tasks 7–9 in Stack #185 [183, 184, 186]. Damit: die Twitch-Action (Clip, Marker, Werbung, Raid, Shoutout, Belohnungen; Umfrage/Vorhersage mit Unterliste nach dem Ende und `$pollchoice`/`$predictionoutcome`, A4), die Event-Command-Identifier der 4.4-Typen, Channel-Points- und Bits-Commands, die Custom-Power-Up-Einlösung als auslösendes Event (generisches Event-Command, kein eigener Typ), und der Emote-Katalog (`internal/emote`: Quellen Twitch/BTTV/FFZ, 1-h-Cache mit Fallback; die 4.3-Abbildung löst Emote-IDs zu Codes auf). Vertagt: der `$emote…`-Template-Identifier (Spezifikation definiert weder Namen noch Semantik; Plan, offene Punkte 4/5). |

@@ -1,6 +1,6 @@
 # Plan: Roadmap 4.4 — Twitch-Funktionen
 
-**Status:** in Ausführung
+**Status:** abgeschlossen
 **Stand:** 2026-10-10, `main` bei `56cfdeb`; 4.1–4.3 stehen in Stack #162
 (4.2) und #170 (4.3), Merging ausstehend
 **Scope:** nur 4.4 (Funktionen). 4.5 (Tests: Fixtures/Contract-Tests gegen
@@ -288,7 +288,7 @@ der Chat-Nachricht (Backlog, 4.4/5.x).
   Werbung, Raid, Shoutout, Belohnungen)
 - [x] Custom Power-Ups als Command-Typ
 - [x] Emote-Kataloge (Twitch, BTTV, FFZ) mit Cache
-- [ ] Doku: README, Roadmap 4.4 abgehakt, Historie
+- [x] Doku: README, Roadmap 4.4 abgehakt, Historie
 
 ## 8. Stack-Aufbau (Zusammenfassung)
 
