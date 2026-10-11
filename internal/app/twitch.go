@@ -12,6 +12,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/auth"
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
+	"github.com/ripmav/streamcrew/internal/dryrun"
 	"github.com/ripmav/streamcrew/internal/emote"
 	"github.com/ripmav/streamcrew/internal/helix"
 	"github.com/ripmav/streamcrew/internal/twitch"
@@ -21,6 +22,15 @@ import (
 // account of the channel (roadmap 4.3, task 5).
 type twitchStreamAuth struct {
 	s *auth.Service
+}
+
+// twitchOps returns the twitch operations for the action registry: the
+// Helix implementation, or the dry-run recording when the dry run is on.
+func (a *App) twitchOps() twitchaction.Ops {
+	if a.cfg.DryRun {
+		return dryrun.NewOps(component(a.logger, "dryrun"))
+	}
+	return twitchOps{app: a}
 }
 
 // Streamer implements twitch.Auth.

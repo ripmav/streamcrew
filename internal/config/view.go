@@ -11,6 +11,7 @@ type FileView struct {
 	Mode              Mode              `yaml:"mode" json:"mode"`
 	Listen            string            `yaml:"listen" json:"listen"`
 	Dev               bool              `yaml:"dev" json:"dev"`
+	DryRun            bool              `yaml:"dry_run" json:"dry_run"`
 	ShutdownTimeout   string            `yaml:"shutdown_timeout" json:"shutdown_timeout"`
 	LogLevel          string            `yaml:"log_level" json:"log_level"`
 	LogComponentLevel map[string]string `yaml:"log_component_level,omitempty" json:"log_component_level,omitempty"`
@@ -32,6 +33,7 @@ func (c *Config) View() FileView {
 		Mode:              c.Mode,
 		Listen:            c.Listen,
 		Dev:               c.Dev,
+		DryRun:            c.DryRun,
 		ShutdownTimeout:   c.ShutdownTimeout.String(),
 		LogLevel:          c.Log.Level,
 		LogComponentLevel: c.Log.ComponentLevel,
