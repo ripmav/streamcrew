@@ -22,7 +22,7 @@ die Twitch-CLI) bleibt offen.
 - [x] Twitch-Action: Clip, Stream-Marker, Umfrage/Vorhersage (mit
   Unterliste nach dem Ende, `$pollchoice`/`$predictionoutcome`, A4),
   Werbung, Raid, Shoutout, Belohnungen verwalten (L)
-- [ ] Custom Power-Ups als Command-Typ (S) (P2)
+- [x] Custom Power-Ups als Command-Typ (S) (P2)
 - [ ] Emote-Kataloge für Twitch, BetterTTV und FrankerFaceZ mit Cache
   (M) (P1)
 
@@ -212,6 +212,12 @@ Umfrage/Vorhersage mit **Unterliste nach dem Ende**
 `internal/engine` (Trigger), Tests. (P2)
 **Inhalt:** Command-Typ für `channel.custom_power_up_redemption.add`
 (Typ `TwitchCustomPowerUpRedeem`), Einlösung als Trigger.
+**Ergebnis:** kein eigener Typ nötig — das Event-Command
+(`command.KindEvent` mit `Event: twitch.custom_power_up.redeem`) löst die
+Einlösung aus; der Event-Typ, die EventSub-Abonnements, die
+EventSub→Domain-Abbildung und die `$custompowerup`-Variable stehen seit
+Task 1/4/5. Der Trigger wird von `TestCustomPowerUpRedemptionTriggers`
+abgedeckt.
 **Tests:** Typ konvertiert, Einlösung löst aus.
 **Commit:** `feat(command): the custom power up commands`
 
@@ -271,7 +277,7 @@ der Chat-Nachricht (Backlog, 4.4/5.x).
 - [x] Bits-Commands (Schwellen, Bereiche)
 - [x] Twitch-Action (Clip, Marker, Umfrage/Vorhersage mit Unterliste,
   Werbung, Raid, Shoutout, Belohnungen)
-- [ ] Custom Power-Ups als Command-Typ
+- [x] Custom Power-Ups als Command-Typ
 - [ ] Emote-Kataloge (Twitch, BTTV, FFZ) mit Cache
 - [ ] Doku: README, Roadmap 4.4 abgehakt, Historie
 
