@@ -1,0 +1,17 @@
+{
+  "id": "frame-027",
+  "event": {
+    "event_type": "channel.channel_points_automatic_reward_redemption.add",
+    "version": "1",
+    "event": {
+      "automatic_reward_cost": 100,
+      "automatic_reward_id": "reward-1",
+      "automatic_reward_image_url": "",
+      "automatic_reward_title": "Hype",
+      "automatic_reward_prompt": "",
+      "user_id": "111000222",
+      "user_name": "alice",
+      "user_display_name": "Alice"
+    }
+  }
+}

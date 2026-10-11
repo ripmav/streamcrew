@@ -1,0 +1,10 @@
+{
+  "id": "frame-015",
+  "event": {
+    "event_type": "channel.shared_chat.update",
+    "version": "1",
+    "event": {
+      "chat_session_id": "session-1"
+    }
+  }
+}
