@@ -6,21 +6,13 @@
   "event": {
     "id": "cheer-1",
     "event_time": "2026-10-11T10:00:00.000000Z",
-    "channel_id": "222000111",
-    "channel_login": "streamer",
-    "channel_display_name": "Streamer",
-    "user_id": "111000222",
-    "user_login": "alice",
-    "user_display_name": "Alice",
-    "message": "cheers",
-    "badges": [
-      {
-        "set_id": "subscriber/1000"
-      }
-    ],
-    "bit_products": [],
-    "color": "",
-    "profile_image_url": "",
-    "bits": 100
+    "broadcaster_user_id": "222000111",
+    "broadcaster_user_login": "streamer",
+    "broadcaster_user_display_name": "Streamer",
+    "from_user_id": "111000222",
+    "from_user_login": "alice",
+    "from_user_display_name": "Alice",
+    "cumulative_bits": 100,
+    "message": "cheers"
   }
 }

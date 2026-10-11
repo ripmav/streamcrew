@@ -541,17 +541,15 @@ func (p chatNotification) giver() chatUser {
 	return chatUser{ID: p.UserID, Login: p.UserLogin, DisplayName: p.UserDisplayName}
 }
 
-// cheer is the payload of channel.cheer.
+// cheer is the payload of channel.cheer (the field names of the
+// production EventSub event: the cheering user is under from_*).
 type cheer struct {
-	Bits    int64  `json:"bits"`
+	Bits    int64  `json:"cumulative_bits"`
 	Message string `json:"message"`
 
-	UserID          string  `json:"user_id"`
-	UserLogin       string  `json:"user_login"`
-	UserDisplayName string  `json:"user_display_name"`
-	Color           string  `json:"color"`
-	Avatar          string  `json:"profile_image_url"`
-	Badges          []badge `json:"badges"`
+	UserID          string `json:"from_user_id"`
+	UserLogin       string `json:"from_user_login"`
+	UserDisplayName string `json:"from_user_display_name"`
 }
 
 func (p cheer) user() chatUser {
@@ -559,9 +557,6 @@ func (p cheer) user() chatUser {
 		ID:          p.UserID,
 		Login:       p.UserLogin,
 		DisplayName: p.UserDisplayName,
-		Color:       p.Color,
-		Avatar:      p.Avatar,
-		Badges:      p.Badges,
 	}
 }
 

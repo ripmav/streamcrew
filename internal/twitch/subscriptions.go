@@ -76,6 +76,7 @@ type Manager struct {
 	accountID string
 	log       *slog.Logger
 	interval  time.Duration
+	sessionID func(ctx context.Context) (string, error)
 }
 
 // ManagerOptions configures NewManager.
@@ -90,6 +91,11 @@ type ManagerOptions struct {
 	Logger *slog.Logger
 	// Interval is the re-align interval (tests shorten it).
 	Interval time.Duration
+	// SessionID returns the ID of the current EventSub session for
+	// the websocket transport of the subscriptions; it blocks until
+	// the session is established. Nil for a session-less transport
+	// (tests).
+	SessionID func(ctx context.Context) (string, error)
 }
 
 // NewManager creates a Manager.
@@ -107,6 +113,7 @@ func NewManager(o ManagerOptions) *Manager {
 		accountID: o.AccountID,
 		log:       log,
 		interval:  interval,
+		sessionID: o.SessionID,
 	}
 }
 
@@ -134,9 +141,19 @@ func (m *Manager) Run(ctx context.Context) error {
 // creates the missing subscriptions and revokes the surplus ones. A
 // 400 answer (limit reached, condition occupied) is skipped with a
 // warning, not an error (roadmap 4.3); every other error is returned.
-// Run calls it at the start and on the interval; the composition root
-// calls it once more right after a token revocation.
+// The subscriptions are delivered to the current EventSub session
+// (websocket transport); Run calls it at the start and on the
+// interval; the composition root calls it once more right after a
+// token revocation.
 func (m *Manager) Reconcile(ctx context.Context) error {
+	sessionID := ""
+	if m.sessionID != nil {
+		var err error
+		sessionID, err = m.sessionID(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	actual, err := m.helix.GetSubscriptions(ctx)
 	if err != nil {
 		return err
@@ -157,6 +174,7 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 			EventType: d.EventType,
 			Version:   d.Version,
 			Condition: m.condition(d),
+			Transport: helix.EventSubTransport{Method: "websocket", SessionID: sessionID},
 		}); err != nil {
 			var se *httpclient.StatusError
 			if errors.As(err, &se) && se.StatusCode == http.StatusBadRequest {

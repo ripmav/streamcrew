@@ -271,11 +271,13 @@ func TestMapCheer(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
 	handle(t, m, "channel.cheer", `{
-		"user_id": "8", "user_login": "alice",
-		"bits": 100, "message": "cheers"
+		"from_user_id": "8", "from_user_login": "alice",
+		"cumulative_bits": 100, "message": "cheers"
 	}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchBitsCheer, ev.Type)
+	require.NotNil(t, ev.User)
+	assert.Equal(t, "8", ev.User.PlatformUserID)
 	assert.Equal(t, int64(100), ev.Details.Bits.Amount)
 	assert.Equal(t, "cheers", ev.Details.Message.Text)
 }

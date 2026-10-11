@@ -28,10 +28,18 @@ type SubscriptionCondition struct {
 type CreateSubscriptionInput struct {
 	// Condition names the object the events are about.
 	Condition SubscriptionCondition `json:"condition"`
-	// EventType is the event type, e.g. "channel.follow".
+	// EventType is the event type, e.g. "channel.follow"; under the
+	// field name the Helix API takes it.
 	EventType string `json:"eventtype"`
+	// Type is the event type under the field name the twitch-cli mock
+	// expects (the production API reads EventType, which is kept
+	// filled by CreateSubscription).
+	Type string `json:"type,omitempty"`
 	// Version is the event version, e.g. "2".
 	Version string `json:"version"`
+	// Transport is the delivery transport (websocket, with the ID of
+	// the session the events are delivered to).
+	Transport EventSubTransport `json:"transport"`
 }
 
 // EventSubTransport is the transport of a subscription (always
@@ -39,6 +47,9 @@ type CreateSubscriptionInput struct {
 type EventSubTransport struct {
 	// Method is "websocket".
 	Method string `json:"method"`
+	// SessionID is the ID of the EventSub session the subscription is
+	// delivered to (mandatory for the websocket transport).
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // EventSubSubscription is a subscription as answered by Helix.
@@ -51,6 +62,10 @@ type EventSubSubscription struct {
 	Condition SubscriptionCondition `json:"condition"`
 	// EventType is the event type.
 	EventType string `json:"eventtype"`
+	// Type is the event type under the field name the twitch-cli mock
+	// answers (CreateSubscription and GetSubscriptions fold it into
+	// EventType).
+	Type string `json:"type"`
 	// Version is the event version.
 	Version string `json:"version"`
 	// Network is "helix".
@@ -66,6 +81,9 @@ type EventSubSubscription struct {
 // websocket; the 4.3 subscription manager maintains the
 // subscriptions against this endpoint.
 func (c *Client) CreateSubscription(ctx context.Context, in CreateSubscriptionInput) (*EventSubSubscription, error) {
+	if in.Type == "" {
+		in.Type = in.EventType
+	}
 	req, err := c.request(ctx, "POST", "/eventsub/subscriptions", nil, in)
 	if err != nil {
 		return nil, err
@@ -73,6 +91,9 @@ func (c *Client) CreateSubscription(ctx context.Context, in CreateSubscriptionIn
 	var s EventSubSubscription
 	if err := c.http.DoJSON(ctx, req, &s); err != nil {
 		return nil, err
+	}
+	if s.EventType == "" {
+		s.EventType = s.Type
 	}
 	return &s, nil
 }
@@ -102,6 +123,11 @@ func (c *Client) GetSubscriptions(ctx context.Context) ([]EventSubSubscription, 
 	})
 	if err != nil {
 		return nil, err
+	}
+	for i := range subscriptions {
+		if subscriptions[i].EventType == "" {
+			subscriptions[i].EventType = subscriptions[i].Type
+		}
 	}
 	return subscriptions, nil
 }
