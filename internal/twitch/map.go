@@ -660,11 +660,12 @@ type charity struct {
 // autoRedemption is the payload of
 // channel.channel_points_automatic_reward_redemption.add.
 type autoRedemption struct {
-	Cost        int64  `json:"automatic_reward_cost"`
-	RewardID    string `json:"automatic_reward_id"`
+	Cost     int64  `json:"automatic_reward_cost"`
+	RewardID string `json:"automatic_reward_id"`
+
 	UserID      string `json:"user_id"`
-	UserLogin   string `json:"user_login"`
-	UserDisplay string `json:"user_name"`
+	UserLogin   string `json:"user_name"`
+	UserDisplay string `json:"user_display_name"`
 }
 
 func (p autoRedemption) user() chatUser {
@@ -676,9 +677,10 @@ func (p autoRedemption) user() chatUser {
 type customRedemption struct {
 	Cost      int64  `json:"custom_reward_cost"`
 	RewardID  string `json:"custom_reward_id"`
-	UserInput string `json:"custom_reward_user_input"`
+	UserInput string `json:"user_input"`
+
 	UserID    string `json:"user_id"`
-	UserLogin string `json:"user_login"`
+	UserLogin string `json:"user_name"`
 	UserDisp  string `json:"user_display_name"`
 }
 

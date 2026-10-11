@@ -1,0 +1,23 @@
+{
+  "id": "frame-018",
+  "event": {
+    "event_type": "channel.hype_train.progress",
+    "version": "1",
+    "event": {
+      "id": "train-1",
+      "event_time": "2026-10-11T10:00:00.000000Z",
+      "channel_id": "222000111",
+      "current_level": 2,
+      "goal": 100,
+      "progress": 25,
+      "goal_type": "bits",
+      "total": 0,
+      "last_increment": 5,
+      "top_contributors": [],
+      "reward_interval": 10,
+      "time_left_to_end": 3600,
+      "is_raid": false,
+      "predicted_end_time": "2026-10-11T11:00:00.000000Z"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "frame-006",
+  "event": {
+    "event_type": "channel.chat.message_delete",
+    "version": "2",
+    "event": {
+      "id": "msg-100",
+      "user_id": "111000222",
+      "user_login": "alice",
+      "user_display_name": "Alice"
+    }
+  }
+}

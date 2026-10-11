@@ -423,7 +423,7 @@ func TestMapCharity(t *testing.T) {
 func TestMapChannelPointsRedemption(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.channel_points_automatic_reward_redemption.add", `{"automatic_reward_id": "r1", "automatic_reward_cost": 100, "user_id": "8", "user_login": "alice"}`, "id-1")
+	handle(t, m, "channel.channel_points_automatic_reward_redemption.add", `{"automatic_reward_id": "r1", "automatic_reward_cost": 100, "user_id": "8", "user_name": "alice"}`, "id-1")
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchChannelPointsRedeem, ev.Type)
 	require.NotNil(t, ev.User)
@@ -434,7 +434,7 @@ func TestMapChannelPointsRedemption(t *testing.T) {
 func TestMapCustomPowerUpRedemption(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.channel_points_custom_reward_redemption.add", `{"custom_reward_id": "p1", "custom_reward_cost": 50, "custom_reward_user_input": "a hug", "user_id": "8", "user_login": "alice"}`, "id-1")
+	handle(t, m, "channel.channel_points_custom_reward_redemption.add", `{"custom_reward_id": "p1", "custom_reward_cost": 50, "user_input": "a hug", "user_id": "8", "user_name": "alice"}`, "id-1")
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchCustomPowerUpRedeem, ev.Type)
 	assert.Equal(t, &eventtype.CustomPowerUp{Reward: "p1"}, ev.Details.CustomPowerUp)
