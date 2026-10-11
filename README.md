@@ -171,6 +171,7 @@ scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network 
   - Jeder Job hat einen eigenen Go-Cache (Module und Build-Ausgaben), damit Race-, Fuzz- und Cross-Builds die Abhängigkeiten nicht bei jedem Lauf neu kompilieren.
 - `.github/workflows/docs.yml` prüft die internen Links aller Markdown-Dateien.
 - Tests nutzen `testing` mit testify (`assert`, `require`) und `testing/synctest` für Zeitverhalten ([Code-ADR-0006](docs/adr/code/0006-teststrategie.md)).
+- Die Twitch-Integrationstests (Roadmap 4.5, `internal/twitch`) laufen gegen den offiziellen twitch-cli-Mock-Server (Mock-API + EventSub-WebSocket-Server): ohne `twitch`-Binary im PATH springen sie über. Die CI installiert sie (Release v1.1.24, SHA-256-geprüft); lokal aus dem [twitch-cli-Release](https://github.com/twitchdev/twitch-cli/releases/tag/v1.1.24) in den PATH legen.
 - Wie im Repository gearbeitet wird (Branches, Commits, ADR-Abnahme, Herkunftsregeln), steht in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ### Aufbau
