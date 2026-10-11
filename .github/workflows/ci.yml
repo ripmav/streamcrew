@@ -134,6 +134,23 @@ jobs:
           key: go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ hashFiles('go.mod', 'go.sum') }}
           restore-keys: go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-
 
+      # The twitch integration and chaos tests (roadmap 4.5) run against
+      # the official twitch-cli mock servers; without the binary they
+      # skip. The release asset is pinned by the SHA-256 sum of the
+      # release's checksums.txt (twitch-cli is unmaintained; v1.1.24 is
+      # the last release, plan 2026-10-11-twitch-tests.md, item 1).
+      - name: Install twitch-cli (EventSub mock server)
+        run: |-
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          asset=twitch-cli_1.1.24_Linux_x86_64.tar.gz
+          curl -fsSL -o "$asset" \
+            "https://github.com/twitchdev/twitch-cli/releases/download/v1.1.24/$asset"
+          echo "9cae4e9cd52e66fb4dda6b633b3276a4450a28a83dea7a4651a42a67372eed8f  $asset" \
+            | sha256sum --check -
+          tar -xzf "$asset"
+          echo "$RUNNER_TEMP/twitch-cli_1.1.24_Linux_x86_64" >> "$GITHUB_PATH"
+
       - name: go test -race
         run: go test -race -shuffle=on ./...
 

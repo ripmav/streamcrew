@@ -286,11 +286,21 @@ Auf `main`, ein PR pro Aufgabe, gestapelt.
   (Der Plan nannte `integration_test.go`; die Tests liegen in der
   eigenen Datei `chaos_test.go`, gleiche Pakete.)
 
-- [ ] **7. CI** (S)
-  `.github/workflows/ci.yml`, Test-Job: Schritt „Install twitch-cli"
-  (Release-Binary v1.1.24, Plattform abhängig, SHA-256-Prüfsumme, nach
-  `PATH`), damit die Integrationstests in CI laufen (lokal ohne Binary
-  weiterhin Skip).
+- [x] **7. CI** (S)
+  `.github/workflows/ci.yml`, Test-Job: Schritt „Install twitch-cli“
+  (Release-Binary v1.1.24, Linux x86_64 — der Job läuft auf
+  ubuntu-latest; SHA-256-Prüfsumme aus der `checksums.txt` des
+  Releases, in die `PATH`), damit die Integrationstests in CI
+  laufen (lokal ohne Binary weiterhin Skip). Erledigt (PR #196);
+  die native Windows-/macOS-Jobs bleiben ohne Binary (Skip).
+  Befund dabei: `go test ./...` läuft die Pakete parallel, und das
+  twitch-Paket (Integration + Chaos) wie das twitchmock-Paket
+  (Selbsttest) starten je eine Mock-Umgebung auf dem festen RPC-Port
+  44747 — das verlorene Rennen bindet der Mock-Server stillschweigend
+  nicht, und die RPC-Requests scheitern mit „connection refused“. Der
+  Harness nimmt jetzt die exklusive Sperre von `internal/lockfile`
+  (OS-Sperre, kein Stale-Problem) für die Lebensdauer der Umgebung;
+  das wartende Paket läuft danach nacheinander.
 
 - [ ] **8. Doku** (S)
   Roadmap 4.5: Checkboxen + Statuszeile + Historieneintrag; README-
@@ -316,11 +326,11 @@ Auf `main`, ein PR pro Aufgabe, gestapelt.
    Binary, stabile Summe). Wenn main die neuen Eventsub-Namen
    übernimmt, können die Hand-Body-Fires für die akzeptierten Themen
    wegfallen.
-2. **Fester RPC-Port 44747:** pro Maschine ein WS-Server. Die
-   Integrationstests sind die einzigen Consumer; in CI läuft ein Test-
-   Job pro Runner. Lokale Kollisionen (zwei Testläufe nebeneinander)
-   sind möglich — dann die zweite Suite überspringen oder sequenziell
-   laufen (Doku im Harness-Kommentar).
+2. **Fester RPC-Port 44747 (gelöst mit Aufgabe 7):** pro Maschine
+   ein WS-Server. Der Harness nimmt die exklusive Sperre von
+   `internal/lockfile` für die Lebensdauer der Umgebung, parallele
+   Testpakete laufen nacheinander; zwei manuelle Testläufe nebeneinander
+   warten ebenso aufeinander (bis zu 4 Minuten).
 3. **Mock-API-Scopes (entschieden 2026-10-11):** der vorgefertigte
    Token trägt keine Scopes (`generate` schreibt `Scopes: ""`), und
    jede Mock-Schreib-Endpunkte (POST/PUT) verlangt mindestens einen
