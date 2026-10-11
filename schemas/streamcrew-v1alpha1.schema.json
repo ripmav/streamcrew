@@ -591,6 +591,9 @@
           "$ref": "#/$defs/action.special_identifier"
         },
         {
+          "$ref": "#/$defs/action.twitch"
+        },
+        {
           "$ref": "#/$defs/action.user_lookup"
         },
         {
@@ -3229,6 +3232,429 @@
             "kind",
             "name",
             "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "action.twitch": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "twitch"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "clip",
+            "marker",
+            "ad",
+            "raid",
+            "shoutout",
+            "poll",
+            "prediction",
+            "reward"
+          ],
+          "default": "clip",
+          "x-ui": "choice"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "template"
+        },
+        "length": {
+          "type": "string",
+          "enum": [
+            "30",
+            "60"
+          ],
+          "x-ui": "choice"
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "template"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "template"
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "x-ui": "template"
+          },
+          "minItems": 2,
+          "x-ui": "list"
+        },
+        "durationMinutes": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 60
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "expression"
+            }
+          ],
+          "x-ui": "amount"
+        },
+        "actions": {
+          "$ref": "#/$defs/actions",
+          "x-ui": "actions"
+        },
+        "outcomeA": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "template"
+        },
+        "outcomeB": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "template"
+        },
+        "op": {
+          "type": "string",
+          "enum": [
+            "create",
+            "enable",
+            "disable",
+            "delete"
+          ],
+          "x-ui": "choice"
+        },
+        "cost": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "expression"
+            }
+          ],
+          "x-ui": "amount"
+        }
+      },
+      "required": [
+        "type",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "twitch"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "clip",
+              "default": "clip"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "twitch"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "marker",
+              "default": "clip"
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "twitch"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "ad",
+              "default": "clip"
+            },
+            "length": {
+              "type": "string",
+              "enum": [
+                "30",
+                "60"
+              ],
+              "x-ui": "choice"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "twitch"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "raid",
+              "default": "clip"
+            },
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "twitch"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "shoutout",
+              "default": "clip"
+            },
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "twitch"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "poll",
+              "default": "clip"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "choices": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "x-ui": "template"
+              },
+              "minItems": 2,
+              "x-ui": "list"
+            },
+            "durationMinutes": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 60
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "expression"
+                }
+              ],
+              "x-ui": "amount"
+            },
+            "actions": {
+              "$ref": "#/$defs/actions",
+              "x-ui": "actions"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "twitch"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "prediction",
+              "default": "clip"
+            },
+            "outcomeA": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "outcomeB": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "durationMinutes": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 90
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "expression"
+                }
+              ],
+              "x-ui": "amount"
+            },
+            "actions": {
+              "$ref": "#/$defs/actions",
+              "x-ui": "actions"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "twitch"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "reward",
+              "default": "clip"
+            },
+            "op": {
+              "type": "string",
+              "enum": [
+                "create",
+                "enable",
+                "disable",
+                "delete"
+              ],
+              "x-ui": "choice"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "cost": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000000
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "expression"
+                }
+              ],
+              "x-ui": "amount"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
           ],
           "additionalProperties": false
         }
