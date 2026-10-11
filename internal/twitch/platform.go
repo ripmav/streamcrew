@@ -13,6 +13,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
+	emotecat "github.com/ripmav/streamcrew/internal/emote"
 	"github.com/ripmav/streamcrew/internal/helix"
 	"github.com/ripmav/streamcrew/internal/httpclient"
 )
@@ -20,6 +21,10 @@ import (
 // pollInterval is how often the platform asks for the state of the
 // streamer account while it is not connected (roadmap 4.3).
 const pollInterval = 5 * time.Second
+
+// emoteRefresh is the wait between the refreshes of the emote catalog
+// (roadmap 4.4, task 9); it matches the catalog's TTL.
+const emoteRefresh = time.Hour
 
 // Auth supplies the data of the streamer account of the channel. The
 // composition root adapts the auth service to it (roadmap 4.3, task 5).
@@ -59,6 +64,9 @@ type Platform struct {
 	helixBase  string
 	log        *slog.Logger
 	poll       time.Duration
+	// emotes resolves the emote IDs of the chat messages (roadmap 4.4,
+	// task 9); nil without a catalog.
+	emotes *emotecat.Catalog
 
 	mu          sync.Mutex
 	connected   bool
@@ -87,6 +95,9 @@ type PlatformOptions struct {
 	// Poll is the wait between the polls of the account state (tests
 	// shorten it); empty for pollInterval.
 	Poll time.Duration
+	// Emotes is the emote catalog the mapper resolves emote IDs with
+	// (roadmap 4.4, task 9); nil for the raw code from the text.
+	Emotes *emotecat.Catalog
 }
 
 // NewPlatform creates a Platform.
@@ -108,6 +119,7 @@ func NewPlatform(o PlatformOptions) *Platform {
 		helixBase:  o.HelixBase,
 		log:        log,
 		poll:       o.Poll,
+		emotes:     o.Emotes,
 	}
 }
 
@@ -224,7 +236,7 @@ func (p *Platform) session(ctx context.Context, st AccountState) error {
 	if err != nil {
 		return err
 	}
-	mapper := NewMapper(MapperOptions{Receiver: p.receiver, Dedup: dedup, Logger: p.log})
+	mapper := NewMapper(MapperOptions{Receiver: p.receiver, Dedup: dedup, Logger: p.log, Emotes: p.emotes, EmoteChannel: st.Login})
 	// A revoked token: the subscriptions are reconciled right away with
 	// the fresh token of the next connection (roadmap 4.3).
 	mapper.WithRevoked(func(ctx context.Context) {
@@ -257,6 +269,9 @@ func (p *Platform) session(ctx context.Context, st AccountState) error {
 			p.log.ErrorContext(ctx, "the subscription manager stopped", "error", err)
 		}
 	}()
+	if p.emotes != nil {
+		go p.refreshEmotes(mgrCtx, st.Login)
+	}
 	return client.Run(ctx, mapper)
 }
 
@@ -271,6 +286,23 @@ func (p *Platform) streamState(ctx context.Context, hc *helix.Client, accountID 
 	live := len(streams) > 0
 	if err := p.receiver.Stream(ctx, platform.Twitch, live); err != nil {
 		p.log.ErrorContext(ctx, "handing over the state of the stream failed", "error", err)
+	}
+}
+
+// refreshEmotes keeps the emote catalog of the channel fresh (roadmap
+// 4.4, task 9): it refreshes at once and on every tick until the context
+// ends.
+func (p *Platform) refreshEmotes(ctx context.Context, channel string) {
+	p.emotes.Refresh(ctx, channel)
+	tick := time.NewTicker(emoteRefresh)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			p.emotes.Refresh(ctx, channel)
+		}
 	}
 }
 

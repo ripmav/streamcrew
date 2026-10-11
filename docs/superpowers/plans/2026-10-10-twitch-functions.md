@@ -23,7 +23,7 @@ die Twitch-CLI) bleibt offen.
   Unterliste nach dem Ende, `$pollchoice`/`$predictionoutcome`, A4),
   Werbung, Raid, Shoutout, Belohnungen verwalten (L)
 - [x] Custom Power-Ups als Command-Typ (S) (P2)
-- [ ] Emote-Kataloge für Twitch, BetterTTV und FrankerFaceZ mit Cache
+- [x] Emote-Kataloge für Twitch, BetterTTV und FrankerFaceZ mit Cache
   (M) (P1)
 
 ## 2. Befunde der Recherche (verifiziert 2026-10-10)
@@ -226,10 +226,14 @@ abgedeckt.
 **Zweig:** `feat/emote-catalogs` (auf Task 8)
 **Dateien:** `internal/emote` (neuer Ordner: Quellen Twitch/BTTV/FFZ,
 Cache, Fallback), `internal/twitch/map.go` (4.3-Abbildung nutzt den
-Katalog), `internal/template` (Emote-Identifier), Tests.
-**Inhalt:** Kataloge mit Cache (1 h; Fallback alte Liste), Emote-
-Codes in Chat-Nachrichten werden aufgelöst (4.3 lieferte Rohtypen);
-`$emote…`-Identifier.
+Katalog), `internal/twitch/platform.go` (Refresh), `internal/app` (Wiring),
+Tests.
+**Inhalt:** Katalog mit Cache (1 h; Fallback alte Liste) und Quellen
+Twitch (Helix), BTTV, FFZ; Emote-Codes in Chat-Nachrichten werden über
+den Katalog aufgelöst (4.3 lieferte Rohtypen/IDs).
+**Ergebnis:** Der `$emote…`-Template-Identifier wird vertagt — die
+Spezifikation definiert weder seinen Namen noch seine Semantik, und der
+Katalog ist kanalgebunden (Streamer-Login). Siehe offene Punkte.
 **Tests:** Cache-Treffer/-Verfall, Fallback, Auflösung in der
 Abbildung.
 **Commit:** `feat(emote): the emote catalogs`
@@ -264,8 +268,13 @@ der Chat-Nachricht (Backlog, 4.4/5.x).
    falls der Original-Begriff „Bereich“ anders fällt, entfällt der
    Endpunkt.
 4. **BTTV/FFZ-APIs**: externe Abhängigkeiten (eigene
-   httpclient-Namen, Allowlist-Meldung); die URLs und Formate in
-   Task 9 verifizieren.
+   httpclient-Namen, Allowlist-Meldung); die Quellen sind nach der
+   öffentlichen Doku implementiert und die JSON-Parade ist mit
+   Beispielen getestet — die Live-Formate vor dem Merge verifizieren.
+5. **$emote…-Template-Identifier**: vertagt (Task 9); die Spezifikation
+   definiert weder Namen noch Semantik, und der Katalog ist
+   kanalgebunden. Vor der Umsetzung festlegen, was der Identifier
+   auflöst (Code/Bild) und für welchen Kanal.
 
 ## 7. Exit von 4.4
 
@@ -278,7 +287,7 @@ der Chat-Nachricht (Backlog, 4.4/5.x).
 - [x] Twitch-Action (Clip, Marker, Umfrage/Vorhersage mit Unterliste,
   Werbung, Raid, Shoutout, Belohnungen)
 - [x] Custom Power-Ups als Command-Typ
-- [ ] Emote-Kataloge (Twitch, BTTV, FFZ) mit Cache
+- [x] Emote-Kataloge (Twitch, BTTV, FFZ) mit Cache
 - [ ] Doku: README, Roadmap 4.4 abgehakt, Historie
 
 ## 8. Stack-Aufbau (Zusammenfassung)
