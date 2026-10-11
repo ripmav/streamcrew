@@ -24,13 +24,17 @@
 //     port, everything else to the mock API with the "/mock" prefix.
 //
 // The fixed RPC port 44747 allows exactly one WebSocket server per
-// machine: close the Client before starting the next one (the tests
-// of one package run sequentially, which is sufficient; two parallel
-// test runs on one machine would collide).
+// machine: close the Client before starting the next one. New takes
+// an exclusive lock file (internal/lockfile) before it starts
+// anything and holds it until Close, so a sibling package that runs
+// in parallel (go test ./...) waits for the other environment
+// instead of racing for the port; the operating system releases the
+// lock when a test process dies, so there are no stale locks.
 package twitchmock
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -39,17 +43,54 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/ripmav/streamcrew/internal/config"
+	"github.com/ripmav/streamcrew/internal/lockfile"
 	"github.com/ripmav/streamcrew/internal/twitch"
 )
 
 // rpcPort is the fixed JSON-RPC control port of the mock EventSub
 // WebSocket server (twitch-cli hardcodes it).
 const rpcPort = 44747
+
+// rpcPortWait is how long New waits for the rpc port lock of a
+// parallel test package (its mock environment runs the integration
+// and chaos tests, a couple of minutes at most).
+const rpcPortWait = 4 * time.Minute
+
+// rpcLockName is the exclusive lock file of the fixed rpc port;
+// only one mock environment per machine may run at a time.
+const rpcLockName = "twitchmock-rpc-44747.lock"
+
+// acquireRPCLock takes the exclusive lock of the fixed rpc port;
+// while a parallel test package holds it, it waits (up to
+// rpcPortWait) and retries.
+func acquireRPCLock(ctx context.Context) (*lockfile.Lock, error) {
+	path := filepath.Join(os.TempDir(), rpcLockName)
+	var locked *lockfile.LockedError
+	deadline := time.Now().Add(rpcPortWait)
+	for {
+		l, err := lockfile.Acquire(path)
+		if err == nil {
+			return l, nil
+		}
+		if !errors.As(err, &locked) {
+			return nil, err
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("the other mock environment does not release the lock (%w)", locked)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(3 * time.Second):
+		}
+	}
+}
 
 // Client is a started mock environment: both twitch-cli servers, the
 // generated account data, and the Helix router. Close tears everything
@@ -82,10 +123,11 @@ type Client struct {
 	// prefix (direct access without the router).
 	MockAPIBase string
 
-	bin    string
+	bin    string           // the twitch binary
 	cmds   []*exec.Cmd      // the started processes (mock API, WebSocket server)
 	server *httptest.Server // the Helix router
 	home   string           // the temporary $HOME of the run
+	lock   *lockfile.Lock   // the exclusive lock of the fixed rpc port
 }
 
 var (
@@ -102,17 +144,24 @@ func FindBinary() (string, error) {
 
 // New starts the mock environment. The context bounds the startup
 // (generation and the health checks) and stays bound to the servers
-// afterwards: a canceled context stops them, like Close.
+// afterwards: a canceled context stops them, like Close. New takes
+// the exclusive lock of the fixed rpc port (held until Close), so
+// parallel test packages wait for each other.
 func New(ctx context.Context) (*Client, error) {
 	bin, err := FindBinary()
 	if err != nil {
 		return nil, fmt.Errorf("twitchmock: the twitch binary is unavailable (install twitch-cli to the PATH): %w", err)
 	}
+	lock, err := acquireRPCLock(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("twitchmock: the fixed rpc port %d is not available (another mock environment is running): %w", rpcPort, err)
+	}
 	home, err := os.MkdirTemp("", "twitchmock-home")
 	if err != nil {
+		_ = lock.Release()
 		return nil, err
 	}
-	c := &Client{home: home, bin: bin}
+	c := &Client{home: home, bin: bin, lock: lock}
 	defer func() {
 		if err != nil {
 			c.Close()
@@ -156,7 +205,8 @@ func New(ctx context.Context) (*Client, error) {
 	// The WebSocket server's RPC port is fixed (44747) and the
 	// server logs it out silently when it is taken (stray twitch-cli
 	// process from a crashed test run): check it up front, because a
-	// second server would then accept no events at all.
+	// second server would then accept no events at all. The lock
+	// guarantees no other mock environment of the test run is up.
 	l, err := (&net.ListenConfig{}).Listen(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", rpcPort))
 	if err != nil {
 		return nil, fmt.Errorf("twitchmock: the fixed rpc port %d is occupied (kill the stray twitch-cli process): %w", rpcPort, err)
@@ -199,7 +249,8 @@ func New(ctx context.Context) (*Client, error) {
 }
 
 // Close tears down the environment: both servers, the router, the
-// temporary $HOME. It is safe to call more than once.
+// temporary $HOME, and the rpc port lock. It is safe to call more
+// than once.
 func (c *Client) Close() {
 	if c == nil {
 		return
@@ -220,6 +271,10 @@ func (c *Client) Close() {
 	if c.home != "" {
 		_ = os.RemoveAll(c.home)
 		c.home = ""
+	}
+	if c.lock != nil {
+		_ = c.lock.Release()
+		c.lock = nil
 	}
 }
 
