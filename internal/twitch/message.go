@@ -50,8 +50,10 @@ type reconnect struct {
 // values, decoded by the mapping.
 type Event struct {
 	// ID is the key the dedup remembers the message by (B22); the
-	// adapter sets it from the payload before the mapping, so a
-	// repeated delivery is recognized as the repeat it is.
+	// adapter sets it from the event object before the mapping, so a
+	// repeated delivery is recognized as the repeat it is — also
+	// after a reconnect, where the subscription shell (session ID,
+	// created at) changes but the event object does not.
 	ID string
 	// Subscription names the event type and version of the event.
 	Subscription struct {

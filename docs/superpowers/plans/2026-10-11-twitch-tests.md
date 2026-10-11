@@ -252,21 +252,39 @@ Auf `main`, ein PR pro Aufgabe, gestapelt.
   Verifikation: `go test ./internal/twitch/ -run TestPlatformAgainstTheMock`
   (Skip ohne die twitch-Binary); `go test -race ./...` grün.
 
-- [ ] **6. Reconnect- und Chaos-Tests** (S)
-  (Harness aus Aufgabe 1; `internal/twitch/integration_test.go`)
-  - **Session-Reconnect:** `Reconnect()` → Adapter erhält
-    `session_reconnect`, verbindet an der `reconnect_url` mit der
-    Session-ID, **ohne Eventverlust** (Events nach dem Neustart
-    kommen an; Duplikate der Grace-Periode werden vom Dedup geworfen).
-  - **Erzwungener Abbruch:** `CloseClient(session, 4008)` → Adapter
-    reconnectet am Base-URL (Backoff), Subscriptions werden neu
-    angelegt; `CloseClient(session, 4003/4006)` (Revocation/Failure)
-    → entsprechendes Verhalten (4003: frischer Token; 4006: Backoff).
+- [x] **6. Reconnect- und Chaos-Tests** (S)
+  (Harness aus Aufgabe 1; `internal/twitch/chaos_test.go`);
+  erledigt (PR #195):
+  - **Session-Reconnect:** `Reconnect()` → Adapter folgt der
+    `reconnect_url` sofort (ohne Backoff), die Subscriptions werden
+    vom Mock mit der Session übernommen (verifiziert), die Events
+    nach dem Neustart kommen an (kein Eventverlust), und die
+    Wiederholung einer gesehenen Nachricht im Grace-Fenster wirft der
+    Dedup weg. Befund dabei: der Dedup-Schlüssel war das komplette
+    Notification-Payload (inkl. Subscription-Shell) — die Shell ändert
+    sich pro Session (Session-ID, created_at), die Wiederholung nach
+    Reconnect wurde also nicht erkannt. Der Schlüssel ist jetzt der
+    Inhalt des Event-Objekts (mit der Nachrichten-ID, B22).
+  - **Erzwungener Abbruch:** `CloseClient(session, 4006)` (der Mock
+    unterstützt 4003–4007, nicht das Produktions-4008) → Adapter
+    reconnectet am Base-URL (Backoff), Events kommen wieder an.
   - **Keepalive-Timeout:** `SetKeepalive(session, false)` → Adapter
-    erkennt den fehlenden Keepalive (pongFactor), bricht die
-    Verbindung ab und reconnectet.
-  - **Server-Neustart:** WS-Server-Prozess killen und neu starten →
-    Adapter überlebt (Backoff), Verbindung stellt sich neu her.
+    erkennt die Stille nach zwei Keepalive-Intervallen (Pong-Faktor
+    2, Mock-Boden 10 s) und reconnectet.
+  - **Server-Neustart (entschieden):** nicht im Harness
+    implementiert — für den Client ist ein toter Server und ein
+    abgebrochenes Connection der gleiche Pfad (Lesefehler, Base-URL,
+    Backoff), den der erzwungene Abbruch testet. Der Mock hält
+    Subscriptions pro Verbindung (ein harter Abbruch deshabiliert
+    sie; nur der Session-Reconnect trägt sie über — Produktions-
+    Semantik: Subscriptions überleben Reconnects), und die
+    Close-/Keepalive-RPCs blockiert der Mock ~30 s während des
+    Reconnect-Tests — daher läuft der Reconnect als erstes Szenario
+    und der Close wird wiederholt, bis der Mock ihn annimmt.
+  Verifikation: `go test ./internal/twitch/ -run TestChaosAgainstTheMock`
+  (Skip ohne die twitch-Binary); `go test -race ./...` grün.
+  (Der Plan nannte `integration_test.go`; die Tests liegen in der
+  eigenen Datei `chaos_test.go`, gleiche Pakete.)
 
 - [ ] **7. CI** (S)
   `.github/workflows/ci.yml`, Test-Job: Schritt „Install twitch-cli"
