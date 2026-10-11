@@ -1,27 +1,26 @@
 {
-  "id": "frame-011",
+  "subscription": {
+    "type": "channel.cheer",
+    "version": "1"
+  },
   "event": {
-    "event_type": "channel.cheer",
-    "version": "1",
-    "event": {
-      "id": "cheer-1",
-      "event_time": "2026-10-11T10:00:00.000000Z",
-      "channel_id": "222000111",
-      "channel_login": "streamer",
-      "channel_display_name": "Streamer",
-      "user_id": "111000222",
-      "user_login": "alice",
-      "user_display_name": "Alice",
-      "message": "cheers",
-      "badges": [
-        {
-          "set_id": "subscriber/1000"
-        }
-      ],
-      "bit_products": [],
-      "color": "",
-      "profile_image_url": "",
-      "bits": 100
-    }
+    "id": "cheer-1",
+    "event_time": "2026-10-11T10:00:00.000000Z",
+    "channel_id": "222000111",
+    "channel_login": "streamer",
+    "channel_display_name": "Streamer",
+    "user_id": "111000222",
+    "user_login": "alice",
+    "user_display_name": "Alice",
+    "message": "cheers",
+    "badges": [
+      {
+        "set_id": "subscriber/1000"
+      }
+    ],
+    "bit_products": [],
+    "color": "",
+    "profile_image_url": "",
+    "bits": 100
   }
 }

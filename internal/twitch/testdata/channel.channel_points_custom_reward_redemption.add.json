@@ -1,34 +1,33 @@
 {
-  "id": "frame-028",
+  "subscription": {
+    "type": "channel.channel_points_custom_reward_redemption.add",
+    "version": "1"
+  },
   "event": {
-    "event_type": "channel.channel_points_custom_reward_redemption.add",
-    "version": "1",
-    "event": {
-      "id": "redemption-1",
-      "redemption_status": "unstarted",
-      "reward": {
-        "id": "reward-2",
-        "title": "Shoutout",
-        "prompt": "Your shoutout",
-        "cost": 100,
-        "is_enabled": true,
-        "max_per_stream": null,
-        "max_per_user_per_stream": null,
-        "max_per_user_per_day": null,
-        "is_user_input_required": true,
-        "channel_id": "222000111",
-        "redemptions_pending": 0
-      },
-      "user_input": "hello from the fixture",
-      "user_id": "111000333",
-      "user_name": "bob",
-      "user_display_name": "Bob",
-      "custom_reward_cost": 100,
-      "custom_reward_id": "reward-2",
-      "custom_reward_image_url": "",
-      "custom_reward_title": "Shoutout",
-      "custom_reward_prompt": "Your shoutout",
-      "stream_id": "444000555"
-    }
+    "id": "redemption-1",
+    "redemption_status": "unstarted",
+    "reward": {
+      "id": "reward-2",
+      "title": "Shoutout",
+      "prompt": "Your shoutout",
+      "cost": 100,
+      "is_enabled": true,
+      "max_per_stream": null,
+      "max_per_user_per_stream": null,
+      "max_per_user_per_day": null,
+      "is_user_input_required": true,
+      "channel_id": "222000111",
+      "redemptions_pending": 0
+    },
+    "user_input": "hello from the fixture",
+    "user_id": "111000333",
+    "user_name": "bob",
+    "user_display_name": "Bob",
+    "custom_reward_cost": 100,
+    "custom_reward_id": "reward-2",
+    "custom_reward_image_url": "",
+    "custom_reward_title": "Shoutout",
+    "custom_reward_prompt": "Your shoutout",
+    "stream_id": "444000555"
   }
 }

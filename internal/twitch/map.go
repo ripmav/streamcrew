@@ -41,7 +41,7 @@ type Mapper struct {
 type MapperOptions struct {
 	// Receiver takes the mapped events (the event service).
 	Receiver connector.Receiver
-	// Dedup drops the repeats by the message ID (B22).
+	// Dedup drops the repeats of the messages (B22).
 	Dedup *connector.Dedup
 	// BotID is the user ID of the bot account of the channel; its
 	// messages are flagged FromBot (B13). Empty for none.
@@ -80,21 +80,21 @@ func (m *Mapper) OnRevoked(ctx context.Context) {
 }
 
 // OnMessage is the Handler of the WebSocket client: it drops the
-// repeats by the message ID and maps the event.
+// repeats of the messages (B22) and maps the event.
 func (m *Mapper) OnMessage(ctx context.Context, e Event) {
 	if !m.dedup.First(e.ID) {
 		return
 	}
 	if err := m.dispatch(ctx, e); err != nil {
-		m.log.WarnContext(ctx, "drop an unmapped eventsub event", "eventtype", e.Event.EventType, "error", err)
+		m.log.WarnContext(ctx, "drop an unmapped eventsub event", "eventtype", e.Subscription.Type, "error", err)
 	}
 }
 
 // dispatch is the table of the mapping; the error is for a payload
 // that does not fit its type, and the event is dropped.
 func (m *Mapper) dispatch(ctx context.Context, e Event) error {
-	body := e.Event.Event
-	switch e.Event.EventType {
+	body := e.Body
+	switch e.Subscription.Type {
 	case "channel.chat.message":
 		var p chatMessage
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
@@ -102,7 +102,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		}
 		return m.rec.Message(ctx, m.incoming(p))
 	case "stream.online", "stream.offline":
-		return m.rec.Stream(ctx, platform.Twitch, e.Event.EventType == "stream.online")
+		return m.rec.Stream(ctx, platform.Twitch, e.Subscription.Type == "stream.online")
 	case "channel.follow":
 		var p follow
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
@@ -194,7 +194,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			return err
 		}
 		typ := eventtype.TwitchSharedChatStart
-		switch e.Event.EventType {
+		switch e.Subscription.Type {
 		case "channel.shared_chat.update":
 			typ = eventtype.TwitchSharedChatUpdate
 		case "channel.shared_chat.end":
@@ -211,7 +211,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			return err
 		}
 		typ := eventtype.TwitchHypeTrainStart
-		switch e.Event.EventType {
+		switch e.Subscription.Type {
 		case "channel.hype_train.progress":
 			typ = eventtype.TwitchHypeTrainProgress
 		case "channel.hype_train.end":
@@ -221,7 +221,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		if p.RewardInterval > 0 {
 			train.RewardLevel = int(p.Progress / p.RewardInterval)
 		}
-		if e.Event.EventType == "channel.hype_train.end" {
+		if e.Subscription.Type == "channel.hype_train.end" {
 			train.Outcome = p.EndReason
 		}
 		return m.rec.Event(ctx, connector.Event{
@@ -256,7 +256,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			return err
 		}
 		typ := eventtype.TwitchGoalStart
-		switch e.Event.EventType {
+		switch e.Subscription.Type {
 		case "channel.goal.progress":
 			typ = eventtype.TwitchGoalProgress
 		case "channel.goal.complete":
@@ -304,7 +304,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		}
 		return m.rec.Event(ctx, ev)
 	default:
-		return fmt.Errorf("eventsub: no mapping for %s", e.Event.EventType)
+		return fmt.Errorf("eventsub: no mapping for %s", e.Subscription.Type)
 	}
 }
 

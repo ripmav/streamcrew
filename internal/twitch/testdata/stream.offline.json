@@ -1,15 +1,14 @@
 {
-  "id": "frame-002",
+  "subscription": {
+    "type": "stream.offline",
+    "version": "1"
+  },
   "event": {
-    "event_type": "stream.offline",
-    "version": "1",
-    "event": {
-      "stream": {
-        "id": "444000555",
-        "user_id": "222000111",
-        "user_login": "streamer",
-        "user_name": "Streamer"
-      }
+    "stream": {
+      "id": "444000555",
+      "user_id": "222000111",
+      "user_login": "streamer",
+      "user_name": "Streamer"
     }
   }
 }
