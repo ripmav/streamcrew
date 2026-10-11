@@ -36,8 +36,8 @@ func TestEventContract(t *testing.T) {
 		wantMsg    *connector.Incoming
 		wantStream *bool
 	}{
-		{name: "stream.online", wantStream: ptr(true)},
-		{name: "stream.offline", wantStream: ptr(false)},
+		{name: "stream.online", wantStream: new(true)},
+		{name: "stream.offline", wantStream: new(false)},
 		{name: "channel.follow", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchChannelFollow,
@@ -255,4 +255,5 @@ func ident(login, display, id string, roles ...role.Role) *user.Identity {
 	}
 }
 
-func ptr[T any](v T) *T { return &v }
+//go:fix inline
+func ptr[T any](v T) *T { return new(v) }
