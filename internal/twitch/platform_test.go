@@ -92,7 +92,8 @@ func (h *helixServer) handler(t *testing.T) http.HandlerFunc {
 }
 
 // keepAliveServer is a fake EventSub server that keeps the connection
-// alive with PINGs until the test closes it or the drop flag is set.
+// alive with session_keepalive frames until the test closes it or the
+// drop flag is set.
 type keepAliveServer struct {
 	drop atomic.Bool
 }
@@ -103,11 +104,11 @@ func (s *keepAliveServer) handler(_ *testing.T) http.HandlerFunc {
 		if err != nil {
 			return
 		}
-		if err := conn.Write(r.Context(), websocket.MessageText, []byte(helloJSON("s1", "10"))); err != nil {
+		if err := conn.Write(r.Context(), websocket.MessageText, []byte(welcomeJSON("s1", "1"))); err != nil {
 			return
 		}
 		for !s.drop.Load() {
-			if err := conn.Write(r.Context(), websocket.MessageText, []byte(`{"type":"PING"}`)); err != nil {
+			if err := conn.Write(r.Context(), websocket.MessageText, []byte(keepaliveJSON())); err != nil {
 				return
 			}
 			select {

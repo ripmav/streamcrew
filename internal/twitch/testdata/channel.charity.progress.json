@@ -1,17 +1,16 @@
 {
-  "id": "frame-025",
+  "subscription": {
+    "type": "channel.charity.progress",
+    "version": "1"
+  },
   "event": {
-    "event_type": "channel.charity.progress",
-    "version": "1",
-    "event": {
-      "id": "charity-1",
-      "charity_name": "Example Fund",
-      "charity_description": "Helping",
-      "charity_logo_url": "https://example.com/logo.png",
-      "charity_id": "ch-1",
-      "current_amount": 150,
-      "target_amount": 1000,
-      "currency": "USD"
-    }
+    "id": "charity-1",
+    "charity_name": "Example Fund",
+    "charity_description": "Helping",
+    "charity_logo_url": "https://example.com/logo.png",
+    "charity_id": "ch-1",
+    "current_amount": 150,
+    "target_amount": 1000,
+    "currency": "USD"
   }
 }

@@ -1,13 +1,12 @@
 {
-  "id": "frame-021",
+  "subscription": {
+    "type": "channel.shoutout.received",
+    "version": "1"
+  },
   "event": {
-    "event_type": "channel.shoutout.received",
-    "version": "1",
-    "event": {
-      "from_user_id": "111000333",
-      "from_user_login": "bob",
-      "from_user_display_name": "Bob",
-      "from_user_viewers": 42
-    }
+    "from_user_id": "111000333",
+    "from_user_login": "bob",
+    "from_user_display_name": "Bob",
+    "from_user_viewers": 42
   }
 }

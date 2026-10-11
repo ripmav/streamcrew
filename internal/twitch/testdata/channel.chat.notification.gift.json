@@ -1,21 +1,20 @@
 {
-  "id": "frame-009",
+  "subscription": {
+    "type": "channel.chat.notification",
+    "version": "2"
+  },
   "event": {
-    "event_type": "channel.chat.notification",
-    "version": "2",
-    "event": {
-      "type": "gift",
-      "anonymous": false,
-      "total": 0,
-      "user_id": "111000222",
-      "user_login": "alice",
-      "user_display_name": "Alice",
-      "to_user_id": "111000444",
-      "to_user_login": "carol",
-      "to_user_logins": [],
-      "plan_name": "1000",
-      "cumulative_month_count": 1,
-      "gift_message": "happy birthday"
-    }
+    "type": "gift",
+    "anonymous": false,
+    "total": 0,
+    "user_id": "111000222",
+    "user_login": "alice",
+    "user_display_name": "Alice",
+    "to_user_id": "111000444",
+    "to_user_login": "carol",
+    "to_user_logins": [],
+    "plan_name": "1000",
+    "cumulative_month_count": 1,
+    "gift_message": "happy birthday"
   }
 }

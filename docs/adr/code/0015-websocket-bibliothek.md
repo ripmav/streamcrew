@@ -53,6 +53,21 @@ doppeln.
 - Jünger als `gorilla/websocket`; Änderungen an der API zwischen den Releases sind möglich (Pinning + Allowlist-Meldung in der CI).
 - Der Keepalive bleibt eigene Logik (Intervall-Timer, PONG-Timeout) — wird in den 4.3-Tests mit der Fake-Uhr geprüft (Code-ADR-0006).
 
+## Revision 2026-10-11 (Phase 4.5)
+
+Die 4.5-Tests gegen den offiziellen `twitch-cli`-Mock (die Referenz-
+implementierung des Protokolls) haben gezeigt, dass die Annahme im
+Kontext zu Punkt 3 falsch war. Tatsächliches Protokoll (verifiziert
+gegen twitch-cli v1.1.24 und die EventSub-WebSocket-Dokumentation):
+
+- Alle Frames sind `{"metadata":{"message_id","message_type",…},"payload":{…}}`; die Typen sind `session_welcome`, `session_keepalive`, `notification`, `session_reconnect`, `revocation`.
+- Der Server hält die Verbindung mit `session_keepalive`-Frames lebendig (im 10-s-Takt), nicht mit `PING`-Texten; der Client sendet gar keine Anwendungsnachrichten (der Mock schließt Clients mit Close-Code 4001, die Inbound-Traffic senden), und jede empfangene Frame hält die Verbindung lebendig (WS-Ping/pong läuft transparent über die Bibliothek).
+- Die Ereignisse kommen als `notification` mit `payload` = EventsubResponse (`subscription` mit `type`/`version` + `event`); die Wiederholungen nach Reconnects (B22) werden anhand des Nutzlast-Inhalts verworfen.
+- `session_reconnect` trägt `payload.session` mit `status: "reconnecting"` und der `reconnect_url` (selbsttragend, inkl. Reconnect-Identität); `revocation` kommt als `payload.revocation.reason`.
+
+Umgesetzt in `internal/twitch` (Plan 4.5, Aufgabe 4); die 4.3-Tests
+sprechen seither das echte Frame-Format.
+
 **Folgearbeiten:**
 
 - [ ] WebSocket-Client von Roadmap 4.3 (Paket `internal/twitch`), Plan `docs/superpowers/plans/2026-10-10-eventsub-websocket.md`

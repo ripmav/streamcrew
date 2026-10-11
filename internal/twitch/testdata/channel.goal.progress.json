@@ -1,16 +1,15 @@
 {
-  "id": "frame-023",
+  "subscription": {
+    "type": "channel.goal.progress",
+    "version": "1"
+  },
   "event": {
-    "event_type": "channel.goal.progress",
-    "version": "1",
-    "event": {
-      "id": "goal-1",
-      "current_amount": 250,
-      "target_amount": 1000,
-      "currency": "USD",
-      "goal_description": "Reach the target",
-      "time_left_to_complete_seconds": 3600,
-      "is_wide_format_enabled": false
-    }
+    "id": "goal-1",
+    "current_amount": 250,
+    "target_amount": 1000,
+    "currency": "USD",
+    "goal_description": "Reach the target",
+    "time_left_to_complete_seconds": 3600,
+    "is_wide_format_enabled": false
   }
 }

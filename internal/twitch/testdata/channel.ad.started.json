@@ -1,12 +1,11 @@
 {
-  "id": "frame-020",
+  "subscription": {
+    "type": "channel.ad.started",
+    "version": "1"
+  },
   "event": {
-    "event_type": "channel.ad.started",
-    "version": "1",
-    "event": {
-      "id": "ad-1",
-      "length": 300,
-      "message": "break time"
-    }
+    "id": "ad-1",
+    "length": 300,
+    "message": "break time"
   }
 }

@@ -81,6 +81,24 @@ Letztrelease v1.1.24, `go 1.20`) bietet zwei Mock-Server:
        Close mit beliebigem Code aus der Doku (4003–4008).
      - `EventSubWebSocketKeepalive` (`--enabled=false`): stoppt die
        `session_keepalive`-Nachrichten des Servers.
+3. **Reales Frame-Format (verifiziert 2026-10-11 gegen die CLI-Quel-
+   le und das laufende Mock-Server):** alle Frames sind
+   `{"metadata":{"message_id","message_type","message_timestamp",…},"payload":{…}}`;
+   die Typen sind `session_welcome` (`payload.session` mit
+   `id`, `keepalive_timeout_seconds`, `reconnect_url`),
+   `session_keepalive` (leeres `payload`, 10-s-Takt — nicht PING),
+   `notification` (`payload` = EventsubResponse
+   `{subscription:{type,version,…}, event:{…}}`), `session_reconnect`
+   (`payload.session` mit `status: "reconnecting"` und einer
+   selbsttragenden `reconnect_url`, die den Reconnect-Identifikator als
+   Query-Parameter trägt) und `revocation` (`payload.revocation.reason`).
+   Der Server schickt WS-Pings (5-s-Takt, transparent über die
+   Bibliothek) und **schließt Clients mit Close-Code 4001, die
+   Anwendungsnachrichten senden** — ein konformer Client ist sendefrei,
+   und jede empfangene Frame hält die Verbindung lebendig.
+   Konsequenz: der 4.3-Client (hypothetisches `{type, payload}`-
+   Format mit `hello`/PING/`event_type`) spricht das echte Protokoll
+   nicht — Aufgabe 4 stellt das um.
 
 **Konsequenzen für die Testarchitektur:**
 
@@ -174,7 +192,22 @@ Auf `main`, ein PR pro Aufgabe, gestapelt.
     Liste bekommen je einen Response-Contract-Test mit dem
     dokumentierten Vollformat.
 
-- [ ] **4. Integrationstests gegen den Mock-EventSub-Server** (M)
+- [x] **4. EventSub-Client auf das reale Frame-Format** (S)
+  Der 4.3-Client spricht das hypothetische `{type, payload}`-Format
+  (`hello`, PING/PONG, `event_type`); das reale Protokoll (Befund 3)
+  ist anders. `internal/twitch`: `message.go` (envelope, welcome,
+  reconnect, Event aus dem EventsubResponse), `ws.go` (session_welcome
+  auslesen, Keepalive-Aufsicht über jede Frame, kein Outbound-Traffic,
+  Query-Merge in der Reconnect-URL), `map.go` (Typ/Version aus der
+  Subscription, Body = `event`, Dedup-Schlüssel = Nutzlast-Inhalt, B22)
+  und die Tests: `ws_test.go` und `platform_test.go` sprechen das neue
+  Frame-Format, die Fixtures wandeln in die reale Notification-Form
+  `{subscription:{type,version}, event:{…}}`. Code-ADR-0015 mit
+  Revision ergänzt.
+  Verifikation: `go test ./internal/twitch/` (Unit) — und die
+  Integrationstests (Aufgabe 5) gegen den echten Mock bestätigen es.
+
+- [ ] **5. Integrationstests gegen den Mock-EventSub-Server** (M)
   `internal/twitch/integration_test.go` (Harness aus Aufgabe 1):
   - **Verbindung + Subscriptions:** der Adapter verbindet,
     `session_welcome` wird angenommen, die akzeptierbaren
@@ -195,7 +228,7 @@ Auf `main`, ein PR pro Aufgabe, gestapelt.
     (Token + Client-ID aus dem generate-Output) — die Antwort 200 mit
     Message-ID wird vom Adapter bestätigt.
 
-- [ ] **5. Reconnect- und Chaos-Tests** (S)
+- [ ] **6. Reconnect- und Chaos-Tests** (S)
   (Harness aus Aufgabe 1; `internal/twitch/integration_test.go`)
   - **Session-Reconnect:** `Reconnect()` → Adapter erhält
     `session_reconnect`, verbindet an der `reconnect_url` mit der
@@ -211,13 +244,13 @@ Auf `main`, ein PR pro Aufgabe, gestapelt.
   - **Server-Neustart:** WS-Server-Prozess killen und neu starten →
     Adapter überlebt (Backoff), Verbindung stellt sich neu her.
 
-- [ ] **6. CI** (S)
+- [ ] **7. CI** (S)
   `.github/workflows/ci.yml`, Test-Job: Schritt „Install twitch-cli"
   (Release-Binary v1.1.24, Plattform abhängig, SHA-256-Prüfsumme, nach
   `PATH`), damit die Integrationstests in CI laufen (lokal ohne Binary
   weiterhin Skip).
 
-- [ ] **7. Doku** (S)
+- [ ] **8. Doku** (S)
   Roadmap 4.5: Checkboxen + Statuszeile + Historieneintrag; README-
   Testabsatz (falls vorhanden) aktualisieren; Plan als abgeschlossen
   markieren. Der manuelle 4-h-Test-Stream bleibt als offenes

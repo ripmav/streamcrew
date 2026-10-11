@@ -4,7 +4,6 @@ package twitch_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -70,27 +69,16 @@ func writeText(t *testing.T, conn *websocket.Conn, s string) {
 	require.NoError(t, conn.Write(context.Background(), websocket.MessageText, []byte(s)))
 }
 
-func readText(t *testing.T, conn *websocket.Conn) string {
-	t.Helper()
-	_, data, err := conn.Read(context.Background())
-	require.NoError(t, err)
-	return string(data)
+func welcomeJSON(session, interval string) string {
+	return `{"metadata":{"message_id":"m-welcome","message_type":"session_welcome","message_timestamp":"2026-01-01T00:00:00Z"},"payload":{"session":{"id":"` + session + `","status":"connected","keepalive_timeout_seconds":` + interval + `,"reconnect_url":null,"connected_at":"2026-01-01T00:00:00Z"}}}`
 }
 
-// frameType reads the next frame from the client and returns its
-// "type" field: the client's PONG, because the server only sends the
-// next frame after it read the PONG.
-func frameType(t *testing.T, conn *websocket.Conn) string {
-	t.Helper()
-	var f struct {
-		Type string `json:"type"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(readText(t, conn)), &f))
-	return f.Type
+func keepaliveJSON() string {
+	return `{"metadata":{"message_id":"m-ka","message_type":"session_keepalive","message_timestamp":"2026-01-01T00:00:01Z"},"payload":{}}`
 }
 
-func helloJSON(session, interval string) string {
-	return `{"type":"hello","payload":{"session_id":"` + session + `","expiry":123,"keepalive_interval_seconds":` + interval + `,"reconnect_url":"/re"}}`
+func notificationJSON(subType, version string, event string) string {
+	return `{"metadata":{"message_id":"m-1","message_type":"notification","message_timestamp":"2026-01-01T00:00:02Z","subscription_type":"` + subType + `","subscription_version":"` + version + `"},"payload":{"subscription":{"id":"sub-1","type":"` + subType + `","version":"` + version + `"},"event":` + event + `}}`
 }
 
 // hold keeps the connection open until the other side closes it.
@@ -121,12 +109,11 @@ func waitFor(t *testing.T, horizon time.Duration, f func() int64) {
 	}
 }
 
-func TestRunHelloPingPongAndMessage(t *testing.T) {
+func TestRunWelcomeKeepaliveAndMessage(t *testing.T) {
 	srv := wsServer(t, func(t *testing.T, _ *http.Request, conn *websocket.Conn) {
-		writeText(t, conn, helloJSON("s1", "10"))
-		writeText(t, conn, `{"type":"PING"}`)
-		assert.Equal(t, "PONG", frameType(t, conn))
-		writeText(t, conn, `{"type":"message","payload":{"id":"m1","event":{"event_type":"channel.follow","version":"2","condition":{"broadcaster_user_id":"7"},"event":{"user_id":"8"}}}}`)
+		writeText(t, conn, welcomeJSON("s1", "10"))
+		writeText(t, conn, keepaliveJSON())
+		writeText(t, conn, notificationJSON("channel.follow", "2", `{"user_id":"8"}`))
 		// Hold the connection until the test closes it.
 		hold(conn)
 	})
@@ -142,33 +129,31 @@ func TestRunHelloPingPongAndMessage(t *testing.T) {
 	}()
 
 	e := h.nextEvent(t)
-	assert.Equal(t, "m1", e.ID)
-	assert.Equal(t, "channel.follow", e.Event.EventType)
-	assert.Equal(t, "2", e.Event.Version)
-	assert.JSONEq(t, `{"user_id":"8"}`, string(e.Event.Event))
+	assert.NotEmpty(t, e.ID)
+	assert.Equal(t, "channel.follow", e.Subscription.Type)
+	assert.Equal(t, "2", e.Subscription.Version)
+	assert.JSONEq(t, `{"user_id":"8"}`, string(e.Body))
 	cancel()
 	<-done
 }
 
-func TestRunSessionReconnectKeepsTheSession(t *testing.T) {
+func TestRunSessionReconnectAtTheGivenURL(t *testing.T) {
 	var reconnects atomic.Int64
 	srv := wsServer(t, func(t *testing.T, r *http.Request, conn *websocket.Conn) {
 		switch r.URL.Path {
 		case "/":
-			writeText(t, conn, helloJSON("s1", "10"))
-			writeText(t, conn, `{"type":"PING"}`)
-			assert.Equal(t, "PONG", frameType(t, conn))
-			writeText(t, conn, `{"type":"session_reconnect","payload":{"reconnect_url":"/re","session_id":"s2","reason":"server reboot"}}`)
+			writeText(t, conn, welcomeJSON("s1", "10"))
+			// The reconnect URL already carries its own query
+			// (the reconnect identifier); the client must merge the
+			// access token into it, not replace the query.
+			writeText(t, conn, `{"metadata":{"message_id":"m-re","message_type":"session_reconnect"},"payload":{"session":{"id":"s2","status":"reconnecting","keepalive_timeout_seconds":null,"reconnect_url":"/re?reconnect_id=abc","connected_at":"2026-01-01T00:00:00Z"}}}`)
 			hold(conn)
 		case "/re":
-			assert.Equal(t, "s2", r.URL.Query().Get("eventsub-session-id"))
+			assert.Equal(t, "abc", r.URL.Query().Get("reconnect_id"))
 			assert.Equal(t, "tok", r.URL.Query().Get("access_token"))
-			writeText(t, conn, helloJSON("s2", "10"))
-			writeText(t, conn, `{"type":"PING"}`)
-			assert.Equal(t, "PONG", frameType(t, conn))
+			writeText(t, conn, welcomeJSON("s2", "10"))
 			// The flag goes up only after the handshake, so the test's
-			// cancel() cannot race the PING answer of the new
-			// connection.
+			// cancel() cannot race the reading of the new connection.
 			reconnects.Store(1)
 			hold(conn)
 		}
@@ -197,16 +182,14 @@ func TestRunRevocationReconnectsWithAFreshToken(t *testing.T) {
 			want = "tok2"
 		}
 		assert.Equal(t, want, r.URL.Query().Get("access_token"))
-		writeText(t, conn, helloJSON("s1", "10"))
-		writeText(t, conn, `{"type":"PING"}`)
-		assert.Equal(t, "PONG", frameType(t, conn))
+		writeText(t, conn, welcomeJSON("s1", "10"))
 		if n > 1 {
 			// After the handshake, so the test's cancel() cannot race
-			// the PING answer of the fresh connection.
+			// the reading of the fresh connection.
 			fresh.Store(true)
 		}
 		if n == 1 {
-			writeText(t, conn, `{"type":"revocation","payload":{"reason":"token revoked"}}`)
+			writeText(t, conn, `{"metadata":{"message_id":"m-rev","message_type":"revocation"},"payload":{"revocation":{"reason":"token revoked"}}}`)
 		}
 		hold(conn)
 	})
@@ -244,14 +227,15 @@ func TestRunRevocationReconnectsWithAFreshToken(t *testing.T) {
 	<-done
 }
 
-// The server never sends a PING: the client must close the
-// connection after twice the keepalive interval and reconnect at the
-// base URL. The interval is 1 s, so the wait is 2 s of real time.
+// The server never sends a frame after the welcome: the client must
+// close the connection after twice the keepalive interval and
+// reconnect at the base URL. The interval is 1 s, so the wait is 2 s
+// of real time.
 func TestRunNoKeepaliveClosesAndReconnects(t *testing.T) {
 	var upgrades atomic.Int64
 	srv := wsServer(t, func(t *testing.T, _ *http.Request, conn *websocket.Conn) {
 		upgrades.Add(1)
-		writeText(t, conn, helloJSON("s1", "1"))
+		writeText(t, conn, welcomeJSON("s1", "1"))
 		hold(conn)
 	})
 	defer srv.Close()
