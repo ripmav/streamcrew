@@ -1,41 +1,40 @@
 {
-  "id": "frame-005",
+  "subscription": {
+    "type": "channel.chat.message",
+    "version": "2"
+  },
   "event": {
-    "event_type": "channel.chat.message",
-    "version": "2",
-    "event": {
-      "id": "msg-100",
-      "badges": [
-        {
-          "set_id": "moderator/1"
-        },
-        {
-          "set_id": "subscriber/1000"
-        }
-      ],
-      "badge_info": {
-        "subscriber": {
-          "tier": "1000"
-        }
+    "id": "msg-100",
+    "badges": [
+      {
+        "set_id": "moderator/1"
       },
-      "channel_id": "222000111",
-      "channel_login": "streamer",
-      "channel_display_name": "Streamer",
-      "message": "hi :Kappa: hey",
-      "emotes": [
-        {
-          "id": "25",
-          "start": 3,
-          "end": 10,
-          "zero": false
-        }
-      ],
-      "emoji": [],
-      "flags": {},
-      "color": "#FF0000",
-      "user_id": "111000222",
-      "user_login": "alice",
-      "user_display_name": "Alice"
-    }
+      {
+        "set_id": "subscriber/1000"
+      }
+    ],
+    "badge_info": {
+      "subscriber": {
+        "tier": "1000"
+      }
+    },
+    "channel_id": "222000111",
+    "channel_login": "streamer",
+    "channel_display_name": "Streamer",
+    "message": "hi :Kappa: hey",
+    "emotes": [
+      {
+        "id": "25",
+        "start": 3,
+        "end": 10,
+        "zero": false
+      }
+    ],
+    "emoji": [],
+    "flags": {},
+    "color": "#FF0000",
+    "user_id": "111000222",
+    "user_login": "alice",
+    "user_display_name": "Alice"
   }
 }

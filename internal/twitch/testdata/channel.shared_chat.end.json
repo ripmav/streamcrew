@@ -1,10 +1,9 @@
 {
-  "id": "frame-016",
+  "subscription": {
+    "type": "channel.shared_chat.end",
+    "version": "1"
+  },
   "event": {
-    "event_type": "channel.shared_chat.end",
-    "version": "1",
-    "event": {
-      "chat_session_id": "session-1"
-    }
+    "chat_session_id": "session-1"
   }
 }

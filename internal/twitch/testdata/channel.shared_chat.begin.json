@@ -1,11 +1,10 @@
 {
-  "id": "frame-014",
+  "subscription": {
+    "type": "channel.shared_chat.begin",
+    "version": "1"
+  },
   "event": {
-    "event_type": "channel.shared_chat.begin",
-    "version": "1",
-    "event": {
-      "chat_session_id": "session-1",
-      "title": "Co-op night"
-    }
+    "chat_session_id": "session-1",
+    "title": "Co-op night"
   }
 }

@@ -1,12 +1,11 @@
 {
-  "id": "frame-003",
+  "subscription": {
+    "type": "channel.follow",
+    "version": "2"
+  },
   "event": {
-    "event_type": "channel.follow",
-    "version": "2",
-    "event": {
-      "user_id": "111000222",
-      "user_login": "alice",
-      "user_display_name": "Alice"
-    }
+    "user_id": "111000222",
+    "user_login": "alice",
+    "user_display_name": "Alice"
   }
 }

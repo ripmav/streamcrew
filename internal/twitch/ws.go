@@ -34,7 +34,7 @@ var ErrToken = errors.New("eventsub: the access token is unavailable")
 // dialTimeout bounds the handshake of a connection.
 const dialTimeout = 10 * time.Second
 
-// pongFactor is how many keepalive intervals without a PING the
+// pongFactor is how many keepalive intervals without a frame the
 // connection tolerates before it is closed.
 const pongFactor = 2
 
@@ -68,12 +68,16 @@ type Options struct {
 type TokenFunc func(ctx context.Context) (string, error)
 
 // Client is the EventSub WebSocket client (Code-ADR-0015): it
-// connects, reads the hello, answers the PING keepalive texts with
-// PONG, hands the events to the handler, reconnects on
-// session_reconnect with the session ID (no event loss, the repeats
-// are dropped by the B22 dedup) and on unexpected drops with a
-// backoff. Run drives one connection at a time; a Client is not
-// shared between concurrent Runs.
+// connects, reads the session_welcome, hands the notification events
+// to the handler, stays alive by the server's session_keepalive
+// frames (no frame for pongFactor intervals closes the connection),
+// reconnects on session_reconnect at the given URL (no event loss,
+// the repeats are dropped by the B22 dedup) and on unexpected drops
+// with a backoff. The client sends no application messages: the
+// mock server closes clients that do (close code 4001), and the
+// server's keepalive frames already carry the liveness. Run drives
+// one connection at a time; a Client is not shared between
+// concurrent Runs.
 type Client struct {
 	base  string
 	token TokenFunc
@@ -99,17 +103,17 @@ func New(o Options) *Client {
 }
 
 // Run drives the connection until the context is canceled: connect,
-// hello, keepalive, events, and the reconnects. A session_reconnect
-// reconnects at once at the given URL with the session ID; an
+// session_welcome, keepalive, events, and the reconnects. A
+// session_reconnect reconnects at once at the given URL; an
 // unexpected drop reconnects at the base URL after an exponential
 // backoff (base 1 s, full jitter, 30 s budget, the httpclient values
 // of Code-ADR-0014 point 4).
 func (c *Client) Run(ctx context.Context, h Handler) error {
 	backoff := retry.WithMaxDuration(30*time.Second,
 		retry.WithFullJitter(retry.NewExponential(time.Second)))
-	dialURL, sessionID := c.base, ""
+	dialURL := c.base
 	for ctx.Err() == nil {
-		next, err := c.session(ctx, h, dialURL, sessionID)
+		next, err := c.session(ctx, h, dialURL)
 		if ctx.Err() != nil {
 			return nil //nolint:nilerr // the canceled context ends Run; the drop error does not matter
 		}
@@ -117,7 +121,7 @@ func (c *Client) Run(ctx context.Context, h Handler) error {
 		if next.fatal {
 			return err
 		}
-		dialURL, sessionID = next.url, next.sessionID
+		dialURL = next.url
 		if !next.immediately {
 			d, _ := backoff.Next()
 			select {
@@ -133,34 +137,36 @@ func (c *Client) Run(ctx context.Context, h Handler) error {
 // next tells Run where and how quickly to reconnect.
 type next struct {
 	url         string
-	sessionID   string
 	immediately bool
 	// fatal ends Run without a backoff (a missing token).
 	fatal bool
 }
 
-// session runs one connection at the given URL (base with the access
-// token for a fresh start, the reconnect URL with the session ID for
-// a session_reconnect). It returns where to reconnect next and the
-// error that dropped the connection (nil when the context ended).
-func (c *Client) session(ctx context.Context, h Handler, dialURL, sessionID string) (next, error) {
-	q := url.Values{}
-	if sessionID != "" {
-		q.Set("eventsub-session-id", sessionID)
-	}
+// session runs one connection at the given URL (the base for a fresh
+// start, the reconnect URL for a session_reconnect) with the access
+// token. It returns where to reconnect next and the error that
+// dropped the connection (nil when the context ended).
+func (c *Client) session(ctx context.Context, h Handler, dialURL string) (next, error) {
 	tok, err := c.token(ctx)
 	if err != nil {
 		// The token is gone: a backoff would only repeat the failure;
 		// the platform polls the account again.
 		return next{fatal: true}, fmt.Errorf("%w: %w", ErrToken, err)
 	}
+	// The reconnect URL may already carry its own query (the mock
+	// server's reconnect identifier), so merge the token into it.
+	u, err := url.Parse(dialURL)
+	if err != nil {
+		return next{}, fmt.Errorf("eventsub: the url is invalid: %w", err)
+	}
+	q := u.Query()
 	q.Set("access_token", tok)
-	u := dialURL + "?" + q.Encode()
+	u.RawQuery = q.Encode()
 
 	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 	// The response body is consumed by the library (the handshake).
-	conn, _, err := websocket.Dial(dctx, u, &websocket.DialOptions{HTTPClient: c.httpc}) //nolint:bodyclose // the body is consumed by Dial
+	conn, _, err := websocket.Dial(dctx, u.String(), &websocket.DialOptions{HTTPClient: c.httpc}) //nolint:bodyclose // the body is consumed by Dial
 	if err != nil {
 		return next{}, err
 	}
@@ -178,26 +184,30 @@ func (c *Client) session(ctx context.Context, h Handler, dialURL, sessionID stri
 	if err := jsonv2.Unmarshal(payload, &env); err != nil {
 		return next{}, err
 	}
-	if env.Type != "hello" {
-		return next{}, fmt.Errorf("eventsub: the first answer is %q, not hello", env.Type)
+	if env.Metadata.MessageType != "session_welcome" {
+		return next{}, fmt.Errorf("eventsub: the first answer is %q, not session_welcome", env.Metadata.MessageType)
 	}
-	var hello hello
-	if err := jsonv2.Unmarshal(env.Payload, &hello); err != nil {
+	var w welcome
+	if err := jsonv2.Unmarshal(env.Payload, &w); err != nil {
 		return next{}, err
 	}
-	interval := time.Duration(hello.KeepaliveIntervalSeconds) * time.Second
-	if interval <= 0 {
-		interval = 10 * time.Second
+	seconds := w.Session.KeepaliveTimeoutSeconds
+	if seconds <= 0 {
+		seconds = w.Session.KeepaliveIntervalSeconds
 	}
-	c.log.InfoContext(ctx, "the eventsub session", "session", hello.SessionID, "keepalive", interval)
+	if seconds <= 0 {
+		seconds = 10
+	}
+	interval := time.Duration(seconds) * time.Second
+	c.log.InfoContext(ctx, "the eventsub session", "session", w.Session.ID, "keepalive", interval)
 
 	return c.loop(ctx, h, conn, interval)
 }
 
-// loop reads the connection until it drops: it answers the PING
-// keepalive texts, hands the events to the handler, reacts to
-// session_reconnect and revocation, and closes the connection when no
-// PING has come for pongFactor intervals.
+// loop reads the connection until it drops: it hands the events to
+// the handler, reacts to session_reconnect and revocation, and closes
+// the connection when no frame has come for pongFactor keepalive
+// intervals.
 func (c *Client) loop(ctx context.Context, h Handler, conn *websocket.Conn, interval time.Duration) (next, error) {
 	type frameIn struct {
 		op      websocket.MessageType
@@ -216,8 +226,8 @@ func (c *Client) loop(ctx context.Context, h Handler, conn *websocket.Conn, inte
 		}
 	}()
 
-	// The keepalive supervision: a PING resets the deadline; no PING
-	// for pongFactor intervals closes the connection.
+	// The keepalive supervision: any frame resets the deadline; no
+	// frame for pongFactor intervals closes the connection.
 	deadline := time.Now().Add(pongFactor * interval)
 	ticker := time.NewTicker(interval / 2)
 	defer ticker.Stop()
@@ -239,45 +249,44 @@ func (c *Client) loop(ctx context.Context, h Handler, conn *websocket.Conn, inte
 			if i.op != websocket.MessageText {
 				continue
 			}
+			// Any frame is proof of life: the server keeps the session
+			// alive with the session_keepalive frames.
+			deadline = time.Now().Add(pongFactor * interval)
 			var env envelope
 			if err := jsonv2.Unmarshal(i.data, &env); err != nil {
 				c.log.WarnContext(ctx, "drop an unreadable eventsub frame", "error", err)
 				continue
 			}
-			switch env.Type {
-			case "PING":
-				deadline = time.Now().Add(pongFactor * interval)
-				if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"PONG"}`)); err != nil {
-					return reconnectBase()
-				}
-			case "PONG":
-				// our answer, nothing to do
-			case "message":
+			switch env.Metadata.MessageType {
+			case "session_welcome", "session_keepalive":
+				// the connection is alive, nothing to do
+			case "notification":
 				var e Event
 				if err := jsonv2.Unmarshal(env.Payload, &e); err != nil {
 					c.log.WarnContext(ctx, "drop an unreadable eventsub event", "error", err)
 					continue
 				}
+				e.ID = string(env.Payload)
 				h.OnMessage(ctx, e)
 			case "session_reconnect":
-				var r sessionReconnect
+				var r reconnect
 				if err := jsonv2.Unmarshal(env.Payload, &r); err != nil {
 					return reconnectBase()
 				}
-				c.log.InfoContext(ctx, "the eventsub session reconnects", "reason", r.Reason)
-				return next{url: resolveReconnectURL(c.base, r.ReconnectURL), sessionID: r.SessionID, immediately: true},
-					fmt.Errorf("eventsub: session reconnect (%s)", r.Reason)
+				c.log.InfoContext(ctx, "the eventsub session reconnects", "session", r.Session.ID)
+				return next{url: resolveReconnectURL(c.base, r.Session.ReconnectURL), immediately: true},
+					errors.New("eventsub: session reconnect")
 			case "revocation":
 				h.OnRevoked(ctx)
 				// The token is gone: a fresh start (new token, no
 				// session) at the base URL.
 				return next{url: c.base}, errors.New("eventsub: the token is revoked")
 			default:
-				c.log.WarnContext(ctx, "drop an unknown eventsub frame type", "type", env.Type)
+				c.log.WarnContext(ctx, "drop an unknown eventsub frame type", "type", env.Metadata.MessageType)
 			}
 		case <-ticker.C:
 			if time.Now().After(deadline) {
-				c.log.WarnContext(ctx, "no keepalive ping, closing the connection")
+				c.log.WarnContext(ctx, "no keepalive frame, closing the connection")
 				_ = conn.Close(websocket.StatusGoingAway, "no keepalive")
 				return reconnectBase()
 			}

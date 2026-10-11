@@ -1,25 +1,24 @@
 {
-  "id": "frame-010",
+  "subscription": {
+    "type": "channel.chat.notification",
+    "version": "2"
+  },
   "event": {
-    "event_type": "channel.chat.notification",
-    "version": "2",
-    "event": {
-      "type": "mass_gift",
-      "anonymous": false,
-      "total": 3,
-      "user_id": "111000333",
-      "user_login": "bob",
-      "user_display_name": "Bob",
-      "to_user_id": "",
-      "to_user_login": "",
-      "to_user_logins": [
-        "alice",
-        "carol",
-        "dave"
-      ],
-      "plan_name": "1000",
-      "cumulative_month_count": 0,
-      "gift_message": ""
-    }
+    "type": "mass_gift",
+    "anonymous": false,
+    "total": 3,
+    "user_id": "111000333",
+    "user_login": "bob",
+    "user_display_name": "Bob",
+    "to_user_id": "",
+    "to_user_login": "",
+    "to_user_logins": [
+      "alice",
+      "carol",
+      "dave"
+    ],
+    "plan_name": "1000",
+    "cumulative_month_count": 0,
+    "gift_message": ""
   }
 }
