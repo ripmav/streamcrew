@@ -26,7 +26,6 @@ import (
 // the result with the documented event model (plan 4.5, task 2).
 func TestEventContract(t *testing.T) {
 	alice := ident("alice", "Alice", "111000222")
-	aliceSub := ident("alice", "Alice", "111000222", role.Subscriber)
 	bob := ident("bob", "Bob", "111000333")
 	carol := ident("carol", "Carol", "111000444")
 
@@ -111,7 +110,7 @@ func TestEventContract(t *testing.T) {
 		{name: "channel.cheer", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchBitsCheer,
-			User:     aliceSub,
+			User:     alice,
 			Details: eventtype.Details{
 				Bits:    &eventtype.Bits{Amount: 100},
 				Message: &eventtype.Message{Text: "cheers"},
@@ -245,12 +244,11 @@ func TestEventContract(t *testing.T) {
 }
 
 // ident is the expected identity of a fixture user.
-func ident(login, display, id string, roles ...role.Role) *user.Identity {
+func ident(login, display, id string) *user.Identity {
 	return &user.Identity{
 		Platform:       platform.Twitch,
 		PlatformUserID: id,
 		Login:          login,
 		DisplayName:    display,
-		Roles:          role.NewSet(roles...),
 	}
 }

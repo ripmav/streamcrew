@@ -62,6 +62,11 @@ type Options struct {
 	// Logger logs the connection lifecycle (Code-ADR-0003); if nil,
 	// the log is discarded.
 	Logger *slog.Logger
+	// Session is called with the ID of every established session
+	// (after the session_welcome, also after every reconnect); nil
+	// discards the ID. The subscription manager uses it for the
+	// websocket transport of the subscriptions.
+	Session func(id string)
 }
 
 // TokenFunc supplies an access token for the connection.
@@ -79,10 +84,11 @@ type TokenFunc func(ctx context.Context) (string, error)
 // one connection at a time; a Client is not shared between
 // concurrent Runs.
 type Client struct {
-	base  string
-	token TokenFunc
-	httpc *http.Client
-	log   *slog.Logger
+	base      string
+	token     TokenFunc
+	httpc     *http.Client
+	log       *slog.Logger
+	onSession func(string)
 }
 
 // New creates a Client.
@@ -99,7 +105,7 @@ func New(o Options) *Client {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Client{base: base, token: o.Token, httpc: httpc, log: log}
+	return &Client{base: base, token: o.Token, httpc: httpc, log: log, onSession: o.Session}
 }
 
 // Run drives the connection until the context is canceled: connect,
@@ -200,6 +206,9 @@ func (c *Client) session(ctx context.Context, h Handler, dialURL string) (next, 
 	}
 	interval := time.Duration(seconds) * time.Second
 	c.log.InfoContext(ctx, "the eventsub session", "session", w.Session.ID, "keepalive", interval)
+	if c.onSession != nil {
+		c.onSession(w.Session.ID)
+	}
 
 	return c.loop(ctx, h, conn, interval)
 }
