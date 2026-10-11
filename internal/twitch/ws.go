@@ -275,7 +275,12 @@ func (c *Client) loop(ctx context.Context, h Handler, conn *websocket.Conn, inte
 					c.log.WarnContext(ctx, "drop an unreadable eventsub event", "error", err)
 					continue
 				}
-				e.ID = string(env.Payload)
+				// The dedup key is the event object, not the whole
+				// payload: the subscription shell (session ID, created
+				// at) changes on a reconnect, the event object (and its
+				// message ID) does not, so a redelivery is still the
+				// repeat it is (B22).
+				e.ID = string(e.Body)
 				h.OnMessage(ctx, e)
 			case "session_reconnect":
 				var r reconnect

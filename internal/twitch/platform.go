@@ -68,6 +68,13 @@ func (s *sessionState) current(ctx context.Context) (string, error) {
 	return s.id, nil
 }
 
+// peek is the currently reported ID, "" before the first report.
+func (s *sessionState) peek() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.id
+}
+
 // pollInterval is how often the platform asks for the state of the
 // streamer account while it is not connected (roadmap 4.3).
 const pollInterval = 5 * time.Second
@@ -121,6 +128,9 @@ type Platform struct {
 	mu          sync.Mutex
 	connected   bool
 	lastAccount AccountState
+	// sessions is the session state of the current session (nil
+	// outside of a session).
+	sessions *sessionState
 }
 
 // PlatformOptions configures NewPlatform.
@@ -282,6 +292,9 @@ func (p *Platform) session(ctx context.Context, st AccountState) error {
 		BaseURL:  p.helixBase,
 	})
 	sessions := newSessionState()
+	p.mu.Lock()
+	p.sessions = sessions
+	p.mu.Unlock()
 	mgr := NewManager(ManagerOptions{Helix: hc, AccountID: st.AccountID, Logger: p.log, SessionID: sessions.current})
 	dedup, err := connector.NewDedup(connector.DefaultDedupTTL)
 	if err != nil {
@@ -356,6 +369,18 @@ func (p *Platform) refreshEmotes(ctx context.Context, channel string) {
 			p.emotes.Refresh(ctx, channel)
 		}
 	}
+}
+
+// SessionID is the ID of the currently connected EventSub session
+// (from the session_welcome); empty outside of a session. The chaos
+// tests use it to address the client of the mock server.
+func (p *Platform) SessionID() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.sessions == nil {
+		return ""
+	}
+	return p.sessions.peek()
 }
 
 func (p *Platform) setConnected(v bool) {
