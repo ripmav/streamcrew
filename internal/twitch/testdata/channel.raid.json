@@ -1,0 +1,14 @@
+{
+  "id": "frame-004",
+  "event": {
+    "event_type": "channel.raid",
+    "version": "1",
+    "event": {
+      "from_user_id": "111000333",
+      "from_user_login": "bob",
+      "from_user_display_name": "Bob",
+      "from_user_profile_image_url": "https://static-cdn.jtvnw.net/user-badges/111000333-0/user/30/30",
+      "viewer_count": 7
+    }
+  }
+}
