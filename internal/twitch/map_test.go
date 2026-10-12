@@ -38,7 +38,7 @@ func (r *fakeReceiver) Message(_ context.Context, m connector.Incoming) error {
 	return nil
 }
 
-func (r *fakeReceiver) Join(_ context.Context, _ platform.Name, _ user.Identity) error {
+func (r *fakeReceiver) Join(_ context.Context, _ platform.Name, _ connector.Channel, _ user.Identity) error {
 	return nil
 }
 

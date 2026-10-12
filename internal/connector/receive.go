@@ -24,8 +24,9 @@ import (
 type Receiver interface {
 	// Message takes a chat message (B13).
 	Message(ctx context.Context, m Incoming) error
-	// Join takes that a user joined the chat without writing (B14).
-	Join(ctx context.Context, p platform.Name, who user.Identity) error
+	// Join takes that a user joined the chat of the channel ch (empty: the
+	// home channel) without writing (B14).
+	Join(ctx context.Context, p platform.Name, ch Channel, who user.Identity) error
 	// Event takes an event that is neither a chat message, nor a join, nor
 	// a change of the stream.
 	Event(ctx context.Context, e Event) error
@@ -38,6 +39,9 @@ type Receiver interface {
 type Incoming struct {
 	// Platform is the platform of the chat.
 	Platform platform.Name
+	// Channel is the channel the message came from (spec
+	// twitch-multi-channel.md, B5); empty for the home channel.
+	Channel Channel
 	// Author is the account that wrote it, with its roles in the channel.
 	Author user.Identity
 	// FromBot reports whether the bot account of the channel wrote it; such
@@ -52,6 +56,9 @@ type Incoming struct {
 type Event struct {
 	// Platform is the platform it happened on.
 	Platform platform.Name
+	// Channel is the channel it happened in (spec twitch-multi-channel.md,
+	// B5); empty for the home channel.
+	Channel Channel
 	// Type is a type of the catalog: one of the platform, or a
 	// platform-neutral one for a platform without its own types, such as
 	// the mock platform (B2).

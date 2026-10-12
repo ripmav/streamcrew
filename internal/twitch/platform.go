@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
@@ -131,6 +133,15 @@ type Platform struct {
 	// sessions is the session state of the current session (nil
 	// outside of a session).
 	sessions *sessionState
+	// chMu guards chIDs and chatLim.
+	chMu sync.Mutex
+	// chIDs is the resolved broadcaster IDs of the additional channels,
+	// keyed by their lowercase login (spec twitch-multi-channel.md, B4).
+	chIDs map[string]string
+	// chatLim is the per-channel chat send limiter, keyed by the channel's
+	// lowercase login (empty for the home channel); each channel has its
+	// own bucket (spec twitch-multi-channel.md, B9).
+	chatLim map[string]*rate.Limiter
 }
 
 // PlatformOptions configures NewPlatform.
@@ -180,6 +191,8 @@ func NewPlatform(o PlatformOptions) *Platform {
 		log:        log,
 		poll:       o.Poll,
 		emotes:     o.Emotes,
+		chIDs:      make(map[string]string),
+		chatLim:    make(map[string]*rate.Limiter),
 	}
 }
 

@@ -112,6 +112,32 @@ func TestMessageOrder(t *testing.T) {
 	assert.Equal(t, []string{"chat.message"}, f.engine.runs())
 }
 
+// TestMessageCarriesChannel covers spec twitch-multi-channel.md, B5 and B6:
+// the channel of a message travels through the event to the parameters of
+// every run it triggers.
+func TestMessageCarriesChannel(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, on(eventtype.ChatMessage), chat("hug", "hug"))
+	ctx := t.Context()
+	ada := account(platform.Mock, "ada")
+
+	// a message from an additional channel
+	m := message(ada, "m1", "!hug bob")
+	m.Channel = "other"
+	require.NoError(t, f.service.Message(ctx, m))
+	reqs := f.engine.take()
+	require.Len(t, reqs, 2)
+	assert.Equal(t, "other", reqs[0].Params.Channel, "the event run gets the channel")
+	assert.Equal(t, "other", reqs[1].Params.Channel, "the chat run gets the channel")
+	assert.Equal(t, "!hug bob", reqs[1].Params.Message)
+
+	// a message from the home channel keeps an empty channel
+	require.NoError(t, f.service.Message(ctx, message(ada, "m2", "hello")))
+	reqs = f.engine.take()
+	require.Len(t, reqs, 1)
+	assert.Empty(t, reqs[0].Params.Channel, "the home channel stays empty")
+}
+
 // TestBotMessage covers B28: the bot's messages trigger nothing.
 func TestBotMessage(t *testing.T) {
 	t.Parallel()
@@ -152,12 +178,12 @@ func TestJoin(t *testing.T) {
 	ctx := t.Context()
 	require.NoError(t, f.service.Stream(ctx, platform.Mock, true))
 	ada := account(platform.Mock, "ada")
-	require.NoError(t, f.service.Join(ctx, platform.Mock, ada))
+	require.NoError(t, f.service.Join(ctx, platform.Mock, "", ada))
 	assert.Equal(t, []string{"chat.user.new", "chat.user.join"}, f.engine.runs())
 	require.NoError(t, f.service.Message(ctx, message(ada, "m1", "hi")))
 	assert.Equal(t, []string{"chat.message", "chat.user.first_message", "chat.user.entrance"}, f.engine.runs())
 
-	require.Error(t, f.service.Join(ctx, platform.Twitch, ada), "an account of another platform")
+	require.Error(t, f.service.Join(ctx, platform.Twitch, "", ada), "an account of another platform")
 }
 
 // TestOncePerSession covers B3, B11 and B20: a second follow of the same
@@ -575,7 +601,7 @@ func TestStopped(t *testing.T) {
 	ada := account(platform.Mock, "ada")
 	require.ErrorIs(t, f.service.Stream(ctx, platform.Mock, true), eventservice.ErrStopped)
 	require.ErrorIs(t, f.service.Message(ctx, message(ada, "m1", "hi")), eventservice.ErrStopped)
-	require.ErrorIs(t, f.service.Join(ctx, platform.Mock, ada), eventservice.ErrStopped)
+	require.ErrorIs(t, f.service.Join(ctx, platform.Mock, "", ada), eventservice.ErrStopped)
 	require.ErrorIs(t, f.service.Event(ctx, connector.Event{Platform: platform.Mock, Type: eventtype.ChannelFollow, User: &ada}), eventservice.ErrStopped)
 	require.ErrorIs(t, f.service.Run(ctx), eventservice.ErrAlreadyRunning)
 }

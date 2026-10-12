@@ -268,6 +268,9 @@ type delivery struct {
 // account B61 says (B62, B64, B67); it fails if a target fails, and the
 // others keep the message (B66).
 func send(ctx context.Context, p engine.Params, targets []connector.Platform, m connector.Message, d delivery) error {
+	// The run's channel (spec twitch-multi-channel.md, B6): empty for a run
+	// without one, which the platforms read as the home channel.
+	m.Channel = connector.Channel(p.Channel)
 	errs := make([]error, len(targets))
 	var wg sync.WaitGroup
 	for i, target := range targets {
@@ -299,6 +302,7 @@ func (d delivery) replies(name platform.Name, p engine.Params) bool {
 // and otherwise the account the platform reports. It fails if a target
 // fails, and if no target whispered.
 func (c Chat) whisper(ctx context.Context, run *engine.Run, targets []connector.Platform, text, recipient string) error {
+	ch := connector.Channel(run.Params().Channel)
 	errs := make([]error, len(targets))
 	sent := make([]bool, len(targets))
 	var wg sync.WaitGroup
@@ -309,7 +313,7 @@ func (c Chat) whisper(ctx context.Context, run *engine.Run, targets []connector.
 				"platform", target.Name())
 			continue
 		}
-		m := connector.Message{Text: text, From: target.Status().Sender(c.AsStreamer)}
+		m := connector.Message{Text: text, From: target.Status().Sender(c.AsStreamer), Channel: ch}
 		wg.Go(func() {
 			to, err := connector.FindAccount(ctx, run, target, recipient)
 			if errors.Is(err, connector.ErrUnknownUser) {

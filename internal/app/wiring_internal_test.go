@@ -28,10 +28,12 @@ import (
 // nopReceiver takes what the mock platform hands over without doing anything.
 type nopReceiver struct{}
 
-func (nopReceiver) Message(context.Context, connector.Incoming) error        { return nil }
-func (nopReceiver) Join(context.Context, platform.Name, user.Identity) error { return nil }
-func (nopReceiver) Event(context.Context, connector.Event) error             { return nil }
-func (nopReceiver) Stream(context.Context, platform.Name, bool) error        { return nil }
+func (nopReceiver) Message(context.Context, connector.Incoming) error { return nil }
+func (nopReceiver) Join(context.Context, platform.Name, connector.Channel, user.Identity) error {
+	return nil
+}
+func (nopReceiver) Event(context.Context, connector.Event) error      { return nil }
+func (nopReceiver) Stream(context.Context, platform.Name, bool) error { return nil }
 
 // openStore returns a store in a temporary directory, closed with the test.
 func openStore(t *testing.T) *store.Store {

@@ -46,6 +46,9 @@ type Call struct {
 	Op Op
 	// From is the account of a message.
 	From connector.Account
+	// Channel is the channel the operation acts on; empty for the home
+	// channel.
+	Channel string
 	// Text is the text of a message.
 	Text string
 	// MessageID is the message a reply answers or Delete deletes.
@@ -236,19 +239,19 @@ type chat struct {
 }
 
 func (c chat) Send(ctx context.Context, m connector.Message) error {
-	return c.p.record(ctx, Call{Op: OpSend, From: m.From, Text: m.Text})
+	return c.p.record(ctx, Call{Op: OpSend, From: m.From, Channel: string(m.Channel), Text: m.Text})
 }
 
-func (c chat) Delete(ctx context.Context, messageID string) error {
-	return c.p.record(ctx, Call{Op: OpDelete, MessageID: messageID})
+func (c chat) Delete(ctx context.Context, ch connector.Channel, messageID string) error {
+	return c.p.record(ctx, Call{Op: OpDelete, Channel: string(ch), MessageID: messageID})
 }
 
 func (c chat) reply(ctx context.Context, messageID string, m connector.Message) error {
-	return c.p.record(ctx, Call{Op: OpReply, From: m.From, Text: m.Text, MessageID: messageID})
+	return c.p.record(ctx, Call{Op: OpReply, From: m.From, Channel: string(m.Channel), Text: m.Text, MessageID: messageID})
 }
 
 func (c chat) whisper(ctx context.Context, to user.Identity, m connector.Message) error {
-	return c.p.record(ctx, Call{Op: OpWhisper, From: m.From, Text: m.Text, Target: to.Login})
+	return c.p.record(ctx, Call{Op: OpWhisper, From: m.From, Channel: string(m.Channel), Text: m.Text, Target: to.Login})
 }
 
 // replyChat is a chat with replies.
@@ -281,32 +284,32 @@ type moderation struct {
 	p *Platform
 }
 
-func (m moderation) Timeout(ctx context.Context, target user.Identity, d time.Duration, reason string) error {
-	return m.p.record(ctx, Call{Op: OpTimeout, Target: target.Login, Duration: d, Reason: reason})
+func (m moderation) Timeout(ctx context.Context, ch connector.Channel, target user.Identity, d time.Duration, reason string) error {
+	return m.p.record(ctx, Call{Op: OpTimeout, Channel: string(ch), Target: target.Login, Duration: d, Reason: reason})
 }
 
-func (m moderation) Purge(ctx context.Context, target user.Identity) error {
-	return m.p.record(ctx, Call{Op: OpPurge, Target: target.Login})
+func (m moderation) Purge(ctx context.Context, ch connector.Channel, target user.Identity) error {
+	return m.p.record(ctx, Call{Op: OpPurge, Channel: string(ch), Target: target.Login})
 }
 
-func (m moderation) ClearChat(ctx context.Context) error {
-	return m.p.record(ctx, Call{Op: OpClearChat})
+func (m moderation) ClearChat(ctx context.Context, ch connector.Channel) error {
+	return m.p.record(ctx, Call{Op: OpClearChat, Channel: string(ch)})
 }
 
-func (m moderation) Ban(ctx context.Context, target user.Identity, reason string) error {
-	return m.p.record(ctx, Call{Op: OpBan, Target: target.Login, Reason: reason})
+func (m moderation) Ban(ctx context.Context, ch connector.Channel, target user.Identity, reason string) error {
+	return m.p.record(ctx, Call{Op: OpBan, Channel: string(ch), Target: target.Login, Reason: reason})
 }
 
-func (m moderation) Unban(ctx context.Context, target user.Identity) error {
-	return m.p.record(ctx, Call{Op: OpUnban, Target: target.Login})
+func (m moderation) Unban(ctx context.Context, ch connector.Channel, target user.Identity) error {
+	return m.p.record(ctx, Call{Op: OpUnban, Channel: string(ch), Target: target.Login})
 }
 
-func (m moderation) Mod(ctx context.Context, target user.Identity) error {
-	return m.p.record(ctx, Call{Op: OpMod, Target: target.Login})
+func (m moderation) Mod(ctx context.Context, ch connector.Channel, target user.Identity) error {
+	return m.p.record(ctx, Call{Op: OpMod, Channel: string(ch), Target: target.Login})
 }
 
-func (m moderation) Unmod(ctx context.Context, target user.Identity) error {
-	return m.p.record(ctx, Call{Op: OpUnmod, Target: target.Login})
+func (m moderation) Unmod(ctx context.Context, ch connector.Channel, target user.Identity) error {
+	return m.p.record(ctx, Call{Op: OpUnmod, Channel: string(ch), Target: target.Login})
 }
 
 // users finds the accounts tests added.

@@ -50,7 +50,7 @@ func (r *receiver) Message(_ context.Context, m connector.Incoming) error {
 	return r.err
 }
 
-func (r *receiver) Join(_ context.Context, p platform.Name, who user.Identity) error {
+func (r *receiver) Join(_ context.Context, p platform.Name, _ connector.Channel, who user.Identity) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if p != platform.Mock {
@@ -264,7 +264,7 @@ func TestNotConnected(t *testing.T) {
 	require.ErrorIs(t, err, connector.ErrNotConnected)
 	err = p.Chat().Send(ctx, connector.Message{Text: "hi", From: connector.AccountStreamer})
 	require.ErrorIs(t, err, connector.ErrNotConnected)
-	require.ErrorIs(t, p.Moderation().ClearChat(ctx), connector.ErrNotConnected)
+	require.ErrorIs(t, p.Moderation().ClearChat(ctx, ""), connector.ErrNotConnected)
 }
 
 func TestJoin(t *testing.T) {
@@ -346,7 +346,7 @@ func TestChat(t *testing.T) {
 		alice, err := p.AddUser(mock.UserSpec{Login: "alice"})
 		require.NoError(t, err)
 		require.NoError(t, chat.(connector.Whisperer).Whisper(ctx, alice, connector.Message{Text: "psst", From: connector.AccountStreamer}))
-		require.NoError(t, chat.Delete(ctx, "m1"))
+		require.NoError(t, chat.Delete(ctx, "", "m1"))
 
 		assert.Equal(t, []mock.Output{
 			{Op: mock.OpSend, From: connector.AccountStreamer, Text: "hi"},
@@ -366,19 +366,19 @@ func TestModeration(t *testing.T) {
 		alice, err := p.AddUser(mock.UserSpec{Login: "alice"})
 		require.NoError(t, err)
 
-		require.NoError(t, mod.Timeout(ctx, alice, time.Minute, "spam"))
-		require.NoError(t, mod.Mod(ctx, alice))
+		require.NoError(t, mod.Timeout(ctx, "", alice, time.Minute, "spam"))
+		require.NoError(t, mod.Mod(ctx, "", alice))
 		got, _ := p.User("ALICE")
 		assert.True(t, got.Roles.Has(role.Moderator))
-		require.NoError(t, mod.Unmod(ctx, alice))
+		require.NoError(t, mod.Unmod(ctx, "", alice))
 		got, _ = p.User("alice")
 		assert.False(t, got.Roles.Has(role.Moderator))
-		require.NoError(t, mod.Ban(ctx, alice, ""))
-		require.NoError(t, mod.Unban(ctx, alice))
-		require.NoError(t, mod.Purge(ctx, alice))
-		require.NoError(t, mod.ClearChat(ctx))
-		require.ErrorIs(t, mod.Timeout(ctx, p.Streamer(), time.Minute, ""), connector.ErrRefused)
-		require.Error(t, mod.Timeout(ctx, alice, 0, ""))
+		require.NoError(t, mod.Ban(ctx, "", alice, ""))
+		require.NoError(t, mod.Unban(ctx, "", alice))
+		require.NoError(t, mod.Purge(ctx, "", alice))
+		require.NoError(t, mod.ClearChat(ctx, ""))
+		require.ErrorIs(t, mod.Timeout(ctx, "", p.Streamer(), time.Minute, ""), connector.ErrRefused)
+		require.Error(t, mod.Timeout(ctx, "", alice, 0, ""))
 
 		assert.Equal(t, []mock.Output{
 			{Op: mock.OpTimeout, Target: "alice", Duration: polydoc.Duration(time.Minute), Reason: "spam"},

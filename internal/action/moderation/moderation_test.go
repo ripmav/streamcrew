@@ -339,6 +339,27 @@ func TestOnPlatform(t *testing.T) {
 	})
 }
 
+// TestModerationCarriesChannel covers spec twitch-multi-channel.md, B6: the
+// moderation acts on the channel of the run.
+func TestModerationCarriesChannel(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		f.store.add(0, f.twitch.Account("bob"))
+		p := onTwitch()
+		p.Channel = "other"
+		in := f.start(p,
+			f.action(`{"kind":"timeout","user":"bob","seconds":60}`),
+			f.action(`{"kind":"clear_chat"}`),
+		)
+		assert.Empty(t, in.Errors)
+		assert.Equal(t, []connectortest.Call{
+			{Op: connectortest.OpTimeout, Channel: "other", Target: "bob", Duration: time.Minute},
+			{Op: connectortest.OpClearChat, Channel: "other"},
+		}, f.twitch.Calls())
+	})
+}
+
 // TestUnknownUser covers actions.md B81: a user who is neither known nor
 // on the platform lets the action fail.
 func TestUnknownUser(t *testing.T) {

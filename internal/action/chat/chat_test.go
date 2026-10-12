@@ -229,6 +229,22 @@ func TestSend(t *testing.T) {
 	})
 }
 
+// TestSendCarriesChannel covers spec twitch-multi-channel.md, B6: the chat
+// message the action sends goes to the channel of the run.
+func TestSendCarriesChannel(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		p := chatParams()
+		p.Channel = "other"
+		in := f.start(p, f.message("Hello $username"))
+		assert.Empty(t, in.Errors)
+		assert.Equal(t, []connectortest.Call{
+			{Op: connectortest.OpSend, From: connector.AccountBot, Channel: "other", Text: "Hello alice"},
+		}, f.twitch.Calls())
+	})
+}
+
 // TestNoPlatform covers actions.md B62: without a connected platform
 // nothing is sent, the core logs it, and the action does not fail.
 func TestNoPlatform(t *testing.T) {

@@ -49,14 +49,14 @@ func (s *Service) Message(ctx context.Context, m connector.Incoming) error {
 	if err != nil {
 		return fmt.Errorf("chat message: %w", err)
 	}
-	if err := s.seeLocked(ctx, m.Platform, u); err != nil {
+	if err := s.seeLocked(ctx, m.Platform, m.Channel, u); err != nil {
 		return fmt.Errorf("chat message: %w", err)
 	}
 	msg := m.Message
-	payload := eventtype.Payload{Platform: m.Platform, User: &u, Details: eventtype.Details{Message: &msg}}
+	payload := eventtype.Payload{Platform: m.Platform, Channel: string(m.Channel), User: &u, Details: eventtype.Details{Message: &msg}}
 	s.fire(ctx, m.Platform, eventtype.ChatMessage, payload)
 
-	chat := chatParams(m.Platform, &u, msg)
+	chat := chatParams(m.Platform, m.Channel, &u, msg)
 	if err := s.recognizeLocked(ctx, msg.Text, chat); err != nil {
 		return fmt.Errorf("chat message: %w", err)
 	}
@@ -76,7 +76,7 @@ func (s *Service) Message(ctx context.Context, m connector.Incoming) error {
 
 // Join implements connector.Receiver (B14): it fires "chat.user.new" and
 // "chat.user.join" as a message does, but greets nobody.
-func (s *Service) Join(ctx context.Context, p platform.Name, who user.Identity) error {
+func (s *Service) Join(ctx context.Context, p platform.Name, ch connector.Channel, who user.Identity) error {
 	if err := checkAccount(p, who); err != nil {
 		return fmt.Errorf("join: %w", err)
 	}
@@ -89,7 +89,7 @@ func (s *Service) Join(ctx context.Context, p platform.Name, who user.Identity) 
 	if err != nil {
 		return fmt.Errorf("join: %w", err)
 	}
-	if err := s.seeLocked(ctx, p, u); err != nil {
+	if err := s.seeLocked(ctx, p, ch, u); err != nil {
 		return fmt.Errorf("join: %w", err)
 	}
 	return nil
@@ -98,8 +98,8 @@ func (s *Service) Join(ctx context.Context, p platform.Name, who user.Identity) 
 // seeLocked fires what seeing u in the chat of p fires (B11, B13):
 // "chat.user.new" the first time ever, "chat.user.join" the first time in
 // the session. s.mu is held.
-func (s *Service) seeLocked(ctx context.Context, p platform.Name, u user.User) error {
-	payload := eventtype.Payload{Platform: p, User: &u}
+func (s *Service) seeLocked(ctx context.Context, p platform.Name, ch connector.Channel, u user.User) error {
+	payload := eventtype.Payload{Platform: p, Channel: string(ch), User: &u}
 	first, err := s.ports.Store.FirstForUser(ctx, u.ID, eventtype.ChatUserNew)
 	if err != nil {
 		return err
@@ -181,7 +181,7 @@ func (s *Service) Event(ctx context.Context, e connector.Event) error {
 	if s.closed {
 		return fmt.Errorf("event %s: %w", e.Type, ErrStopped)
 	}
-	payload := eventtype.Payload{Platform: e.Platform, Details: e.Details}
+	payload := eventtype.Payload{Platform: e.Platform, Channel: string(e.Channel), Details: e.Details}
 	if payload.User, err = s.resolveOptional(ctx, e.User); err != nil {
 		return fmt.Errorf("event %s: %w", e.Type, err)
 	}
@@ -361,7 +361,7 @@ func (s *Service) fireChannelPoints(ctx context.Context, payload eventtype.Paylo
 // params returns the parameters of the event command of an event of type
 // t (B12; command-engine.md, B80, B81).
 func params(t event.Type, payload eventtype.Payload) engine.Params {
-	p := engine.Params{Platform: payload.Platform, User: payload.User, Target: payload.Target, Values: values(t, payload.Details)}
+	p := engine.Params{Platform: payload.Platform, Channel: payload.Channel, User: payload.User, Target: payload.Target, Values: values(t, payload.Details)}
 	neutral := t
 	if d, ok := eventtype.Lookup(t); ok && d.Neutral != "" {
 		neutral = d.Neutral
@@ -369,7 +369,7 @@ func params(t event.Type, payload eventtype.Payload) engine.Params {
 	switch m := payload.Details.Message; neutral {
 	case eventtype.ChatMessage, eventtype.ChatUserEntrance, eventtype.ChatUserFirstMessage:
 		if m != nil {
-			chat := chatParams(payload.Platform, payload.User, *m)
+			chat := chatParams(payload.Platform, connector.Channel(payload.Channel), payload.User, *m)
 			p.Message, p.MessageID, p.Emotes = chat.Message, chat.MessageID, chat.Emotes
 		}
 	default:
@@ -451,10 +451,10 @@ func values(t event.Type, d eventtype.Details) map[string]template.Value {
 	return v
 }
 
-// chatParams returns the parameters of a run for the chat message m of the
-// user u on platform p.
-func chatParams(p platform.Name, u *user.User, m eventtype.Message) engine.Params {
-	return engine.Params{Platform: p, User: u, Message: m.Text, MessageID: m.ID, Emotes: m.Emotes}
+// chatParams returns the parameters of a run for the chat message m of
+// the user u on channel ch of platform p.
+func chatParams(p platform.Name, ch connector.Channel, u *user.User, m eventtype.Message) engine.Params {
+	return engine.Params{Platform: p, Channel: string(ch), User: u, Message: m.Text, MessageID: m.ID, Emotes: m.Emotes}
 }
 
 // resolve returns the user of the account ident, created if new; with
