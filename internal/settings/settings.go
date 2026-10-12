@@ -6,8 +6,10 @@
 // a section that was never saved has its defaults.
 //
 // There are the sections "backups" and "time" (roadmap 2.2), "commands"
-// (roadmap 3.2) and "locale" (roadmap 3.4, ADR-0022); the others (general,
-// chat, moderation, overlay) follow with their features.
+// (roadmap 3.2) and "locale" (roadmap 3.4, ADR-0022); "channels"
+// (roadmap 4.6) names the channels the bot operates in besides the home
+// channel; the others (general, chat, moderation, overlay) follow with
+// their features.
 package settings
 
 import (
@@ -53,6 +55,7 @@ func New(repo Repository) (*Service, error) {
 		{Type: sectionLocale, Version: 2, Decode: decode[Locale], Migrations: []polydoc.Migration{migrateLocaleV1}},
 		{Type: sectionEvents, Version: 1, Decode: decode[Events]},
 		{Type: sectionChannelPoints, Version: 1, Decode: decode[ChannelPoints]},
+		{Type: sectionChannels, Version: 1, Decode: decode[Channels]},
 	} {
 		if err := r.Register(e); err != nil {
 			return nil, err
@@ -115,6 +118,7 @@ const (
 	sectionLocale        = "locale"
 	sectionEvents        = "events"
 	sectionChannelPoints = "channelPoints"
+	sectionChannels      = "channels"
 )
 
 // Limits of the section "events" (spec events.md, B5, B8, B10).
@@ -217,6 +221,56 @@ func (c ChannelPoints) validate() error {
 		rewards[r.RewardID] = r.Command
 	}
 	return nil
+}
+
+// Channels configures the channels the bot operates in besides the home
+// channel (spec twitch-multi-channel.md, B1, roadmap 4.6). The home
+// channel — the channel of the streamer account — is operated implicitly
+// and must not be listed; an entry that names it is not an additional
+// channel, so the adapter leaves it out with a warning (B3).
+type Channels struct {
+	// Additional is the list of the logins of the additional channels,
+	// in the order they were added; empty for none.
+	Additional []string `json:"additional"`
+}
+
+// DefaultChannels returns the default of the section: no additional
+// channel, only the home channel is operated.
+func DefaultChannels() Channels {
+	return Channels{}
+}
+
+// DocType implements polydoc.Document.
+func (Channels) DocType() string { return sectionChannels }
+
+// Validate checks the section: no empty entries and no duplicates; the
+// logins compare case-insensitively, as on the platform.
+func (c Channels) Validate() error { return c.validate() }
+
+func (c Channels) validate() error {
+	seen := make(map[string]bool, len(c.Additional))
+	for _, login := range c.Additional {
+		if login == "" {
+			return errors.New("an empty channel login")
+		}
+		key := strings.ToLower(login)
+		if seen[key] {
+			return fmt.Errorf("the channel %q is listed more than once", login)
+		}
+		seen[key] = true
+	}
+	return nil
+}
+
+// Contains reports whether login is one of the additional channels; the
+// logins compare case-insensitively, as on the platform.
+func (c Channels) Contains(login string) bool {
+	for _, l := range c.Additional {
+		if strings.EqualFold(l, login) {
+			return true
+		}
+	}
+	return false
 }
 
 // LocaleSystem names the locale of the environment the core runs in, as
