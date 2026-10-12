@@ -72,6 +72,16 @@ Empfangs-Vorgaben je EventSub-Topic (Abschnitt „Offene Fragen“, E2E).
 - Die Shared-Chat-Ereignisse in zusätzlichen Channels (ob der Bot sie als
   Moderator erhält).
 
+Abdeckungsstand (2026-10-12): Die twitch-cli-Mock-Server stellen einen
+Broadcaster pro Umgebung dar, die Empfangs-Vorgaben je Topic lassen sich
+gegen sie nicht prüfen; sie werden im manuellen E2E auf echten Kanälen
+verifiziert. Automatisch abgedeckt sind stattdessen: der Mod-Check und
+das Nicht-Betreiben fehlender oder entzogener Channels (B2, B3, B11,
+B12), der Subscription-Sollzustand je Channel×Topic ohne die
+Stream-Events (B10), die Channel-Dimension in den Eingängen und dem
+Routing (B5, B6, B14), das Ownership-Gate (B7, B13) und die
+Send-Buckets je Channel (B9).
+
 ## Akzeptanzkriterien
 
 - [ ] B1: die Sektion `channels` akzeptiert Login-Listen und lehnt leere, doppelte und den eigenen Channel ab
@@ -95,3 +105,4 @@ Empfangs-Vorgaben je EventSub-Topic (Abschnitt „Offene Fragen“, E2E).
 | Datum | Änderung |
 |---|---|
 | 2026-10-12 | Erstellt für Phase 4.6: Voraussetzung und Prüfung (B1–B3), Token-Zuordnung (B4), Channel-Dimension (B5–B7, B9), geteilte Konfiguration (B8, B10), Randfälle (B11–B14), Abweichung A1, E2E-Fragen. |
+| 2026-10-12 | Abdeckungsstand der offenen Fragen dokumentiert: die twitch-cli-Mock-Server stellen einen Broadcaster pro Umgebung dar, die je-Topic-Empfangs-Vorgaben bleiben das manuelle E2E; automatisch abgedeckt sind Mod-Check, Nicht-Betreiben fehlender Channels, Sollzustand je Channel×Topic, Channel-Dimension und Routing, Ownership-Gate und Send-Buckets je Channel. |
