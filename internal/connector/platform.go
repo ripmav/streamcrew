@@ -31,6 +31,10 @@ var (
 	// ErrUnknownUser is returned when the platform has no account with the
 	// login name or ID.
 	ErrUnknownUser = errors.New("unknown user")
+	// ErrUnknownChannel is returned for a channel the platform does not
+	// operate (spec twitch-multi-channel.md, B1): neither the home channel
+	// nor a configured additional channel.
+	ErrUnknownChannel = errors.New("unknown channel")
 	// ErrRefused is wrapped by the error of an operation the platform
 	// refused, e.g. for lack of rights or because the target is the
 	// streamer; the error text has the reason of the platform (actions.md
