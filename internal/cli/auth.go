@@ -47,6 +47,11 @@ type authLoginCmd struct {
 	// flows is replaced by the tests; the real flows are the ones of the
 	// platforms.
 	flows func(p platform.Name, c auth.Credentials) (auth.Flow, error)
+
+	// builtIn is the built-in app port of the command (ADR-0024); without
+	// it, the built-in app of the binary is used. The tests replace it to
+	// simulate a build without the sealed record.
+	builtIn func(p platform.Name) (auth.Credentials, bool)
 }
 
 // Run logs in the account (ADR-0023): by default it starts the
@@ -91,7 +96,11 @@ func (c authLoginCmd) Run(ctx context.Context, e *Env) (err error) {
 	if flows == nil {
 		flows = realFlows()
 	}
-	svc, err := authService(s, ks, flows)
+	builtIn := app.EmbeddedApp
+	if c.builtIn != nil {
+		builtIn = c.builtIn
+	}
+	svc, err := authService(s, ks, flows, builtIn)
 	if err != nil {
 		return err
 	}
@@ -161,7 +170,7 @@ func (c authStatusCmd) Run(ctx context.Context, e *Env) error {
 		return fmt.Errorf("vault key: %w", err)
 	}
 
-	svc, err := authService(readonlyStore{ro: ro}, ks, noFlows)
+	svc, err := authService(readonlyStore{ro: ro}, ks, noFlows, app.EmbeddedApp)
 	if err != nil {
 		return err
 	}
@@ -196,6 +205,11 @@ type authLogoutCmd struct {
 	// flows is replaced by the tests; the real flows are the ones of the
 	// platforms.
 	flows func(p platform.Name, c auth.Credentials) (auth.Flow, error)
+
+	// builtIn is the built-in app port of the command (ADR-0024); without
+	// it, the built-in app of the binary is used. The tests replace it to
+	// simulate a build without the sealed record.
+	builtIn func(p platform.Name) (auth.Credentials, bool)
 }
 
 // Run revokes the token of the account at the platform with the client of
@@ -238,7 +252,11 @@ func (c authLogoutCmd) Run(ctx context.Context, e *Env) (err error) {
 	if flows == nil {
 		flows = realFlows()
 	}
-	svc, err := authService(s, ks, flows)
+	builtIn := app.EmbeddedApp
+	if c.builtIn != nil {
+		builtIn = c.builtIn
+	}
+	svc, err := authService(s, ks, flows, builtIn)
 	if err != nil {
 		return err
 	}
@@ -264,13 +282,14 @@ func (c authLogoutCmd) Run(ctx context.Context, e *Env) (err error) {
 
 // authService is the auth service of the CLI commands over the profile
 // store; the tokens join the transactions of the store through the vault
-// factory (Code-ADR-0008). The commands publish no auth events.
-func authService(st auth.Store, ks *vault.KeySet, flows func(p platform.Name, c auth.Credentials) (auth.Flow, error)) (*auth.Service, error) {
+// factory (Code-ADR-0008). The commands publish no auth events. builtIn
+// is the built-in app port (ADR-0024); nil disables it.
+func authService(st auth.Store, ks *vault.KeySet, flows func(p platform.Name, c auth.Credentials) (auth.Flow, error), builtIn func(p platform.Name) (auth.Credentials, bool)) (*auth.Service, error) {
 	return auth.New(auth.Ports{
 		Store:    st,
 		Vault:    func(repo vault.Repository) *vault.Vault { return vault.New(repo, ks) },
 		Flows:    flows,
-		Embedded: app.EmbeddedApp,
+		Embedded: builtIn,
 		Logger:   discardLogger(),
 	})
 }
