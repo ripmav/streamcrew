@@ -6,6 +6,7 @@
 | **Datum** | 2026-10-08 |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Plan §6.12, §7, §10; Roadmap Phase 4 (4.1); [ADR-0003](0003-betriebsmodi.md), [ADR-0004](0004-plattformumfang-zum-start.md), [ADR-0012](0012-persistenz.md), [ADR-0013](0013-sicherheitsmodell.md), [ADR-0014](0014-oauth-und-app-credentials.md); [Code-ADR-0008](code/0008-datenbankzugriff.md), [Code-ADR-0019](code/0019-host-rechte-in-der-startkonfiguration.md) |
+| **Ergänzt durch** | [ADR-0024](0024-eingebaute-twitch-app.md) (eingebaute Standard-App statt BYO-Pflicht; Redirect-URL mit Pfad; Refresh ohne Secret) |
 
 ## Kontext
 

@@ -49,5 +49,6 @@ Ergänzend:
 | [0014](0014-oauth-und-app-credentials.md) | OAuth und App-Credentials | Abgelöst durch ADR-0023 | 2026-10-07 |
 | [0022](0022-internationalisierung.md) | Internationalisierung | Akzeptiert | 2026-10-02 |
 | [0023](0023-twitch-login-authorization-code-flow.md) | Twitch-Login per Authorization Code Flow | Akzeptiert | 2026-10-08 |
+| [0024](0024-eingebaute-twitch-app.md) | Eingebaute Twitch-App für den Login | Akzeptiert | 2026-10-11 |
 
 Die geplanten ADRs stehen im ADR-Backlog von [`plan.md`](../plan.md) (§12).
