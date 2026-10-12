@@ -67,6 +67,13 @@ func newFakeLoginFlow(scopes string) *fakeLoginFlow {
 	}
 }
 
+// noBuiltInApp is the embedded port of a build without the sealed record
+// of the built-in app (ADR-0024); the tests use it so that the "no app"
+// premise stays independent of the activation state of the built-in app.
+func noBuiltInApp(platform.Name) (auth.Credentials, bool) {
+	return auth.Credentials{}, false
+}
+
 // flows is the flows port of the command for the fake; it remembers the
 // credentials of every flow it makes, so that the tests can check which app
 // a call was made with.
@@ -325,7 +332,7 @@ func TestAuthLoginErrors(t *testing.T) {
 		env, _ := authEnv(ctx, t)
 		flow := newFakeLoginFlow(strings.Join(auth.Scopes, " "))
 		env.Stdout, env.Stderr = &syncedLog{}, &syncedLog{}
-		err := authLoginCmd{Platform: "twitch", flows: flow.flows()}.Run(ctx, env)
+		err := authLoginCmd{Platform: "twitch", flows: flow.flows(), builtIn: noBuiltInApp}.Run(ctx, env)
 		assert.ErrorContains(t, err, "no app for the login")
 	})
 
