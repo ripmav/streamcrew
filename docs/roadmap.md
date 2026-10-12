@@ -577,7 +577,7 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 
 ### 4.6 Zusätzliche Kanäle (Multi-Channel)
 
-- [ ] Settings-Sektion „channels": Kanäle, in denen der Bot zusätzlich arbeitet — kein zusätzlicher Login, die einzige Voraussetzung ist der Moderator-Status des Bot-Kontos ([Plan](../superpowers/plans/2026-10-12-twitch-multi-channel.md)) (S)
+- [ ] Settings-Sektion „channels": Kanäle, in denen der Bot zusätzlich arbeitet — kein zusätzlicher Login, die einzige Voraussetzung ist der Moderator-Status des Bot-Kontos ([Plan](superpowers/plans/2026-10-12-twitch-multi-channel.md)) (S)
 - [ ] Channel-Dimension in den Connector-Ports und Engine-Routing: ereignisgetriggerte Aktionen wirken auf den Channel des auslösenden Events, Aktionen ohne Kontext auf dem eigenen Channel (M)
 - [ ] Multi-Channel-EventSub: Subscriptions für die zusätzlichen Kanäle und WS-Transport mit dem Bot-Token; Mod-Check über Helix mit Status-Warnung (L)
 - [ ] Chat, Chat löschen und Moderation in den zusätzlichen Kanälen über das Bot-Konto; Emote-Kataloge je Channel (M)
