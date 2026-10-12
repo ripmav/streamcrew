@@ -38,6 +38,13 @@ func (r *fakeReceiver) Message(_ context.Context, m connector.Incoming) error {
 	return nil
 }
 
+// received is a copy of the received messages.
+func (r *fakeReceiver) received() []connector.Incoming {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]connector.Incoming(nil), r.messages...)
+}
+
 func (r *fakeReceiver) Join(_ context.Context, _ platform.Name, _ connector.Channel, _ user.Identity) error {
 	return nil
 }

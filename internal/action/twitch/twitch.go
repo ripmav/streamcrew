@@ -485,6 +485,12 @@ func (t Twitch) Perform(ctx context.Context, run *engine.Run) error {
 	if ports == nil {
 		return errors.New("twitch action: no ports (catalog action)")
 	}
+	// Ownership gate (spec twitch-multi-channel.md, B7): the twitch
+	// operations act on the streamer channel only; a run from another
+	// channel names the channel instead of acting on someone else's stream.
+	if ch := run.Params().Channel; ch != "" {
+		return field("channel", fmt.Errorf("%w: the twitch operation %q acts on the streamer channel, not on %s", action.ErrInvalid, t.Kind, ch))
+	}
 	log := ports.Logger
 	switch t.Kind {
 	case KindClip:

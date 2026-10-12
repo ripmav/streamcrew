@@ -393,13 +393,22 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	// Twitch platform (ADR-0004: Twitch at the start); it connects when
 	// the streamer account has a token (roadmap 4.3, task 5).
 	if o.platform == nil {
-		o.platform = func(_ context.Context, b PlatformBuilder) (connector.Platform, error) {
+		o.platform = func(ctx context.Context, b PlatformBuilder) (connector.Platform, error) {
+			// The additional channels of the settings (roadmap 4.6); without
+			// the section, the home channel is operated only.
+			var channels []string
+			if chs, err := settings.Load(ctx, a.settings, settings.DefaultChannels()); err != nil {
+				logger.WarnContext(ctx, "the channels settings are unknown, the home channel is operated only", "error", err)
+			} else {
+				channels = chs.Additional
+			}
 			return twitch.NewPlatform(twitch.PlatformOptions{
 				Receiver:   b.Receiver,
 				Auth:       twitchStreamAuth{s: a.auth},
 				Helix:      twitchHelix,
 				DialClient: authClient,
 				Emotes:     a.emotes,
+				Channels:   channels,
 				Logger:     component(b.Logger, "twitch"),
 			}), nil
 		}

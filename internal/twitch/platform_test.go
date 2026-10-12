@@ -47,6 +47,14 @@ func (f *fakeAuth) ClientID(context.Context) (string, error) {
 	return "client", nil
 }
 
+func (f *fakeAuth) Bot(context.Context) (twitch.AccountState, error) {
+	return twitch.AccountState{}, nil // no bot account in the tests by default
+}
+
+func (f *fakeAuth) BotToken(context.Context) (string, error) {
+	return "", errors.New("no bot account")
+}
+
 func (f *fakeAuth) setReady(v bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

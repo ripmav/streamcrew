@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/ripmav/streamcrew/internal/helix"
@@ -29,6 +30,10 @@ type Spec struct {
 	// account as whisper receiver); all the other events are channel
 	// and stream events (broadcaster_user_id).
 	User bool
+	// HomeOnly is true for the stream state events: they report the
+	// stream of the home channel only (spec twitch-multi-channel.md,
+	// B10), so an additional channel does not subscribe to them.
+	HomeOnly bool
 }
 
 // desired is the table of the subscriptions of this adapter: exactly
@@ -40,8 +45,8 @@ type Spec struct {
 //
 //nolint:gochecknoglobals // the static desired state; it carries the account ID nowhere
 var desired = []Spec{
-	{EventType: "stream.online", Version: "1"},
-	{EventType: "stream.offline", Version: "1"},
+	{EventType: "stream.online", Version: "1", HomeOnly: true},
+	{EventType: "stream.offline", Version: "1", HomeOnly: true},
 	{EventType: "channel.follow", Version: "2"},
 	{EventType: "channel.raid", Version: "1"},
 	{EventType: "channel.chat.message", Version: "2"},
@@ -67,25 +72,52 @@ var desired = []Spec{
 	{EventType: "user.whisper.message", Version: "1", User: true},
 }
 
-// Manager maintains the EventSub subscriptions of the streamer
-// account (roadmap 4.3): it keeps the actual state (Helix
+// ChannelSpecs is the desired table without the home-only specs (the
+// stream state events, spec twitch-multi-channel.md, B10): the desired
+// state of an additional channel.
+func ChannelSpecs() []Spec {
+	specs := make([]Spec, 0, len(desired))
+	for _, d := range desired {
+		if d.HomeOnly {
+			continue
+		}
+		specs = append(specs, d)
+	}
+	return specs
+}
+
+// Manager maintains the EventSub subscriptions of the channels it is
+// given (roadmap 4.3, 4.6): it keeps the actual state (Helix
 // GET/POST/DELETE /eventsub/subscriptions) in line with the desired
-// state of the table above.
+// state — every spec for every channel, plus the whisper subscription
+// for its receiver.
 type Manager struct {
 	helix     *helix.Client
-	accountID string
+	channels  []string
+	whisper   string
+	specs     []Spec
 	log       *slog.Logger
 	interval  time.Duration
 	sessionID func(ctx context.Context) (string, error)
+	ready     func(ctx context.Context) (bool, error)
 }
 
 // ManagerOptions configures NewManager.
 type ManagerOptions struct {
-	// Helix is the Helix client of the streamer account.
+	// Helix is the Helix client of the account that owns the
+	// subscriptions.
 	Helix *helix.Client
-	// AccountID is the user ID of the streamer account (the
-	// broadcaster of the conditions, and the whisper receiver).
-	AccountID string
+	// Channels are the broadcaster user IDs the channel and stream
+	// events are subscribed for; the home manager gets the home channel
+	// only, the additional-channels manager the additional channels.
+	Channels []string
+	// Whisper is the user ID that receives user.whisper.message (the
+	// user_id condition); empty to not subscribe to whispers.
+	Whisper string
+	// Specs is the desired table; the caller leaves out the home-only
+	// specs for the additional channels (stream state, spec
+	// twitch-multi-channel.md, B10).
+	Specs []Spec
 	// Logger logs the reconciliations (Code-ADR-0003); if nil, the
 	// log is discarded.
 	Logger *slog.Logger
@@ -96,6 +128,12 @@ type ManagerOptions struct {
 	// the session is established. Nil for a session-less transport
 	// (tests).
 	SessionID func(ctx context.Context) (string, error)
+	// Ready reports whether the channels are operated (spec
+	// twitch-multi-channel.md, B3): for the additional channels the mod
+	// status of the bot, checked at the start and at every reconciliation.
+	// While it reports not ready, the manager holds no subscriptions;
+	// on an error it leaves the state as it is. Nil for the home channel.
+	Ready func(ctx context.Context) (bool, error)
 }
 
 // NewManager creates a Manager.
@@ -108,12 +146,19 @@ func NewManager(o ManagerOptions) *Manager {
 	if interval <= 0 {
 		interval = reconcileInterval
 	}
+	specs := o.Specs
+	if len(specs) == 0 {
+		specs = desired
+	}
 	return &Manager{
 		helix:     o.Helix,
-		accountID: o.AccountID,
+		channels:  o.Channels,
+		whisper:   o.Whisper,
+		specs:     specs,
 		log:       log,
 		interval:  interval,
 		sessionID: o.SessionID,
+		ready:     o.Ready,
 	}
 }
 
@@ -146,6 +191,16 @@ func (m *Manager) Run(ctx context.Context) error {
 // interval; the composition root calls it once more right after a
 // token revocation.
 func (m *Manager) Reconcile(ctx context.Context) error {
+	// B3: while the channels are not operated, the manager holds no
+	// subscriptions: the own surplus is revoked below, nothing is created.
+	operated := true
+	if m.ready != nil {
+		var err error
+		if operated, err = m.ready(ctx); err != nil {
+			m.log.WarnContext(ctx, "the readiness of the channels is unknown", "error", err)
+			return nil
+		}
+	}
 	sessionID := ""
 	if m.sessionID != nil {
 		var err error
@@ -163,33 +218,60 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 		have[specKeyOf(s.EventType, s.Version, s.Condition)] = true
 	}
 
+	// The desired (spec, condition) pairs: every channel and stream spec
+	// for every channel, plus the whisper spec for its receiver.
+	type wantSpec struct {
+		d Spec
+		c helix.SubscriptionCondition
+	}
+	var wants []wantSpec
+	if operated {
+		for _, d := range m.specs {
+			if d.User {
+				if m.whisper != "" {
+					wants = append(wants, wantSpec{d, helix.SubscriptionCondition{UserID: m.whisper}})
+				}
+				continue
+			}
+			for _, b := range m.channels {
+				wants = append(wants, wantSpec{d, helix.SubscriptionCondition{BroadcasterUserID: b}})
+			}
+		}
+	}
+
 	want := map[specKey]bool{}
-	for _, d := range desired {
-		k := specKeyOf(d.EventType, d.Version, m.condition(d))
+	for _, w := range wants {
+		k := specKeyOf(w.d.EventType, w.d.Version, w.c)
 		want[k] = true
 		if have[k] {
 			continue
 		}
 		if _, err := m.helix.CreateSubscription(ctx, helix.CreateSubscriptionInput{
-			EventType: d.EventType,
-			Version:   d.Version,
-			Condition: m.condition(d),
+			EventType: w.d.EventType,
+			Version:   w.d.Version,
+			Condition: w.c,
 			Transport: helix.EventSubTransport{Method: "websocket", SessionID: sessionID},
 		}); err != nil {
 			var se *httpclient.StatusError
 			if errors.As(err, &se) && se.StatusCode == http.StatusBadRequest {
-				m.log.WarnContext(ctx, "skip the eventsub subscription", "eventtype", d.EventType, "error", err)
+				m.log.WarnContext(ctx, "skip the eventsub subscription", "eventtype", w.d.EventType, "error", err)
 				continue
 			}
 			return err
 		}
-		m.log.InfoContext(ctx, "eventsub subscription created", "eventtype", d.EventType)
+		m.log.InfoContext(ctx, "eventsub subscription created", "eventtype", w.d.EventType)
 	}
 
 	// The surplus: actual subscriptions outside the desired state
-	// (e.g. left over of an older version of the app).
+	// (e.g. left over of an older version of the app). The managers
+	// revoke their own subscriptions only: the additional channels
+	// share the bot token, whose listing also carries the subscriptions
+	// of the other channels (spec twitch-multi-channel.md, B4).
 	for _, s := range actual {
 		if want[specKeyOf(s.EventType, s.Version, s.Condition)] {
+			continue
+		}
+		if !m.owns(s) {
 			continue
 		}
 		if err := m.helix.RevokeSubscription(ctx, s.ID); err != nil {
@@ -200,13 +282,14 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 	return nil
 }
 
-// condition is the condition of the desired spec: the account as
-// broadcaster, or as whisper receiver (user.whisper.message).
-func (m *Manager) condition(d Spec) helix.SubscriptionCondition {
-	if d.User {
-		return helix.SubscriptionCondition{UserID: m.accountID}
+// owns reports whether the subscription belongs to the manager: its
+// broadcaster is one of the manager's channels, or the receiver is the
+// manager's whisper.
+func (m *Manager) owns(s helix.EventSubSubscription) bool {
+	if slices.Contains(m.channels, s.Condition.BroadcasterUserID) {
+		return true
 	}
-	return helix.SubscriptionCondition{BroadcasterUserID: m.accountID}
+	return m.whisper != "" && s.Condition.UserID == m.whisper
 }
 
 // specKey names a subscription without its ID.
