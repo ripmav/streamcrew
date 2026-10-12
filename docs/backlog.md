@@ -31,6 +31,10 @@ wenn eine Aufgabe wieder eingeplant wird.
 
 - Antworten in der Chat-Nachricht: Die EventSub-Felder `reply_parent_message_*` von `channel.chat.message` werden in 4.3 verworfen, weil die kanonische Nachricht (`eventtype.Message`) kein Antwort-Feld hat. Abbilden mit Spec-Nachtrag (Antwort-ID, -Autor, -Text) und `reply`-Aktion (Roadmap 4.4/5.x) (M)
 
+**Mock-Plattform:**
+
+- Multi-Channel in der Mock-Konsole: `streamcrew mock` kennt zusätzliche Channels (eigene Option `--channel <login>` oder die `channels`-Sektion des Profils) und die Konsole-Befehle `chat send` und `event simulate` ein `--on <channel>`, damit Chat-Nachrichten und Events der zusätzlichen Channels simuliert werden können (das Backend existiert seit 4.6: `SayOn`, `JoinOn`, `Event.Channel`; [`twitch-multi-channel.md`](spec/twitch-multi-channel.md)). Damit lässt sich der Multi-Channel-Betrieb offline testen, ohne dass das Bot-Konto in echten Channels Moderator sein muss (S) (Idee des Projektinhabers vom 2026-10-12)
+
 **Abhängigkeiten:**
 
 - Auf `go.yaml.in/yaml/v4` wechseln, sobald es stabil ist: Syntaxfehler in YAML nennen dann auch die Spalte ([Code-ADR-0005](adr/code/0005-konfiguration.md), Punkt 3; Entscheidung des Projektinhabers vom 2026-10-03) (S)
