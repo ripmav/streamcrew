@@ -308,7 +308,7 @@ func (p *Platform) session(ctx context.Context, st AccountState) error {
 	p.mu.Lock()
 	p.sessions = sessions
 	p.mu.Unlock()
-	mgr := NewManager(ManagerOptions{Helix: hc, AccountID: st.AccountID, Logger: p.log, SessionID: sessions.current})
+	mgr := NewManager(ManagerOptions{Helix: hc, Channels: []string{st.AccountID}, Whisper: st.AccountID, Logger: p.log, SessionID: sessions.current})
 	dedup, err := connector.NewDedup(connector.DefaultDedupTTL)
 	if err != nil {
 		return err

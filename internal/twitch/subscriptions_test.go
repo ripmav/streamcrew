@@ -99,9 +99,10 @@ func newManager(t *testing.T, f *fakeHelix, interval time.Duration) *twitch.Mana
 	hc := httpclient.New(httpclient.Options{Name: "twitch.helix", Base: srv.Client(), Rate: 100, Burst: 100})
 	c := helix.New(hc, helix.Options{ClientID: "test", Token: func(context.Context) (string, error) { return "tok", nil }, BaseURL: srv.URL})
 	return twitch.NewManager(twitch.ManagerOptions{
-		Helix:     c,
-		AccountID: "7",
-		Interval:  interval,
+		Helix:    c,
+		Channels: []string{"7"},
+		Whisper:  "7",
+		Interval: interval,
 	})
 }
 
@@ -150,6 +151,49 @@ func TestReconcileCreatesTheMissingSubscriptions(t *testing.T) {
 	require.NoError(t, m.Reconcile(t.Context()))
 	assert.Len(t, f.created, 25)
 	assert.Empty(t, f.revoked)
+}
+
+func TestReconcileAdditionalChannels(t *testing.T) {
+	t.Parallel()
+	f := newFakeHelix()
+	srv := httptest.NewTestServer(t, f.handler(t))
+	t.Cleanup(srv.Close)
+	hc := httpclient.New(httpclient.Options{Name: "twitch.helix", Base: srv.Client(), Rate: 100, Burst: 100})
+	c := helix.New(hc, helix.Options{ClientID: "test", Token: func(context.Context) (string, error) { return "tok", nil }, BaseURL: srv.URL})
+	m := twitch.NewManager(twitch.ManagerOptions{
+		Helix:    c,
+		Channels: []string{"100", "200"},
+		Whisper:  "999", // the bot account
+		Specs:    twitch.ChannelSpecs(),
+	})
+	require.NoError(t, m.Reconcile(t.Context()))
+
+	// 22 channel specs per channel, 2 channels, plus the one whisper.
+	require.Len(t, f.created, 45)
+	// No stream subscriptions for the additional channels (B10).
+	for _, in := range f.created {
+		assert.NotEqual(t, "stream.online", in.EventType)
+		assert.NotEqual(t, "stream.offline", in.EventType)
+	}
+	// The channel events are subscribed per additional channel.
+	var follow []helix.SubscriptionCondition
+	for _, in := range f.created {
+		if in.EventType == "channel.follow" {
+			follow = append(follow, in.Condition)
+		}
+	}
+	assert.ElementsMatch(t, []helix.SubscriptionCondition{
+		{BroadcasterUserID: "100"}, {BroadcasterUserID: "200"},
+	}, follow)
+	// The whisper goes to the bot account.
+	found := false
+	for _, in := range f.created {
+		if in.EventType == "user.whisper.message" {
+			found = true
+			assert.Equal(t, helix.SubscriptionCondition{UserID: "999"}, in.Condition)
+		}
+	}
+	assert.True(t, found)
 }
 
 func TestReconcileRevokesTheSurplus(t *testing.T) {
