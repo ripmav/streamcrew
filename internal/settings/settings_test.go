@@ -61,6 +61,10 @@ func TestDefaultsWhenNeverSaved(t *testing.T) {
 	e, err := settings.Load(t.Context(), svc, settings.DefaultEvents())
 	require.NoError(t, err)
 	assert.Equal(t, settings.Events{MassGiftThreshold: 2, StreamGracePeriod: polydoc.Duration(10 * time.Minute)}, e, "events.md B10")
+
+	ch, err := settings.Load(t.Context(), svc, settings.DefaultChannels())
+	require.NoError(t, err)
+	assert.Equal(t, settings.Channels{}, ch, "no additional channel by default")
 }
 
 func TestSaveAndLoad(t *testing.T) {
@@ -120,6 +124,17 @@ func TestSaveAndLoad(t *testing.T) {
 	doc, _, err = s.Settings(ctx, "events")
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"type":"events","schemaVersion":1,"massGiftThreshold":1000,"streamGracePeriod":"0s"}`, string(doc))
+
+	chans := settings.Channels{Additional: []string{"friend", "Other"}}
+	require.NoError(t, settings.Save(ctx, svc, chans))
+	gotChans, err := settings.Load(ctx, svc, settings.DefaultChannels())
+	require.NoError(t, err)
+	assert.Equal(t, chans, gotChans)
+	assert.True(t, gotChans.Contains("FRIEND"), "the logins compare case-insensitively")
+	assert.False(t, gotChans.Contains("home"))
+	doc, _, err = s.Settings(ctx, "channels")
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"type":"channels","schemaVersion":1,"additional":["friend","Other"]}`, string(doc))
 }
 
 func TestValidation(t *testing.T) {
@@ -158,6 +173,9 @@ func TestValidation(t *testing.T) {
 		settings.ChannelPoints{Rewards: []settings.ChannelPointReward{{RewardID: "r1"}}},
 		settings.ChannelPoints{Rewards: []settings.ChannelPointReward{{Command: "c"}}},
 		settings.ChannelPoints{Rewards: []settings.ChannelPointReward{{RewardID: "r1", Command: "c"}, {RewardID: "r1", Command: "d"}}},
+		settings.Channels{Additional: []string{"a", ""}},
+		settings.Channels{Additional: []string{"a", "a"}},
+		settings.Channels{Additional: []string{"a", "A"}},
 	} {
 		assert.Error(t, settings.Save(ctx, svc, s), "%+v", s)
 	}
