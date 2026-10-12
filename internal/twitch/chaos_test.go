@@ -129,7 +129,10 @@ func TestChaosAgainstTheMock(t *testing.T) {
 		assert.True(t, got[want], "the subscription %s must carry over to the new session", want)
 	}
 	fireChat(t, c, "chaos-a", "hello baseline") // the repeat of the baseline payload
-	require.Never(t, func() bool { return r.msgCount() > before+1 },
+	// limit is immutable: testify's Never polls the condition in a
+	// goroutine that may still run when the next line reassigns before.
+	limit := before + 1
+	require.Never(t, func() bool { return r.msgCount() > limit },
 		3*time.Second, 100*time.Millisecond, "the repeated payload must be dropped")
 	before = r.msgCount()
 	fireChat(t, c, "chaos-d", "hello after the restart")
