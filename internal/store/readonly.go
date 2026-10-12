@@ -70,6 +70,19 @@ func (r *ReadOnly) Accounts(ctx context.Context) ([]Account, error) {
 	return out, nil
 }
 
+// Settings returns the document of a settings section; found is false if
+// the section has never been saved.
+func (r *ReadOnly) Settings(ctx context.Context, section string) (doc []byte, found bool, err error) {
+	row, err := sqlcgen.New(r.db).GetSettings(ctx, section)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("settings %q: %w", section, translate(err))
+	}
+	return []byte(row.Document), true, nil
+}
+
 // GetSecret returns a vault record; found is false if there is no record
 // with the name.
 func (r *ReadOnly) GetSecret(ctx context.Context, name string) (vault.Record, bool, error) {

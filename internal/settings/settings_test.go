@@ -125,7 +125,7 @@ func TestSaveAndLoad(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"type":"events","schemaVersion":1,"massGiftThreshold":1000,"streamGracePeriod":"0s"}`, string(doc))
 
-	chans := settings.Channels{Additional: []string{"friend", "Other"}}
+	chans := settings.Channels{Additional: []string{"friend", "Other", strings.Repeat("a", 25)}}
 	require.NoError(t, settings.Save(ctx, svc, chans))
 	gotChans, err := settings.Load(ctx, svc, settings.DefaultChannels())
 	require.NoError(t, err)
@@ -134,7 +134,7 @@ func TestSaveAndLoad(t *testing.T) {
 	assert.False(t, gotChans.Contains("home"))
 	doc, _, err = s.Settings(ctx, "channels")
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"type":"channels","schemaVersion":1,"additional":["friend","Other"]}`, string(doc))
+	assert.JSONEq(t, `{"type":"channels","schemaVersion":1,"additional":["friend","Other","aaaaaaaaaaaaaaaaaaaaaaaaa"]}`, string(doc))
 }
 
 func TestValidation(t *testing.T) {
@@ -176,6 +176,8 @@ func TestValidation(t *testing.T) {
 		settings.Channels{Additional: []string{"a", ""}},
 		settings.Channels{Additional: []string{"a", "a"}},
 		settings.Channels{Additional: []string{"a", "A"}},
+		settings.Channels{Additional: []string{"has space"}},
+		settings.Channels{Additional: []string{strings.Repeat("a", 26)}},
 	} {
 		assert.Error(t, settings.Save(ctx, svc, s), "%+v", s)
 	}

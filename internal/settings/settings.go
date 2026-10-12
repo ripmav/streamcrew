@@ -244,20 +244,35 @@ func DefaultChannels() Channels {
 func (Channels) DocType() string { return sectionChannels }
 
 // Validate checks the section: no empty entries and no duplicates; the
-// logins compare case-insensitively, as on the platform.
+// logins compare case-insensitively, as on the platform. Each login has
+// the shape of a platform login: 1 to 25 letters, digits, or underscores.
 func (c Channels) Validate() error { return c.validate() }
 
 func (c Channels) validate() error {
 	seen := make(map[string]bool, len(c.Additional))
 	for _, login := range c.Additional {
-		if login == "" {
-			return errors.New("an empty channel login")
+		if err := validLogin(login); err != nil {
+			return err
 		}
 		key := strings.ToLower(login)
 		if seen[key] {
 			return fmt.Errorf("the channel %q is listed more than once", login)
 		}
 		seen[key] = true
+	}
+	return nil
+}
+
+// validLogin checks the shape of a login name: 1 to 25 characters of
+// letters, digits, or underscores (as the platform allows).
+func validLogin(login string) error {
+	if login == "" || len(login) > 25 {
+		return fmt.Errorf("the channel login %q: want 1 to 25 characters", login)
+	}
+	for _, r := range login {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' {
+			return fmt.Errorf("the channel login %q: only letters, digits, and underscores are allowed", login)
+		}
 	}
 	return nil
 }
