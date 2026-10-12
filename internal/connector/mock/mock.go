@@ -64,6 +64,7 @@ type options struct {
 	bot       *user.Identity
 	logger    *slog.Logger
 	publisher Publisher
+	channels  []string
 }
 
 // WithStreamer sets the login name of the streamer's account; without it,
@@ -90,6 +91,44 @@ func WithBot(login string) Option {
 		o.bot = &ident
 		return nil
 	}
+}
+
+// WithChannels gives the channel additional channels the bot operates in
+// besides the home channel (spec twitch-multi-channel.md, B1); the logins
+// must be valid, must not name the home channel, and must be distinct.
+// Without the option, the platform operates the home channel only.
+func WithChannels(logins ...string) Option {
+	return func(o *options) error {
+		seen := map[string]bool{}
+		for _, l := range logins {
+			if err := validLogin(l); err != nil {
+				return fmt.Errorf("%w: channel: %w", ErrInvalidOption, err)
+			}
+			k := key(l)
+			if k == key(o.streamer.Login) {
+				return fmt.Errorf("%w: channel %q is the home channel", ErrInvalidOption, l)
+			}
+			if seen[k] {
+				return fmt.Errorf("%w: the channel %q is listed more than once", ErrInvalidOption, l)
+			}
+			seen[k] = true
+			o.channels = append(o.channels, k)
+		}
+		return nil
+	}
+}
+
+// validLogin checks the shape of a login name (as in newIdentity).
+func validLogin(login string) error {
+	if login == "" || len(login) > maxLogin {
+		return fmt.Errorf("%w: login name %q: want 1 to %d characters", ErrInvalidUser, login, maxLogin)
+	}
+	for _, r := range login {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' {
+			return fmt.Errorf("%w: login name %q: only letters, digits and underscores are allowed", ErrInvalidUser, login)
+		}
+	}
+	return nil
 }
 
 // WithLogger sets the logger; without it, the platform logs nothing.
@@ -128,6 +167,9 @@ type Platform struct {
 	streamer string
 	bot      string
 	hasBot   bool
+	// channels are the keys of the additional channels the platform
+	// operates (B1); the home channel is the empty key.
+	channels []string
 
 	mu sync.Mutex
 	// running is true while Run runs: then the accounts are connected.
@@ -172,6 +214,7 @@ func New(r connector.Receiver, opts ...Option) (*Platform, error) {
 		logger:    o.logger,
 		dedup:     dedup,
 		streamer:  key(o.streamer.Login),
+		channels:  o.channels,
 		users:     map[string]user.Identity{key(o.streamer.Login): o.streamer},
 		present:   make(map[string]bool),
 	}
@@ -256,6 +299,32 @@ func (p *Platform) Channel(context.Context) (connector.ChannelInfo, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.channel, nil
+}
+
+// Channels returns the logins of the additional channels in their
+// configured order (B1); empty if the platform operates the home channel
+// only.
+func (p *Platform) Channels() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]string(nil), p.channels...)
+}
+
+// chanKey reports whether ch is an operated channel (B1): the home channel
+// (empty) or a configured additional channel; it returns the channel in
+// its key form, the login name in lowercase.
+func (p *Platform) chanKey(ch connector.Channel) (connector.Channel, error) {
+	if ch == "" {
+		return "", nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, c := range p.channels {
+		if c == key(string(ch)) {
+			return connector.Channel(c), nil
+		}
+	}
+	return "", fmt.Errorf("channel %q: %w", ch, connector.ErrUnknownChannel)
 }
 
 // Streamer returns the streamer's account.

@@ -5,6 +5,7 @@ package mock_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -38,6 +39,7 @@ type receiver struct {
 	mu       sync.Mutex
 	messages []connector.Incoming
 	joins    []user.Identity
+	joinChs  []connector.Channel
 	events   []connector.Event
 	streams  []bool
 	err      error
@@ -50,13 +52,14 @@ func (r *receiver) Message(_ context.Context, m connector.Incoming) error {
 	return r.err
 }
 
-func (r *receiver) Join(_ context.Context, p platform.Name, _ connector.Channel, who user.Identity) error {
+func (r *receiver) Join(_ context.Context, p platform.Name, ch connector.Channel, who user.Identity) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if p != platform.Mock {
 		return errors.New("wrong platform")
 	}
 	r.joins = append(r.joins, who)
+	r.joinChs = append(r.joinChs, ch)
 	return r.err
 }
 
@@ -458,4 +461,69 @@ func TestAccountsAndChatters(t *testing.T) {
 	require.NoError(t, err)
 	_, ok := q.Identity(connector.AccountBot)
 	assert.False(t, ok, "no bot")
+}
+
+// TestWithChannelsValidation checks the option: a channel must be a valid
+// login, not the home channel, and not listed twice (twitch-multi-channel
+// .md, B1, B3).
+func TestWithChannelsValidation(t *testing.T) {
+	t.Parallel()
+	r := &receiver{}
+	for name, opts := range map[string][]mock.Option{
+		"empty":     {mock.WithChannels("")},
+		"too long":  {mock.WithChannels(strings.Repeat("a", 26))},
+		"invalid":   {mock.WithChannels("bad login")},
+		"home":      {mock.WithStreamer("chan"), mock.WithChannels("chan")},
+		"duplicate": {mock.WithChannels("a", "A")},
+	} {
+		_, err := mock.New(r, opts...)
+		assert.ErrorIs(t, err, mock.ErrInvalidOption, name)
+	}
+	p, err := mock.New(r, mock.WithChannels("Other", "another"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"other", "another"}, p.Channels())
+}
+
+// TestMultiChannel simulates the additional channels: the messages, joins
+// and events carry the channel they are about (twitch-multi-channel.md,
+// B5), and a channel the platform does not operate is refused (B1).
+func TestMultiChannel(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p, r, _ := start(t, mock.WithChannels("other"))
+
+		// The home message stays on the home channel.
+		_, err := p.Say(t.Context(), "bob", "home")
+		require.NoError(t, err)
+		require.Len(t, r.messages, 1)
+		assert.Equal(t, connector.Channel(""), r.messages[0].Channel)
+
+		// The additional-channel message carries its channel.
+		sent, err := p.SayOn(t.Context(), connector.Channel("Other"), "alice", "hi")
+		require.NoError(t, err)
+		assert.Equal(t, mock.Delivered, sent.Delivery)
+		require.Len(t, r.messages, 2)
+		assert.Equal(t, connector.Channel("other"), r.messages[1].Channel, "the channel is keyed by its login")
+
+		// A channel the platform does not operate is refused.
+		_, err = p.SayOn(t.Context(), connector.Channel("nowhere"), "alice", "x")
+		require.ErrorIs(t, err, connector.ErrUnknownChannel)
+		_, err = p.SayWithID(t.Context(), "alice", "x", "id-1")
+		require.NoError(t, err)
+		require.Len(t, r.messages, 3, "the refused message is not delivered, the home one is")
+		assert.Equal(t, connector.Channel(""), r.messages[2].Channel)
+
+		// The event carries the channel.
+		_, err = p.Simulate(t.Context(), mock.Event{Type: eventtype.ChannelFollow, Channel: "other", User: "alice"})
+		require.NoError(t, err)
+		require.Len(t, r.events, 1)
+		assert.Equal(t, connector.Channel("other"), r.events[0].Channel)
+		_, err = p.Simulate(t.Context(), mock.Event{Type: eventtype.ChannelFollow, Channel: "nowhere", User: "alice"})
+		require.ErrorIs(t, err, connector.ErrUnknownChannel)
+
+		// The join carries the channel.
+		require.NoError(t, p.JoinOn(t.Context(), connector.Channel("other"), "carol"))
+		require.NoError(t, p.Join(t.Context(), "ada"))
+		require.Len(t, r.joins, 2)
+		assert.Equal(t, []connector.Channel{"other", ""}, r.joinChs)
+	})
 }

@@ -34,23 +34,39 @@ type Sent struct {
 	Delivery Delivery
 }
 
-// Say simulates a chat message that the user with the login name writes,
-// with a new ID. A login name the platform does not know becomes a new user
-// without roles; a message of the bot account is marked as such (events.md,
-// B13). The text must not be empty.
+// Say simulates a chat message that the user with the login name writes
+// in the home channel, with a new ID. A login name the platform does not
+// know becomes a new user without roles; a message of the bot account is
+// marked as such (events.md, B13). The text must not be empty.
 func (p *Platform) Say(ctx context.Context, login, text string) (Sent, error) {
-	return p.SayWithID(ctx, login, text, p.newID())
+	return p.say(ctx, "", login, text, p.newID())
 }
 
-// SayWithID simulates a chat message like Say, with the platform's ID
-// messageID, e.g. to simulate a repeat after a lost connection (events.md,
-// B22).
+// SayOn simulates a chat message that the user with the login name writes
+// in the channel ch (empty: the home channel), with a new ID.
+func (p *Platform) SayOn(ctx context.Context, ch connector.Channel, login, text string) (Sent, error) {
+	return p.say(ctx, ch, login, text, p.newID())
+}
+
+// SayWithID simulates a chat message in the home channel like Say, with
+// the platform's ID messageID, e.g. to simulate a repeat after a lost
+// connection (events.md, B22).
 func (p *Platform) SayWithID(ctx context.Context, login, text, messageID string) (Sent, error) {
+	return p.say(ctx, "", login, text, messageID)
+}
+
+// say simulates a chat message in the channel ch with the platform's ID
+// messageID.
+func (p *Platform) say(ctx context.Context, ch connector.Channel, login, text, messageID string) (Sent, error) {
 	switch {
 	case text == "":
 		return Sent{}, errors.New("say: empty message")
 	case messageID == "":
 		return Sent{}, errors.New("say: empty message ID")
+	}
+	ch, err := p.chanKey(ch)
+	if err != nil {
+		return Sent{}, fmt.Errorf("say: %w", err)
 	}
 	if err := p.connected(); err != nil {
 		return Sent{}, fmt.Errorf("say: %w", err)
@@ -68,6 +84,7 @@ func (p *Platform) SayWithID(ctx context.Context, login, text, messageID string)
 	p.setPresent(author.Login, true)
 	m := connector.Incoming{
 		Platform: platform.Mock,
+		Channel:  ch,
 		Author:   author,
 		FromBot:  p.isBot(author),
 		Message:  eventtype.Message{ID: messageID, Text: text},
@@ -78,10 +95,20 @@ func (p *Platform) SayWithID(ctx context.Context, login, text, messageID string)
 	return sent, nil
 }
 
-// Join simulates that the user with the login name joins the chat without
-// writing (events.md, B14); a login name the platform does not know
-// becomes a new user without roles.
+// Join simulates that the user with the login name joins the chat of the
+// home channel without writing (events.md, B14); a login name the platform
+// does not know becomes a new user without roles.
 func (p *Platform) Join(ctx context.Context, login string) error {
+	return p.JoinOn(ctx, "", login)
+}
+
+// JoinOn simulates that the user with the login name joins the chat of the
+// channel ch (empty: the home channel) without writing.
+func (p *Platform) JoinOn(ctx context.Context, ch connector.Channel, login string) error {
+	ch, err := p.chanKey(ch)
+	if err != nil {
+		return fmt.Errorf("join: %w", err)
+	}
 	if err := p.connected(); err != nil {
 		return fmt.Errorf("join: %w", err)
 	}
@@ -90,7 +117,7 @@ func (p *Platform) Join(ctx context.Context, login string) error {
 		return fmt.Errorf("join: %w", err)
 	}
 	p.setPresent(who.Login, true)
-	if err := p.receiver.Join(ctx, platform.Mock, "", who); err != nil {
+	if err := p.receiver.Join(ctx, platform.Mock, ch, who); err != nil {
 		return fmt.Errorf("join: %w", err)
 	}
 	return nil
@@ -102,6 +129,10 @@ type Event struct {
 	// Type is a platform-neutral type of the catalog, e.g.
 	// "channel.follow".
 	Type event.Type
+	// Channel is the channel the event is about: the login of an
+	// additional channel (spec twitch-multi-channel.md, B5); empty for
+	// the home channel.
+	Channel string
 	// User and Target are the login names of the user and of the target
 	// user (events.md, B6, B9); empty if the event has none.
 	User   string
@@ -132,11 +163,14 @@ func (p *Platform) SimulateWithID(ctx context.Context, e Event, eventID string) 
 	if err := simulated(e.Type); err != nil {
 		return Sent{}, fmt.Errorf("simulate: %w", err)
 	}
+	ch, err := p.chanKey(connector.Channel(e.Channel))
+	if err != nil {
+		return Sent{}, fmt.Errorf("simulate: %w", err)
+	}
 	if err := p.connected(); err != nil {
 		return Sent{}, fmt.Errorf("simulate %s: %w", e.Type, err)
 	}
-	in := connector.Event{Platform: platform.Mock, Type: e.Type, Details: e.Details}
-	var err error
+	in := connector.Event{Platform: platform.Mock, Type: e.Type, Channel: ch, Details: e.Details}
 	if in.User, err = p.optionalAccount(e.User); err != nil {
 		return Sent{}, fmt.Errorf("simulate %s: user: %w", e.Type, err)
 	}
