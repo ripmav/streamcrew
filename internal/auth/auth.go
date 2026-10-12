@@ -81,6 +81,10 @@ type Ports struct {
 	// Flows returns the login flow of a platform for its credentials
 	// (ADR-0023).
 	Flows func(p platform.Name, c Credentials) (Flow, error)
+	// Embedded returns the built-in app of a platform (ADR-0024); nil or
+	// ok=false without one. It is the fallback of the app resolution
+	// after the vault, and its secret is never written to the vault.
+	Embedded func(p platform.Name) (Credentials, bool)
 	// Publisher takes the auth events; a nil publisher discards them.
 	Publisher Publisher
 	// Logger records the service; a nil logger discards.
@@ -435,7 +439,8 @@ func (s *Service) refresh(ctx context.Context, acc Account) {
 // crash never leaves one without the other (Code-ADR-0008). For a login of
 // the authorization code flow it stores the app credentials of the
 // platform next to them, so that a later refresh or revoke can rebuild the
-// client (ADR-0023).
+// client (ADR-0023) — except for the built-in app, whose secret is sealed
+// in the binary and must not be duplicated in the vault (ADR-0024).
 func (s *Service) save(ctx context.Context, acc Account, tok Token, c Credentials) error {
 	name := authName(acc.Platform, acc.Role)
 	return s.ports.Store.Atomically(ctx, func(tx *store.Store) error {
@@ -445,7 +450,7 @@ func (s *Service) save(ctx context.Context, acc Account, tok Token, c Credential
 		if err := putToken(ctx, s.ports.Vault(tx), name, tok); err != nil {
 			return fmt.Errorf("token %s %s: %w", acc.Platform, acc.Role, err)
 		}
-		if !c.DeviceFlow {
+		if !c.DeviceFlow && !s.isEmbedded(acc.Platform, c.ID) {
 			if err := putClient(ctx, s.ports.Vault(tx), acc.Platform, c); err != nil {
 				return fmt.Errorf("client %s: %w", acc.Platform, err)
 			}
@@ -505,26 +510,50 @@ func (s *Service) ClientID(ctx context.Context, p platform.Name, r connector.Acc
 	return FromStore(row).ClientID, true, nil
 }
 
-// resolveApp fills in the app of a login (ADR-0023): for the
+// resolveApp fills in the app of a login (ADR-0023, ADR-0024): for the
 // authorization code flow it uses the app of the last login of the
-// platform when the caller gives none, for a device code login the project
-// app. StartLogin and WaitLogin resolve the same way, so that a login the
-// caller started flagless can be followed flagless.
+// platform when the caller gives none, then the built-in app of the
+// platform, and for a device code login the project app. StartLogin and
+// WaitLogin resolve the same way, so that a login the caller started
+// flagless can be followed flagless.
 func (s *Service) resolveApp(ctx context.Context, p platform.Name, c Credentials) (Credentials, error) {
 	if !c.DeviceFlow && c.ID == "" {
 		rec, found, err := s.client(ctx, p)
 		if err != nil {
 			return Credentials{}, err
 		}
-		if !found {
+		switch {
+		case found:
+			c = Credentials{ID: rec.ID, Secret: rec.Secret}
+		case s.embedded(p).ID != "":
+			c = s.embedded(p)
+		default:
 			return Credentials{}, fmt.Errorf("%s: no app for the login: give a client ID and secret, or use the device code flow", p)
 		}
-		c = Credentials{ID: rec.ID, Secret: rec.Secret}
 	}
 	if c.ID == "" {
 		c.ID = defaultClientID(p, "")
 	}
 	return c, nil
+}
+
+// embedded returns the built-in app of the platform (ADR-0024); a zero
+// credential without one.
+func (s *Service) embedded(p platform.Name) Credentials {
+	if s.ports.Embedded == nil {
+		return Credentials{}
+	}
+	if c, ok := s.ports.Embedded(p); ok {
+		return c
+	}
+	return Credentials{}
+}
+
+// isEmbedded reports whether id is the built-in app of the platform
+// (ADR-0024), whose secret stays out of the vault.
+func (s *Service) isEmbedded(p platform.Name, id string) bool {
+	c := s.embedded(p)
+	return c.ID != "" && c.ID == id
 }
 
 // client returns the app credentials stored for the platform; found is
@@ -545,14 +574,19 @@ func (s *Service) client(ctx context.Context, p platform.Name) (ClientRecord, bo
 }
 
 // clientSecret returns the stored secret of the app with the client ID id
-// of the platform; it is empty if the platform has no entry or the entry
-// is for another app, so that a refresh never guesses (ADR-0023).
+// of the platform, or the secret of the built-in app when the account was
+// logged in with it (ADR-0024); it is empty if the platform has no entry
+// or the entry is for another app, so that a refresh never guesses
+// (ADR-0023).
 func (s *Service) clientSecret(ctx context.Context, p platform.Name, id string) string {
 	rec, found, err := s.client(ctx, p)
-	if err != nil || !found || rec.ID != id {
-		return ""
+	if err == nil && found && rec.ID == id {
+		return rec.Secret
 	}
-	return rec.Secret
+	if emb := s.embedded(p); emb.ID == id {
+		return emb.Secret
+	}
+	return ""
 }
 
 // flowForAccount returns the flow of a stored account: the flow and the

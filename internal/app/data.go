@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ripmav/streamcrew/internal/appcreds"
 	"github.com/ripmav/streamcrew/internal/auth"
 	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
@@ -69,6 +70,17 @@ func authFlows(client *http.Client, twitchAuth, twitchHelix *httpclient.Client) 
 			return nil, fmt.Errorf("no login flow for platform %q", p)
 		}
 	}
+}
+
+// EmbeddedApp adapts the built-in app credentials of ADR-0024 to the
+// auth port; ok is false for a platform without a built-in app or while
+// the embedded record is disabled.
+func EmbeddedApp(p platform.Name) (auth.Credentials, bool) {
+	r, ok := appcreds.Get(p)
+	if !ok {
+		return auth.Credentials{}, false
+	}
+	return auth.Credentials{ID: r.ClientID, Secret: string(r.ClientSecret)}, true
 }
 
 // BackupDir returns the backup directory of a data directory.

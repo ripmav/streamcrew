@@ -45,13 +45,13 @@ const (
 	usersURL = "https://api.twitch.tv/helix/users"
 
 	// RedirectURL is the loopback redirect of the authorization code
-	// flow (ADR-0023). The user must register exactly this URL in the
-	// "OAuth Redirect URLs" of their app; the host is localhost, not the
-	// loopback IP, because the Twitch developer console rejects IP
-	// addresses (which must be HTTPS), like in the examples of the Twitch
-	// docs. The listener answers on both loopback addresses, because a
-	// browser may resolve localhost to either.
-	RedirectURL = "http://localhost:8741"
+	// flow (ADR-0023, path per ADR-0024). The user must register exactly
+	// this URL in the "OAuth Redirect URLs" of their app; the host is
+	// localhost, not the loopback IP, because the Twitch developer console
+	// rejects IP addresses (which must be HTTPS), like in the examples of
+	// the Twitch docs. The listener answers on both loopback addresses,
+	// because a browser may resolve localhost to either.
+	RedirectURL = "http://localhost:8741/oauth/callback"
 	// redirectPort is the port of RedirectURL.
 	redirectPort = 8741
 	// codeWindow is how long the login window of the authorization code
@@ -473,14 +473,14 @@ func (f *twitchCodeFlow) Wait(ctx context.Context, l *Login) (*oauth2.Token, err
 	}
 }
 
-// Refresh exchanges a refresh token for a new token. A confidential
-// client sends its secret (ADR-0023). An answer that says the grant is
-// gone, e.g. the refresh token is invalid, is ErrTokenExpired: the login
-// must be started again.
+// Refresh exchanges a refresh token for a new token. It sends only the
+// client ID, no secret (ADR-0024): Twitch accepts it, and a rotated
+// embedded secret never breaks the refresh of an existing account. An
+// answer that says the grant is gone, e.g. the refresh token is invalid,
+// is ErrTokenExpired: the login must be started again.
 func (f *twitchCodeFlow) Refresh(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
 	v := url.Values{
 		"client_id":     {f.clientID},
-		"client_secret": {f.secret},
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
 	}
@@ -495,10 +495,11 @@ func (f *twitchCodeFlow) Refresh(ctx context.Context, refreshToken string) (*oau
 	return tok, nil
 }
 
-// Revoke revokes a token with the client secret; a token that is already
-// revoked is not an error.
+// Revoke revokes a token with only the client ID, like the refresh
+// (ADR-0024): a rotated embedded secret must not break the revoke of a
+// logout; a token that is already revoked is not an error.
 func (f *twitchCodeFlow) Revoke(ctx context.Context, token string) error {
-	return f.revoke(ctx, token, f.secret)
+	return f.revoke(ctx, token, "")
 }
 
 // authorizeURL builds the URL the user opens to log in and authorize

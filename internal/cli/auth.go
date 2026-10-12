@@ -41,7 +41,7 @@ type authLoginCmd struct {
 	Platform     string `arg:"" enum:"twitch" help:"The platform to log in: ${enum}."`
 	Bot          bool   `help:"Log in the bot account instead of the streamer account."`
 	DeviceFlow   bool   `help:"Use the device code flow instead of the authorization code flow (fallback, ADR-0023)."`
-	ClientID     string `env:"-" help:"Client ID of your own Twitch app (BYO); without it the app of the last login is used." default:""`
+	ClientID     string `env:"-" help:"Client ID of your own Twitch app (BYO); without it the app of the last login, then the built-in StreamCrew app, is used." default:""`
 	ClientSecret string `env:"-" help:"Client secret of your own Twitch app, stored encrypted in the profile; given together with the client ID." default:""`
 
 	// flows is replaced by the tests; the real flows are the ones of the
@@ -267,10 +267,11 @@ func (c authLogoutCmd) Run(ctx context.Context, e *Env) (err error) {
 // factory (Code-ADR-0008). The commands publish no auth events.
 func authService(st auth.Store, ks *vault.KeySet, flows func(p platform.Name, c auth.Credentials) (auth.Flow, error)) (*auth.Service, error) {
 	return auth.New(auth.Ports{
-		Store:  st,
-		Vault:  func(repo vault.Repository) *vault.Vault { return vault.New(repo, ks) },
-		Flows:  flows,
-		Logger: discardLogger(),
+		Store:    st,
+		Vault:    func(repo vault.Repository) *vault.Vault { return vault.New(repo, ks) },
+		Flows:    flows,
+		Embedded: app.EmbeddedApp,
+		Logger:   discardLogger(),
 	})
 }
 
