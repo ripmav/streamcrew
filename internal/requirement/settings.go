@@ -34,7 +34,7 @@ func (s *Service) Decided(ctx context.Context, cmd command.Command, p engine.Par
 	if !ok || !target.Status().Connected() {
 		return fmt.Errorf("delete the triggering message of %q: %s: %w", cmd.Name, p.Platform, connector.ErrNotConnected)
 	}
-	if err := target.Chat().Delete(ctx, p.MessageID); err != nil {
+	if err := target.Chat().Delete(ctx, connector.Channel(p.Channel), p.MessageID); err != nil {
 		return fmt.Errorf("delete the triggering message of %q on %s: %w", cmd.Name, p.Platform, err)
 	}
 	return nil

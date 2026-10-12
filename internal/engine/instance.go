@@ -72,6 +72,11 @@ type Params struct {
 	// Platform is the platform the command was triggered on; empty if the
 	// run has none, e.g. a timer.
 	Platform platform.Name
+	// Channel is the channel the run is about (spec
+	// twitch-multi-channel.md, B6): the channel of the triggering event;
+	// empty if the run has none (timer, manual run), which acts on the
+	// home channel.
+	Channel string
 	// User is the triggering user; nil if the run has none, e.g. a timer.
 	User *user.User
 	// Target is the user the run is about (B81). The caller sets the one

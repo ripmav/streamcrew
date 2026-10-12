@@ -31,7 +31,7 @@ func (c *recChat) Send(_ context.Context, m connector.Message) error {
 	return nil
 }
 
-func (c *recChat) Delete(_ context.Context, messageID string) error {
+func (c *recChat) Delete(_ context.Context, _ connector.Channel, messageID string) error {
 	c.deleted = append(c.deleted, messageID)
 	return nil
 }
@@ -41,17 +41,25 @@ type recMod struct{ calls []string }
 
 func (m *recMod) record(op string) error { m.calls = append(m.calls, op); return nil }
 
-func (m *recMod) Timeout(_ context.Context, _ user.Identity, _ time.Duration, _ string) error {
+func (m *recMod) Timeout(_ context.Context, _ connector.Channel, _ user.Identity, _ time.Duration, _ string) error {
 	return m.record("timeout")
 }
-func (m *recMod) Purge(_ context.Context, _ user.Identity) error { return m.record("purge") }
-func (m *recMod) ClearChat(_ context.Context) error              { return m.record("clear") }
-func (m *recMod) Ban(_ context.Context, _ user.Identity, _ string) error {
+func (m *recMod) Purge(_ context.Context, _ connector.Channel, _ user.Identity) error {
+	return m.record("purge")
+}
+func (m *recMod) ClearChat(_ context.Context, _ connector.Channel) error { return m.record("clear") }
+func (m *recMod) Ban(_ context.Context, _ connector.Channel, _ user.Identity, _ string) error {
 	return m.record("ban")
 }
-func (m *recMod) Unban(_ context.Context, _ user.Identity) error { return m.record("unban") }
-func (m *recMod) Mod(_ context.Context, _ user.Identity) error   { return m.record("mod") }
-func (m *recMod) Unmod(_ context.Context, _ user.Identity) error { return m.record("unmod") }
+func (m *recMod) Unban(_ context.Context, _ connector.Channel, _ user.Identity) error {
+	return m.record("unban")
+}
+func (m *recMod) Mod(_ context.Context, _ connector.Channel, _ user.Identity) error {
+	return m.record("mod")
+}
+func (m *recMod) Unmod(_ context.Context, _ connector.Channel, _ user.Identity) error {
+	return m.record("unmod")
+}
 
 // stubPlatform is the inner platform: reads are real, writes are recorded.
 type stubPlatform struct {
@@ -100,7 +108,7 @@ func TestChatRecordedAndNotSent(t *testing.T) {
 	p := dryrun.NewPlatform(&stubPlatform{chat: inner, mod: &recMod{}}, log)
 
 	require.NoError(t, p.Chat().Send(ctx, connector.Message{Text: "hello", From: connector.AccountBot}))
-	require.NoError(t, p.Chat().Delete(ctx, "msg-1"))
+	require.NoError(t, p.Chat().Delete(ctx, "", "msg-1"))
 
 	assert.Empty(t, inner.sent, "the dry run must not send")
 	assert.Empty(t, inner.deleted, "the dry run must not delete")
@@ -117,13 +125,13 @@ func TestModerationRecordedAndNotExecuted(t *testing.T) {
 	p := dryrun.NewPlatform(&stubPlatform{chat: &recChat{}, mod: inner}, log)
 	target := user.Identity{Platform: platform.Twitch, Login: "trouble"}
 
-	require.NoError(t, p.Moderation().Timeout(ctx, target, time.Minute, "spam"))
-	require.NoError(t, p.Moderation().Purge(ctx, target))
-	require.NoError(t, p.Moderation().ClearChat(ctx))
-	require.NoError(t, p.Moderation().Ban(ctx, target, "reason"))
-	require.NoError(t, p.Moderation().Unban(ctx, target))
-	require.NoError(t, p.Moderation().Mod(ctx, target))
-	require.NoError(t, p.Moderation().Unmod(ctx, target))
+	require.NoError(t, p.Moderation().Timeout(ctx, "", target, time.Minute, "spam"))
+	require.NoError(t, p.Moderation().Purge(ctx, "", target))
+	require.NoError(t, p.Moderation().ClearChat(ctx, ""))
+	require.NoError(t, p.Moderation().Ban(ctx, "", target, "reason"))
+	require.NoError(t, p.Moderation().Unban(ctx, "", target))
+	require.NoError(t, p.Moderation().Mod(ctx, "", target))
+	require.NoError(t, p.Moderation().Unmod(ctx, "", target))
 
 	assert.Empty(t, inner.calls, "the dry run must not moderate")
 	for _, op := range []string{"timeout", "purge", "clear chat", "ban", "unban", "mod", "unmod"} {

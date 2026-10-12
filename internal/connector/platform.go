@@ -130,17 +130,23 @@ type Chatters interface {
 
 // Chat is the chat of the channel on a platform.
 type Chat interface {
-	// Send sends m to the chat. The adapter splits a text that is longer
-	// than the platform allows and keeps to the rate limits of the
-	// platform (actions.md B65); Send returns when the platform has taken
-	// every part (actions.md B2). An error wraps ErrNotConnected if the
-	// account of m is not connected.
+	// Send sends m to the chat of m.Channel (empty: the home channel). The
+	// adapter splits a text that is longer than the platform allows and
+	// keeps to the rate limits of the platform (actions.md B65); Send
+	// returns when the platform has taken every part (actions.md B2). An
+	// error wraps ErrNotConnected if the account of m is not connected.
 	Send(ctx context.Context, m Message) error
-	// Delete deletes the chat message with the platform's ID messageID,
-	// e.g. the triggering message of a command (requirements.md) or a
-	// message in a muted chat (actions.md B85).
-	Delete(ctx context.Context, messageID string) error
+	// Delete deletes the chat message with the platform's ID messageID
+	// from the channel ch (empty: the home channel), e.g. the triggering
+	// message of a command (requirements.md) or a message in a muted chat
+	// (actions.md B85).
+	Delete(ctx context.Context, ch Channel, messageID string) error
 }
+
+// Channel is the login of a channel the platform operates in, e.g. the
+// home channel or one of the additional channels (spec
+// twitch-multi-channel.md, B6); the empty channel is the home channel.
+type Channel string
 
 // Message is a chat message the core sends.
 type Message struct {
@@ -148,6 +154,9 @@ type Message struct {
 	Text string
 	// From is the account that sends the message.
 	From Account
+	// Channel is the channel the message goes to (spec
+	// twitch-multi-channel.md, B6); empty for the home channel.
+	Channel Channel
 }
 
 // Replier is the optional capability of a Chat to send a message as a
@@ -170,21 +179,22 @@ type Whisperer interface {
 // B80 to B86). Strikes and a muted chat are the core's own (B84, B85). The
 // error of an operation the platform refuses wraps ErrRefused (B86).
 type Moderation interface {
-	// Timeout bans target from the chat for d. The platform gets reason
-	// where it takes one; empty means no reason (B83).
-	Timeout(ctx context.Context, target user.Identity, d time.Duration, reason string) error
-	// Purge removes the messages of target from the chat.
-	Purge(ctx context.Context, target user.Identity) error
-	// ClearChat removes every message from the chat.
-	ClearChat(ctx context.Context) error
-	// Ban bans target from the channel; reason as for Timeout.
-	Ban(ctx context.Context, target user.Identity, reason string) error
-	// Unban lifts the ban or timeout of target.
-	Unban(ctx context.Context, target user.Identity) error
-	// Mod makes target a moderator of the channel.
-	Mod(ctx context.Context, target user.Identity) error
-	// Unmod takes the moderator role from target.
-	Unmod(ctx context.Context, target user.Identity) error
+	// Timeout bans target from the chat of the channel ch (empty: the home
+	// channel) for d. The platform gets reason where it takes one; empty
+	// means no reason (B83).
+	Timeout(ctx context.Context, ch Channel, target user.Identity, d time.Duration, reason string) error
+	// Purge removes the messages of target from the chat of ch.
+	Purge(ctx context.Context, ch Channel, target user.Identity) error
+	// ClearChat removes every message from the chat of ch.
+	ClearChat(ctx context.Context, ch Channel) error
+	// Ban bans target from the channel ch; reason as for Timeout.
+	Ban(ctx context.Context, ch Channel, target user.Identity, reason string) error
+	// Unban lifts the ban or timeout of target in the channel ch.
+	Unban(ctx context.Context, ch Channel, target user.Identity) error
+	// Mod makes target a moderator of the channel ch.
+	Mod(ctx context.Context, ch Channel, target user.Identity) error
+	// Unmod takes the moderator role from target in the channel ch.
+	Unmod(ctx context.Context, ch Channel, target user.Identity) error
 }
 
 // Users looks up accounts on a platform, also of people who were never in

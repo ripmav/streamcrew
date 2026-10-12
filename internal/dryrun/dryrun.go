@@ -126,8 +126,8 @@ func (c chat) Send(ctx context.Context, m connector.Message) error {
 }
 
 // Delete implements connector.Chat.
-func (c chat) Delete(ctx context.Context, messageID string) error {
-	c.log.DebugContext(ctx, "dry run: chat delete", "message_id", messageID)
+func (c chat) Delete(ctx context.Context, ch connector.Channel, messageID string) error {
+	c.log.DebugContext(ctx, "dry run: chat delete", "channel", ch, "message_id", messageID)
 	return nil
 }
 
@@ -139,44 +139,44 @@ type moderation struct {
 var _ connector.Moderation = moderation{}
 
 // Timeout implements connector.Moderation.
-func (m moderation) Timeout(ctx context.Context, target user.Identity, d time.Duration, reason string) error {
-	m.log.DebugContext(ctx, "dry run: timeout", "user", target, "duration", d, "reason", reason)
+func (m moderation) Timeout(ctx context.Context, ch connector.Channel, target user.Identity, d time.Duration, reason string) error {
+	m.log.DebugContext(ctx, "dry run: timeout", "channel", ch, "user", target, "duration", d, "reason", reason)
 	return nil
 }
 
 // Purge implements connector.Moderation.
-func (m moderation) Purge(ctx context.Context, target user.Identity) error {
-	m.log.DebugContext(ctx, "dry run: purge", "user", target)
+func (m moderation) Purge(ctx context.Context, ch connector.Channel, target user.Identity) error {
+	m.log.DebugContext(ctx, "dry run: purge", "channel", ch, "user", target)
 	return nil
 }
 
 // ClearChat implements connector.Moderation.
-func (m moderation) ClearChat(ctx context.Context) error {
-	m.log.DebugContext(ctx, "dry run: clear chat")
+func (m moderation) ClearChat(ctx context.Context, ch connector.Channel) error {
+	m.log.DebugContext(ctx, "dry run: clear chat", "channel", ch)
 	return nil
 }
 
 // Ban implements connector.Moderation.
-func (m moderation) Ban(ctx context.Context, target user.Identity, reason string) error {
-	m.log.DebugContext(ctx, "dry run: ban", "user", target, "reason", reason)
+func (m moderation) Ban(ctx context.Context, ch connector.Channel, target user.Identity, reason string) error {
+	m.log.DebugContext(ctx, "dry run: ban", "channel", ch, "user", target, "reason", reason)
 	return nil
 }
 
 // Unban implements connector.Moderation.
-func (m moderation) Unban(ctx context.Context, target user.Identity) error {
-	m.log.DebugContext(ctx, "dry run: unban", "user", target)
+func (m moderation) Unban(ctx context.Context, ch connector.Channel, target user.Identity) error {
+	m.log.DebugContext(ctx, "dry run: unban", "channel", ch, "user", target)
 	return nil
 }
 
 // Mod implements connector.Moderation.
-func (m moderation) Mod(ctx context.Context, target user.Identity) error {
-	m.log.DebugContext(ctx, "dry run: mod", "user", target)
+func (m moderation) Mod(ctx context.Context, ch connector.Channel, target user.Identity) error {
+	m.log.DebugContext(ctx, "dry run: mod", "channel", ch, "user", target)
 	return nil
 }
 
 // Unmod implements connector.Moderation.
-func (m moderation) Unmod(ctx context.Context, target user.Identity) error {
-	m.log.DebugContext(ctx, "dry run: unmod", "user", target)
+func (m moderation) Unmod(ctx context.Context, ch connector.Channel, target user.Identity) error {
+	m.log.DebugContext(ctx, "dry run: unmod", "channel", ch, "user", target)
 	return nil
 }
 

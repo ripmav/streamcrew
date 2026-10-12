@@ -26,11 +26,13 @@ import (
 
 // opsServer is a fake Helix for the platform operations (roadmap 4.4).
 type opsServer struct {
-	mu      sync.Mutex
-	chat    []string // the sent chat texts, in order
-	bans404 bool     // make DELETE /moderation/bans answer 404
-	offline bool     // /streams and /users answer no data
-	timeout int      // the timeout duration the last POST carried
+	mu          sync.Mutex
+	chat        []string // the sent chat texts, in order
+	bans404     bool     // make DELETE /moderation/bans answer 404
+	offline     bool     // /streams and /users answer no data
+	timeout     int      // the timeout duration the last POST carried
+	broadcaster string   // the broadcaster ID the last chat send carried
+	userLookups int      // the GET /users calls so far
 }
 
 func (s *opsServer) handler(t *testing.T) http.HandlerFunc {
@@ -45,10 +47,10 @@ func (s *opsServer) handler(t *testing.T) http.HandlerFunc {
 				Message       string `json:"message"`
 			}
 			require.NoError(t, jsonv2.Unmarshal(body, &in))
-			assert.Equal(t, "7", in.BroadcasterID)
 			assert.Equal(t, "7", in.SenderID)
 			s.mu.Lock()
 			s.chat = append(s.chat, in.Message)
+			s.broadcaster = in.BroadcasterID
 			s.mu.Unlock()
 			_, _ = w.Write([]byte(`{"message":{"id":"m1","message":""}}`))
 		case r.URL.Path == "/chat/messages" && r.Method == http.MethodDelete:
@@ -97,10 +99,16 @@ func (s *opsServer) handler(t *testing.T) http.HandlerFunc {
 			w.WriteHeader(http.StatusNoContent)
 		case r.URL.Path == "/users":
 			s.mu.Lock()
-			unknown := s.offline
+			s.userLookups++
+			offline := s.offline
 			s.mu.Unlock()
-			if unknown {
+			login := r.URL.Query().Get("login")
+			if offline || login == "ghost" {
 				_, _ = w.Write([]byte(`{"data":[]}`))
+				return
+			}
+			if login == "other" {
+				_, _ = w.Write([]byte(`{"data":[{"id":"42","login":"other","display_name":"User"}]}`))
 				return
 			}
 			_, _ = w.Write([]byte(`{"data":[{"id":"3","login":"user","display_name":"User"}]}`))
@@ -159,6 +167,8 @@ func TestChatSendSplitsLongText(t *testing.T) {
 	require.NoError(t, p.Chat().Send(context.Background(), connector.Message{Text: long, From: connector.AccountStreamer}))
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	assert.Equal(t, "7", s.broadcaster) // the home channel is the streamer's account
+	assert.Zero(t, s.userLookups)
 	require.Len(t, s.chat, 2)
 	for _, part := range s.chat {
 		assert.LessOrEqual(t, len([]rune(part)), 500)
@@ -209,20 +219,64 @@ func TestChatSendRefusedByPlatform(t *testing.T) {
 	assert.ErrorIs(t, err, connector.ErrRefused)
 }
 
+// TestChatSendToAdditionalChannel covers channel resolution (spec twitch-multi-channel.md, B4):
+// an additional channel is looked up by its login over Helix, the message goes to the resolved
+// broadcaster, and the lookup is cached.
+func TestChatSendToAdditionalChannel(t *testing.T) {
+	s := &opsServer{}
+	p := opsPlatform(t, readyAuth(), s)
+	msg := connector.Message{Text: "hi", From: connector.AccountStreamer, Channel: "other"}
+	require.NoError(t, p.Chat().Send(context.Background(), msg))
+	require.NoError(t, p.Chat().Send(context.Background(), msg)) // cached
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	assert.Equal(t, "42", s.broadcaster) // the resolved channel, not the streamer
+	assert.Equal(t, 1, s.userLookups)    // the Helix lookup happened once
+}
+
+// TestChatSendUnknownChannel reports that a channel login Helix does not
+// know is refused as an unknown user.
+func TestChatSendUnknownChannel(t *testing.T) {
+	p := opsPlatform(t, readyAuth(), &opsServer{})
+	err := p.Chat().Send(context.Background(), connector.Message{Text: "hi", From: connector.AccountStreamer, Channel: "ghost"})
+	assert.ErrorIs(t, err, connector.ErrUnknownUser)
+}
+
+// TestChatSendPerChannelBuckets covers spec twitch-multi-channel.md, B9:
+// the send bucket of one channel is not limited by another; an exhausted
+// channel does not slow down a send on a different channel.
+func TestChatSendPerChannelBuckets(t *testing.T) {
+	s := &opsServer{}
+	p := opsPlatform(t, readyAuth(), s)
+	ctx := context.Background()
+	// Exhaust the "other" channel's bucket (Twitch takes 20 per 30 seconds).
+	for range 20 {
+		require.NoError(t, p.Chat().Send(ctx, connector.Message{Text: "x", From: connector.AccountStreamer, Channel: "other"}))
+	}
+	// The home channel has its own bucket, so it is not limited by "other":
+	// the send goes out without waiting for the rate to refill.
+	start := time.Now()
+	require.NoError(t, p.Chat().Send(ctx, connector.Message{Text: "y", From: connector.AccountStreamer}))
+	assert.Less(t, time.Since(start), 500*time.Millisecond, "the home bucket must not be drained by the other channel")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	assert.Equal(t, 1, s.userLookups) // the "other" login is resolved once
+}
+
 func TestChatDelete(t *testing.T) {
 	p := opsPlatform(t, readyAuth(), &opsServer{})
-	assert.NoError(t, p.Chat().Delete(context.Background(), "m1"))
+	assert.NoError(t, p.Chat().Delete(context.Background(), "", "m1"))
 }
 
 func TestModerationTimeoutClampsDuration(t *testing.T) {
 	s := &opsServer{}
 	p := opsPlatform(t, readyAuth(), s)
-	require.NoError(t, p.Moderation().Timeout(context.Background(), target(), 30*time.Second, "r"))
+	require.NoError(t, p.Moderation().Timeout(context.Background(), "", target(), 30*time.Second, "r"))
 	s.mu.Lock()
 	assert.Equal(t, 60, s.timeout) // below the Twitch minimum
 	s.mu.Unlock()
 
-	require.NoError(t, p.Moderation().Timeout(context.Background(), target(), 48*time.Hour, "r"))
+	require.NoError(t, p.Moderation().Timeout(context.Background(), "", target(), 48*time.Hour, "r"))
 	s.mu.Lock()
 	assert.Equal(t, 86400, s.timeout) // above the Twitch maximum
 	s.mu.Unlock()
@@ -231,26 +285,26 @@ func TestModerationTimeoutClampsDuration(t *testing.T) {
 func TestModerationPurgeIsRefused(t *testing.T) {
 	s := &opsServer{}
 	p := opsPlatform(t, readyAuth(), s)
-	err := p.Moderation().Purge(context.Background(), target())
+	err := p.Moderation().Purge(context.Background(), "", target())
 	assert.ErrorIs(t, err, connector.ErrRefused)
 }
 
 func TestModerationClearChat(t *testing.T) {
 	p := opsPlatform(t, readyAuth(), &opsServer{})
-	assert.NoError(t, p.Moderation().ClearChat(context.Background()))
+	assert.NoError(t, p.Moderation().ClearChat(context.Background(), ""))
 }
 
 func TestModerationBanAndMods(t *testing.T) {
 	p := opsPlatform(t, readyAuth(), &opsServer{})
-	require.NoError(t, p.Moderation().Ban(context.Background(), target(), "b"))
-	require.NoError(t, p.Moderation().Mod(context.Background(), target()))
-	assert.NoError(t, p.Moderation().Unmod(context.Background(), target()))
+	require.NoError(t, p.Moderation().Ban(context.Background(), "", target(), "b"))
+	require.NoError(t, p.Moderation().Mod(context.Background(), "", target()))
+	assert.NoError(t, p.Moderation().Unmod(context.Background(), "", target()))
 }
 
 func TestModerationUnbanFallsBackToUntimeout(t *testing.T) {
 	// the ban is none (404), so the timeout is lifted instead
 	p := opsPlatform(t, readyAuth(), &opsServer{bans404: true})
-	assert.NoError(t, p.Moderation().Unban(context.Background(), target()))
+	assert.NoError(t, p.Moderation().Unban(context.Background(), "", target()))
 }
 
 func TestUsersLookup(t *testing.T) {

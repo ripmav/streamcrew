@@ -5,7 +5,9 @@ package twitch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/helix"
@@ -56,4 +58,43 @@ func refuse(err error) error {
 func notFound(err error) bool {
 	var se *httpclient.StatusError
 	return errors.As(err, &se) && se.StatusCode == http.StatusNotFound
+}
+
+// channelID resolves the broadcaster ID of the channel ch (spec twitch-multi-channel.md, B4).
+// The home channel is the streamer's own account; an additional channel is looked up by
+// its login over Helix and cached, so the Helix call happens once per channel.
+func (p *Platform) channelID(ctx context.Context, ch connector.Channel) (string, error) {
+	if ch == "" {
+		st, err := p.account(ctx)
+		if err != nil {
+			return "", err
+		}
+		return st.AccountID, nil
+	}
+	login := strings.ToLower(string(ch))
+	p.chMu.Lock()
+	if id, ok := p.chIDs[login]; ok {
+		p.chMu.Unlock()
+		return id, nil
+	}
+	p.chMu.Unlock()
+	if _, err := p.account(ctx); err != nil {
+		return "", err
+	}
+	hc, err := p.ops(ctx)
+	if err != nil {
+		return "", err
+	}
+	users, err := hc.GetUsers(ctx, nil, []string{string(ch)})
+	if err != nil {
+		return "", fmt.Errorf("channel %s: %w", ch, err)
+	}
+	if len(users) == 0 {
+		return "", fmt.Errorf("channel %q: %w", ch, connector.ErrUnknownUser)
+	}
+	id := users[0].ID
+	p.chMu.Lock()
+	p.chIDs[login] = id
+	p.chMu.Unlock()
+	return id, nil
 }

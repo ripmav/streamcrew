@@ -56,6 +56,9 @@ type Output struct {
 	Op Op `json:"op"`
 	// From is the account that sends a message.
 	From connector.Account `json:"from,omitempty"`
+	// Channel is the channel the operation acts on; empty for the home
+	// channel.
+	Channel string `json:"channel,omitempty"`
 	// Text is the text of a message.
 	Text string `json:"text,omitempty"`
 	// MessageID is the message a reply answers or a delete deletes.
@@ -71,7 +74,7 @@ type Output struct {
 
 // output logs o and publishes it.
 func (p *Platform) output(ctx context.Context, o Output) {
-	p.logger.InfoContext(ctx, "mock output", "op", o.Op, "from", o.From, "text", o.Text,
+	p.logger.InfoContext(ctx, "mock output", "op", o.Op, "from", o.From, "channel", o.Channel, "text", o.Text,
 		"message_id", o.MessageID, "target", o.Target, "duration", o.Duration.Std(), "reason", o.Reason)
 	e := event.New(event.Source{Kind: event.SourcePlatform, Name: string(platform.Mock)}, TypeOutput, o)
 	if err := p.publisher.Publish(ctx, e); err != nil {
@@ -89,19 +92,19 @@ func (c chat) Send(ctx context.Context, m connector.Message) error {
 	if err := c.p.sendable(m); err != nil {
 		return fmt.Errorf("send: %w", err)
 	}
-	c.p.output(ctx, Output{Op: OpSend, From: m.From, Text: m.Text})
+	c.p.output(ctx, Output{Op: OpSend, From: m.From, Channel: string(m.Channel), Text: m.Text})
 	return nil
 }
 
 // Delete implements connector.Chat.
-func (c chat) Delete(ctx context.Context, messageID string) error {
+func (c chat) Delete(ctx context.Context, ch connector.Channel, messageID string) error {
 	if messageID == "" {
 		return errors.New("delete: empty message ID")
 	}
 	if err := c.p.connected(); err != nil {
 		return fmt.Errorf("delete: %w", err)
 	}
-	c.p.output(ctx, Output{Op: OpDelete, MessageID: messageID})
+	c.p.output(ctx, Output{Op: OpDelete, Channel: string(ch), MessageID: messageID})
 	return nil
 }
 
@@ -113,7 +116,7 @@ func (c chat) Reply(ctx context.Context, messageID string, m connector.Message) 
 	if err := c.p.sendable(m); err != nil {
 		return fmt.Errorf("reply: %w", err)
 	}
-	c.p.output(ctx, Output{Op: OpReply, From: m.From, Text: m.Text, MessageID: messageID})
+	c.p.output(ctx, Output{Op: OpReply, From: m.From, Channel: string(m.Channel), Text: m.Text, MessageID: messageID})
 	return nil
 }
 
@@ -122,7 +125,7 @@ func (c chat) Whisper(ctx context.Context, to user.Identity, m connector.Message
 	if err := c.p.sendable(m); err != nil {
 		return fmt.Errorf("whisper: %w", err)
 	}
-	c.p.output(ctx, Output{Op: OpWhisper, From: m.From, Text: m.Text, Target: to.Login})
+	c.p.output(ctx, Output{Op: OpWhisper, From: m.From, Channel: string(m.Channel), Text: m.Text, Target: to.Login})
 	return nil
 }
 
@@ -148,37 +151,37 @@ type moderation struct {
 }
 
 // Timeout implements connector.Moderation.
-func (m moderation) Timeout(ctx context.Context, target user.Identity, d time.Duration, reason string) error {
+func (m moderation) Timeout(ctx context.Context, ch connector.Channel, target user.Identity, d time.Duration, reason string) error {
 	if d <= 0 {
 		return fmt.Errorf("timeout: duration %s is not positive", d)
 	}
-	return m.do(ctx, Output{Op: OpTimeout, Target: target.Login, Duration: polydoc.Duration(d), Reason: reason})
+	return m.do(ctx, Output{Op: OpTimeout, Channel: string(ch), Target: target.Login, Duration: polydoc.Duration(d), Reason: reason})
 }
 
 // Purge implements connector.Moderation.
-func (m moderation) Purge(ctx context.Context, target user.Identity) error {
-	return m.do(ctx, Output{Op: OpPurge, Target: target.Login})
+func (m moderation) Purge(ctx context.Context, ch connector.Channel, target user.Identity) error {
+	return m.do(ctx, Output{Op: OpPurge, Channel: string(ch), Target: target.Login})
 }
 
 // ClearChat implements connector.Moderation.
-func (m moderation) ClearChat(ctx context.Context) error {
-	return m.do(ctx, Output{Op: OpClearChat})
+func (m moderation) ClearChat(ctx context.Context, ch connector.Channel) error {
+	return m.do(ctx, Output{Op: OpClearChat, Channel: string(ch)})
 }
 
 // Ban implements connector.Moderation.
-func (m moderation) Ban(ctx context.Context, target user.Identity, reason string) error {
-	return m.do(ctx, Output{Op: OpBan, Target: target.Login, Reason: reason})
+func (m moderation) Ban(ctx context.Context, ch connector.Channel, target user.Identity, reason string) error {
+	return m.do(ctx, Output{Op: OpBan, Channel: string(ch), Target: target.Login, Reason: reason})
 }
 
 // Unban implements connector.Moderation.
-func (m moderation) Unban(ctx context.Context, target user.Identity) error {
-	return m.do(ctx, Output{Op: OpUnban, Target: target.Login})
+func (m moderation) Unban(ctx context.Context, ch connector.Channel, target user.Identity) error {
+	return m.do(ctx, Output{Op: OpUnban, Channel: string(ch), Target: target.Login})
 }
 
 // Mod implements connector.Moderation; a simulated user gets the
 // moderator role.
-func (m moderation) Mod(ctx context.Context, target user.Identity) error {
-	if err := m.do(ctx, Output{Op: OpMod, Target: target.Login}); err != nil {
+func (m moderation) Mod(ctx context.Context, ch connector.Channel, target user.Identity) error {
+	if err := m.do(ctx, Output{Op: OpMod, Channel: string(ch), Target: target.Login}); err != nil {
 		return err
 	}
 	m.p.changeRoles(target.Login, func(s role.Set) role.Set { return s.With(role.Moderator) })
@@ -187,8 +190,8 @@ func (m moderation) Mod(ctx context.Context, target user.Identity) error {
 
 // Unmod implements connector.Moderation; a simulated user loses the
 // moderator role.
-func (m moderation) Unmod(ctx context.Context, target user.Identity) error {
-	if err := m.do(ctx, Output{Op: OpUnmod, Target: target.Login}); err != nil {
+func (m moderation) Unmod(ctx context.Context, ch connector.Channel, target user.Identity) error {
+	if err := m.do(ctx, Output{Op: OpUnmod, Channel: string(ch), Target: target.Login}); err != nil {
 		return err
 	}
 	m.p.changeRoles(target.Login, func(s role.Set) role.Set { return s.Without(role.Moderator) })

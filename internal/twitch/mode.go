@@ -26,9 +26,14 @@ const (
 )
 
 // Timeout implements connector.Moderation; the duration is clamped to
-// the range Twitch takes (60 seconds to 24 hours).
-func (m moderation) Timeout(ctx context.Context, target user.Identity, d time.Duration, reason string) error {
+// the range Twitch takes (60 seconds to 24 hours). It acts on the
+// channel ch; the operation itself runs as the streamer account.
+func (m moderation) Timeout(ctx context.Context, ch connector.Channel, target user.Identity, d time.Duration, reason string) error {
 	st, err := m.p.account(ctx)
+	if err != nil {
+		return err
+	}
+	broadcaster, err := m.p.channelID(ctx, ch)
 	if err != nil {
 		return err
 	}
@@ -44,7 +49,7 @@ func (m moderation) Timeout(ctx context.Context, target user.Identity, d time.Du
 		secs = maxTimeoutSeconds
 	}
 	_, err = hc.Timeout(ctx, helix.TimeoutInput{
-		BroadcasterID: st.AccountID,
+		BroadcasterID: broadcaster,
 		ModeratorID:   st.AccountID,
 		FromID:        target.PlatformUserID,
 		Duration:      secs,
@@ -55,13 +60,18 @@ func (m moderation) Timeout(ctx context.Context, target user.Identity, d time.Du
 
 // Purge implements connector.Moderation: Twitch has no purge, so the
 // operation is refused.
-func (m moderation) Purge(context.Context, user.Identity) error {
+func (m moderation) Purge(context.Context, connector.Channel, user.Identity) error {
 	return errors.Join(connector.ErrRefused, errors.New("twitch has no purge"))
 }
 
-// ClearChat implements connector.Moderation.
-func (m moderation) ClearChat(ctx context.Context) error {
+// ClearChat implements connector.Moderation; it clears the chat of the
+// channel ch.
+func (m moderation) ClearChat(ctx context.Context, ch connector.Channel) error {
 	st, err := m.p.account(ctx)
+	if err != nil {
+		return err
+	}
+	broadcaster, err := m.p.channelID(ctx, ch)
 	if err != nil {
 		return err
 	}
@@ -69,12 +79,16 @@ func (m moderation) ClearChat(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return refuse(hc.ClearChat(ctx, st.AccountID, st.AccountID))
+	return refuse(hc.ClearChat(ctx, broadcaster, st.AccountID))
 }
 
-// Ban implements connector.Moderation.
-func (m moderation) Ban(ctx context.Context, target user.Identity, reason string) error {
+// Ban implements connector.Moderation; it bans from the channel ch.
+func (m moderation) Ban(ctx context.Context, ch connector.Channel, target user.Identity, reason string) error {
 	st, err := m.p.account(ctx)
+	if err != nil {
+		return err
+	}
+	broadcaster, err := m.p.channelID(ctx, ch)
 	if err != nil {
 		return err
 	}
@@ -83,7 +97,7 @@ func (m moderation) Ban(ctx context.Context, target user.Identity, reason string
 		return err
 	}
 	_, err = hc.Ban(ctx, helix.BanInput{
-		BroadcasterID: st.AccountID,
+		BroadcasterID: broadcaster,
 		ModeratorID:   st.AccountID,
 		FromID:        target.PlatformUserID,
 		Reason:        reason,
@@ -91,10 +105,14 @@ func (m moderation) Ban(ctx context.Context, target user.Identity, reason string
 	return refuse(err)
 }
 
-// Unban implements connector.Moderation: it lifts the ban, and if the
-// user is not banned, the timeout.
-func (m moderation) Unban(ctx context.Context, target user.Identity) error {
+// Unban implements connector.Moderation: it lifts the ban in the channel
+// ch, and if the user is not banned, the timeout.
+func (m moderation) Unban(ctx context.Context, ch connector.Channel, target user.Identity) error {
 	st, err := m.p.account(ctx)
+	if err != nil {
+		return err
+	}
+	broadcaster, err := m.p.channelID(ctx, ch)
 	if err != nil {
 		return err
 	}
@@ -102,16 +120,21 @@ func (m moderation) Unban(ctx context.Context, target user.Identity) error {
 	if err != nil {
 		return err
 	}
-	err = hc.Unban(ctx, st.AccountID, st.AccountID, target.PlatformUserID)
+	err = hc.Unban(ctx, broadcaster, st.AccountID, target.PlatformUserID)
 	if notFound(err) {
-		err = hc.Untimeout(ctx, st.AccountID, st.AccountID, target.PlatformUserID)
+		err = hc.Untimeout(ctx, broadcaster, st.AccountID, target.PlatformUserID)
 	}
 	return refuse(err)
 }
 
-// Mod implements connector.Moderation.
-func (m moderation) Mod(ctx context.Context, target user.Identity) error {
+// Mod implements connector.Moderation; it adds the moderator to the
+// channel ch.
+func (m moderation) Mod(ctx context.Context, ch connector.Channel, target user.Identity) error {
 	st, err := m.p.account(ctx)
+	if err != nil {
+		return err
+	}
+	broadcaster, err := m.p.channelID(ctx, ch)
 	if err != nil {
 		return err
 	}
@@ -119,12 +142,17 @@ func (m moderation) Mod(ctx context.Context, target user.Identity) error {
 	if err != nil {
 		return err
 	}
-	return refuse(hc.AddMod(ctx, st.AccountID, st.AccountID, target.PlatformUserID))
+	return refuse(hc.AddMod(ctx, broadcaster, st.AccountID, target.PlatformUserID))
 }
 
-// Unmod implements connector.Moderation.
-func (m moderation) Unmod(ctx context.Context, target user.Identity) error {
+// Unmod implements connector.Moderation; it removes the moderator from
+// the channel ch.
+func (m moderation) Unmod(ctx context.Context, ch connector.Channel, target user.Identity) error {
 	st, err := m.p.account(ctx)
+	if err != nil {
+		return err
+	}
+	broadcaster, err := m.p.channelID(ctx, ch)
 	if err != nil {
 		return err
 	}
@@ -132,5 +160,5 @@ func (m moderation) Unmod(ctx context.Context, target user.Identity) error {
 	if err != nil {
 		return err
 	}
-	return refuse(hc.RemoveMod(ctx, st.AccountID, st.AccountID, target.PlatformUserID))
+	return refuse(hc.RemoveMod(ctx, broadcaster, st.AccountID, target.PlatformUserID))
 }
