@@ -15,6 +15,9 @@ import (
 // platform, the users and the values.
 type Payload struct {
 	Platform platform.Name `json:"platform"`
+	// Channel is the channel the event happened in (spec
+	// twitch-multi-channel.md, B5); empty for the home channel.
+	Channel string `json:"channel,omitempty"`
 	// User and Target are the user and the target user (B6); nil if the
 	// event has none.
 	User   *user.User `json:"user,omitempty"`

@@ -382,10 +382,13 @@ func (m Moderation) targets(p engine.Params) ([]connector.Platform, error) {
 // platform (B86).
 func (m Moderation) moderate(ctx context.Context, run *engine.Run, targets []connector.Platform, in inputs) error {
 	p := run.Params()
+	// The run's channel (spec twitch-multi-channel.md, B6): empty for a run
+	// without one, which the platforms read as the home channel.
+	ch := connector.Channel(p.Channel)
 	if !m.Kind.hasUser() {
 		errs := make([]error, len(targets))
 		for i, target := range targets {
-			errs[i] = m.act(ctx, target.Moderation(), nil, in)
+			errs[i] = m.act(ctx, target.Moderation(), ch, nil, in)
 		}
 		return connector.JoinErrors("failed", targets, errs)
 	}
@@ -398,29 +401,29 @@ func (m Moderation) moderate(ctx context.Context, run *engine.Run, targets []con
 		case err != nil:
 			return field("user", connector.JoinErrors("failed", on, []error{err}))
 		}
-		return connector.JoinErrors("failed", on, []error{m.act(ctx, target.Moderation(), &ident, in)})
+		return connector.JoinErrors("failed", on, []error{m.act(ctx, target.Moderation(), ch, &ident, in)})
 	}
 	return field("user", unknown(in.login, p.Platform))
 }
 
-// act does what the kind says on one platform; to is the user's account
-// there, nil for kinds without a user.
-func (m Moderation) act(ctx context.Context, mod connector.Moderation, to *user.Identity, in inputs) error {
+// act does what the kind says on one platform, in the channel ch; to is the
+// user's account there, nil for kinds without a user.
+func (m Moderation) act(ctx context.Context, mod connector.Moderation, ch connector.Channel, to *user.Identity, in inputs) error {
 	switch m.Kind {
 	case KindTimeout:
-		return mod.Timeout(ctx, *to, in.duration, in.reason)
+		return mod.Timeout(ctx, ch, *to, in.duration, in.reason)
 	case KindPurge:
-		return mod.Purge(ctx, *to)
+		return mod.Purge(ctx, ch, *to)
 	case KindClearChat:
-		return mod.ClearChat(ctx)
+		return mod.ClearChat(ctx, ch)
 	case KindBan:
-		return mod.Ban(ctx, *to, in.reason)
+		return mod.Ban(ctx, ch, *to, in.reason)
 	case KindUnban:
-		return mod.Unban(ctx, *to)
+		return mod.Unban(ctx, ch, *to)
 	case KindMod:
-		return mod.Mod(ctx, *to)
+		return mod.Mod(ctx, ch, *to)
 	case KindUnmod:
-		return mod.Unmod(ctx, *to)
+		return mod.Unmod(ctx, ch, *to)
 	default:
 		return fmt.Errorf("%w: %s is no moderation on a platform", action.ErrInvalid, m.Kind)
 	}

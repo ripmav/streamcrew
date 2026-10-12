@@ -90,7 +90,7 @@ func (p *Platform) Join(ctx context.Context, login string) error {
 		return fmt.Errorf("join: %w", err)
 	}
 	p.setPresent(who.Login, true)
-	if err := p.receiver.Join(ctx, platform.Mock, who); err != nil {
+	if err := p.receiver.Join(ctx, platform.Mock, "", who); err != nil {
 		return fmt.Errorf("join: %w", err)
 	}
 	return nil

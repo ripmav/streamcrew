@@ -5,6 +5,9 @@ package twitch
 import (
 	"context"
 	"errors"
+	"strings"
+
+	"golang.org/x/time/rate"
 
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/helix"
@@ -13,6 +16,13 @@ import (
 // maxChatMessage is the limit Twitch takes for one chat message, in
 // runes (roadmap 4.4, actions.md B65).
 const maxChatMessage = 500
+
+// The Twitch chat send limit, per channel: 20 messages in 30 seconds
+// (spec twitch-multi-channel.md, B9).
+const (
+	chatRate  = rate.Limit(20.0 / 30.0) // messages per second
+	chatBurst = 20                      // messages that may go at once
+)
 
 // chat is the connector.Chat of the twitch platform (roadmap 4.4): it
 // sends and deletes messages of the channel through Helix. The bot
@@ -33,13 +43,21 @@ func (c chat) Send(ctx context.Context, m connector.Message) error {
 	if err != nil {
 		return err
 	}
+	broadcaster, err := c.p.channelID(ctx, m.Channel)
+	if err != nil {
+		return err
+	}
 	hc, err := c.p.ops(ctx)
 	if err != nil {
 		return err
 	}
+	limiter := c.p.chatLimiter(m.Channel)
 	for _, part := range splitMessage(m.Text) {
+		if err := limiter.Wait(ctx); err != nil {
+			return err
+		}
 		_, err := hc.SendChatMessage(ctx, helix.SendChatMessageInput{
-			BroadcasterID: st.AccountID,
+			BroadcasterID: broadcaster,
 			SenderID:      st.AccountID,
 			Message:       part,
 		})
@@ -50,9 +68,13 @@ func (c chat) Send(ctx context.Context, m connector.Message) error {
 	return nil
 }
 
-// Delete implements connector.Chat.
-func (c chat) Delete(ctx context.Context, messageID string) error {
+// Delete implements connector.Chat; it deletes from the channel ch.
+func (c chat) Delete(ctx context.Context, ch connector.Channel, messageID string) error {
 	st, err := c.p.account(ctx)
+	if err != nil {
+		return err
+	}
+	broadcaster, err := c.p.channelID(ctx, ch)
 	if err != nil {
 		return err
 	}
@@ -60,7 +82,22 @@ func (c chat) Delete(ctx context.Context, messageID string) error {
 	if err != nil {
 		return err
 	}
-	return refuse(hc.DeleteChatMessage(ctx, st.AccountID, st.AccountID, messageID))
+	return refuse(hc.DeleteChatMessage(ctx, broadcaster, st.AccountID, messageID))
+}
+
+// chatLimiter returns the chat send limiter of the channel ch; each
+// channel has its own bucket, so one channel is not limited by another
+// (spec twitch-multi-channel.md, B9).
+func (p *Platform) chatLimiter(ch connector.Channel) *rate.Limiter {
+	key := strings.ToLower(string(ch))
+	p.chMu.Lock()
+	defer p.chMu.Unlock()
+	if l, ok := p.chatLim[key]; ok {
+		return l
+	}
+	l := rate.NewLimiter(chatRate, chatBurst)
+	p.chatLim[key] = l
+	return l
 }
 
 // splitMessage splits text into parts of at most maxChatMessage runes,
