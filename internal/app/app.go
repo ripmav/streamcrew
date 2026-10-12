@@ -338,6 +338,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Names:    Reserved(reserved, a.actions),
 		Types:    a.actions,
 		Roots:    a.rights,
+		Channels: scopeChannels{store: a.store, settings: a.settings},
 	})
 	if err != nil {
 		return a, err

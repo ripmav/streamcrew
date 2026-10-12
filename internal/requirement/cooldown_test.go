@@ -447,7 +447,7 @@ func TestCooldownOutlastsRestart(t *testing.T) {
 	require.NoError(t, err)
 	codec, err := command.NewCodec()
 	require.NoError(t, err)
-	commands, err := command.NewService(s, codec, command.Checks{Counters: s, Names: noNames{}, Types: noTypes{}, Roots: noRoots{}})
+	commands, err := command.NewService(s, codec, command.Checks{Counters: s, Names: noNames{}, Types: noTypes{}, Roots: noRoots{}, Channels: noChannels{}})
 	require.NoError(t, err)
 	daily := cmd(cooldownFor(command.CooldownPerUser, time.Hour, id.ID{}))
 	daily.Triggers, daily.ErrorPolicy = []string{"daily"}, command.ErrorContinue
@@ -484,3 +484,9 @@ func (noNames) Reserved(string) (string, bool) { return "", false }
 type noRoots struct{}
 
 func (noRoots) HasRoot(string) bool { return false }
+
+// noChannels operates no channel; every scope but the global one is
+// rejected.
+type noChannels struct{}
+
+func (noChannels) Operated(context.Context) ([]string, error) { return nil, nil }

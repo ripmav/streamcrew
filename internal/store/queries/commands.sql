@@ -7,8 +7,8 @@ SELECT * FROM commands ORDER BY name, id;
 -- name: PutCommand :exec
 INSERT INTO commands (
     id, name, name_key, kind, enabled, unlocked, group_id, trigger_mode, event_type,
-    error_policy, requirements, actions, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    error_policy, channel, requirements, actions, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE SET
     name = excluded.name,
     name_key = excluded.name_key,
@@ -19,6 +19,7 @@ ON CONFLICT (id) DO UPDATE SET
     trigger_mode = excluded.trigger_mode,
     event_type = excluded.event_type,
     error_policy = excluded.error_policy,
+    channel = excluded.channel,
     requirements = excluded.requirements,
     actions = excluded.actions,
     updated_at = excluded.updated_at;

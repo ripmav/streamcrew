@@ -75,6 +75,14 @@ type Roots interface {
 	HasRoot(name string) bool
 }
 
+// Channels reports the channels the profile operates: the home channel
+// and the additional channels of the settings section (spec
+// twitch-multi-channel.md, B1); the scope of a command must name one of
+// them (commands.md, B9).
+type Channels interface {
+	Operated(ctx context.Context) ([]string, error)
+}
+
 // Checks are what the service needs to check the actions of a command
 // when it saves it (Code-ADR-0013, point 7). All fields are required.
 type Checks struct {
@@ -82,6 +90,7 @@ type Checks struct {
 	Names    Names
 	Types    ActionTypes
 	Roots    Roots
+	Channels Channels
 }
 
 // validate reports a missing field.
@@ -95,6 +104,8 @@ func (c Checks) validate() error {
 		return errors.New("no action types")
 	case c.Roots == nil:
 		return errors.New("no roots")
+	case c.Channels == nil:
+		return errors.New("no channels")
 	}
 	return nil
 }

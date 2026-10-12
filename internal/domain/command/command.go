@@ -99,6 +99,11 @@ type Header struct {
 	// ErrorPolicy says what happens after an action fails (spec
 	// command-engine.md, B71); it must be set.
 	ErrorPolicy ErrorPolicy
+	// Channel is the channel scope of the command (B9): the login of the
+	// channel it runs in; empty for the global scope, all operated
+	// channels. It is checked against the channels the profile operates
+	// when the command is saved.
+	Channel string
 	// CreatedAt and UpdatedAt are maintained by the service.
 	CreatedAt time.Time
 	UpdatedAt time.Time
