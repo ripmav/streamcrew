@@ -44,6 +44,7 @@ type CommandGroup struct {
 	TimerInterval int64
 	CreatedAt     int64
 	UpdatedAt     int64
+	TimerChannel  string
 }
 
 type CommandTrigger struct {

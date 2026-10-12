@@ -228,6 +228,9 @@ const (
 	OutcomeRejected Outcome = "rejected"
 	// OutcomeDisabled means the command is disabled (B14).
 	OutcomeDisabled Outcome = "disabled"
+	// OutcomeOutOfScope means the command's channel scope does not match
+	// the channel of the run (B18); nothing ran, like a disabled command.
+	OutcomeOutOfScope Outcome = "out_of_scope"
 )
 
 // Result is what became of a triggered or called command. The outcomes are
@@ -295,6 +298,11 @@ func (e *Engine) enter(ctx context.Context, req Request, start func(*trigger)) (
 	if !cmd.Enabled {
 		return &trigger{e: e, req: req, ended: true, result: Result{Outcome: OutcomeDisabled}}, nil
 	}
+	if !inScope(cmd, req.Params) {
+		e.logger.DebugContext(ctx, "command out of the channel scope",
+			"command", cmd.Name, "scope", cmd.Channel, "channel", req.Params.Channel)
+		return &trigger{e: e, req: req, ended: true, result: Result{Outcome: OutcomeOutOfScope}}, nil
+	}
 	cfg, err := e.readConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("trigger command %q: %w", cmd.Name, err)
@@ -315,6 +323,14 @@ func (e *Engine) enter(ctx context.Context, req Request, start func(*trigger)) (
 		start(t)
 	}
 	return t, nil
+}
+
+// inScope reports whether the channel scope of cmd (commands.md, B9)
+// matches the channel of the run (B18): the scope is empty, or equal to
+// the channel of the run regardless of case; a run without a channel is
+// out of scope of a scoped command.
+func inScope(cmd command.Command, p Params) bool {
+	return cmd.Channel == "" || strings.EqualFold(cmd.Channel, p.Channel)
 }
 
 // release gives back the place in the queue of a trigger that queues

@@ -314,6 +314,9 @@ func (c Command) call(ctx context.Context, run *engine.Run) error {
 	case engine.OutcomeDisabled, engine.OutcomeRejected, engine.OutcomeWaiting:
 		c.ports.Logger.InfoContext(ctx, "called command did not run",
 			"command", c.Command, "outcome", res.Outcome, "instance", run.InstanceID())
+	case engine.OutcomeOutOfScope:
+		// B18: a call does not check the channel scope, so this outcome
+		// does not occur here.
 	}
 	return nil
 }

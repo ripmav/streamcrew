@@ -213,6 +213,7 @@ func (s *Store) PutGroup(ctx context.Context, g command.Group) error {
 			Name:          g.Name,
 			NameKey:       strings.ToLower(g.Name),
 			TimerInterval: g.TimerInterval.Milliseconds(),
+			TimerChannel:  g.TimerChannel,
 			CreatedAt:     g.CreatedAt.UnixMilli(),
 			UpdatedAt:     g.UpdatedAt.UnixMilli(),
 		})
@@ -355,6 +356,7 @@ func toGroup(row sqlcgen.CommandGroup) (command.Group, error) {
 		ID:            groupID,
 		Name:          row.Name,
 		TimerInterval: time.Duration(row.TimerInterval) * time.Millisecond,
+		TimerChannel:  row.TimerChannel,
 		CreatedAt:     fromMillis(row.CreatedAt),
 		UpdatedAt:     fromMillis(row.UpdatedAt),
 	}, nil

@@ -675,6 +675,35 @@ func TestCommandChannelScope(t *testing.T) {
 	assert.ErrorContains(t, err, `the channel "streamer" is not operated by this profile`)
 }
 
+// TestGroupTimerChannel covers commands.md, B31: the target channel of the
+// group's timer interval is checked against the channels the profile
+// operates and is kept; empty is the home channel.
+func TestGroupTimerChannel(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+	codec, err := command.NewCodec()
+	require.NoError(t, err)
+	fake := fakeChecks{channels: []string{"streamer", "other"}}
+	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: fake, Types: fake, Roots: fake, Channels: fake})
+	require.NoError(t, err)
+
+	// Without a channel, the interval runs at home; the check ignores the
+	// case, the channel is stored as written.
+	g, err := svc.SaveGroup(ctx, command.Group{Name: "home", TimerInterval: time.Minute})
+	require.NoError(t, err)
+	assert.Empty(t, g.TimerChannel)
+	g, err = svc.SaveGroup(ctx, command.Group{Name: "fun", TimerInterval: time.Minute, TimerChannel: "Other"})
+	require.NoError(t, err)
+	loaded, err := svc.Group(ctx, g.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Other", loaded.TimerChannel)
+
+	// A channel the profile does not operate rejects the save.
+	_, err = svc.SaveGroup(ctx, command.Group{Name: "nowhere", TimerInterval: time.Minute, TimerChannel: "unknown"})
+	assert.ErrorContains(t, err, `the channel "unknown" is not operated by this profile`)
+}
+
 // TestSwitchCommand covers actions.md B34 with commands.md B14: the switch
 // changes for good, a command in the target state stays unchanged, and the
 // triggers follow the switch.
