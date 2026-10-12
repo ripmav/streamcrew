@@ -194,6 +194,12 @@ type testAuth struct {
 }
 
 func newTestAuth(t *testing.T, flow Flow) *testAuth {
+	return newTestAuthEmbedded(t, flow, nil)
+}
+
+// newTestAuthEmbedded is newTestAuth with the built-in app port of
+// ADR-0024; a nil embedded leaves the port unset.
+func newTestAuthEmbedded(t *testing.T, flow Flow, embedded func(p platform.Name) (Credentials, bool)) *testAuth {
 	t.Helper()
 	dir := t.TempDir()
 	st, err := store.Open(t.Context(), filepath.Join(dir, "profile.db"),
@@ -221,6 +227,7 @@ func newTestAuth(t *testing.T, flow Flow) *testAuth {
 			calls.add(p, cr)
 			return flow, nil
 		},
+		Embedded:  embedded,
 		Publisher: pub,
 		Logger:    slog.New(slog.DiscardHandler),
 		Clock:     clk.Now,
@@ -363,6 +370,88 @@ func TestStartLogin(t *testing.T) {
 		assert.Nil(t, l)
 		assert.Nil(t, pr)
 		assert.Empty(t, a.Events.of(eventtype.AuthActionRequired))
+	})
+}
+
+// TestEmbeddedApp covers the built-in app of ADR-0024: the flagless login
+// falls back to it, the app of the last login beats it, its secret stays
+// out of the vault, and a refresh of its accounts uses its secret.
+func TestEmbeddedApp(t *testing.T) {
+	t.Parallel()
+	const embID, embSecret = "embedded-client", "embedded-secret"
+	twitchEmbedded := func(p platform.Name) (Credentials, bool) {
+		if p != platform.Twitch {
+			return Credentials{}, false
+		}
+		return Credentials{ID: embID, Secret: embSecret}, true
+	}
+
+	t.Run("the flagless login falls back to the built-in app", func(t *testing.T) {
+		t.Parallel()
+		a := newTestAuthEmbedded(t, newTestFlow(t), twitchEmbedded)
+		ctx := t.Context()
+
+		l, _, err := a.Service.StartLogin(ctx, platform.Twitch, connector.AccountStreamer, Credentials{})
+		require.NoError(t, err)
+		require.NotNil(t, l)
+		assert.Equal(t, []Credentials{{ID: embID, Secret: embSecret}}, a.FlowIDs.list())
+	})
+
+	t.Run("the app of the last login beats the built-in app", func(t *testing.T) {
+		t.Parallel()
+		a := newTestAuthEmbedded(t, newTestFlow(t), twitchEmbedded)
+		ctx := t.Context()
+		require.NoError(t, a.Vault.Put(ctx, clientName(platform.Twitch), secretJSON(t, ClientRecord{ID: "app-1", Secret: "secret-1"})))
+
+		l, _, err := a.Service.StartLogin(ctx, platform.Twitch, connector.AccountStreamer, Credentials{})
+		require.NoError(t, err)
+		require.NotNil(t, l)
+		assert.Equal(t, []Credentials{{ID: "app-1", Secret: "secret-1"}}, a.FlowIDs.list())
+	})
+
+	t.Run("a given app beats the built-in app", func(t *testing.T) {
+		t.Parallel()
+		a := newTestAuthEmbedded(t, newTestFlow(t), twitchEmbedded)
+		ctx := t.Context()
+
+		l, _, err := a.Service.StartLogin(ctx, platform.Twitch, connector.AccountStreamer, Credentials{ID: "app-2", Secret: "secret-2"})
+		require.NoError(t, err)
+		require.NotNil(t, l)
+		assert.Equal(t, []Credentials{{ID: "app-2", Secret: "secret-2"}}, a.FlowIDs.list())
+	})
+
+	t.Run("the built-in secret stays out of the vault", func(t *testing.T) {
+		t.Parallel()
+		a := newTestAuthEmbedded(t, newTestFlow(t), twitchEmbedded)
+		ctx := t.Context()
+		acc := Account{Platform: platform.Twitch, Role: connector.AccountStreamer, Login: "ada", UserID: "1001", ClientID: embID, Flow: FlowAuthorizationCode}
+		a.loginWith(acc, Token{AccessToken: "at-1", RefreshToken: "rt-1", ExpiresAt: a.Clock.now.Add(time.Hour)}, Credentials{ID: embID, Secret: embSecret})
+
+		_, err := a.Vault.Get(ctx, clientName(platform.Twitch))
+		assert.ErrorIs(t, err, vault.ErrNotFound)
+	})
+
+	t.Run("a refresh of a built-in app account uses its secret", func(t *testing.T) {
+		t.Parallel()
+		a := newTestAuthEmbedded(t, newTestFlow(t), twitchEmbedded)
+		ctx := t.Context()
+		acc := Account{Platform: platform.Twitch, Role: connector.AccountStreamer, Login: "ada", UserID: "1001", ClientID: embID, Flow: FlowAuthorizationCode}
+		// An expired access token forces the refresh.
+		a.loginWith(acc, Token{AccessToken: "at-1", RefreshToken: "rt-1", ExpiresAt: a.Clock.now.Add(-time.Minute)}, Credentials{ID: embID, Secret: embSecret})
+
+		tok, err := a.Service.Token(ctx, platform.Twitch, connector.AccountStreamer)
+		require.NoError(t, err)
+		assert.Equal(t, "at-2", tok)
+		assert.Equal(t, []Credentials{{ID: embID, Secret: embSecret}}, a.FlowIDs.list())
+	})
+
+	t.Run("without a built-in app the flagless login still fails", func(t *testing.T) {
+		t.Parallel()
+		a := newTestAuth(t, newTestFlow(t))
+		ctx := t.Context()
+
+		_, _, err := a.Service.StartLogin(ctx, platform.Twitch, connector.AccountStreamer, Credentials{})
+		assert.ErrorContains(t, err, "no app for the login")
 	})
 }
 

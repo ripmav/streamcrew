@@ -267,6 +267,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Store:     a.store,
 		Vault:     func(repo vault.Repository) *vault.Vault { return vault.New(repo, ks) },
 		Flows:     authFlows(authClient, twitchAuth, twitchHelix),
+		Embedded:  EmbeddedApp,
 		Publisher: a.bus,
 		Logger:    component(logger, "auth"),
 	}); err != nil {
