@@ -45,6 +45,7 @@ Die Regeln setzen [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-orig
 | [`requirements.md`](requirements.md) | Prüfung der Anforderungsarten, Fehlermeldungen, Kosten und Cooldowns | Phase 3.4 | Geprüft |
 | [`commands-as-code.md`](commands-as-code.md) | Commands als Code: Format in YAML und JSON, Prüfen, Import, Export, JSON-Schemas | Phase 3.5 | Geprüft |
 | [`twitch-events.md`](twitch-events.md) | Zuordnung der Twitch-Events und ihrer Identifier | Phase 4.4 | Entwurf |
+| [`twitch-multi-channel.md`](twitch-multi-channel.md) | Die Channels, in denen der Bot arbeitet: Voraussetzung, Channel-Dimension, Ownership-Gate | Phase 4.6 | Entwurf |
 | `moderation.md` | Filter, Strikes, Teilnahmeregeln | Phase 5 | geplant |
 | `overlays.md` | Overlay-Items, Widgets, Protokoll | Phase 7 | geplant |
 | `economy.md` | Währungen, Ränge, Inventar, Shop | Phase 8 | geplant |
