@@ -11,3 +11,6 @@
 *.test
 *.out
 *.prof
+
+# local pi agent state
+.pi/
