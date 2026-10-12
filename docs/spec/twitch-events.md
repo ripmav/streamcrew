@@ -17,6 +17,10 @@ B7, B9, Plan A.6). Sie gilt für die plattformspezifischen Twitch-Typen
 und die plattformneutralen Entsprechungen, die Twitch als Quelle
 liefert.
 
+Jedes Channel-Ereignis trägt seinen Channel (den Broadcaster); die
+Channels, in denen der Bot arbeitet, und das Weitergeben des Channels legt
+[`twitch-multi-channel.md`](twitch-multi-channel.md) fest (Phase 4.6).
+
 Nicht Teil dieser Spezifikation: die numerischen Ereignis-IDs des
 Originals für den Import (Roadmap Gate O, O.1), das Verhalten der
 Ereignis-Commands selbst ([`commands.md`](commands.md), B20) und die
@@ -115,3 +119,4 @@ Twitch-Actions (Roadmap 4.4, A4 für Umfragen und Vorhersagen).
 |---|---|
 | 2026-10-10 | Erstellt für Phase 4.4: Zuordnung (B1–B16), Umfragen/Vorhersagen (B17), Identifier je Ereignis (B18–B19), Verwerfungen (B20–B22). |
 | 2026-10-10 | Identifier an die Implementierung angepasst (Task 4): ein `$moderationmessage` statt Dauer/Grund (die Plattform nennt beides in einem Feld), die Cheer-Nachricht ist das allgemeine `$message`, Shoutout trägt den shoutenden Kanal als Nutzer, kein `$channelpointsrewardname`/`$custompowerupname` (die Nutzlasten nennen nur die ID) und kein `$donationpercent` (die Plattform sendet keinen Prozentsatz). |
+| 2026-10-12 | Querverweis auf [`twitch-multi-channel.md`](twitch-multi-channel.md) (Phase 4.6): jedes Channel-Ereignis trägt seinen Channel; die betriebenen Channels und die Channel-Dimension gehören dorthin. |
