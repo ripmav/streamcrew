@@ -60,11 +60,12 @@ func snapshot(ctx context.Context, cfg *config.Config, id string, kind backup.Ki
 }
 
 type profileCmd struct {
-	List   profileListCmd   `cmd:"" help:"List the profiles."`
-	Create profileCreateCmd `cmd:"" help:"Create a profile."`
-	Rename profileRenameCmd `cmd:"" help:"Change the display name of a profile."`
-	Use    profileUseCmd    `cmd:"" help:"Make a profile the active one."`
-	Delete profileDeleteCmd `cmd:"" help:"Delete a profile; a backup is made first."`
+	List     profileListCmd   `cmd:"" help:"List the profiles."`
+	Create   profileCreateCmd `cmd:"" help:"Create a profile."`
+	Rename   profileRenameCmd `cmd:"" help:"Change the display name of a profile."`
+	Use      profileUseCmd    `cmd:"" help:"Make a profile the active one."`
+	Delete   profileDeleteCmd `cmd:"" help:"Delete a profile; a backup is made first."`
+	Channels channelsCmd      `cmd:"" help:"Manage the additional channels the bot operates in. Needs a stopped core, except list."`
 }
 
 type profileListCmd struct {
