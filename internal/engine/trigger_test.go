@@ -825,3 +825,40 @@ func TestTriggerSettingsError(t *testing.T) {
 		}
 	})
 }
+
+// TestTriggerChannelOfTheSource covers spec twitch-multi-channel.md, B6:
+// the run acts in the channel of its trigger; the chat message of an
+// additional channel runs the command in that channel, and the timer
+// source has no channel, so its commands act on the home channel.
+func TestTriggerChannelOfTheSource(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.LockPerCommandType)
+		defer f.stop()
+
+		var (
+			chatParams  engine.Params
+			timerParams engine.Params
+		)
+		capture := func(p *engine.Params) action {
+			return action{typ: "note", fn: func(_ context.Context, run *engine.Run) error {
+				*p = run.Params()
+				return nil
+			}}
+		}
+		res, err := f.trigger(f.command("chat", command.KindChat, capture(&chatParams)),
+			engine.Params{Channel: "other", Message: "hi"})
+		require.NoError(t, err)
+		assert.Equal(t, engine.OutcomeQueued, res.Outcome)
+		assert.Equal(t, "other", chatParams.Channel, "the chat command runs in the channel of the message")
+
+		res, err = f.engine.Trigger(t.Context(), engine.Request{
+			Command: f.command("timer", command.KindTimer, capture(&timerParams)),
+			Source:  engine.SourceTimer,
+		})
+		synctest.Wait()
+		require.NoError(t, err)
+		assert.Equal(t, engine.OutcomeQueued, res.Outcome)
+		assert.Equal(t, "", timerParams.Channel, "the timer command runs in the home channel")
+	})
+}

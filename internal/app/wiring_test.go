@@ -52,12 +52,12 @@ func instanceNamed(e event.Envelope, named string) bool {
 }
 
 // mockSent reports whether e is the mock output op with the text.
-func mockSent(e event.Envelope, op mock.Op, text string) bool {
+func mockSent(e event.Envelope, text string) bool {
 	if e.Type != mock.TypeOutput {
 		return false
 	}
 	o, ok := event.Payload[mock.Output](e)
-	return ok && o.Op == op && o.Text == text
+	return ok && o.Op == mock.OpSend && o.Text == text
 }
 
 // TestChatCommandRunsOnMockPlatform covers the wiring of roadmap 3.6 (M1):
@@ -133,7 +133,7 @@ func TestChatCommandRunsOnMockPlatform(t *testing.T) {
 	waitFor("the app.started event command to complete",
 		func(e event.Envelope) bool { return instanceNamed(e, "Greet") })
 	waitFor("the chat output of the app.started event command",
-		func(e event.Envelope) bool { return mockSent(e, mock.OpSend, "Core started") })
+		func(e event.Envelope) bool { return mockSent(e, "Core started") })
 
 	// A simulated user triggers the chat command, which runs, and its chat
 	// action reaches the platform with the user's name rendered.
@@ -143,7 +143,7 @@ func TestChatCommandRunsOnMockPlatform(t *testing.T) {
 	waitFor("the chat command to complete",
 		func(e event.Envelope) bool { return instanceNamed(e, "Hello") })
 	waitFor("the chat output of the chat command",
-		func(e event.Envelope) bool { return mockSent(e, mock.OpSend, "Hello alice!") })
+		func(e event.Envelope) bool { return mockSent(e, "Hello alice!") })
 
 	cancel()
 	require.NoError(t, <-errc)
