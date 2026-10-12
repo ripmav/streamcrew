@@ -149,7 +149,7 @@ type fixture struct {
 	echo *echo
 }
 
-func newFixture(t *testing.T, tick time.Duration) *fixture {
+func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	reg, _ := template.NewRegistry()
 	eng := template.New(reg)
@@ -159,7 +159,7 @@ func newFixture(t *testing.T, tick time.Duration) *fixture {
 	ports := twitch.Ports{
 		Templates: eng,
 		Ops:       ops,
-		PollTick:  tick,
+		PollTick:  time.Millisecond,
 		Logger:    slog.New(slog.DiscardHandler),
 	}
 	descs, err := twitch.Descriptors(ports)
@@ -243,7 +243,7 @@ func TestTwitchValidate(t *testing.T) {
 // TestTwitchPerform runs each operation and checks the ops call.
 func TestTwitchPerform(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		f := newFixture(t, time.Millisecond)
+		f := newFixture(t)
 
 		f.h.Start(f.h.Command("clip", f.tw(t, func(a *twitch.Twitch) { a.Kind = twitch.KindClip })), params())
 		f.h.Start(f.h.Command("marker", f.tw(t, func(a *twitch.Twitch) {
@@ -289,7 +289,7 @@ func TestTwitchPerform(t *testing.T) {
 // sublist saw $pollchoice.
 func TestTwitchPollRunsTheSublist(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		f := newFixture(t, time.Millisecond)
+		f := newFixture(t)
 		// The poll is already ended, so the action reads the winner at once
 		// and runs the sublist.
 		f.ops.mu.Lock()
@@ -309,7 +309,7 @@ func TestTwitchPollRunsTheSublist(t *testing.T) {
 // checks the sublist saw $predictionoutcome.
 func TestTwitchPredictionRunsTheSublist(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		f := newFixture(t, time.Millisecond)
+		f := newFixture(t)
 		f.ops.mu.Lock()
 		f.ops.predictions["pr1"] = twitch.PredictionStatus{Ended: true, Winner: "B"}
 		f.ops.mu.Unlock()
@@ -340,6 +340,26 @@ func TestTwitchOperationError(t *testing.T) {
 		inst := h.Start(h.Command("clip", a), params())
 		require.NotEmpty(t, inst.Errors)
 		assert.Equal(t, twitch.TypeTwitch, inst.Errors[0].Type)
+	})
+}
+
+// TestTwitchOwnershipGate rejects the twitch operation from a run that has
+// a channel (B7): it is bound to the streamer channel and must not act on
+// someone else's; a home run (no channel) runs as usual.
+func TestTwitchOwnershipGate(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		a := f.tw(t, func(a *twitch.Twitch) { a.Kind = twitch.KindClip })
+		// From another channel: refused, nothing runs.
+		inst := f.h.Start(f.h.Command("clip", a), engine.Params{Channel: "other"})
+		require.NotEmpty(t, inst.Errors)
+		assert.Equal(t, twitch.TypeTwitch, inst.Errors[0].Type)
+		assert.Contains(t, inst.Errors[0].Message, "streamer channel")
+		assert.Contains(t, inst.Errors[0].Message, "other")
+		assert.Empty(t, f.ops.calls)
+		// From the home channel (no channel): runs.
+		f.h.Start(f.h.Command("clip", a), params())
+		assert.Equal(t, []string{"clip"}, f.ops.calls)
 	})
 }
 

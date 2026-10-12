@@ -56,6 +56,30 @@ func (a twitchStreamAuth) Token(ctx context.Context) (string, error) {
 	return a.s.Token(ctx, platform.Twitch, connector.AccountStreamer)
 }
 
+// Bot implements twitch.Auth: the bot account the additional channels run
+// with (twitch-multi-channel.md, B2); without one, an empty state.
+func (a twitchStreamAuth) Bot(ctx context.Context) (twitch.AccountState, error) {
+	sts, err := a.s.Status(ctx)
+	if err != nil {
+		return twitch.AccountState{}, err
+	}
+	for _, st := range sts {
+		if st.Platform == platform.Twitch && st.Role == connector.AccountBot {
+			return twitch.AccountState{
+				AccountID: st.UserID,
+				Login:     st.Login,
+				Ready:     st.State == auth.StateOK,
+			}, nil
+		}
+	}
+	return twitch.AccountState{}, nil
+}
+
+// BotToken implements twitch.Auth.
+func (a twitchStreamAuth) BotToken(ctx context.Context) (string, error) {
+	return a.s.Token(ctx, platform.Twitch, connector.AccountBot)
+}
+
 // ClientID implements twitch.Auth.
 func (a twitchStreamAuth) ClientID(ctx context.Context) (string, error) {
 	id, found, err := a.s.ClientID(ctx, platform.Twitch, connector.AccountStreamer)
