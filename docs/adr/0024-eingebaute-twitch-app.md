@@ -67,12 +67,13 @@ der BYO-Ansatz bleibt optional erhalten.
    geschrieben. Der BYO-Weg ändert sich nicht.
 5. **Rotation:** Neues Secret in der Twitch-Konsole → Generator erneut
    laufen lassen → neue Binary/Release. Damit der alte Stand nach einer
-   Rotation nicht bricht, läuft der **Refresh des Authorization Code Flows
-   ohne `client_secret`** (nur Client-ID; von Twitch akzeptiert, im Feld
-   seit Jahren so praktiziert — MixItUp). Eine Rotation betrifft dann nur
-   *neue* Logins; bestehende Accounts refreshen mit ihrer Binary weiter.
-   Der Generator (intern, `go:generate`) erzeugt aus ID und Secret (Secret
-   über Umgebungsvariable/Stdin, nie als CLI-Argument) das `embedded.go`;
+   Rotation nicht bricht, laufen **Refresh und Revoke des Authorization
+   Code Flows ohne `client_secret`** (nur Client-ID; von Twitch
+   akzeptiert, im Feld seit Jahren so praktiziert — MixItUp). Eine
+   Rotation betrifft dann nur *neue* Logins; bestehende Accounts
+   refreshen und widerrufen mit ihrer Binary weiter. Der Generator
+   (intern, `go:generate`) erzeugt aus ID und Secret (Secret über
+   Umgebungsvariable/Stdin, nie als CLI-Argument) das `embedded.go`;
    der Wert verlässt die Maschine des Projektinhabers nicht.
 6. **Redirect-URL:** fest `http://localhost:8741/oauth/callback` (ersetzt
    ADR-0023, Punkt 4). Die URL trägt einen Pfad, bleibt exakt zwischen
