@@ -299,6 +299,17 @@ func (a *Auth) Token(_ context.Context) (string, error) { return a.AccessToken, 
 // ClientID implements twitch.Auth.
 func (a *Auth) ClientID(_ context.Context) (string, error) { return a.AppClientID, nil }
 
+// Bot implements twitch.Auth: the test server has no bot account, so the
+// additional channels stay out (twitch-multi-channel.md, B2).
+func (a *Auth) Bot(_ context.Context) (twitch.AccountState, error) {
+	return twitch.AccountState{}, nil
+}
+
+// BotToken implements twitch.Auth.
+func (a *Auth) BotToken(_ context.Context) (string, error) {
+	return "", errors.New("no bot account")
+}
+
 // start launches one CLI server process; it is bound to the context,
 // so a canceled context also stops the servers.
 func (c *Client) start(ctx context.Context, args ...string) error {

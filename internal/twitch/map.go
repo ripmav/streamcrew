@@ -35,6 +35,9 @@ type Mapper struct {
 	// read from the marked text.
 	emotes       *emotecat.Catalog
 	emoteChannel string
+	// channel is the channel of the WS session (B5), stamped on every
+	// inbound by the receiver wrapper; empty for the home channel.
+	channel connector.Channel
 }
 
 // MapperOptions configures NewMapper.
@@ -54,6 +57,11 @@ type MapperOptions struct {
 	Emotes *emotecat.Catalog
 	// EmoteChannel is the login the emote catalog is resolved for.
 	EmoteChannel string
+	// Channel is the channel of the WS session this mapper belongs to
+	// (spec twitch-multi-channel.md, B5); empty for the home channel. It
+	// is stamped on every chat message and event, because the session —
+	// one per channel — is what knows it, not the event body.
+	Channel connector.Channel
 }
 
 // NewMapper creates a Mapper.
@@ -62,7 +70,42 @@ func NewMapper(o MapperOptions) *Mapper {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Mapper{rec: o.Receiver, dedup: o.Dedup, botID: o.BotID, log: log, emotes: o.Emotes, emoteChannel: o.EmoteChannel}
+	return &Mapper{
+		rec:          channelReceiver{next: o.Receiver, channel: o.Channel},
+		dedup:        o.Dedup,
+		botID:        o.BotID,
+		log:          log,
+		emotes:       o.Emotes,
+		emoteChannel: o.EmoteChannel,
+		channel:      o.Channel,
+	}
+}
+
+// channelReceiver stamps the mapper's channel on the chat messages and
+// events before forwarding them: the channel is known to the WS session
+// (one per channel, spec twitch-multi-channel.md, B5), not to the event
+// body.
+type channelReceiver struct {
+	next    connector.Receiver
+	channel connector.Channel
+}
+
+func (r channelReceiver) Message(ctx context.Context, m connector.Incoming) error {
+	m.Channel = r.channel
+	return r.next.Message(ctx, m)
+}
+
+func (r channelReceiver) Join(ctx context.Context, p platform.Name, ch connector.Channel, who user.Identity) error {
+	return r.next.Join(ctx, p, ch, who)
+}
+
+func (r channelReceiver) Event(ctx context.Context, e connector.Event) error {
+	e.Channel = r.channel
+	return r.next.Event(ctx, e)
+}
+
+func (r channelReceiver) Stream(ctx context.Context, p platform.Name, live bool) error {
+	return r.next.Stream(ctx, p, live)
 }
 
 // WithRevoked sets the revocation callback, called once when the

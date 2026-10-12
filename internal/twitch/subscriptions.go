@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/ripmav/streamcrew/internal/helix"
@@ -98,6 +99,7 @@ type Manager struct {
 	log       *slog.Logger
 	interval  time.Duration
 	sessionID func(ctx context.Context) (string, error)
+	ready     func(ctx context.Context) (bool, error)
 }
 
 // ManagerOptions configures NewManager.
@@ -126,6 +128,12 @@ type ManagerOptions struct {
 	// the session is established. Nil for a session-less transport
 	// (tests).
 	SessionID func(ctx context.Context) (string, error)
+	// Ready reports whether the channels are operated (spec
+	// twitch-multi-channel.md, B3): for the additional channels the mod
+	// status of the bot, checked at the start and at every reconciliation.
+	// While it reports not ready, the manager holds no subscriptions;
+	// on an error it leaves the state as it is. Nil for the home channel.
+	Ready func(ctx context.Context) (bool, error)
 }
 
 // NewManager creates a Manager.
@@ -150,6 +158,7 @@ func NewManager(o ManagerOptions) *Manager {
 		log:       log,
 		interval:  interval,
 		sessionID: o.SessionID,
+		ready:     o.Ready,
 	}
 }
 
@@ -182,6 +191,16 @@ func (m *Manager) Run(ctx context.Context) error {
 // interval; the composition root calls it once more right after a
 // token revocation.
 func (m *Manager) Reconcile(ctx context.Context) error {
+	// B3: while the channels are not operated, the manager holds no
+	// subscriptions: the own surplus is revoked below, nothing is created.
+	operated := true
+	if m.ready != nil {
+		var err error
+		if operated, err = m.ready(ctx); err != nil {
+			m.log.WarnContext(ctx, "the readiness of the channels is unknown", "error", err)
+			return nil
+		}
+	}
 	sessionID := ""
 	if m.sessionID != nil {
 		var err error
@@ -206,15 +225,17 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 		c helix.SubscriptionCondition
 	}
 	var wants []wantSpec
-	for _, d := range m.specs {
-		if d.User {
-			if m.whisper != "" {
-				wants = append(wants, wantSpec{d, helix.SubscriptionCondition{UserID: m.whisper}})
+	if operated {
+		for _, d := range m.specs {
+			if d.User {
+				if m.whisper != "" {
+					wants = append(wants, wantSpec{d, helix.SubscriptionCondition{UserID: m.whisper}})
+				}
+				continue
 			}
-			continue
-		}
-		for _, b := range m.channels {
-			wants = append(wants, wantSpec{d, helix.SubscriptionCondition{BroadcasterUserID: b}})
+			for _, b := range m.channels {
+				wants = append(wants, wantSpec{d, helix.SubscriptionCondition{BroadcasterUserID: b}})
+			}
 		}
 	}
 
@@ -242,9 +263,15 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 	}
 
 	// The surplus: actual subscriptions outside the desired state
-	// (e.g. left over of an older version of the app).
+	// (e.g. left over of an older version of the app). The managers
+	// revoke their own subscriptions only: the additional channels
+	// share the bot token, whose listing also carries the subscriptions
+	// of the other channels (spec twitch-multi-channel.md, B4).
 	for _, s := range actual {
 		if want[specKeyOf(s.EventType, s.Version, s.Condition)] {
+			continue
+		}
+		if !m.owns(s) {
 			continue
 		}
 		if err := m.helix.RevokeSubscription(ctx, s.ID); err != nil {
@@ -253,6 +280,16 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 		m.log.InfoContext(ctx, "eventsub subscription revoked", "eventtype", s.EventType)
 	}
 	return nil
+}
+
+// owns reports whether the subscription belongs to the manager: its
+// broadcaster is one of the manager's channels, or the receiver is the
+// manager's whisper.
+func (m *Manager) owns(s helix.EventSubSubscription) bool {
+	if slices.Contains(m.channels, s.Condition.BroadcasterUserID) {
+		return true
+	}
+	return m.whisper != "" && s.Condition.UserID == m.whisper
 }
 
 // specKey names a subscription without its ID.

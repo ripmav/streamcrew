@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -85,8 +86,8 @@ const pollInterval = 5 * time.Second
 // (roadmap 4.4, task 9); it matches the catalog's TTL.
 const emoteRefresh = time.Hour
 
-// Auth supplies the data of the streamer account of the channel. The
-// composition root adapts the auth service to it (roadmap 4.3, task 5).
+// Auth supplies the data of the accounts of the channel (roadmap 4.3,
+// task 5, 4.6). The composition root adapts the auth service to it.
 type Auth interface {
 	// Streamer reports the streamer account: ready is true when a valid
 	// token is available.
@@ -95,6 +96,13 @@ type Auth interface {
 	Token(ctx context.Context) (string, error)
 	// ClientID returns the client ID of the app for the Helix headers.
 	ClientID(ctx context.Context) (string, error)
+	// Bot reports the bot account (spec twitch-multi-channel.md, B2):
+	// ready is true when a valid token is available; without a bot
+	// account, an empty AccountState.
+	Bot(ctx context.Context) (AccountState, error)
+	// BotToken returns a valid access token of the bot account; the
+	// additional channels run with it (B4).
+	BotToken(ctx context.Context) (string, error)
 }
 
 // AccountState is the state of the streamer account as the platform
@@ -127,9 +135,10 @@ type Platform struct {
 	// task 9); nil without a catalog.
 	emotes *emotecat.Catalog
 
-	mu          sync.Mutex
-	connected   bool
-	lastAccount AccountState
+	mu           sync.Mutex
+	connected    bool
+	botConnected bool
+	lastAccount  AccountState
 	// sessions is the session state of the current session (nil
 	// outside of a session).
 	sessions *sessionState
@@ -142,6 +151,9 @@ type Platform struct {
 	// lowercase login (empty for the home channel); each channel has its
 	// own bucket (spec twitch-multi-channel.md, B9).
 	chatLim map[string]*rate.Limiter
+	// channels are the logins of the additional channels (spec
+	// twitch-multi-channel.md, B1); empty for the home channel only.
+	channels []string
 }
 
 // PlatformOptions configures NewPlatform.
@@ -169,6 +181,10 @@ type PlatformOptions struct {
 	// Emotes is the emote catalog the mapper resolves emote IDs with
 	// (roadmap 4.4, task 9); nil for the raw code from the text.
 	Emotes *emotecat.Catalog
+	// Channels are the logins of the additional channels the bot operates
+	// in besides the home channel (spec twitch-multi-channel.md, B1); the
+	// home channel must not be listed (B3).
+	Channels []string
 }
 
 // NewPlatform creates a Platform.
@@ -191,6 +207,7 @@ func NewPlatform(o PlatformOptions) *Platform {
 		log:        log,
 		poll:       o.Poll,
 		emotes:     o.Emotes,
+		channels:   o.Channels,
 		chIDs:      make(map[string]string),
 		chatLim:    make(map[string]*rate.Limiter),
 	}
@@ -206,7 +223,7 @@ func (p *Platform) Name() platform.Name {
 func (p *Platform) Status() connector.Status {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return connector.Status{Streamer: p.connected}
+	return connector.Status{Streamer: p.connected, Bot: p.botConnected}
 }
 
 // Chat implements connector.Platform.
@@ -277,7 +294,7 @@ func (p *Platform) Run(ctx context.Context) error {
 		} else {
 			p.setAccount(st)
 			if st.Ready {
-				if err := p.session(ctx, st); ctx.Err() == nil && err != nil {
+				if err := p.connect(ctx, st); ctx.Err() == nil && err != nil {
 					p.log.WarnContext(ctx, "the eventsub session ended", "error", err)
 				}
 			}
@@ -291,29 +308,185 @@ func (p *Platform) Run(ctx context.Context) error {
 	return nil
 }
 
-// session runs one EventSub session: the subscription manager and the
-// WebSocket, in line; it ends when the connection ends.
-func (p *Platform) session(ctx context.Context, st AccountState) error {
+// channelSession is the EventSub session of one channel (spec
+// twitch-multi-channel.md, B4): the home channel runs with the streamer
+// token and the full breadth of functions, the additional channels with
+// the bot token and the moderator rights. The sessions are one per
+// channel, so every event of a session is the event of its channel (B5).
+type channelSession struct {
+	// channel is the channel of the session; empty for the home channel.
+	channel connector.Channel
+	// login is the login of the channel (emote catalog, the log).
+	login string
+	// accountID is the user ID of the channel (the broadcaster
+	// condition of the subscriptions).
+	accountID string
+	// whisper is the user ID that receives the whisper messages; empty
+	// for none.
+	whisper string
+	// botID is the user ID of the bot account; its messages are flagged
+	// FromBot (B13); empty if the bot is not connected.
+	botID string
+	// token is the access token of the session (streamer or bot).
+	token func(ctx context.Context) (string, error)
+	// home is the session of the home channel: it reports the stream
+	// state and keeps the platform's status up.
+	home bool
+	// ready reports whether the channels are operated (B3); nil for the
+	// home channel.
+	ready func(ctx context.Context) (bool, error)
+}
+
+// connect runs the EventSub session of the home channel and the sessions
+// of the additional channels; it returns when the home session ends.
+func (p *Platform) connect(ctx context.Context, st AccountState) error {
+	token := func(ctx context.Context) (string, error) { return p.auth.Token(ctx) }
+	bot, botErr := p.auth.Bot(ctx)
+	if botErr != nil {
+		p.log.WarnContext(ctx, "the state of the bot account is unknown", "error", botErr)
+		bot = AccountState{}
+	}
+	home := channelSession{
+		login:     st.Login,
+		accountID: st.AccountID,
+		whisper:   st.AccountID,
+		token:     token,
+		home:      true,
+	}
+	if bot.Ready {
+		home.botID = bot.AccountID
+	}
+	var cancels []context.CancelFunc
+	for _, cs := range p.additionalChannels(ctx, st, bot) {
+		csCtx, cancel := context.WithCancel(ctx)
+		cancels = append(cancels, cancel)
+		go func(cs channelSession) {
+			if err := p.channelSession(csCtx, cs); err != nil && csCtx.Err() == nil {
+				p.log.WarnContext(ctx, "the eventsub session of an additional channel ended", "channel", cs.login, "error", err)
+			}
+		}(cs)
+	}
+	if len(cancels) > 0 {
+		p.setBot(true)
+		defer p.setBot(false)
+		defer func() {
+			for _, cancel := range cancels {
+				cancel()
+			}
+		}()
+	}
+	return p.channelSession(ctx, home)
+}
+
+// additionalChannels selects the sessions of the additional channels
+// (spec twitch-multi-channel.md, B2, B3): the channel must exist, and the
+// bot must be a moderator of it; an entry that names the home channel is
+// not an additional channel, so it is left out with a warning (B3).
+func (p *Platform) additionalChannels(ctx context.Context, st, bot AccountState) []channelSession {
+	if len(p.channels) == 0 {
+		return nil
+	}
+	clientID, err := p.auth.ClientID(ctx)
+	if err != nil {
+		p.log.WarnContext(ctx, "the additional channels are not operated", "error", err)
+		return nil
+	}
+	botToken := func(ctx context.Context) (string, error) { return p.auth.BotToken(ctx) }
+	hc := helix.New(p.helix, helix.Options{ClientID: clientID, Token: botToken, BaseURL: p.helixBase})
+	var out []channelSession
+	for _, login := range p.channels {
+		if strings.EqualFold(login, st.Login) {
+			p.log.WarnContext(ctx, "the channels section lists the home channel, it is not additional", "channel", login)
+			continue
+		}
+		id, err := p.channelID(ctx, connector.Channel(login))
+		if err != nil {
+			p.log.WarnContext(ctx, "an additional channel is not operated", "channel", login, "error", err)
+			continue
+		}
+		mod, err := p.isModerator(ctx, hc, id, bot.AccountID)
+		if err != nil {
+			p.log.WarnContext(ctx, "the moderator status of the bot is unknown", "channel", login, "error", err)
+			continue
+		}
+		if !mod {
+			p.log.WarnContext(ctx, "the bot is not a moderator of the channel, it is not operated", "channel", login, "status", "mod_missing")
+			continue
+		}
+		out = append(out, channelSession{
+			channel:   connector.Channel(login),
+			login:     login,
+			accountID: id,
+			whisper:   bot.AccountID,
+			botID:     bot.AccountID,
+			token:     botToken,
+			ready:     func(ctx context.Context) (bool, error) { return p.isModerator(ctx, hc, id, bot.AccountID) },
+		})
+	}
+	return out
+}
+
+// isModerator reports whether the user with the userID is a moderator of
+// the channel with the channelID (spec twitch-multi-channel.md, B3); the
+// check is repeated at every reconciliation by the ready callback.
+func (p *Platform) isModerator(ctx context.Context, hc *helix.Client, channelID, userID string) (bool, error) {
+	mods, err := hc.GetModerators(ctx, channelID)
+	if err != nil {
+		return false, err
+	}
+	for _, m := range mods {
+		if m.ID == userID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// channelSession runs the EventSub session of the channel: the
+// subscription manager and the WebSocket, in line; it ends when the
+// connection ends.
+func (p *Platform) channelSession(ctx context.Context, cs channelSession) error {
 	clientID, err := p.auth.ClientID(ctx)
 	if err != nil {
 		return err
 	}
-	token := func(ctx context.Context) (string, error) { return p.auth.Token(ctx) }
 	hc := helix.New(p.helix, helix.Options{
 		ClientID: clientID,
-		Token:    token,
+		Token:    cs.token,
 		BaseURL:  p.helixBase,
 	})
 	sessions := newSessionState()
-	p.mu.Lock()
-	p.sessions = sessions
-	p.mu.Unlock()
-	mgr := NewManager(ManagerOptions{Helix: hc, Channels: []string{st.AccountID}, Whisper: st.AccountID, Logger: p.log, SessionID: sessions.current})
+	if cs.home {
+		p.mu.Lock()
+		p.sessions = sessions
+		p.mu.Unlock()
+	}
+	specs := desired
+	if !cs.home {
+		specs = ChannelSpecs()
+	}
+	mgr := NewManager(ManagerOptions{
+		Helix:     hc,
+		Channels:  []string{cs.accountID},
+		Whisper:   cs.whisper,
+		Specs:     specs,
+		Logger:    p.log,
+		SessionID: sessions.current,
+		Ready:     cs.ready,
+	})
 	dedup, err := connector.NewDedup(connector.DefaultDedupTTL)
 	if err != nil {
 		return err
 	}
-	mapper := NewMapper(MapperOptions{Receiver: p.receiver, Dedup: dedup, Logger: p.log, Emotes: p.emotes, EmoteChannel: st.Login})
+	mapper := NewMapper(MapperOptions{
+		Receiver:     p.receiver,
+		Dedup:        dedup,
+		Logger:       p.log,
+		Emotes:       p.emotes,
+		EmoteChannel: cs.login,
+		Channel:      cs.channel,
+		BotID:        cs.botID,
+	})
 	// A revoked token: the subscriptions are reconciled right away with
 	// the fresh token of the next connection (roadmap 4.3).
 	mapper.WithRevoked(func(ctx context.Context) {
@@ -323,22 +496,27 @@ func (p *Platform) session(ctx context.Context, st AccountState) error {
 	})
 	client := New(Options{
 		Base:       p.base,
-		Token:      token,
+		Token:      cs.token,
 		HTTPClient: p.dialClient,
 		Logger:     p.log,
 		Session:    sessions.report,
 	})
 
-	p.log.InfoContext(ctx, "the twitch platform connected", "streamer", st.Login)
-	defer func() {
-		p.setConnected(false)
-		p.log.InfoContext(ctx, "the twitch platform disconnected")
-	}()
-	p.streamState(ctx, hc, st.AccountID)
-	// The status goes up only after the initial stream state was
-	// handed over, so a connected status never precedes the state
-	// event.
-	p.setConnected(true)
+	if cs.home {
+		p.log.InfoContext(ctx, "the twitch platform connected", "streamer", cs.login)
+		defer func() {
+			p.setConnected(false)
+			p.log.InfoContext(ctx, "the twitch platform disconnected")
+		}()
+		p.streamState(ctx, hc, cs.accountID)
+		// The status goes up only after the initial stream state was
+		// handed over, so a connected status never precedes the state
+		// event.
+		p.setConnected(true)
+	} else {
+		p.log.InfoContext(ctx, "the additional channel connected", "channel", cs.login)
+		defer p.log.InfoContext(ctx, "the additional channel disconnected", "channel", cs.login)
+	}
 
 	mgrCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -348,7 +526,7 @@ func (p *Platform) session(ctx context.Context, st AccountState) error {
 		}
 	}()
 	if p.emotes != nil {
-		go p.refreshEmotes(mgrCtx, st.Login)
+		go p.refreshEmotes(mgrCtx, cs.login)
 	}
 	return client.Run(ctx, mapper)
 }
@@ -400,6 +578,12 @@ func (p *Platform) setConnected(v bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.connected = v
+}
+
+func (p *Platform) setBot(v bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.botConnected = v
 }
 
 func (p *Platform) setAccount(st AccountState) {
