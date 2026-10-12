@@ -34,7 +34,7 @@ Empfangs-Vorgaben je EventSub-Topic (Abschnitt „Offene Fragen“, E2E).
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B1 | Die Settings-Sektion `channels` listet die Logins der zusätzlichen Channels; der eigene Channel ist immer betrieben und nicht konfigurierbar. Sie nimmt keine leeren Einträge, keine Duplikate und keinen eigenen Channel an. | Q2, Q3 |
+| B1 | Die Settings-Sektion `channels` listet die Logins der zusätzlichen Channels; der eigene Channel ist immer betrieben und nicht konfigurierbar. Sie nimmt keine leeren Einträge, keine Duplikate, keinen eigenen Channel und keine fehlerhaften Logins an (1–25 Zeichen: Buchstaben, Ziffern, Unterstrich; 4.8). Konfiguriert wird die Sektion über die CLI-Befehle `profile channels list|add|remove` (4.8). | Q2, Q3 |
 | B2 | Die einzige Voraussetzung eines zusätzlichen Channels ist der Mod-Status des Bot-Kontos dort. Er wird vom Channel-Owner gewährt; es braucht keinen zweiten Login, keine zweite App und keine App-Credentials. | Q1, Q2 |
 | B3 | Der Adapter prüft den Mod-Status jedes zusätzlichen Channels beim Start und bei jedem Subscription-Abgleich. Fehlt er, ist der Channel nicht betrieben (keine Subscriptions, kein Chat-Ziel, keine Moderation), und der Adapter meldet die Warnung `mod_missing`. Der Adapter fügt sich nicht selbst als Moderator hinzu. | Q1, Q2 |
 | B4 | Der eigene Channel wird mit dem Streamer-Konto betrieben (volle Funktionsbreite), die zusätzlichen Channels mit dem Bot-Konto (Moderator-Rechte). Die Subscriptions der zusätzlichen Channels tragen den Channel als Broadcaster; die Flüsternachrichten empfangt das Bot-Konto. | Q1, Q2 |
@@ -106,3 +106,4 @@ Send-Buckets je Channel (B9).
 |---|---|
 | 2026-10-12 | Erstellt für Phase 4.6: Voraussetzung und Prüfung (B1–B3), Token-Zuordnung (B4), Channel-Dimension (B5–B7, B9), geteilte Konfiguration (B8, B10), Randfälle (B11–B14), Abweichung A1, E2E-Fragen. |
 | 2026-10-12 | Abdeckungsstand der offenen Fragen dokumentiert: die twitch-cli-Mock-Server stellen einen Broadcaster pro Umgebung dar, die je-Topic-Empfangs-Vorgaben bleiben das manuelle E2E; automatisch abgedeckt sind Mod-Check, Nicht-Betreiben fehlender Channels, Sollzustand je Channel×Topic, Channel-Dimension und Routing, Ownership-Gate und Send-Buckets je Channel. |
+| 2026-10-12 | 4.8: B1 um die Login-Form-Prüfung beim Speichern ergänzt (1–25 Zeichen, Buchstaben, Ziffern, Unterstrich) und der Benutzerweg zur Konfiguration der Sektion: die neuen CLI-Befehle `profile channels list|add|remove` (roadmap 4.8). |
