@@ -4,6 +4,7 @@ package commandfile_test
 
 import (
 	"encoding/json/jsontext"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -136,6 +137,59 @@ func values[T any](list []commandfile.Planned[T]) []T {
 	return out
 }
 
+// TestExportChannelScope covers B10, B20 and B36 with commands.md, B9 and
+// B31: the channel scope of a command and the target channel of a group's
+// timer interval survive the round trip of export and import, in YAML and
+// in JSON; a command without a scope is exported with the empty channel.
+func TestExportChannelScope(t *testing.T) {
+	t.Parallel()
+	scoped := head + `kind: ChatCommand
+metadata: {name: Hug}
+spec:
+  triggers: [hug]
+  channel: zdf
+---
+` + head + `kind: ChatCommand
+metadata: {name: Wave}
+spec: {triggers: [wave]}
+---
+` + head + `kind: CommandGroup
+metadata: {name: Fun}
+spec: {timerInterval: 5m, timerChannel: zdf}
+---
+` + head + `kind: CommandGroup
+metadata: {name: Quiet}
+spec: {timerInterval: 5m}
+`
+	plan, problems := convert(t, commandfile.Existing{}, "f.yaml", scoped)
+	require.Empty(t, problems)
+	src := sourceOf(t, plan)
+	docs, err := commandfile.Export(src, nil, fileTypes(t))
+	require.NoError(t, err)
+
+	yamlOut, err := commandfile.EncodeYAML(docs)
+	require.NoError(t, err)
+	jsonOut, err := commandfile.EncodeJSON(docs, false)
+	require.NoError(t, err)
+	for _, member := range []string{
+		"channel: zdf",      // the scope of Hug
+		"channel: \"\"",     // the empty scope of Wave, written as the default
+		"timerChannel: zdf", // the target channel of Fun
+	} {
+		assert.Contains(t, string(yamlOut), member)
+	}
+	assert.Equal(t, 1, strings.Count(string(yamlOut), "timerChannel: zdf"),
+		"a group without a target channel has no member for it")
+	for name, data := range map[string][]byte{"export.yaml": yamlOut, "export.json": jsonOut} {
+		again, problems := commandfile.Read(name, data)
+		require.Empty(t, problems, "%s", data)
+		plan2, problems := commandfile.Convert(again, existingOf(src), fileTypes(t))
+		require.Empty(t, problems, "%s", data)
+		assert.Equal(t, byName(plan.Commands), byName(plan2.Commands), name)
+		assert.ElementsMatch(t, values(plan.Groups), values(plan2.Groups), name)
+	}
+}
+
 // TestExportForm covers B36: all members, also those with a default, in the
 // order of the schema, IDs as names.
 func TestExportForm(t *testing.T) {
@@ -170,6 +224,7 @@ spec:
   enabled: true
   unlocked: false
   errorPolicy: continue
+  channel: ""
   requirements: {}
   actions:
     - type: wait

@@ -185,7 +185,7 @@ func (x *exporter) command(rec command.Record, usedGroups, usedCooldowns map[id.
 		spec = append(spec, text("event", string(cmd.Event)))
 	case command.KindTimer, command.KindActionGroup:
 	}
-	spec = append(spec, boolean("enabled", cmd.Enabled), boolean("unlocked", cmd.Unlocked), text("errorPolicy", string(cmd.ErrorPolicy)))
+	spec = append(spec, boolean("enabled", cmd.Enabled), boolean("unlocked", cmd.Unlocked), text("errorPolicy", string(cmd.ErrorPolicy)), text("channel", cmd.Channel))
 	reqs, err := x.requirementMap(stored)
 	if err != nil {
 		return Exported{}, err
@@ -375,11 +375,15 @@ func cooldownGroupDoc(g command.CooldownGroup) Exported {
 }
 
 // groupDoc returns the document of a command group (B20); without an own
-// timer interval it has no member for it.
+// timer interval it has no member for it, and without a target channel
+// the interval runs at home.
 func groupDoc(g command.Group) Exported {
 	var spec []member
 	if g.TimerInterval > 0 {
 		spec = append(spec, text("timerInterval", g.TimerInterval.String()))
+	}
+	if g.TimerChannel != "" {
+		spec = append(spec, text("timerChannel", g.TimerChannel))
 	}
 	return document(KindCommandGroup, g.Name, []member{text("name", g.Name)}, spec)
 }
