@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | **Status** | Geprüft |
-| **Stand** | 2026-10-04 |
-| **Bezug** | Roadmap Phase 3.5; Plan §2 (Ziel Z9), §6.9, §7.2; [Code-ADR-0005](../adr/code/0005-konfiguration.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0013](../adr/code/0013-typ-registry.md), [Code-ADR-0017](../adr/code/0017-klare-signale-statt-magischer-werte.md), [Code-ADR-0018](../adr/code/0018-json-v2.md), [Code-ADR-0020](../adr/code/0020-dezimalzahlen.md); [`commands.md`](commands.md), [`requirements.md`](requirements.md), [`actions.md`](actions.md) |
+| **Stand** | 2026-10-12 |
+| **Bezug** | Roadmap Phase 3.5, 4.7; Plan §2 (Ziel Z9), §6.9, §7.2; [Code-ADR-0005](../adr/code/0005-konfiguration.md), [Code-ADR-0010](../adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0013](../adr/code/0013-typ-registry.md), [Code-ADR-0017](../adr/code/0017-klare-signale-statt-magischer-werte.md), [Code-ADR-0018](../adr/code/0018-json-v2.md), [Code-ADR-0020](../adr/code/0020-dezimalzahlen.md); [`commands.md`](commands.md), [`requirements.md`](requirements.md), [`actions.md`](actions.md) |
 | **Umsetzung** | umgesetzt 2026-10-03 (Roadmap 3.5) in `internal/commandfile` und `internal/app`: Format, Lesen und Umwandeln (B1–B5, B10–B14, B20–B24, B37), Schema-Export mit `streamcrew schema export` (B30), `streamcrew command validate` (B31, B32), `command import` (B33, B34) und `command export` (B35–B38) |
 
 ## Zweck und Umfang
@@ -42,7 +42,7 @@ Nicht Teil dieser Spezifikation:
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B10 | `spec` eines Commands hat: `enabled` (Schalter „aktiv“, Voreinstellung an), `unlocked` (Schalter „freigegeben“, Voreinstellung aus), `errorPolicy` (`continue` oder `abort`, Voreinstellung `continue`), `requirements` (B12) und `actions` (B13). | [`commands.md`](commands.md), B1 |
+| B10 | `spec` eines Commands hat: `enabled` (Schalter „aktiv“, Voreinstellung an), `unlocked` (Schalter „freigegeben“, Voreinstellung aus), `errorPolicy` (`continue` oder `abort`, Voreinstellung `continue`), `channel` (Channel-Scope als Login, Voreinstellung leer = alle betriebenen Channels, [`commands.md`](commands.md), B9), `requirements` (B12) und `actions` (B13). | [`commands.md`](commands.md), B1, B9 |
 | B11 | Je Art kommen hinzu: bei `ChatCommand` die Trigger `triggers` (Liste, mindestens einer) und `triggerMode` (`exclamation`, `literal` oder `wildcard`, Voreinstellung `exclamation`); bei `EventCommand` der Ereignistyp `event` (Pflicht); `TimerCommand` und `ActionGroup` haben keine weiteren Felder. | [`commands.md`](commands.md), B10–B14, B20 |
 | B12 | `requirements` ist eine Map: Schlüssel ist die Art der Anforderung (`role`, `cooldown`, `currency`, `rank`, `inventory`, `arguments`, `threshold`, `settings`), Wert sind ihre Felder ohne `type` und `schemaVersion`, etwa `role: { role: follower }`. Je Art gibt es so höchstens eine Anforderung. Ohne das Feld hat der Command keine Anforderungen. | QP (§6.9), Entscheidung des Projektinhabers |
 | B13 | `actions` ist eine Liste von Actions mit `type` und ihren Feldern, ohne `schemaVersion`; Kind-Actions ebenso. Die Version der Dokumente ergibt sich aus `apiVersion`. Ohne das Feld hat der Command keine Actions. | Code-ADR-0010, Code-ADR-0013 |
@@ -52,7 +52,7 @@ Nicht Teil dieser Spezifikation:
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B20 | `CommandGroup` hat in `spec` das eigene Timer-Intervall `timerInterval` als Dauer; ohne das Feld hat die Gruppe keines ([`commands.md`](commands.md), B31). | [`commands.md`](commands.md), B30, B31 |
+| B20 | `CommandGroup` hat in `spec` das eigene Timer-Intervall `timerInterval` als Dauer und den Ziel-Channel des Intervalls `timerChannel` als Login, beide optional, Voreinstellung: kein Intervall bzw. der eigene Channel ([`commands.md`](commands.md), B31). | [`commands.md`](commands.md), B30, B31 |
 | B21 | `CooldownGroup` hat in `spec` die positive Dauer `duration` (Pflicht). | [`commands.md`](commands.md), B33 |
 
 ### Namen und Verweise
@@ -103,6 +103,7 @@ Keine. Commands als Code sind eine neue Funktion (Plan §4, „neu“); Commands
 - [x] B31, B32, B62, B66: Fehler mit Datei, Zeile, Spalte und Pfad, die aller Dokumente auf einmal, als Text und als JSON. Erledigt 2026-10-03 mit `streamcrew command validate` und `streamcrew command import`.
 - [x] B33, B34, B60, B63: Import neu und ersetzend, alles oder nichts, mit gestopptem Core. Erledigt 2026-10-03 mit `streamcrew command import` und `Store.Atomically`.
 - [x] B35–B38, B64, B65: Export als YAML und JSON, in eine Datei und je Dokument; Rundlauf aus Export und Import ohne Änderung. Erledigt 2026-10-03 mit `streamcrew command export`; `TestExportCommands` prüft den Rundlauf gegen das Profil.
+- [ ] B10, B20: `channel` und `timerChannel` in YAML und JSON, gültige und ungültige Werte (Prüfung wie beim Speichern, B31); der Rundlauf aus Export und Import trägt den Scope verlustfrei (B36).
 
 ## Offene Fragen
 
@@ -128,3 +129,4 @@ Keine. Die Grundsatzfragen hat der Projektinhaber am 2026-10-03 entschieden (Art
 | 2026-10-03 | `command import` umgesetzt. Festlegungen dabei: Der Import durchläuft dieselben Schritte wie `validate`, aber in einer Transaktion des Profils (`Store.Atomically`, Nachtrag zu [Code-ADR-0008](../adr/code/0008-datenbankzugriff.md), Entscheidung des Projektinhabers); hat ein Dokument einen Fehler, rollt er alles zurück. Counter, die das Speichern für Counter-Actions anlegt, bleiben nach einem erfolgreichen Import. Er öffnet das Profil wie die anderen Befehle mit einem Backup vor Migrationen und legt kein Profil an, das es nicht gibt. Die Ausgabe als Text endet mit `imported: 2 new, 1 replaced` oder `nothing imported`. |
 | 2026-10-03 | `command export` umgesetzt. Festlegungen dabei: Ohne Namen schreibt der Export alle Commands, Command-Gruppen und Cooldown-Gruppen, auch solche, auf die kein Command verweist. Ein Command, der sich nicht schreiben lässt (B64, B65), lässt den ganzen Export scheitern; der Fehler nennt jeden solchen Command, damit kein Export unbemerkt unvollständig ist. JSON auf der Standardausgabe und in `--file` ist eine Liste von Dokumenten, mit `--dir` steht in jeder Datei ein Dokument. Eine Command-Gruppe ohne eigenes Timer-Intervall hat kein Feld `timerInterval`, weil sein Fehlen „keines“ bedeutet (B20). Ohne Dokumente ist die YAML-Ausgabe leer. Dateinamen behalten Buchstaben aller Schriften in Kleinbuchstaben; vorhandene Dateien in `--dir` werden überschrieben. Der Export liest eine Kopie des Profils wie `validate`, der Core darf also laufen. |
 | 2026-10-04 | B64: Seit [`commands.md`](commands.md), B8, lassen sich Commands, Gruppen und Cooldown-Gruppen, auf die ein anderer Command verweist, nicht mehr löschen (Entscheidung des Projektinhabers); der Randfall betrifft nur noch ältere Daten. |
+| 2026-10-12 | Channel-Scope und Timer-Ziel-Channel im Format (Roadmap 4.7, [Plan 4.7](../superpowers/plans/2026-10-12-twitch-channel-config.md)): `spec` eines Commands hat `channel` (B10, [`commands.md`](commands.md), B9), `CommandGroup` hat `timerChannel` neben `timerInterval` (B20, [`commands.md`](commands.md), B31). Beide stehen als Login, Voreinstellung leer; die Prüfung gegen die konfigurierten Channels übernimmt der Go-Code wie alle Prüfungen beim Speichern (B31), das Schema prüft nur die Form. Der Export schreibt beide Felder wie alle anderen ausdrücklich (B36). |

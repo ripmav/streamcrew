@@ -14,8 +14,7 @@ welche Voraussetzung ein solcher Channel erfüllt, wie der Channel in
 Ereignissen, Chat und Moderation wirkt und welche Aktionen beim eigenen
 Channel bleiben. Sie gilt für die Twitch-Plattform (Roadmap 4.6).
 
-Nicht Teil dieser Spezifikation: pro-Channel-Konfiguration von Commands,
-Requirements und Timern (offen, v2), zusätzliche Logins pro Channel
+Nicht Teil dieser Spezifikation: pro-Channel-Konfiguration von Commands (Roadmap 4.7, [`commands.md`](commands.md), B9, B31), pro-Channel-Konfiguration von Requirements, Countern, Quotes, Währungen, Cooldowns, Nutzer-Statistiken und Settings (offen, v2), zusätzliche Logins pro Channel
 (verworfen: es bleibt ein Account-Paar, A1), die Multi-Channel-Unterstützung
 anderer Plattformen (der Mock-Adapter folgt der Spezifikation), die
 Empfangs-Vorgaben je EventSub-Topic (Abschnitt „Offene Fragen“, E2E).
@@ -41,7 +40,7 @@ Empfangs-Vorgaben je EventSub-Topic (Abschnitt „Offene Fragen“, E2E).
 | B5 | Der Adapter empfängt Ereignisse aller betriebenen Channels. Jedes Channel-Ereignis trägt seinen Channel (den Broadcaster), und der Adapter gibt ihn an das Event-Modell weiter ([`twitch-events.md`](twitch-events.md)). | Q1, Q4 |
 | B6 | Chat, Chat löschen und Moderation wirken auf einen Channel. Ein ereignisgetriggertes Läufen wirkt auf den Channel des auslösenden Events; ein Läufen ohne Channel (Timer, manuelle Aufrufe) wirkt auf den eigenen Channel. | Q2 |
 | B7 | Owner-Actions (Raid, Werbeeinschaltung, Titel und Kategorie, Clip, Stream-Marker, Umfrage, Vorhersage, Channel-Points-Belohnungen und Power-Ups) wirken nur auf den eigenen Channel. Für einen anderen Channel geben sie eine klare Fehlermeldung (der Channel wird nicht vom Streamer-Konto betrieben), die Frontends als deaktiviert darstellen können. | Q1, Q2 |
-| B8 | Commands, Requirements, Timer und Settings gelten identisch für alle betriebenen Channels; es gibt in v1 keine pro-Channel-Konfiguration. | Q2, Q3 |
+| B8 | Commands ohne Channel-Scope, Requirements, Counter, Quotes, Währungen, Cooldowns, Nutzer-Statistiken und Settings gelten identisch für alle betriebenen Channels. Ein Command mit Channel-Scope feuert nur in seinem Channel (Roadmap 4.7, [`commands.md`](commands.md), B9); das Timer-Intervall einer Gruppe feuert in ihrem Ziel-Channel (dort B31). Eine pro-Channel-Wirtschaft (getrennte Bits- und Währungs-Bestände, Counter und Quotes je Channel) und pro-Channel-Settings gibt es in v1 nicht. | Q2, Q3, Roadmap 4.7 |
 | B9 | Die Rate-Limits des Chat-Sendens sind je Channel eigene Buckets. | Q2 |
 | B10 | Die Channel-Information (Titel, Kategorie, Live-Zustand, Zuschauer) wird für den eigenen Channel gemeldet; für zusätzliche Channels bleibt sie in v1 ohne Angabe. | Q2 |
 
@@ -50,7 +49,7 @@ Empfangs-Vorgaben je EventSub-Topic (Abschnitt „Offene Fragen“, E2E).
 | ID | Situation | Erwartetes Verhalten | Quellen |
 |---|---|---|---|
 | B11 | Ein konfigurierter Channel existiert nicht (Konto gelöscht) | der Mod-Check schlägt fehl; der Channel wird nicht betrieben, die Warnung bleibt, bis der Eintrag entfernt ist | Q1 |
-| B12 | Der Mod-Status wird während des Laufens entzogen | beim nächsten Abgleich ist der Channel nicht mehr betrieben; seine Ereignisse werden nicht mehr empfangen | Q1 |
+| B12 | Der Mod-Status wird während des Laufens entzogen | beim nächsten Abgleich ist der Channel nicht mehr betrieben; seine Ereignisse werden nicht mehr empfangen, und seine scoped Commands feuern nicht mehr ([`commands.md`](commands.md), B9) | Q1 |
 | B13 | Ein Event eines zusätzlichen Channels löst ein Command aus, das eine Owner-Action ausführt | die Owner-Action schlägt mit dem Fehler von B7 fehl; die übrigen Aktionen des Commands (Chat, Moderation) wirken weiter in dem Channel | Q2 |
 | B14 | Ein Timer oder ein manueller Aufruf sendet eine Nachricht oder moderiert | es wirkt auf den eigenen Channel (B6) | Q2 |
 
@@ -107,3 +106,4 @@ Send-Buckets je Channel (B9).
 | 2026-10-12 | Erstellt für Phase 4.6: Voraussetzung und Prüfung (B1–B3), Token-Zuordnung (B4), Channel-Dimension (B5–B7, B9), geteilte Konfiguration (B8, B10), Randfälle (B11–B14), Abweichung A1, E2E-Fragen. |
 | 2026-10-12 | Abdeckungsstand der offenen Fragen dokumentiert: die twitch-cli-Mock-Server stellen einen Broadcaster pro Umgebung dar, die je-Topic-Empfangs-Vorgaben bleiben das manuelle E2E; automatisch abgedeckt sind Mod-Check, Nicht-Betreiben fehlender Channels, Sollzustand je Channel×Topic, Channel-Dimension und Routing, Ownership-Gate und Send-Buckets je Channel. |
 | 2026-10-12 | 4.8: B1 um die Login-Form-Prüfung beim Speichern ergänzt (1–25 Zeichen, Buchstaben, Ziffern, Unterstrich) und der Benutzerweg zur Konfiguration der Sektion: die neuen CLI-Befehle `profile channels list|add|remove` (roadmap 4.8). |
+| 2026-10-12 | 4.7: B8 um den Channel-Scope der Commands ergänzt — Commands ohne Scope gelten identisch für alle betriebenen Channels, ein scoped Command feuert nur in seinem Channel, das Gruppen-Timer-Intervall im Ziel-Channel (Roadmap 4.7, [`commands.md`](commands.md), B9, B31); der Scope gehört zu [`commands.md`](commands.md), die Channel-Dimension bleibt bei dieser Spezifikation. B12 um die scoped Commands ergänzt. |
