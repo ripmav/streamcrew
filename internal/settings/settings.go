@@ -6,10 +6,10 @@
 // a section that was never saved has its defaults.
 //
 // There are the sections "backups" and "time" (roadmap 2.2), "commands"
-// (roadmap 3.2) and "locale" (roadmap 3.4, ADR-0022); "channels"
-// (roadmap 4.6) names the channels the bot operates in besides the home
-// channel; the others (general, chat, moderation, overlay) follow with
-// their features.
+// (roadmap 3.2), "locale" (roadmap 3.4, ADR-0022), "events" (roadmap 3.6),
+// "channelPoints" (roadmap 4.4), "channels" (roadmap 4.6), and "general"
+// and "chat" (roadmap 5.1); "moderation" and "overlay" follow with their
+// features.
 package settings
 
 import (
@@ -22,6 +22,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/polydoc"
 	"github.com/ripmav/streamcrew/internal/template"
@@ -56,6 +57,8 @@ func New(repo Repository) (*Service, error) {
 		{Type: sectionEvents, Version: 1, Decode: decode[Events]},
 		{Type: sectionChannelPoints, Version: 1, Decode: decode[ChannelPoints]},
 		{Type: sectionChannels, Version: 1, Decode: decode[Channels]},
+		{Type: sectionGeneral, Version: 1, Decode: decode[General]},
+		{Type: sectionChat, Version: 1, Decode: decode[Chat]},
 	} {
 		if err := r.Register(e); err != nil {
 			return nil, err
@@ -119,6 +122,8 @@ const (
 	sectionEvents        = "events"
 	sectionChannelPoints = "channelPoints"
 	sectionChannels      = "channels"
+	sectionGeneral       = "general"
+	sectionChat          = "chat"
 )
 
 // Limits of the section "events" (spec events.md, B5, B8, B10).
@@ -219,6 +224,67 @@ func (c ChannelPoints) validate() error {
 			return fmt.Errorf("the channel points reward %s maps to both %q and %q", r.RewardID, other, r.Command)
 		}
 		rewards[r.RewardID] = r.Command
+	}
+	return nil
+}
+
+// General holds the profile-wide settings without a more specific section
+// (spec chat-service.md, B26).
+type General struct {
+	// DefaultPlatform is the platform the rules use where the run names
+	// none (B26, B27); a change applies from the next read.
+	DefaultPlatform platform.Name `json:"defaultPlatform"`
+}
+
+// DefaultGeneral returns the defaults of B26: the platform of ADR-0004.
+func DefaultGeneral() General {
+	return General{DefaultPlatform: platform.Default}
+}
+
+// DocType implements polydoc.Document.
+func (General) DocType() string { return sectionGeneral }
+
+// Validate checks the section.
+func (g General) Validate() error { return g.validate() }
+
+func (g General) validate() error { return g.DefaultPlatform.Validate() }
+
+// Limits of the section "chat" (spec chat-service.md, B15).
+const (
+	// DefaultChatHistorySize is the history size of a profile that never
+	// set one, like the command history of the engine.
+	DefaultChatHistorySize = 200
+	// MinChatHistorySize and MaxChatHistorySize limit the size.
+	MinChatHistorySize = 1
+	MaxChatHistorySize = 10_000
+)
+
+// Chat configures the chat service (spec chat-service.md, B15, B17, B30).
+type Chat struct {
+	// HistorySize is how many messages the history keeps per platform
+	// (B15); a change applies from the next save.
+	HistorySize int `json:"historySize"`
+	// Protocol switches the chat protocol on disk on (B17).
+	Protocol bool `json:"protocol"`
+	// DeleteTriggerMessage deletes the triggering message of every chat
+	// command, in addition to (OR) the switch of the command (B30).
+	DeleteTriggerMessage bool `json:"deleteTriggerMessage"`
+}
+
+// DefaultChat returns the defaults of B15, B17 and B30.
+func DefaultChat() Chat {
+	return Chat{HistorySize: DefaultChatHistorySize}
+}
+
+// DocType implements polydoc.Document.
+func (Chat) DocType() string { return sectionChat }
+
+// Validate checks the section.
+func (c Chat) Validate() error { return c.validate() }
+
+func (c Chat) validate() error {
+	if c.HistorySize < MinChatHistorySize || c.HistorySize > MaxChatHistorySize {
+		return fmt.Errorf("history size %d is not between %d and %d", c.HistorySize, MinChatHistorySize, MaxChatHistorySize)
 	}
 	return nil
 }

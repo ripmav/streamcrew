@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/polydoc"
 	"github.com/ripmav/streamcrew/internal/settings"
@@ -65,6 +66,14 @@ func TestDefaultsWhenNeverSaved(t *testing.T) {
 	ch, err := settings.Load(t.Context(), svc, settings.DefaultChannels())
 	require.NoError(t, err)
 	assert.Equal(t, settings.Channels{}, ch, "no additional channel by default")
+
+	g, err := settings.Load(t.Context(), svc, settings.DefaultGeneral())
+	require.NoError(t, err)
+	assert.Equal(t, settings.General{DefaultPlatform: platform.Default}, g, "chat-service.md B26")
+
+	ch2, err := settings.Load(t.Context(), svc, settings.DefaultChat())
+	require.NoError(t, err)
+	assert.Equal(t, settings.Chat{HistorySize: 200}, ch2, "chat-service.md B15, B17, B30")
 }
 
 func TestSaveAndLoad(t *testing.T) {
@@ -135,6 +144,24 @@ func TestSaveAndLoad(t *testing.T) {
 	doc, _, err = s.Settings(ctx, "channels")
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"type":"channels","schemaVersion":1,"additional":["friend","Other","aaaaaaaaaaaaaaaaaaaaaaaaa"]}`, string(doc))
+
+	gen := settings.General{DefaultPlatform: platform.Mock}
+	require.NoError(t, settings.Save(ctx, svc, gen))
+	gotGen, err := settings.Load(ctx, svc, settings.DefaultGeneral())
+	require.NoError(t, err)
+	assert.Equal(t, gen, gotGen)
+	doc, _, err = s.Settings(ctx, "general")
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"type":"general","schemaVersion":1,"defaultPlatform":"mock"}`, string(doc))
+
+	chat := settings.Chat{HistorySize: 1000, Protocol: true, DeleteTriggerMessage: true}
+	require.NoError(t, settings.Save(ctx, svc, chat))
+	gotChat, err := settings.Load(ctx, svc, settings.DefaultChat())
+	require.NoError(t, err)
+	assert.Equal(t, chat, gotChat)
+	doc, _, err = s.Settings(ctx, "chat")
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"type":"chat","schemaVersion":1,"historySize":1000,"protocol":true,"deleteTriggerMessage":true}`, string(doc))
 }
 
 func TestValidation(t *testing.T) {
@@ -178,6 +205,11 @@ func TestValidation(t *testing.T) {
 		settings.Channels{Additional: []string{"a", "A"}},
 		settings.Channels{Additional: []string{"has space"}},
 		settings.Channels{Additional: []string{strings.Repeat("a", 26)}},
+		settings.General{DefaultPlatform: ""},
+		settings.General{DefaultPlatform: "Twitch"},
+		settings.General{DefaultPlatform: platform.Name(strings.Repeat("a", 33))},
+		settings.Chat{HistorySize: 0},
+		settings.Chat{HistorySize: 10_001},
 	} {
 		assert.Error(t, settings.Save(ctx, svc, s), "%+v", s)
 	}
