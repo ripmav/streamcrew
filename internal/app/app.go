@@ -299,6 +299,8 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Platforms: a.platforms,
 		Cooldowns: a.store,
 		Streamer:  a.users,
+		General:   a.generalSettings,
+		Chat:      a.chatSettings,
 		Logger:    component(logger, "requirement"),
 	})
 	if err != nil {
@@ -475,6 +477,7 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches)
 		Users:     a.users,
 		Strikes:   a.store,
 		Mute:      a.chat,
+		General:   a.generalSettings,
 		Logger:    component(a.logger, "action"),
 	}))
 	add(network.Descriptors(network.Ports{

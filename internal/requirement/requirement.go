@@ -27,6 +27,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/i18n"
+	"github.com/ripmav/streamcrew/internal/settings"
 )
 
 // ErrNotSupported is returned for a requirement type the service cannot
@@ -57,6 +58,13 @@ type Ports struct {
 	Cooldowns Cooldowns
 	// Streamer finds the streamer for runs without a user (B4).
 	Streamer Streamer
+	// General reads the settings section "general": the default platform
+	// the rules use where the run names none (spec chat-service.md, B26,
+	// B27), whenever a rule needs it, so a change applies at once.
+	General func(ctx context.Context) (settings.General, error)
+	// Chat reads the settings section "chat": the switch that deletes the
+	// triggering message of every chat command (spec chat-service.md, B30).
+	Chat func(ctx context.Context) (settings.Chat, error)
 	// Logger records faulty requirements (B7, B8).
 	Logger *slog.Logger
 }
@@ -86,6 +94,10 @@ func New(p Ports) (*Service, error) {
 		return nil, errors.New("requirement service: no cooldowns")
 	case p.Streamer == nil:
 		return nil, errors.New("requirement service: no streamer")
+	case p.General == nil:
+		return nil, errors.New("requirement service: no general settings")
+	case p.Chat == nil:
+		return nil, errors.New("requirement service: no chat settings")
 	case p.Logger == nil:
 		return nil, errors.New("requirement service: no logger")
 	}
