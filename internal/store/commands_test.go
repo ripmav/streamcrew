@@ -41,7 +41,7 @@ type commandSaver struct {
 
 func newCommandService(t *testing.T, s *store.Store, codec *command.Codec) *commandSaver {
 	t.Helper()
-	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: noNames{}, Types: noTypes{}, Roots: noRoots{}})
+	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: noNames{}, Types: noTypes{}, Roots: noRoots{}, Channels: noChannels{}})
 	require.NoError(t, err)
 	return &commandSaver{Service: svc, t: t}
 }
@@ -68,6 +68,12 @@ func (noTypes) Missing(string) []capability.Capability { return []capability.Cap
 type noRoots struct{}
 
 func (noRoots) HasRoot(string) bool { return false }
+
+// noChannels operates no channel; every scope but the global one is
+// rejected.
+type noChannels struct{}
+
+func (noChannels) Operated(context.Context) ([]string, error) { return nil, nil }
 
 func chatCommand(name string, enabled bool, triggers ...string) command.Command {
 	return command.Command{
@@ -401,6 +407,7 @@ type fakeChecks struct {
 	reserved map[string]string
 	missing  map[string][]capability.Capability
 	roots    []string
+	channels []string
 }
 
 func (f fakeChecks) Reserved(name string) (string, bool) {
@@ -413,6 +420,10 @@ func (f fakeChecks) Missing(actionType string) []capability.Capability {
 }
 
 func (f fakeChecks) HasRoot(name string) bool { return slices.Contains(f.roots, name) }
+
+func (f fakeChecks) Operated(context.Context) ([]string, error) {
+	return append([]string{}, f.channels...), nil
+}
 
 // TestSaveChecksActions covers Code-ADR-0013, point 7: saving checks the
 // references and result names of actions, also of child actions, creates
@@ -433,7 +444,7 @@ func TestSaveChecksActions(t *testing.T) {
 		missing:  map[string][]capability.Capability{"ref": {capability.HostFS}},
 		roots:    []string{"overlays"},
 	}
-	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: fake, Types: fake, Roots: fake})
+	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: fake, Types: fake, Roots: fake, Channels: fake})
 	require.NoError(t, err)
 
 	target, err := svc.Save(ctx, chatCommand("target", true, "target"))
@@ -514,7 +525,7 @@ func TestSaveChecksRequirements(t *testing.T) {
 		reserved: map[string]string{"username": "username", "webrequestresult": "webrequestresult"},
 		missing:  map[string][]capability.Capability{"ref": {capability.HostFS}},
 	}
-	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: fake, Types: fake, Roots: fake})
+	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: fake, Types: fake, Roots: fake, Channels: fake})
 	require.NoError(t, err)
 
 	args := func(identifiers ...string) command.ArgumentsRequirement {
@@ -577,7 +588,7 @@ func TestSaveFindsUnicodeCounters(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: noNames{}, Types: noTypes{}, Roots: noRoots{}})
+	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: noNames{}, Types: noTypes{}, Roots: noRoots{}, Channels: noChannels{}})
 	require.NoError(t, err)
 	_, err = s.CreateCounter(ctx, counter.New("Zähler"))
 	require.NoError(t, err)
@@ -600,12 +611,13 @@ func TestNewServiceNeedsChecks(t *testing.T) {
 	s := openStore(t)
 	codec, err := command.NewCodec()
 	require.NoError(t, err)
-	full := command.Checks{Counters: s, Names: noNames{}, Types: noTypes{}, Roots: noRoots{}}
+	full := command.Checks{Counters: s, Names: noNames{}, Types: noTypes{}, Roots: noRoots{}, Channels: noChannels{}}
 	for name, change := range map[string]func(*command.Checks){
 		"counters": func(c *command.Checks) { c.Counters = nil },
 		"names":    func(c *command.Checks) { c.Names = nil },
 		"types":    func(c *command.Checks) { c.Types = nil },
 		"roots":    func(c *command.Checks) { c.Roots = nil },
+		"channels": func(c *command.Checks) { c.Channels = nil },
 	} {
 		checks := full
 		change(&checks)
@@ -614,6 +626,53 @@ func TestNewServiceNeedsChecks(t *testing.T) {
 	}
 	_, err = command.NewService(s, nil, full)
 	require.Error(t, err, "codec")
+}
+
+// TestCommandChannelScope covers commands.md, B9: the scope of a command is
+// checked against the channels the profile operates; empty is the global
+// scope, existing commands read back without a scope.
+func TestCommandChannelScope(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+	codec, err := command.NewCodec()
+	require.NoError(t, err)
+	fake := fakeChecks{channels: []string{"streamer", "other"}}
+	svc, err := command.NewService(s, codec, command.Checks{Counters: s, Names: fake, Types: fake, Roots: fake, Channels: fake})
+	require.NoError(t, err)
+
+	scope := func(name, channel string) command.Command {
+		cmd := chatCommand(name, true, name)
+		cmd.Channel = channel
+		return cmd
+	}
+
+	// The global scope saves and reads back empty.
+	saved, err := svc.Save(ctx, scope("hug", ""))
+	require.NoError(t, err)
+	loaded, err := svc.Command(ctx, saved.Command.ID)
+	require.NoError(t, err)
+	assert.Empty(t, loaded.Channel)
+
+	// The home channel and an additional channel save; the check ignores
+	// the case of the scope.
+	for _, channel := range []string{"streamer", "Other"} {
+		saved, err := svc.Save(ctx, scope("hug "+channel, channel))
+		require.NoError(t, err)
+		loaded, err := svc.Command(ctx, saved.Command.ID)
+		require.NoError(t, err)
+		assert.Equal(t, channel, loaded.Channel, "the scope is stored as written")
+	}
+
+	// A channel the profile does not operate rejects the save.
+	_, err = svc.Save(ctx, scope("hug unknown", "unknown"))
+	assert.ErrorContains(t, err, `the channel "unknown" is not operated by this profile`)
+
+	// A profile without channels rejects every scope.
+	svc, err = command.NewService(s, codec, command.Checks{Counters: s, Names: fake, Types: fake, Roots: fake, Channels: noChannels{}})
+	require.NoError(t, err)
+	_, err = svc.Save(ctx, scope("hug none", "streamer"))
+	assert.ErrorContains(t, err, `the channel "streamer" is not operated by this profile`)
 }
 
 // TestSwitchCommand covers actions.md B34 with commands.md B14: the switch

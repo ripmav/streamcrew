@@ -3,6 +3,7 @@
 package app_test
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"path/filepath"
@@ -37,6 +38,7 @@ func commandProfile(t *testing.T) string {
 	require.NoError(t, err)
 	svc, err := command.NewService(st, codec, command.Checks{
 		Counters: st, Names: app.Reserved(identifiers, actions), Types: actions, Roots: config.NewLive(config.Rights{}),
+		Channels: noScopeChannels{},
 	})
 	require.NoError(t, err)
 	chat := func(name, trigger string) command.Command {
@@ -396,3 +398,9 @@ spec: {duration: 30s}
 	_, err = app.ExportCommands(t.Context(), filepath.Join(dir, "none.db"), nil)
 	require.Error(t, err)
 }
+
+// noScopeChannels operates no channel; every scope but the global one is
+// rejected. These tests save no scoped command.
+type noScopeChannels struct{}
+
+func (noScopeChannels) Operated(context.Context) ([]string, error) { return nil, nil }

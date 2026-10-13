@@ -34,6 +34,7 @@ type Command struct {
 	ErrorPolicy  string
 	TriggerMode  sql.NullString
 	NameKey      string
+	Channel      string
 }
 
 type CommandGroup struct {

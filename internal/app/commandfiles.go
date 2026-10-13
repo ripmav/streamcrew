@@ -16,6 +16,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/commandfile"
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/domain/command"
+	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/store"
 )
 
@@ -237,8 +238,13 @@ func checkInto(ctx context.Context, st *store.Store, rights config.Rights, docs 
 	if err != nil {
 		return plan, nil, err
 	}
+	svcSettings, err := settings.New(st)
+	if err != nil {
+		return plan, nil, err
+	}
 	svc, err := command.NewService(st, codec, command.Checks{
 		Counters: st, Names: Reserved(identifiers, actions), Types: actions, Roots: live,
+		Channels: scopeChannels{store: st, settings: svcSettings},
 	})
 	if err != nil {
 		return plan, nil, err
