@@ -126,8 +126,8 @@ Die Anforderungen sind eine Menge von Einträgen je Art; jede Art kommt höchste
 - [x] B30, B62: Gruppennamen sind eindeutig; Löschen einer Gruppe lässt ihre Commands bestehen.
 - [x] B8, B62, B64, B69: Löschen scheitert, solange ein anderer Command auf Command, Gruppe oder Cooldown-Gruppe verweist, und nennt ihn; Selbstbezug und Gruppenzugehörigkeit hindern nicht. Erledigt 2026-10-04: `command.Service.Delete`, `DeleteGroup` und `DeleteCooldownGroup` liefern `command.InUseError`.
 - [x] B40–B47: Jede Anforderungsart lässt sich speichern und laden (Golden Files, Code-ADR-0010).
-- [ ] B9: Ein scoped Command feuert nur in seinem Channel, ein unscoped in allen betriebenen Channels (Regression); ein Scope, der weder der eigene noch ein konfigurierter Channel ist, wird beim Speichern abgelehnt; ein nicht mehr betriebener Channel feuert seine scoped Commands nicht, ohne Fehler.
-- [ ] B31: Das Timer-Intervall einer Gruppe hat einen Ziel-Channel; leer = eigener Channel; Prüfung wie der Scope (B9).
+- [x] B9: Ein scoped Command feuert nur in seinem Channel, ein unscoped in allen betriebenen Channels (Regression); ein Scope, der weder der eigene noch ein konfigurierter Channel ist, wird beim Speichern abgelehnt; ein nicht mehr betriebener Channel feuert seine scoped Commands nicht, ohne Fehler.
+- [x] B31: Das Timer-Intervall einer Gruppe hat einen Ziel-Channel; leer = eigener Channel; Prüfung wie der Scope (B9).
 
 ## Offene Fragen
 

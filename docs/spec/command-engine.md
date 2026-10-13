@@ -194,7 +194,7 @@ Nicht Teil dieser Spezifikation:
 - [x] B60–B62: Verlauf als Ringpuffer; Ereignisse je Zustandswechsel in der richtigen Reihenfolge.
 - [x] B70–B74: Fehlerpolitik, Zeitlimit, Tiefe und Zyklen von Aufrufen.
 - [x] B80–B82: Parameter und Zielnutzer im Scope der Templates.
-- [ ] B18: Ein scoped Command feuert nur in seinem Channel (Chat, Ereignis, Timer), ein unscoped in allen (Regression); ein Scope-Missmatch endet als out-of-scope ohne Instanz und ohne Meldung; Start von Hand, Aufruf und Wiederholung ignorieren den Scope; der Gruppen-Timer feuert im Ziel-Channel ([`commands.md`](commands.md), B31).
+- [x] B18: Ein scoped Command feuert nur in seinem Channel (Chat, Ereignis, Timer), ein unscoped in allen (Regression); ein Scope-Missmatch endet als out-of-scope ohne Instanz und ohne Meldung; Start von Hand, Aufruf und Wiederholung ignorieren den Scope; der Gruppen-Timer feuert im Ziel-Channel ([`commands.md`](commands.md), B31).
 - [x] B90: Settings-Sektion mit Standardwerten, Prüfung und Migration nach Code-ADR-0010.
 - [x] Nebenläufigkeit: alle Tests der Engine mit `-race`; ein Lasttest mit vielen gleichzeitig ausgelösten Commands in jedem Sperrmodus.
 
