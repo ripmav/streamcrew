@@ -106,6 +106,12 @@
               "default": "continue",
               "x-ui": "choice"
             },
+            "channel": {
+              "type": "string",
+              "pattern": "^([A-Za-z0-9_]{1,25})?$",
+              "default": "",
+              "x-ui": "channel"
+            },
             "requirements": {
               "$ref": "#/$defs/requirements",
               "default": {}
@@ -250,6 +256,12 @@
               "default": "continue",
               "x-ui": "choice"
             },
+            "channel": {
+              "type": "string",
+              "pattern": "^([A-Za-z0-9_]{1,25})?$",
+              "default": "",
+              "x-ui": "channel"
+            },
             "requirements": {
               "$ref": "#/$defs/requirements",
               "default": {}
@@ -326,6 +338,12 @@
               "default": "continue",
               "x-ui": "choice"
             },
+            "channel": {
+              "type": "string",
+              "pattern": "^([A-Za-z0-9_]{1,25})?$",
+              "default": "",
+              "x-ui": "channel"
+            },
             "requirements": {
               "$ref": "#/$defs/requirements",
               "default": {}
@@ -399,6 +417,12 @@
               "default": "continue",
               "x-ui": "choice"
             },
+            "channel": {
+              "type": "string",
+              "pattern": "^([A-Za-z0-9_]{1,25})?$",
+              "default": "",
+              "x-ui": "channel"
+            },
             "requirements": {
               "$ref": "#/$defs/requirements",
               "default": {}
@@ -452,6 +476,11 @@
               "type": "string",
               "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
               "x-ui": "duration"
+            },
+            "timerChannel": {
+              "type": "string",
+              "pattern": "^([A-Za-z0-9_]{1,25})?$",
+              "x-ui": "channel"
             }
           },
           "additionalProperties": false

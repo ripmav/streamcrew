@@ -51,6 +51,10 @@ const (
 	UICurrency      UI = "currency"
 	UIRank          UI = "rank"
 	UIItem          UI = "item"
+	// UIChannel is a channel scope or a timer target channel (commands.md,
+	// B9, B31); empty is the default, all operated channels or the home
+	// channel.
+	UIChannel UI = "channel"
 )
 
 // UIs returns every UI hint, in a fixed order.
@@ -58,7 +62,7 @@ func UIs() []UI {
 	return []UI{
 		UIText, UIMultiline, UITemplate, UIAmount, UIExpression, UIUser, UIPlatform,
 		UICommand, UIGroup, UICounter, UIFileRoot, UIResultName, UIActions, UISwitch, UIChoice, UIList,
-		UIDuration, UICooldownGroup, UICurrency, UIRank, UIItem,
+		UIDuration, UICooldownGroup, UICurrency, UIRank, UIItem, UIChannel,
 	}
 }
 
@@ -101,6 +105,11 @@ const (
 	// lowercase ASCII letters, digits and "_", as --file-root takes them
 	// (Code-ADR-0019, point 3).
 	PatternFileRoot = "^[a-z0-9_]{1,32}$"
+	// PatternChannel is the form of a channel scope or a timer target
+	// channel (commands.md, B9, B31): empty for the default, otherwise the
+	// shape of a platform login. That the channel is operated by the
+	// profile the Go code checks when it saves.
+	PatternChannel = "^([A-Za-z0-9_]{1,25})?$"
 )
 
 // KeyKind is the member that picks the kind of an action document (Kinds).
@@ -426,6 +435,12 @@ func FileRoot() *Schema {
 // to one by its name (commands-as-code.md, B3, B23).
 func CommandName(ui UI) *Schema {
 	return &Schema{Type: "string", Pattern: PatternCommandName, UI: ui}
+}
+
+// Channel returns the field of a channel scope or a timer target channel
+// (commands.md, B9, B31): a platform login, empty for the default.
+func Channel() *Schema {
+	return &Schema{Type: "string", Pattern: PatternChannel, UI: UIChannel}
 }
 
 // ResultName returns the field of the name of a result value

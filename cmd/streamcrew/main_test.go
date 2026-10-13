@@ -551,7 +551,7 @@ func TestCommandExport(t *testing.T) {
 	res := runCLI(t.Context(), t, "--data-dir", dataDir, "command", "export", "hug")
 	require.Equal(t, cli.ExitOK, res.code, res.stderr)
 	assert.Equal(t, "apiVersion: streamcrew/v1alpha1\nkind: ChatCommand\nmetadata:\n  name: Hug\nspec:\n  triggers:\n    - hug\n"+
-		"  triggerMode: exclamation\n  enabled: true\n  unlocked: false\n  errorPolicy: continue\n  requirements: {}\n  actions: []\n", res.stdout)
+		"  triggerMode: exclamation\n  enabled: true\n  unlocked: false\n  errorPolicy: continue\n  channel: \"\"\n  requirements: {}\n  actions: []\n", res.stdout)
 
 	res = runCLI(t.Context(), t, "--data-dir", dataDir, "command", "export", "--format", "json")
 	require.Equal(t, cli.ExitOK, res.code, res.stderr)
