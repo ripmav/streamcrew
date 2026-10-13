@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"strconv"
 
+	chatsvc "github.com/ripmav/streamcrew/internal/chat"
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
+	"github.com/ripmav/streamcrew/internal/domain/role"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
@@ -28,17 +30,16 @@ import (
 // the author's first message ever and, while a stream is live, greets the
 // author once per session with "chat.user.entrance" and the author's
 // entrance command (command-engine.md, B41). A message of the bot account
-// triggers nothing. The roles of the author are those in the message.
+// triggers nothing, but it still lands in the chat history (spec
+// chat-service.md, B14). While the muted chat is on, a message is deleted
+// and triggers nothing (spec chat-service.md, B21, B22). The roles of the
+// author are those in the message.
 func (s *Service) Message(ctx context.Context, m connector.Incoming) error {
 	if err := checkAccount(m.Platform, m.Author); err != nil {
 		return fmt.Errorf("chat message: %w", err)
 	}
 	if m.Message.Text == "" {
 		return errors.New("chat message: empty text")
-	}
-	if m.FromBot {
-		s.logger.DebugContext(ctx, "chat message of the bot ignored", "platform", m.Platform)
-		return nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -48,6 +49,18 @@ func (s *Service) Message(ctx context.Context, m connector.Incoming) error {
 	u, err := s.resolve(ctx, m.Author, true)
 	if err != nil {
 		return fmt.Errorf("chat message: %w", err)
+	}
+	if m.FromBot {
+		// The bot account triggers nothing (events.md, B13), but its
+		// message still lands in the history (spec chat-service.md, B14).
+		s.logger.DebugContext(ctx, "chat message of the bot ignored", "platform", m.Platform)
+		return s.recordLocked(ctx, m, u)
+	}
+	// The muted chat is the first check of the moderation stage (spec
+	// chat-service.md, B3, B21): it deletes the message and it fires
+	// nothing; messages of the streamer run through (B22, B31).
+	if s.ports.Chat.Muted() && !m.Author.Roles.Has(role.Streamer) {
+		return s.muteDeleteLocked(ctx, m)
 	}
 	if err := s.seeLocked(ctx, m.Platform, m.Channel, u); err != nil {
 		return fmt.Errorf("chat message: %w", err)
@@ -69,6 +82,38 @@ func (s *Service) Message(ctx context.Context, m connector.Incoming) error {
 		s.fire(ctx, m.Platform, eventtype.ChatUserFirstMessage, payload)
 	}
 	if err := s.greetLocked(ctx, m.Platform, u, payload, chat); err != nil {
+		return fmt.Errorf("chat message: %w", err)
+	}
+	// The history is the last stage of the pipeline (spec
+	// chat-service.md, B1, B14).
+	return s.recordLocked(ctx, m, u)
+}
+
+// muteDeleteLocked deletes m because the chat is muted (spec
+// chat-service.md, B21 to B23): the message is discarded without events
+// or triggers; a delete that the platform cannot do is a warning. s.mu is
+// held.
+func (s *Service) muteDeleteLocked(ctx context.Context, m connector.Incoming) error {
+	if err := s.ports.Chat.Delete(ctx, m.Platform, m.Channel, m.Message.ID); err != nil {
+		s.logger.WarnContext(ctx, "the muted chat could not delete the message",
+			"platform", m.Platform, "channel", m.Channel, "message_id", m.Message.ID, "error", err)
+	}
+	return nil
+}
+
+// recordLocked takes m into the chat history (spec chat-service.md, B14,
+// B15). s.mu is held.
+func (s *Service) recordLocked(ctx context.Context, m connector.Incoming, u user.User) error {
+	ident, _ := u.Identity(m.Platform)
+	if err := s.ports.Chat.Record(ctx, chatsvc.Entry{
+		Platform:  m.Platform,
+		Channel:   string(m.Channel),
+		UserID:    u.ID,
+		Name:      ident.DisplayName,
+		Text:      m.Message.Text,
+		FromBot:   m.FromBot,
+		MessageID: m.Message.ID,
+	}); err != nil {
 		return fmt.Errorf("chat message: %w", err)
 	}
 	return nil

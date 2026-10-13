@@ -13,6 +13,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	chatsvc "github.com/ripmav/streamcrew/internal/chat"
+	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
@@ -299,6 +301,67 @@ func (s *channelPointsSettings) get(context.Context) (settings.ChannelPoints, er
 	return s.cfg, nil
 }
 
+// fakeChat is the chat service of the fixture (spec chat-service.md, B14,
+// B21 to B23): it records the entries it takes, the deletes it is asked
+// for, and can be muted.
+type fakeChat struct {
+	mu      sync.Mutex
+	entries []chatsvc.Entry
+	deleted []string
+	muted   bool
+	fail    error
+}
+
+func (c *fakeChat) Record(_ context.Context, e chatsvc.Entry) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries = append(c.entries, e)
+	return nil
+}
+
+func (c *fakeChat) Muted() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.muted
+}
+
+func (c *fakeChat) Delete(_ context.Context, p platform.Name, ch connector.Channel, messageID string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.deleted = append(c.deleted, fmt.Sprintf("%s/%s/%s", p, ch, messageID))
+	return c.fail
+}
+
+func (c *fakeChat) setMuted(b bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.muted = b
+}
+
+func (c *fakeChat) setDeleteError(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.fail = err
+}
+
+// taken returns the recorded entries and forgets them.
+func (c *fakeChat) taken() []chatsvc.Entry {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := c.entries
+	c.entries = nil
+	return out
+}
+
+// deletes returns the deletes asked for and forgets them.
+func (c *fakeChat) deletes() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := c.deleted
+	c.deleted = nil
+	return out
+}
+
 func (s *eventSettings) set(change func(*settings.Events)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -312,6 +375,7 @@ type fixture struct {
 	pub      *publisher
 	settings *eventSettings
 	points   *channelPointsSettings
+	chat     *fakeChat
 	cmds     commands
 	service  *eventservice.Service
 }
@@ -330,6 +394,7 @@ func newFixture(t *testing.T, cmds ...command.Command) *fixture {
 		pub:      &publisher{catalog: catalog},
 		settings: &eventSettings{cfg: settings.DefaultEvents()},
 		points:   &channelPointsSettings{cfg: settings.DefaultChannelPoints()},
+		chat:     &fakeChat{},
 		cmds:     commands{list: cmds},
 	}
 	f.service = f.restart(t)
@@ -341,8 +406,8 @@ func newFixture(t *testing.T, cmds ...command.Command) *fixture {
 func (f *fixture) restart(t *testing.T) *eventservice.Service {
 	t.Helper()
 	svc, err := eventservice.New(t.Context(), eventservice.Ports{
-		Store: f.store, Commands: f.cmds, Engine: f.engine, Publisher: f.pub, Settings: f.settings.get,
-		ChannelPoints: f.points.get,
+		Store: f.store, Commands: f.cmds, Engine: f.engine, Publisher: f.pub,
+		Chat: f.chat, Settings: f.settings.get, ChannelPoints: f.points.get,
 	})
 	require.NoError(t, err)
 	return svc

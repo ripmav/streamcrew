@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	chatsvc "github.com/ripmav/streamcrew/internal/chat"
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
@@ -103,12 +104,26 @@ type Publisher interface {
 	Publish(ctx context.Context, e event.Envelope) error
 }
 
+// Chat is what the event service needs from the chat service (spec
+// chat-service.md, B1, B14, B21 to B23): the history it takes accepted
+// messages into, and the muted chat, which deletes incoming messages
+// before they fire anything.
+type Chat interface {
+	// Record takes e into the chat history (B14, B15).
+	Record(ctx context.Context, e chatsvc.Entry) error
+	// Muted reports whether the chat is muted now (B21, B24).
+	Muted() bool
+	// Delete removes the message on its platform (B23).
+	Delete(ctx context.Context, p platform.Name, ch connector.Channel, messageID string) error
+}
+
 // Ports are what the service needs. All are required.
 type Ports struct {
 	Store     Store
 	Commands  Commands
 	Engine    Engine
 	Publisher Publisher
+	Chat      Chat
 	// Settings reads the settings section "events" (B10) whenever a rule
 	// needs it, so changes apply at once.
 	Settings func(ctx context.Context) (settings.Events, error)
@@ -163,7 +178,7 @@ type session struct {
 // did not run ends the session without "channel.stream.stop" (B27).
 func New(ctx context.Context, p Ports, opts ...Option) (*Service, error) {
 	switch {
-	case p.Store == nil, p.Commands == nil, p.Engine == nil, p.Publisher == nil, p.Settings == nil:
+	case p.Store == nil, p.Commands == nil, p.Engine == nil, p.Publisher == nil, p.Chat == nil, p.Settings == nil:
 		return nil, fmt.Errorf("new event service: %w: missing port", ErrInvalidOption)
 	}
 	s := &Service{ports: p, logger: slog.New(slog.DiscardHandler), sessions: make(map[platform.Name]*session)}
