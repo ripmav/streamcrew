@@ -12,15 +12,20 @@ Umgebung. 4.7 setzt auf die Channel-Dimension von 4.6 auf (Spec
 
 ## 1. Was 4.7 liefert (Roadmap)
 
-- [ ] Channel-Scope für Commands: ohne Scope (Standard: alle betriebenen
-  Channels) oder ein bestimmter Channel (M)
-- [ ] Engine: Scope-Check in der Trigger-Matching; die Timer der
-  Command-Gruppen zielen auf einen Channel (M)
-- [ ] Command-Format und -Verwaltung: `channel` im YAML/JSON-Format, in der
-  Liste und im Import/Export; Validierung gegen die konfigurierten Channels (S)
-- [ ] Explizit profiltweit (dokumentiert): Counter, Quotes, Währungen,
-  Cooldowns, Nutzer-Statistiken (S)
-- [ ] Tests, E2E auf zwei Channels, Doku (S)
+- [x] Channel-Scope für Commands: ohne Scope (Standard: alle betriebenen
+  Channels) oder ein bestimmter Channel (M), erledigt 2026-10-13
+- [x] Engine: Scope-Check in der Trigger-Matching; die Timer der
+  Command-Gruppen zielen auf einen Channel (M), erledigt 2026-10-13
+- [x] Command-Format und -Verwaltung: `channel` im YAML/JSON-Format, in der
+  Liste und im Import/Export; Validierung gegen die konfigurierten Channels (S),
+  erledigt 2026-10-13 (das CLI-Flag `--channel` und die Spalte in der Liste
+  folgen mit der Command-Verwaltung der Phasen 5/6, es gibt bisher noch
+  weder einen List- noch einen Erzeugungs-Befehl)
+- [x] Explizit profiltweit (dokumentiert): Counter, Quotes, Währungen,
+  Cooldowns, Nutzer-Statistiken (S), erledigt 2026-10-13 (twitch-multi-channel.md, B8)
+- [x] Tests, E2E auf zwei Channels, Doku (S), erledigt 2026-10-13
+  (das E2E auf echten Channels bleibt wie bei 4.6 als Exit-Kriterium offen,
+  siehe Änderungshistorie der Roadmap)
 
 ## 2. Befunde (Stand nach 4.6)
 
