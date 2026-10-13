@@ -8,6 +8,7 @@ import (
 
 	"github.com/ripmav/streamcrew/internal/action"
 	"github.com/ripmav/streamcrew/internal/action/schema"
+	chatsvc "github.com/ripmav/streamcrew/internal/chat"
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/engine"
@@ -64,21 +65,28 @@ func (m PlatformMessage) Validate() error {
 
 // Perform implements engine.Performer. If the platform is not connected,
 // nothing happens, and that is no failure (B67); otherwise the action
-// behaves like a chat message on that platform (B61, B64 to B66).
+// behaves like a chat message on that platform (B61, B64 to B66). The
+// delivery goes through the chat service (spec chat-service.md, B4), which
+// logs the platform it skips.
 func (m PlatformMessage) Perform(ctx context.Context, run *engine.Run) error {
-	target, ok := m.ports.Platforms.Platform(m.Platform)
-	if !ok || !target.Status().Connected() {
-		m.ports.Logger.InfoContext(ctx, "platform message not sent: platform not connected",
-			"instance_id", run.InstanceID(), "platform", m.Platform)
-		return nil
-	}
 	text, err := m.ports.Templates.Render(ctx, m.Message.Parse(), run.Scope(), template.Text)
 	if err != nil {
 		return err
 	}
-	if m.ports.blank(ctx, run, text) {
-		return nil
+	p := run.Params()
+	var replyPlatform platform.Name
+	var replyMessageID string
+	if m.Reply {
+		// The reply answers the triggering message on the platform of the
+		// run, where it can (B64).
+		replyPlatform, replyMessageID = p.Platform, p.MessageID
 	}
-	return send(ctx, run.Params(), []connector.Platform{target}, connector.Message{Text: text},
-		delivery{asStreamer: m.AsStreamer, reply: m.Reply})
+	return m.ports.Chat.Send(ctx, chatsvc.SendRequest{
+		Text:           text,
+		AsStreamer:     m.AsStreamer,
+		Channel:        connector.Channel(p.Channel),
+		Platform:       m.Platform,
+		ReplyPlatform:  replyPlatform,
+		ReplyMessageID: replyMessageID,
+	})
 }

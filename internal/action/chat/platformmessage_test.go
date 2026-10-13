@@ -118,7 +118,7 @@ func TestPlatformMessageNotConnected(t *testing.T) {
 			f.platformMessage("velora", "Hi"),
 			f.platformMessage(platform.Twitch, "$blank"))
 		assert.Empty(t, in.Errors)
-		assert.Equal(t, 2, strings.Count(f.logs.String(), "platform message not sent: platform not connected"))
+		assert.Equal(t, 2, strings.Count(f.logs.String(), "message not sent: platform not connected"))
 		assert.Contains(t, f.logs.String(), "platform=velora")
 		assert.Contains(t, f.logs.String(), "empty after rendering")
 		for _, pl := range []*connectortest.Platform{f.twitch, f.youtube, f.kick} {
