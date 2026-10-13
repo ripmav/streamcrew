@@ -5,7 +5,6 @@
 // secret, re-run the generator:
 //
 //	STREAMCREW_APP_SECRET=... go run ./internal/appcreds/gen --client-id <ID>
-//
 package appcreds
 
 var (
@@ -41,7 +40,7 @@ var (
 		`10f441a426b4d76aa1a58ff8e8c556fcade6b3edd5743ff928c61a605bf5607a9bb1abbd0a1e` +
 		`a73c6da644087cae965fc7e2865f463a1c35bdb61ef7fa60`
 	embeddedGCMNonceHex string = `75a45db361a8982244580f5e`
-	embeddedPayloadHex string = `965c25694ef958dc021a423ce9bed160ed99996b34e50ec567500dc9fb81c8b88eb5456ff952` +
+	embeddedPayloadHex  string = `965c25694ef958dc021a423ce9bed160ed99996b34e50ec567500dc9fb81c8b88eb5456ff952` +
 		`99e449b3a7755df81e8e0f21e59f93cea0ba73d0bde367454c69a6b4cc91fcba9d34a6d7447d` +
 		`073bf8413a15bbe86bb5eeaf43bcc5864c60e4be0199ac39c76a8037091218473a59a1`
 )
