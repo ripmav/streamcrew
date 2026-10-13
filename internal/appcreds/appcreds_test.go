@@ -6,6 +6,7 @@ import (
 	"crypto/mlkem"
 	"encoding/hex"
 	"encoding/json"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -115,11 +116,12 @@ func TestRecordJSONShape(t *testing.T) {
 	assert.Equal(t, "s", w.ClientSecret) // plain on the wire, not redacted
 }
 
-// resetEmbedded restores the pristine (disabled) state between tests.
+// resetEmbedded restores the pristine (disabled) state between tests,
+// including the once of the opening.
 func resetEmbedded() {
 	embedded = struct {
-		rec   Record
-		ok    bool
-		tried bool
+		rec Record
+		ok  bool
 	}{}
+	openOnce = sync.Once{}
 }
