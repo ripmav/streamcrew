@@ -369,6 +369,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Commands:      a.commands,
 		Engine:        a.engine,
 		Publisher:     a.bus,
+		Chat:          a.chat,
 		Settings:      a.eventsSettings,
 		ChannelPoints: a.channelPointsSettings,
 	}, eventservice.WithLogger(component(logger, "events")))
