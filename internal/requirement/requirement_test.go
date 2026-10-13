@@ -33,6 +33,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/polydoc"
 	"github.com/ripmav/streamcrew/internal/requirement"
+	"github.com/ripmav/streamcrew/internal/settings"
 )
 
 // apply prepares the decision about cmd for p with s and makes it, as the
@@ -178,6 +179,46 @@ func (s streamer) StreamerUser(_ context.Context, p platform.Name) (id.ID, error
 	return userID, nil
 }
 
+// generalAndChat are mutable fakes of the settings sections the service
+// reads (spec chat-service.md, B26, B30), so a change applies from the
+// next read.
+type generalAndChat struct {
+	mu      sync.Mutex
+	general settings.General
+	chat    settings.Chat
+}
+
+func (g *generalAndChat) getGeneral(context.Context) (settings.General, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.general, nil
+}
+
+func (g *generalAndChat) getChat(context.Context) (settings.Chat, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.chat, nil
+}
+
+// setGeneral and setChat change the sections so that the change applies
+// from the next read (spec chat-service.md, B26, B30).
+func (g *generalAndChat) setGeneral(fn func(*settings.General)) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	fn(&g.general)
+}
+
+func (g *generalAndChat) setChat(fn func(*settings.Chat)) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	fn(&g.chat)
+}
+
+// fakeGeneralAndChat is a convenience constructor with the defaults.
+func fakeGeneralAndChat() *generalAndChat {
+	return &generalAndChat{general: settings.DefaultGeneral(), chat: settings.DefaultChat()}
+}
+
 // fixture is a service with Twitch, which replies, and Kick, which does
 // not.
 type fixture struct {
@@ -186,6 +227,7 @@ type fixture struct {
 	kick      *connectortest.Platform
 	logs      *bytes.Buffer
 	cooldowns *cooldowns
+	settings  *generalAndChat
 	// streamer has the user of the streamer on Twitch and Kick.
 	streamer streamer
 }
@@ -199,6 +241,7 @@ func newFixture(t *testing.T, lang language) *fixture {
 		kick:      connectortest.New(platform.Kick, connectortest.Features{}),
 		logs:      &bytes.Buffer{},
 		cooldowns: newCooldowns(),
+		settings:  fakeGeneralAndChat(),
 		streamer:  streamer{platform.Twitch: id.New(), platform.Kick: id.New()},
 	}
 	set, err := connector.NewSet(f.twitch, f.kick)
@@ -206,6 +249,7 @@ func newFixture(t *testing.T, lang language) *fixture {
 	f.service, err = requirement.New(requirement.Ports{
 		Catalog: catalog, Language: lang, Platforms: set,
 		Cooldowns: f.cooldowns, Streamer: f.streamer,
+		General: f.settings.getGeneral, Chat: f.settings.getChat,
 		Logger: slog.New(slog.NewTextHandler(f.logs, nil)),
 	})
 	require.NoError(t, err)
@@ -409,12 +453,15 @@ func TestNew(t *testing.T) {
 		Catalog: catalog, Language: language{}, Platforms: set,
 		Cooldowns: newCooldowns(), Streamer: streamer{}, Logger: slog.New(slog.DiscardHandler),
 	}
+	full.General, full.Chat = fakeGeneralAndChat().getGeneral, fakeGeneralAndChat().getChat
 	for name, change := range map[string]func(*requirement.Ports){
 		"catalog":   func(p *requirement.Ports) { p.Catalog = nil },
 		"language":  func(p *requirement.Ports) { p.Language = nil },
 		"platforms": func(p *requirement.Ports) { p.Platforms = nil },
 		"cooldowns": func(p *requirement.Ports) { p.Cooldowns = nil },
 		"streamer":  func(p *requirement.Ports) { p.Streamer = nil },
+		"general":   func(p *requirement.Ports) { p.General = nil },
+		"chat":      func(p *requirement.Ports) { p.Chat = nil },
 		"logger":    func(p *requirement.Ports) { p.Logger = nil },
 	} {
 		p := full

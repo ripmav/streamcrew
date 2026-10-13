@@ -17,14 +17,21 @@ import (
 var errNoMessageID = errors.New("the platform gave no ID of the message")
 
 // Decided implements engine.Requirements: once the decision about cmd for
-// p is final, it deletes the triggering chat message if cmd has the setting
-// for it (B61), on the platform of the run, also if a requirement rejected
-// cmd or a threshold waits. Without a chat message it does nothing. A
-// message it cannot delete is an error, which the engine logs; the run goes
-// on.
+// p is final, it deletes the triggering chat message if the command has
+// the setting for it, or the profile does (spec chat-service.md, B30, OR),
+// on the platform of the run, also if a requirement rejected cmd or a
+// threshold waits. Without a chat message it does nothing. A message it
+// cannot delete is an error, which the engine logs; the run goes on.
 func (s *Service) Decided(ctx context.Context, cmd command.Command, p engine.Params) error {
-	settings, ok := find[command.SettingsRequirement](cmd)
-	if !ok || !settings.DeleteTriggerMessage || p.Message == "" {
+	if p.Message == "" {
+		return nil
+	}
+	cmdSettings, ok := find[command.SettingsRequirement](cmd)
+	global, err := s.ports.Chat(ctx)
+	if err != nil {
+		return fmt.Errorf("decide command %q: read the chat settings: %w", cmd.Name, err)
+	}
+	if (!ok || !cmdSettings.DeleteTriggerMessage) && !global.DeleteTriggerMessage {
 		return nil
 	}
 	if p.MessageID == "" {

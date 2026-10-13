@@ -77,17 +77,31 @@ func roundUp(d, unit time.Duration) time.Duration {
 // cooldownUser returns the user whose cooldown a run of the scopes per user
 // counts against (B22): the user of the run, and in a run without a user
 // the streamer on the platform of the run, without a platform on the
-// default platform (B4).
+// default platform (B4, general.defaultPlatform, spec chat-service.md,
+// B27).
 func (s *Service) cooldownUser(ctx context.Context, p engine.Params) (id.ID, error) {
 	if p.User != nil {
 		return p.User.ID, nil
 	}
-	name := cmp.Or(p.Platform, platform.Default)
+	name := cmp.Or(p.Platform, s.defaultPlatform(ctx))
 	userID, err := s.ports.Streamer.StreamerUser(ctx, name)
 	if err != nil {
 		return id.ID{}, fmt.Errorf("find the streamer on %s: %w", name, err)
 	}
 	return userID, nil
+}
+
+// defaultPlatform returns the default platform of the profile
+// (general.defaultPlatform, spec chat-service.md, B26, B27); a failed read
+// keeps the default of the section, and the rule then fails as without a
+// platform (B28, B39).
+func (s *Service) defaultPlatform(ctx context.Context) platform.Name {
+	g, err := s.ports.General(ctx)
+	if err != nil {
+		s.ports.Logger.WarnContext(ctx, "reading the general settings failed", "error", err)
+		return platform.Default
+	}
+	return g.DefaultPlatform
 }
 
 // cooldownKey returns the key of the cooldown r of cmd that a run p is

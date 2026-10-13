@@ -387,9 +387,14 @@ func (a *App) eventsSettings(ctx context.Context) (settings.Events, error) {
 	return settings.Load(ctx, a.settings, settings.DefaultEvents())
 }
 
-// chatSettings reads the section "chat" (spec chat-service.md, B15, B17).
+// chatSettings reads the section "chat" (spec chat-service.md, B15, B17, B30).
 func (a *App) chatSettings(ctx context.Context) (settings.Chat, error) {
 	return settings.Load(ctx, a.settings, settings.DefaultChat())
+}
+
+// generalSettings reads the section "general" (spec chat-service.md, B26).
+func (a *App) generalSettings(ctx context.Context) (settings.General, error) {
+	return settings.Load(ctx, a.settings, settings.DefaultGeneral())
 }
 
 // channelPointsSettings reads the section "channelPoints" (roadmap 4.4).

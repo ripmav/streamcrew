@@ -26,6 +26,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/engine"
+	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/template"
 )
 
@@ -147,6 +148,10 @@ type Ports struct {
 	Strikes Strikes
 	// Mute is the muted chat.
 	Mute ChatMute
+	// General reads the settings section "general": the default platform
+	// the action acts on where the run names none (spec chat-service.md,
+	// B26, B27; actions.md, B82).
+	General func(ctx context.Context) (settings.General, error)
 	// Logger records actions without a platform to act on.
 	Logger *slog.Logger
 }
@@ -169,6 +174,8 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("moderation action types: no strikes")
 	case p.Mute == nil:
 		return nil, errors.New("moderation action types: no chat mute")
+	case p.General == nil:
+		return nil, errors.New("moderation action types: no general settings")
 	case p.Logger == nil:
 		return nil, errors.New("moderation action types: no logger")
 	}
@@ -292,7 +299,7 @@ func (m Moderation) Perform(ctx context.Context, run *engine.Run) error {
 	if m.Kind == KindAddStrike || m.Kind == KindRemoveStrike {
 		return m.strike(ctx, run, in.login)
 	}
-	targets, err := m.targets(run.Params())
+	targets, err := m.targets(ctx, run.Params())
 	if err != nil {
 		return err
 	}
@@ -360,16 +367,30 @@ func (m Moderation) render(ctx context.Context, s *template.Scope) (inputs, erro
 
 // targets returns the platforms the action acts on (B82): the platform of
 // the run, which must be connected, or without one every connected
-// platform, the default platform first.
-func (m Moderation) targets(p engine.Params) ([]connector.Platform, error) {
+// platform, the default platform of the profile first (spec
+// chat-service.md, B27).
+func (m Moderation) targets(ctx context.Context, p engine.Params) ([]connector.Platform, error) {
 	if p.Platform == "" {
-		return connector.DefaultFirst(m.ports.Platforms.Connected()), nil
+		return connector.DefaultFirst(m.ports.Platforms.Connected(), m.defaultPlatform(ctx)), nil
 	}
 	target, ok := m.ports.Platforms.Platform(p.Platform)
 	if !ok || !target.Status().Connected() {
 		return nil, fmt.Errorf("%s: %w", p.Platform, connector.ErrNotConnected)
 	}
 	return []connector.Platform{target}, nil
+}
+
+// defaultPlatform returns the default platform of the profile
+// (general.defaultPlatform, spec chat-service.md, B26, B27); a failed read
+// keeps the default of the section, and the action then acts as without a
+// platform (B28, B39).
+func (m Moderation) defaultPlatform(ctx context.Context) platform.Name {
+	g, err := m.ports.General(ctx)
+	if err != nil {
+		m.ports.Logger.WarnContext(ctx, "reading the general settings failed", "error", err)
+		return platform.Default
+	}
+	return g.DefaultPlatform
 }
 
 // moderate acts on the targets (B80 to B83). Kinds without a user act on
@@ -440,7 +461,7 @@ func (m Moderation) strike(ctx context.Context, run *engine.Run, login string) e
 	if p.Platform != "" {
 		names = []platform.Name{p.Platform}
 	} else {
-		for _, target := range connector.DefaultFirst(m.ports.Platforms.Connected()) {
+		for _, target := range connector.DefaultFirst(m.ports.Platforms.Connected(), m.defaultPlatform(ctx)) {
 			names = append(names, target.Name())
 		}
 	}

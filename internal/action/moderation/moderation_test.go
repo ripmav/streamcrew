@@ -31,6 +31,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/engine"
+	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/template"
 )
 
@@ -164,6 +165,30 @@ func (m *mute) get() []string {
 	return slices.Clone(m.calls)
 }
 
+// generalSettings is a mutable fake of the general settings section
+// (spec chat-service.md, B26, B27), so a changed default platform applies
+// from the next run.
+type generalSettings struct {
+	mu       sync.Mutex
+	platform platform.Name
+}
+
+func (g *generalSettings) get(context.Context) (settings.General, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return settings.General{DefaultPlatform: g.platform}, nil
+}
+
+func (g *generalSettings) set(p platform.Name) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.platform = p
+}
+
+// staticGeneral is a General reader without a change, for tests that never
+// change the default platform.
+func staticGeneral(context.Context) (settings.General, error) { return settings.DefaultGeneral(), nil }
+
 // fixture is a running engine with the moderation action and three
 // platforms: Twitch, YouTube and Kick, all connected.
 type fixture struct {
@@ -175,6 +200,7 @@ type fixture struct {
 	kick    *connectortest.Platform
 	store   *store
 	mute    *mute
+	general *generalSettings
 	logs    *logs
 }
 
@@ -188,13 +214,14 @@ func newFixture(t *testing.T) *fixture {
 		kick:    connectortest.New(platform.Kick, connectortest.Features{}),
 		store:   &store{},
 		mute:    &mute{},
+		general: &generalSettings{platform: platform.Twitch},
 		logs:    &logs{},
 	}
 	// Twitch comes last, so that the tests see the default platform searched
 	// first (B82).
 	set, err := connector.NewSet(f.kick, f.youtube, f.twitch)
 	require.NoError(t, err)
-	f.reg = registry(t, moderation.Ports{Platforms: set, Users: f.store, Strikes: f.store, Mute: f.mute},
+	f.reg = registry(t, moderation.Ports{Platforms: set, Users: f.store, Strikes: f.store, Mute: f.mute, General: f.general.get},
 		slog.New(slog.NewTextHandler(f.logs, nil)))
 	// The run finds known users through the engine (spec command-engine.md,
 	// B17).
@@ -258,7 +285,7 @@ func timer() engine.Params {
 
 func TestConformance(t *testing.T) {
 	t.Parallel()
-	reg := registry(t, moderation.Ports{Platforms: &connector.Set{}, Users: &store{}, Strikes: &store{}, Mute: &mute{}},
+	reg := registry(t, moderation.Ports{Platforms: &connector.Set{}, Users: &store{}, Strikes: &store{}, Mute: &mute{}, General: staticGeneral},
 		slog.New(slog.DiscardHandler))
 	d, ok := reg.Descriptor(moderation.TypeModeration)
 	require.True(t, ok)
@@ -411,6 +438,36 @@ func TestWithoutPlatform(t *testing.T) {
 		assert.Contains(t, in.Errors[0].Message, "user: failed on twitch: ")
 		assert.Contains(t, in.Errors[0].Message, "rate limited")
 		assert.Empty(t, f.kick.Calls(), "the first match may lie on twitch")
+	})
+}
+
+// TestDefaultPlatform covers spec chat-service.md, B26, B27 and B39 and
+// actions.md B82: a run without a platform searches the connected platforms
+// with general.defaultPlatform first, and a change applies from the next
+// run.
+func TestDefaultPlatform(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		// bob is known on kick and youtube, not on twitch.
+		f.store.add(0, f.kick.Account("bob"), f.youtube.Account("bob"))
+
+		// the default platform is twitch: the search order is twitch, kick,
+		// youtube, so the match on kick counts.
+		in := f.start(timer(), f.on(moderation.KindPurge, "bob"))
+		assert.Empty(t, in.Errors)
+		assert.Equal(t, []connectortest.Op{connectortest.OpPurge}, f.kick.Ops(), "found on kick first")
+		assert.Empty(t, f.youtube.Calls(), "the match on youtube is left alone")
+
+		// a changed default platform applies from the next run: the search
+		// order is youtube, twitch, kick, so the match on youtube counts.
+		f.kick.ForgetCalls()
+		f.youtube.ForgetCalls()
+		f.general.set(platform.YouTube)
+		in = f.start(timer(), f.on(moderation.KindPurge, "bob"))
+		assert.Empty(t, in.Errors)
+		assert.Equal(t, []connectortest.Op{connectortest.OpPurge}, f.youtube.Ops(), "found on youtube first")
+		assert.Empty(t, f.kick.Calls(), "the match on kick is left alone")
 	})
 }
 
@@ -594,6 +651,7 @@ func TestPorts(t *testing.T) {
 		Users:     &store{},
 		Strikes:   &store{},
 		Mute:      &mute{},
+		General:   staticGeneral,
 		Logger:    slog.New(slog.DiscardHandler),
 	}
 	_, err := moderation.Descriptors(full)
@@ -604,6 +662,7 @@ func TestPorts(t *testing.T) {
 		"users":     func(p *moderation.Ports) { p.Users = nil },
 		"strikes":   func(p *moderation.Ports) { p.Strikes = nil },
 		"mute":      func(p *moderation.Ports) { p.Mute = nil },
+		"general":   func(p *moderation.Ports) { p.General = nil },
 		"logger":    func(p *moderation.Ports) { p.Logger = nil },
 	} {
 		p := full
