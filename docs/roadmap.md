@@ -626,11 +626,11 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 
 ### 5.1 Chat
 
-- [ ] Pipeline: normalisieren → Nutzer auflösen → Moderation → Trigger → Folge-Events (erste Nachricht, erster Join) → Verlauf (M)
-- [ ] Senden über Bot oder Streamer, Aufteilen langer Nachrichten, Rate-Limits (`golang.org/x/time/rate`), Whisper (S)
-- [ ] Chatverlauf im Speicher (Ringpuffer je Plattform) und optionales Chat-Protokoll auf Platte (S)
-- [ ] Stummer Chat aus der Moderation-Action ([`actions.md`](spec/actions.md), B85): Port `moderation.ChatMute`; solange er an ist, löscht die Pipeline neue Nachrichten außer denen von Streamer und Bot (S)
-- [ ] Settings-Sektionen „general“ und „chat“ mit ihren Funktionen, aus 3.2 übertragen; in „chat“ auch das Löschen der auslösenden Nachricht für alle Commands ([`requirements.md`](spec/requirements.md), B61) (S)
+- [x] Pipeline: normalisieren → Nutzer auflösen → Moderation → Trigger → Folge-Events (erste Nachricht, erster Join) → Verlauf (M), erledigt 2026-10-13 in [`internal/eventservice`](../internal/eventservice) (Stummer Chat als erste Prüfung der Moderationsstufe, Verlauf als letzte Stufe; B14)
+- [x] Senden über Bot oder Streamer, Aufteilen langer Nachrichten, Rate-Limits (`golang.org/x/time/rate`), Whisper (S), erledigt 2026-10-13 in [`internal/chat`](../internal/chat) (Senden über den Chat-Service, Whisper je verbundener Plattform mit Empfängersuche; Aufteilen und Rate-Limits bleiben bei den Adaptern, B11)
+- [x] Chatverlauf im Speicher (Ringpuffer je Plattform) und optionales Chat-Protokoll auf Platte (S), erledigt 2026-10-13 in [`internal/chat`](../internal/chat) (Ringpuffer je Plattform mit Channel als Feld, JSON Lines in `<DataDir>/chat/<plattform>.jsonl` mit Rotation)
+- [x] Stummer Chat aus der Moderation-Action ([`actions.md`](spec/actions.md), B85): Port `moderation.ChatMute`; solange er an ist, löscht die Pipeline neue Nachrichten außer denen von Streamer und Bot (S), erledigt 2026-10-13 in [`internal/chat`](../internal/chat) (Zustand im Service, nicht gespeichert) und [`internal/eventservice`](../internal/eventservice) (Löschen vor den Ereignissen, Streamer und Bot ausgenommen)
+- [x] Settings-Sektionen „general“ und „chat“ mit ihren Funktionen, aus 3.2 übertragen; in „chat“ auch das Löschen der auslösenden Nachricht für alle Commands ([`requirements.md`](spec/requirements.md), B61) (S), erledigt 2026-10-13 in [`internal/settings`](../internal/settings) (Sektionen `general` und `chat`) und [`internal/requirement`](../internal/requirement) (`defaultPlatform`, globales `deleteTriggerMessage` per ODER je Command; B26–B30)
 
 ### 5.2 Nutzer
 
