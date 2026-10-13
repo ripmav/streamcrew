@@ -590,6 +590,20 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 - Owner-Actions nur auf dem eigenen Channel; sonst klare Fehlermeldung.
 - Erzwungene Reconnects verlaufen ohne Eventverlust (je Transport).
 
+### 4.7 Pro-Channel-Konfiguration
+
+- [ ] Channel-Scope für Commands: ohne Scope (Standard: alle betriebenen Channels) oder ein bestimmter Channel; Name-Unique bleibt profiltweit; Validierung gegen die konfigurierten Channels ([Plan](superpowers/plans/2026-10-12-twitch-channel-config.md)) (M)
+- [ ] Engine: Scope-Check in der Trigger-Matching (Channel des Events, 4.6 B6); die Timer der Command-Gruppen zielen auf einen Channel (leer = eigener Channel) (M)
+- [ ] Command-Format und -Verwaltung: `channel` im YAML/JSON-Format, in der Liste und im Import/Export (S)
+- [ ] Explizit profiltweit dokumentiert: Counter, Quotes, Währungen, Cooldowns, Nutzer-Statistiken (S)
+- [ ] Tests, E2E auf zwei Channels (scoped und Regression), Doku (S)
+
+**Exit-Kriterien:**
+
+- Ein scoped Command feuert nur in seinem Channel; ein unscoped Command in allen betriebenen Channels (bestehende Profile verhalten sich unverändert).
+- Der Gruppen-Timer feuert im Ziel-Channel.
+- Import/Export mit `channel` ist verlustfrei.
+
 ### 4.8 CLI für die zusätzlichen Kanäle
 
 - [x] CLI-Befehle für die `channels`-Sektion: `profile channels list` (auch bei laufendem Core, read-only) und `profile channels add|remove <login>` (gestoppter Core, Datenverzeichnis-Lock); Login-Prüfung (1–25 Zeichen, Buchstaben, Ziffern, Unterstrich; Duplikate und eigene Schreibweise egal) mit klarer Fehlermeldung (S), erledigt 2026-10-12
