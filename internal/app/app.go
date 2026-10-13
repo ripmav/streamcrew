@@ -569,16 +569,6 @@ func (a *App) Ready() bool {
 func (a *App) Run(ctx context.Context) (err error) {
 	defer func() { err = errors.Join(err, a.close()) }()
 
-	stopWatching := context.AfterFunc(ctx, func() {
-		stopCtx := context.WithoutCancel(ctx)
-		if err := a.ready.publishStopping(func() error {
-			return a.events.Application(stopCtx, eventtype.AppStopping, Stopping{})
-		}); err != nil {
-			a.logger.ErrorContext(stopCtx, "the stopping event failed", "error", err)
-		}
-	})
-	defer stopWatching()
-
 	a.logger.InfoContext(ctx, "streamcrew starting",
 		"version", a.version, "mode", a.cfg.Mode, "profile", a.profile.ID,
 		"data_dir", a.cfg.DataDir, "pid", os.Getpid())
@@ -618,12 +608,40 @@ func (a *App) Run(ctx context.Context) (err error) {
 	case <-ctx.Done():
 	}
 
+	// The select returned when the core ran for the first time, so wait
+	// for the context to end, or for a critical component to fail, and
+	// only then does "app.stopping" go out (events.md, B12), while the
+	// components still run, so that the engine takes it for its event
+	// command and the bus still holds it for its subscribers.
+	select {
+	case <-ctx.Done():
+	case err := <-supErr:
+		a.logger.ErrorContext(ctx, "streamcrew stopped with an error", "error", err)
+		return err
+	}
+	a.stoppingEvent(ctx)
+
 	if err := <-supErr; err != nil {
 		a.logger.ErrorContext(ctx, "streamcrew stopped with an error", "error", err)
 		return err
 	}
 	a.logger.InfoContext(ctx, "streamcrew stopped")
 	return nil
+}
+
+// stoppingEvent publishes "app.stopping" through the event service
+// (events.md, B12) while the components still run; it gives up with a
+// live context, because the core did not stop by request.
+func (a *App) stoppingEvent(ctx context.Context) {
+	if ctx.Err() == nil {
+		return
+	}
+	stopCtx := context.WithoutCancel(ctx)
+	if err := a.ready.publishStopping(func() error {
+		return a.events.Application(stopCtx, eventtype.AppStopping, Stopping{})
+	}); err != nil {
+		a.logger.ErrorContext(stopCtx, "the stopping event failed", "error", err)
+	}
 }
 
 // Close releases what New opened without running the core. Run does this
