@@ -80,6 +80,9 @@ func (s *Service) Save(ctx context.Context, cmd Command) (Saved, error) {
 	if err := cmd.Validate(); err != nil {
 		return Saved{}, err
 	}
+	if err := s.checkScope(ctx, cmd); err != nil {
+		return Saved{}, err
+	}
 	if cmd.ID.IsZero() {
 		cmd.ID = id.New()
 	}
@@ -107,6 +110,23 @@ func (s *Service) Save(ctx context.Context, cmd Command) (Saved, error) {
 		return Saved{}, err
 	}
 	return Saved{Command: stored, Warnings: warnings}, nil
+}
+
+// checkScope checks that the scope of cmd names a channel the profile
+// operates (B9): the home channel or an additional channel, regardless of
+// case; a command without a scope needs no check.
+func (s *Service) checkScope(ctx context.Context, cmd Command) error {
+	if cmd.Channel == "" {
+		return nil
+	}
+	allowed, err := s.checks.Channels.Operated(ctx)
+	if err != nil {
+		return fmt.Errorf("the channel scope: %w", err)
+	}
+	if !slices.ContainsFunc(allowed, func(ch string) bool { return strings.EqualFold(ch, cmd.Channel) }) {
+		return invalid("the channel %q is not operated by this profile", cmd.Channel)
+	}
+	return nil
 }
 
 // Delete deletes a command, unless the actions of another command refer to
