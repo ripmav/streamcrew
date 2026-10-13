@@ -269,6 +269,61 @@ func TestTrigger(t *testing.T) {
 	})
 }
 
+// TestTriggerChannelScope covers B18 with commands.md, B9: a command with
+// a channel scope is only triggered in its channel, regardless of case;
+// an out-of-scope trigger ends out-of-scope without an instance and
+// without the requirements; a command without a scope runs in every
+// channel; a timer fires in the target channel of its group (B31).
+func TestTriggerChannelScope(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		reqs := newRequirements()
+		f := newFixture(t, settings.LockPerCommandType, engine.WithRequirements(reqs))
+		defer f.stop()
+
+		// The scoped command runs in its channel, regardless of the case.
+		scoped := f.command("hug", command.KindChat, f.journal.note("hug"))
+		scoped.Channel = "streamer"
+		res, err := f.trigger(scoped, engine.Params{Channel: "STREAMER", Message: "hi"})
+		require.NoError(t, err)
+		assert.Equal(t, engine.OutcomeQueued, res.Outcome)
+
+		// In another channel it ends out of scope: no instance, no
+		// requirements, nothing told.
+		seen := len(reqs.appliedTo())
+		res, err = f.trigger(scoped, engine.Params{Channel: "other", Message: "hi"})
+		require.NoError(t, err)
+		assert.Equal(t, engine.Result{Outcome: engine.OutcomeOutOfScope}, res)
+		assert.Len(t, reqs.appliedTo(), seen, "an out-of-scope trigger checks no requirements")
+
+		// A command without a scope runs in every channel, with or without
+		// a channel of the run.
+		global := f.command("wave", command.KindChat, f.journal.note("wave"))
+		for _, channel := range []string{"", "other"} {
+			res, err := f.trigger(global, engine.Params{Channel: channel, Message: "hi"})
+			require.NoError(t, err)
+			assert.Equal(t, engine.OutcomeQueued, res.Outcome)
+		}
+
+		// A timer command fires in the target channel of its group and not
+		// where the interval does not run.
+		timer := f.command("sweep", command.KindTimer, f.journal.note("sweep"))
+		timer.Channel = "other"
+		res, err = f.engine.Trigger(t.Context(), engine.Request{
+			Command: timer, Source: engine.SourceTimer, Params: engine.Params{Channel: "other"},
+		})
+		synctest.Wait()
+		require.NoError(t, err)
+		assert.Equal(t, engine.OutcomeQueued, res.Outcome)
+		res, err = f.engine.Trigger(t.Context(), engine.Request{
+			Command: timer, Source: engine.SourceTimer,
+		})
+		synctest.Wait()
+		require.NoError(t, err)
+		assert.Equal(t, engine.Result{Outcome: engine.OutcomeOutOfScope}, res)
+	})
+}
+
 // TestTriggerDisabled covers B14: a disabled command is never triggered
 // automatically, but it can be started by hand without its requirements.
 func TestTriggerDisabled(t *testing.T) {

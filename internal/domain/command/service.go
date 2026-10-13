@@ -119,12 +119,18 @@ func (s *Service) checkScope(ctx context.Context, cmd Command) error {
 	if cmd.Channel == "" {
 		return nil
 	}
+	return s.checkChannel(ctx, cmd.Channel)
+}
+
+// checkChannel checks that ch names a channel the profile operates
+// (B9, B31): the home channel or an additional channel, regardless of case.
+func (s *Service) checkChannel(ctx context.Context, ch string) error {
 	allowed, err := s.checks.Channels.Operated(ctx)
 	if err != nil {
 		return fmt.Errorf("the channel scope: %w", err)
 	}
-	if !slices.ContainsFunc(allowed, func(ch string) bool { return strings.EqualFold(ch, cmd.Channel) }) {
-		return invalid("the channel %q is not operated by this profile", cmd.Channel)
+	if !slices.ContainsFunc(allowed, func(allowed string) bool { return strings.EqualFold(allowed, ch) }) {
+		return invalid("the channel %q is not operated by this profile", ch)
 	}
 	return nil
 }
@@ -168,6 +174,11 @@ func (s *Service) Groups(ctx context.Context) ([]Group, error) {
 func (s *Service) SaveGroup(ctx context.Context, g Group) (Group, error) {
 	if err := g.Validate(); err != nil {
 		return Group{}, err
+	}
+	if g.TimerChannel != "" {
+		if err := s.checkChannel(ctx, g.TimerChannel); err != nil {
+			return Group{}, fmt.Errorf("save group %q: %w", g.Name, err)
+		}
 	}
 	if g.ID.IsZero() {
 		g.ID = id.New()
