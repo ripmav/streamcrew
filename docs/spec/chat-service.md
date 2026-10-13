@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
+| **Status** | Geprüft |
 | **Stand** | 2026-10-13 |
 | **Bezug** | Roadmap Phase 5.1 (Core-Services, Chat), Plan §6.11, §6.14; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0011](../adr/code/0011-event-bus.md); [`events.md`](events.md), [`actions.md`](actions.md), [`requirements.md`](requirements.md), [`commands.md`](commands.md), [`twitch-multi-channel.md`](twitch-multi-channel.md) |
-| **Umsetzung** | noch offen (geplant: `internal/chat`, Änderungen an `internal/eventservice`, `internal/action/chat`, `internal/settings`, `internal/requirement`, `internal/connector`) |
+| **Umsetzung** | der Chat-Service in `internal/chat` (Senden, Antworten, Flüstern, Löschen, Chat leeren, Verlauf im Ringpuffer je Plattform, optionales Protokoll in JSON Lines mit Rotation, Stummer Chat); die Pipeline-Stufen und die Aufnahme in den Verlauf (B14) in `internal/eventservice`; die Delegierung der Chat-Action (B4) in `internal/action/chat`; die Settings-Sektionen `general` und `chat` in `internal/settings`, der globale Schalter `deleteTriggerMessage` (B30) und die Standardplattform (B26–B28) in `internal/requirement`; die Auswertung der Standardplattform in `connector.DefaultFirst` und die Empfängersuche in `connector.FindAccount` (B10). |
 
 ## Zweck und Umfang
 
@@ -151,4 +151,5 @@ Prüfbare Kriterien. Tests verweisen auf diese IDs.
 
 | Datum | Änderung |
 |---|---|
+| 2026-10-13 | Umsetzung in `internal/chat` (Service, Verlauf, Protokoll, Stummer Chat), `internal/eventservice` (Pipeline-Stufe B3, Aufnahme B14), `internal/action/chat` (B4), `internal/settings` (Sektionen `general` und `chat`), `internal/requirement` (B26–B30) und `internal/connector` (`DefaultFirst`, `FindAccount`); E2E-Tests in `internal/app` gegen die Mock-Plattform (Verlauf und Protokoll, Stummer Chat mit Ausnahmen, Whisper). Damit geprüfter Bestand der Phase 5.1. |
 | 2026-10-13 | Erstfassung nach dem Plan [2026-10-13-phase-5-chat.md](../superpowers/plans/2026-10-13-phase-5-chat.md). Entscheidungen dabei: die Pipeline-Stufen gelten wie [`events.md`](events.md), B13, der Stumme Chat ist die erste Prüfung der Moderationsstufe (B3), die Chat-Action delegiert auf den Chat-Service (B4, A1), Teilerfolg scheitert mit Meldung je Plattform (B9, A2), die Mock-Plattform kennt keine Senderegeln (B11, A3), der Verlauf ist je Plattform mit Channel als Feld (B12, A4) und standardmäßig 200 Einträge (B15, A5), das Protokoll ist JSON Lines mit Rotation nach Größe (B17–B19, A6), der Stumme Chat unterdrückt Ereignisse und Aufnahme statt das Empfangen zu verhindern (B22, A7) und greift nicht auf Beitritte (B25), die Standardplattform steht in `general` (B26–B28, A8), und der globale Schalter von B30 wirkt per ODER neben dem je Command. |
