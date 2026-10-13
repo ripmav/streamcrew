@@ -202,22 +202,6 @@ func TestStreamStates(t *testing.T) {
 	assert.Equal(t, "Just Chatting", st.Game)
 }
 
-// TestChatMute covers the muted chat, which is not stored.
-func TestChatMute(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	m := newChatMute(slog.New(slog.DiscardHandler))
-	assert.False(t, m.Muted())
-	m.Mute(ctx)
-	assert.True(t, m.Muted())
-	m.Mute(ctx)
-	assert.True(t, m.Muted())
-	m.Unmute(ctx)
-	assert.False(t, m.Muted())
-	m.Unmute(ctx)
-	assert.False(t, m.Muted())
-}
-
 // TestLateSwitches covers the port of the command action before the command
 // service is set.
 func TestLateSwitches(t *testing.T) {

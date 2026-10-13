@@ -21,6 +21,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/actiontest"
 	"github.com/ripmav/streamcrew/internal/action/chat"
 	"github.com/ripmav/streamcrew/internal/capability"
+	chatsvc "github.com/ripmav/streamcrew/internal/chat"
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/connector/connectortest"
 	"github.com/ripmav/streamcrew/internal/domain/command"
@@ -28,6 +29,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/engine"
+	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/template"
 )
 
@@ -90,15 +92,22 @@ func newFixture(t *testing.T) *fixture {
 }
 
 // registry returns the chat types with a template engine that knows the
-// arguments, the values of the run and the users.
-func registry(t *testing.T, platforms chat.Platforms, log *logs) *action.Registry {
+// arguments, the values of the run and the users, and a chat service on
+// the platforms that delivers them.
+func registry(t *testing.T, platforms *connector.Set, log *logs) *action.Registry {
 	t.Helper()
+	svc, err := chatsvc.New(chatsvc.Ports{
+		Platforms: platforms,
+		Settings:  func(_ context.Context) (settings.Chat, error) { return settings.DefaultChat(), nil },
+		DataDir:   t.TempDir(),
+		Logger:    slog.New(slog.NewTextHandler(log, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	})
+	require.NoError(t, err)
 	identifiers, err := template.NewRegistry(template.ArgumentFamily(), template.RunFamily(), template.UserFamily(nil))
 	require.NoError(t, err)
 	ds, err := chat.Descriptors(chat.Ports{
 		Templates: template.New(identifiers),
-		Platforms: platforms,
-		Logger:    slog.New(slog.NewTextHandler(log, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Chat:      svc,
 	})
 	require.NoError(t, err)
 	reg, err := action.NewRegistry(capability.Set{}, ds...)
@@ -498,15 +507,13 @@ func TestPorts(t *testing.T) {
 	t.Parallel()
 	full := chat.Ports{
 		Templates: template.New(nil),
-		Platforms: &connector.Set{},
-		Logger:    slog.New(slog.DiscardHandler),
+		Chat:      &chatsvc.Service{},
 	}
 	_, err := chat.Descriptors(full)
 	require.NoError(t, err)
 	for name, edit := range map[string]func(*chat.Ports){
 		"templates": func(p *chat.Ports) { p.Templates = nil },
-		"platforms": func(p *chat.Ports) { p.Platforms = nil },
-		"logger":    func(p *chat.Ports) { p.Logger = nil },
+		"chat":      func(p *chat.Ports) { p.Chat = nil },
 	} {
 		p := full
 		edit(&p)

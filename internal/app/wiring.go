@@ -282,51 +282,6 @@ func (s streamStates) StreamState(ctx context.Context, p platform.Name) (templat
 	}, nil
 }
 
-// chatMute is the muted chat (actions.md, B85): while it is on, the chat
-// service deletes every new chat message on the connected platforms
-// (roadmap 5.1). It is not stored; a restart unmutes.
-type chatMute struct {
-	mu     sync.Mutex
-	muted  bool
-	logger *slog.Logger
-}
-
-func newChatMute(logger *slog.Logger) *chatMute {
-	if logger == nil {
-		logger = slog.New(slog.DiscardHandler)
-	}
-	return &chatMute{logger: logger}
-}
-
-// Mute implements moderation.ChatMute.
-func (m *chatMute) Mute(ctx context.Context) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.muted {
-		return
-	}
-	m.muted = true
-	m.logger.InfoContext(ctx, "chat muted")
-}
-
-// Unmute implements moderation.ChatMute.
-func (m *chatMute) Unmute(ctx context.Context) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if !m.muted {
-		return
-	}
-	m.muted = false
-	m.logger.InfoContext(ctx, "chat unmuted")
-}
-
-// Muted reports whether the chat is muted now.
-func (m *chatMute) Muted() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.muted
-}
-
 // errSwitchesNotSet is returned by lateSwitches before the command service
 // is set, which the composition root does once during New.
 var errSwitchesNotSet = errors.New("the command service is not set")
@@ -430,6 +385,11 @@ func (l localeLanguage) Language(ctx context.Context) (i18n.Language, error) {
 // eventsSettings reads the section "events" (events.md, B10).
 func (a *App) eventsSettings(ctx context.Context) (settings.Events, error) {
 	return settings.Load(ctx, a.settings, settings.DefaultEvents())
+}
+
+// chatSettings reads the section "chat" (spec chat-service.md, B15, B17).
+func (a *App) chatSettings(ctx context.Context) (settings.Chat, error) {
+	return settings.Load(ctx, a.settings, settings.DefaultChat())
 }
 
 // channelPointsSettings reads the section "channelPoints" (roadmap 4.4).

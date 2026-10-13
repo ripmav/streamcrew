@@ -39,6 +39,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/breaker"
 	"github.com/ripmav/streamcrew/internal/buildinfo"
+	chatsvc "github.com/ripmav/streamcrew/internal/chat"
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/command"
@@ -127,7 +128,7 @@ type App struct {
 	// service, the engine and the event service.
 	platforms  *platformSet
 	users      *userLookup
-	mute       *chatMute
+	chat       *chatsvc.Service
 	programEnv []string
 	// systemLocale is the locale of the environment, read once at start
 	// (B41); the templates format dates and times with it when the profile
@@ -278,7 +279,15 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	// which is their receiver; until then the set is empty.
 	a.platforms = newPlatformSet()
 	a.users = &userLookup{store: a.store, set: a.platforms}
-	a.mute = newChatMute(component(logger, "moderation"))
+	a.chat, err = chatsvc.New(chatsvc.Ports{
+		Platforms: a.platforms,
+		Settings:  a.chatSettings,
+		DataDir:   cfg.DataDir,
+		Logger:    component(logger, "chat"),
+	})
+	if err != nil {
+		return a, err
+	}
 
 	messageCatalog, err := i18n.Load()
 	if err != nil {
@@ -440,8 +449,7 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches)
 	}
 	add(chat.Descriptors(chat.Ports{
 		Templates: a.templates,
-		Platforms: a.platforms,
-		Logger:    component(a.logger, "action"),
+		Chat:      a.chat,
 	}))
 	add(commands.Descriptors(commands.Ports{
 		Templates: a.templates,
@@ -465,7 +473,7 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches)
 		Platforms: a.platforms,
 		Users:     a.users,
 		Strikes:   a.store,
-		Mute:      a.mute,
+		Mute:      a.chat,
 		Logger:    component(a.logger, "action"),
 	}))
 	add(network.Descriptors(network.Ports{
@@ -656,6 +664,9 @@ func (a *App) close() error {
 	var errs []error
 	if a.bus != nil {
 		a.bus.Close()
+	}
+	if a.chat != nil {
+		errs = append(errs, a.chat.Close())
 	}
 	if a.store != nil {
 		errs = append(errs, a.store.Close())
