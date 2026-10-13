@@ -103,7 +103,7 @@ Keine. Commands als Code sind eine neue Funktion (Plan §4, „neu“); Commands
 - [x] B31, B32, B62, B66: Fehler mit Datei, Zeile, Spalte und Pfad, die aller Dokumente auf einmal, als Text und als JSON. Erledigt 2026-10-03 mit `streamcrew command validate` und `streamcrew command import`.
 - [x] B33, B34, B60, B63: Import neu und ersetzend, alles oder nichts, mit gestopptem Core. Erledigt 2026-10-03 mit `streamcrew command import` und `Store.Atomically`.
 - [x] B35–B38, B64, B65: Export als YAML und JSON, in eine Datei und je Dokument; Rundlauf aus Export und Import ohne Änderung. Erledigt 2026-10-03 mit `streamcrew command export`; `TestExportCommands` prüft den Rundlauf gegen das Profil.
-- [ ] B10, B20: `channel` und `timerChannel` in YAML und JSON, gültige und ungültige Werte (Prüfung wie beim Speichern, B31); der Rundlauf aus Export und Import trägt den Scope verlustfrei (B36).
+- [x] B10, B20: `channel` und `timerChannel` in YAML und JSON, gültige und ungültige Werte (Prüfung wie beim Speichern, B31); der Rundlauf aus Export und Import trägt den Scope verlustfrei (B36).
 
 ## Offene Fragen
 
