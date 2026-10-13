@@ -53,12 +53,13 @@ SELECT * FROM command_groups WHERE id = ?;
 SELECT * FROM command_groups ORDER BY name_key, id;
 
 -- name: PutCommandGroup :exec
-INSERT INTO command_groups (id, name, name_key, timer_interval, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO command_groups (id, name, name_key, timer_interval, timer_channel, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE SET
     name = excluded.name,
     name_key = excluded.name_key,
     timer_interval = excluded.timer_interval,
+    timer_channel = excluded.timer_channel,
     updated_at = excluded.updated_at;
 
 -- name: DeleteCommandGroup :execrows

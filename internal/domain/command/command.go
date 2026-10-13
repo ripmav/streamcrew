@@ -133,6 +133,10 @@ type Group struct {
 	Name string
 	// TimerInterval is the group's own timer interval; zero for none (B31).
 	TimerInterval time.Duration
+	// TimerChannel is the channel the timer interval fires in (B31); empty
+	// for the home channel. It is checked against the channels the profile
+	// operates when the group is saved, like the scope of a command (B9).
+	TimerChannel string
 	// CreatedAt and UpdatedAt are maintained by the service.
 	CreatedAt time.Time
 	UpdatedAt time.Time

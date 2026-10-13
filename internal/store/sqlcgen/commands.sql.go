@@ -83,7 +83,7 @@ func (q *Queries) GetCommand(ctx context.Context, id string) (Command, error) {
 }
 
 const getCommandGroup = `-- name: GetCommandGroup :one
-SELECT id, name, name_key, timer_interval, created_at, updated_at FROM command_groups WHERE id = ?
+SELECT id, name, name_key, timer_interval, created_at, updated_at, timer_channel FROM command_groups WHERE id = ?
 `
 
 func (q *Queries) GetCommandGroup(ctx context.Context, id string) (CommandGroup, error) {
@@ -96,6 +96,7 @@ func (q *Queries) GetCommandGroup(ctx context.Context, id string) (CommandGroup,
 		&i.TimerInterval,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TimerChannel,
 	)
 	return i, err
 }
@@ -179,7 +180,7 @@ func (q *Queries) ListAllTriggers(ctx context.Context) ([]ListAllTriggersRow, er
 }
 
 const listCommandGroups = `-- name: ListCommandGroups :many
-SELECT id, name, name_key, timer_interval, created_at, updated_at FROM command_groups ORDER BY name_key, id
+SELECT id, name, name_key, timer_interval, created_at, updated_at, timer_channel FROM command_groups ORDER BY name_key, id
 `
 
 func (q *Queries) ListCommandGroups(ctx context.Context) ([]CommandGroup, error) {
@@ -198,6 +199,7 @@ func (q *Queries) ListCommandGroups(ctx context.Context) ([]CommandGroup, error)
 			&i.TimerInterval,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TimerChannel,
 		); err != nil {
 			return nil, err
 		}
@@ -377,12 +379,13 @@ func (q *Queries) PutCommand(ctx context.Context, arg PutCommandParams) error {
 }
 
 const putCommandGroup = `-- name: PutCommandGroup :exec
-INSERT INTO command_groups (id, name, name_key, timer_interval, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO command_groups (id, name, name_key, timer_interval, timer_channel, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE SET
     name = excluded.name,
     name_key = excluded.name_key,
     timer_interval = excluded.timer_interval,
+    timer_channel = excluded.timer_channel,
     updated_at = excluded.updated_at
 `
 
@@ -391,6 +394,7 @@ type PutCommandGroupParams struct {
 	Name          string
 	NameKey       string
 	TimerInterval int64
+	TimerChannel  string
 	CreatedAt     int64
 	UpdatedAt     int64
 }
@@ -401,6 +405,7 @@ func (q *Queries) PutCommandGroup(ctx context.Context, arg PutCommandGroupParams
 		arg.Name,
 		arg.NameKey,
 		arg.TimerInterval,
+		arg.TimerChannel,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
