@@ -303,8 +303,11 @@ func (c *conversion) cooldownGroup(r *reader, h header) command.CooldownGroup {
 
 // group converts a command group (B20).
 func (c *conversion) group(r *reader, h header) command.Group {
-	r.members(h.spec, "spec", "timerInterval")
-	g := command.Group{ID: h.id, Name: h.name, TimerInterval: r.duration(h.spec, "spec", "timerInterval", false)}
+	r.members(h.spec, "spec", "timerInterval", "timerChannel")
+	g := command.Group{ID: h.id, Name: h.name,
+		TimerInterval: r.duration(h.spec, "spec", "timerInterval", false),
+		TimerChannel:  r.text(h.spec, "spec", "timerChannel", false, ""),
+	}
 	if r.err == nil {
 		if err := g.Validate(); err != nil {
 			m, _ := h.spec.lookup("timerInterval")
@@ -316,7 +319,7 @@ func (c *conversion) group(r *reader, h header) command.Group {
 
 // The members of the spec of every command (B10).
 func commandMembers() []string {
-	return []string{"enabled", "unlocked", "errorPolicy", "requirements", "actions"}
+	return []string{"enabled", "unlocked", "errorPolicy", "channel", "requirements", "actions"}
 }
 
 // command converts a command (B10 to B14, B23, B24).
@@ -344,6 +347,7 @@ func (c *conversion) command(r *reader, h header) command.Command {
 	cmd.Unlocked = r.boolean(spec, "spec", "unlocked", DefaultUnlocked)
 	cmd.ErrorPolicy = command.ErrorPolicy(r.text(spec, "spec", "errorPolicy", false, string(DefaultErrorPolicy)))
 	valid(r, spec, "spec", "errorPolicy", cmd.ErrorPolicy.Valid(), command.ErrorContinue, command.ErrorAbort)
+	cmd.Channel = r.text(spec, "spec", "channel", false, "")
 	if h.group != nil && r.err == nil {
 		groupID, ok := c.ids[spaceGroup][command.NameKey(h.group.text)]
 		if !ok {

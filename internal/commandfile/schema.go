@@ -127,7 +127,10 @@ func kindSchema(k Kind) *schema.Schema {
 	case KindEventCommand:
 		spec = commandSpec(schema.Property{Name: "event", Schema: schema.Choice(eventTypes()...), Required: true})
 	case KindCommandGroup:
-		spec = schema.Object(schema.Property{Name: "timerInterval", Schema: schema.Duration()})
+		spec = schema.Object(
+			schema.Property{Name: "timerInterval", Schema: schema.Duration()},
+			schema.Property{Name: "timerChannel", Schema: schema.Channel()},
+		)
 	case KindCooldownGroup:
 		spec = schema.Object(schema.Property{Name: "duration", Schema: schema.Duration(), Required: true})
 	case KindTimerCommand, KindActionGroup:
@@ -150,6 +153,7 @@ func commandSpec(kind ...schema.Property) *schema.Schema {
 		{Name: "errorPolicy", Schema: withDefault(
 			schema.Choice(string(command.ErrorContinue), string(command.ErrorAbort)), schema.Quote(string(DefaultErrorPolicy)),
 		)},
+		{Name: "channel", Schema: withDefault(schema.Channel(), schema.Quote(""))},
 		{Name: "requirements", Schema: withDefault(schema.DefRef(defRequirements), jsontext.Value("{}"))},
 		{Name: "actions", Schema: actionList(jsontext.Value("[]"))},
 	})...)
