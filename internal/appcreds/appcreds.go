@@ -18,6 +18,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"sync"
 
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/logging"
@@ -50,58 +51,63 @@ func SealedRecord(clientID, clientSecret string) ([]byte, error) {
 	return json.Marshal(wireRecord{ClientID: clientID, ClientSecret: clientSecret})
 }
 
-// embedded is the opened record; ok is false without one, tried keeps
-// the opening attempt to once per process.
+// embedded is the opened record; ok is false without one.
 //
 //nolint:gochecknoglobals // process-lifetime cache of the opened record (ADR-0024)
 var embedded = struct {
-	rec   Record
-	ok    bool
-	tried bool
+	rec Record
+	ok  bool
 }{}
+
+// openOnce keeps the opening attempt to once per process; the tests of
+// this package replace it with their reset (appcreds_test.go).
+//
+//nolint:gochecknoglobals // once per process, as openOnce says
+var openOnce sync.Once
 
 // open runs the sealed opening once per process: ML-KEM-768 decapsulation
 // of the embedded ciphertext, HKDF key derivation, and the AES-256-GCM
 // open (ADR-0024). An empty payload (generator not run) or a corrupted
 // record leaves the built-in app disabled.
 func open() {
-	if embedded.tried || embeddedPayloadHex == "" {
-		return
-	}
-	embedded.tried = true
-	priv, err := hex.DecodeString(embeddedMLKEMPrivateKeyHex)
-	if err != nil {
-		return
-	}
-	ct, err := hex.DecodeString(embeddedMLKEMCiphertextHex)
-	if err != nil {
-		return
-	}
-	nonce, err := hex.DecodeString(embeddedGCMNonceHex)
-	if err != nil {
-		return
-	}
-	payload, err := hex.DecodeString(embeddedPayloadHex)
-	if err != nil {
-		return
-	}
-	dk, err := mlkem.NewDecapsulationKey768(priv)
-	if err != nil {
-		return
-	}
-	ss, err := dk.Decapsulate(ct)
-	if err != nil {
-		return
-	}
-	data, err := Open(ss, nonce, payload)
-	if err != nil {
-		return
-	}
-	var w wireRecord
-	if err := json.Unmarshal(data, &w); err != nil {
-		return
-	}
-	embedded.rec, embedded.ok = Record{ClientID: w.ClientID, ClientSecret: logging.Secret(w.ClientSecret)}, true
+	openOnce.Do(func() {
+		if embeddedPayloadHex == "" {
+			return
+		}
+		priv, err := hex.DecodeString(embeddedMLKEMPrivateKeyHex)
+		if err != nil {
+			return
+		}
+		ct, err := hex.DecodeString(embeddedMLKEMCiphertextHex)
+		if err != nil {
+			return
+		}
+		nonce, err := hex.DecodeString(embeddedGCMNonceHex)
+		if err != nil {
+			return
+		}
+		payload, err := hex.DecodeString(embeddedPayloadHex)
+		if err != nil {
+			return
+		}
+		dk, err := mlkem.NewDecapsulationKey768(priv)
+		if err != nil {
+			return
+		}
+		ss, err := dk.Decapsulate(ct)
+		if err != nil {
+			return
+		}
+		data, err := Open(ss, nonce, payload)
+		if err != nil {
+			return
+		}
+		var w wireRecord
+		if err := json.Unmarshal(data, &w); err != nil {
+			return
+		}
+		embedded.rec, embedded.ok = Record{ClientID: w.ClientID, ClientSecret: logging.Secret(w.ClientSecret)}, true
+	})
 }
 
 // Get returns the built-in record of the platform; ok is false for other
