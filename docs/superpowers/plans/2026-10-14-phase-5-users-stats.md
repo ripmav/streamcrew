@@ -1,6 +1,6 @@
 # Plan: Roadmap 5.2.1 — Aktive Nutzer, Watchtime, Statistiken
 
-**Status:** abgeschlossen (Tasks 1–4 erledigt, Stack #233)
+**Status:** abgeschlossen (Tasks 1–4 erledigt, Stack #234: PR #232, #233)
 **Stand:** 2026-10-14, `main` bei `5351093`
 **Scope:** nur 5.2.1 (Nutzer-Service mit Aktivität, Watchtime und
 Statistiken). Regular (5.2.2), Titel (5.2.3), Ausschlüsse (5.2.5) und die
