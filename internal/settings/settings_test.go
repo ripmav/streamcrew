@@ -74,6 +74,10 @@ func TestDefaultsWhenNeverSaved(t *testing.T) {
 	ch2, err := settings.Load(t.Context(), svc, settings.DefaultChat())
 	require.NoError(t, err)
 	assert.Equal(t, settings.Chat{HistorySize: 200}, ch2, "chat-service.md B15, B17, B30")
+
+	u, err := settings.Load(t.Context(), svc, settings.DefaultUsers())
+	require.NoError(t, err)
+	assert.Equal(t, settings.Users{}, u, "no regular role by default (users-and-roles.md, B26)")
 }
 
 func TestSaveAndLoad(t *testing.T) {
@@ -162,6 +166,15 @@ func TestSaveAndLoad(t *testing.T) {
 	doc, _, err = s.Settings(ctx, "chat")
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"type":"chat","schemaVersion":1,"historySize":1000,"protocol":true,"deleteTriggerMessage":true}`, string(doc))
+
+	users := settings.Users{RegularHours: 3}
+	require.NoError(t, settings.Save(ctx, svc, users))
+	gotUsers, err := settings.Load(ctx, svc, settings.DefaultUsers())
+	require.NoError(t, err)
+	assert.Equal(t, users, gotUsers)
+	doc, _, err = s.Settings(ctx, "users")
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"type":"users","schemaVersion":1,"regularHours":3}`, string(doc))
 }
 
 func TestValidation(t *testing.T) {
@@ -210,6 +223,7 @@ func TestValidation(t *testing.T) {
 		settings.General{DefaultPlatform: platform.Name(strings.Repeat("a", 33))},
 		settings.Chat{HistorySize: 0},
 		settings.Chat{HistorySize: 10_001},
+		settings.Users{RegularHours: -1},
 	} {
 		assert.Error(t, settings.Save(ctx, svc, s), "%+v", s)
 	}

@@ -291,3 +291,32 @@ func TestAddStats(t *testing.T) {
 	assert.Equal(t, t0, loaded.Stats.FirstSeen)
 	assert.Equal(t, t1, loaded.Stats.LastSeen)
 }
+
+// TestListUsersRegular covers the sweep rows of the regular role (B26):
+// every user with its watch minutes, in ID order.
+func TestListUsersRegular(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+
+	ada, _, err := s.UpsertIdentity(ctx, twitchIdentity("1001", "ada"))
+	require.NoError(t, err)
+	bob, _, err := s.UpsertIdentity(ctx, twitchIdentity("1002", "bob"))
+	require.NoError(t, err)
+	require.NoError(t, s.AddStats(ctx, []user.StatsDelta{
+		{UserID: ada.ID, WatchMinutes: 60},
+		{UserID: bob.ID, WatchMinutes: 125},
+	}))
+	_, err = s.UpdateUser(ctx, ada.ID, func(u *user.User) error {
+		u.Regular = true
+		return nil
+	})
+	require.NoError(t, err)
+
+	rows, err := s.ListUsersRegular(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []user.RegularSweep{
+		{ID: ada.ID, Regular: true, WatchMinutes: 60},
+		{ID: bob.ID, Regular: false, WatchMinutes: 125},
+	}, rows)
+}

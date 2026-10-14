@@ -1,6 +1,12 @@
 -- name: GetUser :one
 SELECT * FROM users WHERE id = ?;
 
+-- name: ListUsersRegular :many
+SELECT u.id AS id, u.regular AS regular, s.watch_minutes AS watch_minutes
+FROM users u
+JOIN user_stats s ON s.user_id = u.id
+ORDER BY u.id;
+
 -- name: InsertUser :exec
 INSERT INTO users (id, title, notes, excluded, regular, entrance_command_id, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?);

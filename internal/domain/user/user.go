@@ -108,6 +108,18 @@ func (u User) Identity(p platform.Name) (Identity, bool) {
 	return Identity{}, false
 }
 
+// RegularSweep is a user and the watch minutes the regular role is
+// evaluated from (users-and-roles.md, B26). The repository provides them
+// for the sweep of the user service.
+type RegularSweep struct {
+	// ID is the user's ID.
+	ID id.ID
+	// Regular is the stored regular role.
+	Regular bool
+	// WatchMinutes is the stored watch time.
+	WatchMinutes int64
+}
+
 // Roles returns the user's roles when acting on platform p: the roles of the
 // identities on p, Regular if the user is a regular, and always User (B21,
 // B24, B26).

@@ -381,9 +381,13 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		return a, err
 	}
 	// The user service counts the user statistics and the watch time from
-	// the events on the bus (roadmap 5.2.1).
-	if a.userSvc, err = userservice.New(userservice.Ports{Store: a.store, Bus: a.bus},
-		userservice.WithLogger(component(logger, "users"))); err != nil {
+	// the events on the bus and evaluates the regular role (roadmap 5.2.1
+	// and 5.2.2).
+	if a.userSvc, err = userservice.New(userservice.Ports{
+		Store:    a.store,
+		Bus:      a.bus,
+		Settings: a.usersSettings,
+	}, userservice.WithLogger(component(logger, "users"))); err != nil {
 		return a, err
 	}
 

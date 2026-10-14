@@ -291,6 +291,42 @@ func (q *Queries) ListIdentities(ctx context.Context, userID string) ([]UserIden
 	return items, nil
 }
 
+const listUsersRegular = `-- name: ListUsersRegular :many
+SELECT u.id AS id, u.regular AS regular, s.watch_minutes AS watch_minutes
+FROM users u
+JOIN user_stats s ON s.user_id = u.id
+ORDER BY u.id
+`
+
+type ListUsersRegularRow struct {
+	ID           string
+	Regular      int64
+	WatchMinutes int64
+}
+
+func (q *Queries) ListUsersRegular(ctx context.Context) ([]ListUsersRegularRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersRegular)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUsersRegularRow{}
+	for rows.Next() {
+		var i ListUsersRegularRow
+		if err := rows.Scan(&i.ID, &i.Regular, &i.WatchMinutes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const putUserStats = `-- name: PutUserStats :exec
 INSERT INTO user_stats (
     user_id, watch_minutes, messages, commands_run, mentions, streams_watched,

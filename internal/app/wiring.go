@@ -401,3 +401,8 @@ func (a *App) generalSettings(ctx context.Context) (settings.General, error) {
 func (a *App) channelPointsSettings(ctx context.Context) (settings.ChannelPoints, error) {
 	return settings.Load(ctx, a.settings, settings.DefaultChannelPoints())
 }
+
+// usersSettings reads the section "users" (roadmap 5.2.2, users-and-roles.md, B26).
+func (a *App) usersSettings(ctx context.Context) (settings.Users, error) {
+	return settings.Load(ctx, a.settings, settings.DefaultUsers())
+}
