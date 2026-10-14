@@ -62,6 +62,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/supervisor"
 	"github.com/ripmav/streamcrew/internal/template"
 	"github.com/ripmav/streamcrew/internal/twitch"
+	"github.com/ripmav/streamcrew/internal/userservice"
 	"github.com/ripmav/streamcrew/internal/vault"
 )
 
@@ -139,6 +140,7 @@ type App struct {
 	commands     *command.Service
 	engine       *engine.Engine
 	events       *eventservice.Service
+	userSvc      *userservice.Service
 	catalog      *event.Catalog
 	// twitchHelix is the resilient HTTP client of the Helix API, shared by
 	// the Twitch platform and the twitch action's operations (roadmap 4.4).
@@ -378,6 +380,12 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if err != nil {
 		return a, err
 	}
+	// The user service counts the user statistics and the watch time from
+	// the events on the bus (roadmap 5.2.1).
+	if a.userSvc, err = userservice.New(userservice.Ports{Store: a.store, Bus: a.bus},
+		userservice.WithLogger(component(logger, "users"))); err != nil {
+		return a, err
+	}
 
 	a.sup = supervisor.New(component(logger, "supervisor"),
 		supervisor.WithStatusFunc(a.onStatus),
@@ -397,6 +405,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		a.sup.Add("backup", scheduler),
 		a.sup.Add("http", a.http, supervisor.WithCritical()),
 		a.sup.Add("events", a.events),
+		a.sup.Add("users", a.userSvc),
 	)
 	// The platform stops after the engine on shutdown, so that the engine
 	// can still deliver its pending instances to it; on start the
