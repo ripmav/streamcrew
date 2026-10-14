@@ -78,6 +78,36 @@ func (s *Store) ResetStrikes(ctx context.Context) error {
 	return nil
 }
 
+// AddStats adds each delta to the statistics of its user in one
+// transaction (users-and-roles.md, B9): the counters are incremented, and
+// the seen times follow the Seen of the delta.
+func (s *Store) AddStats(ctx context.Context, deltas []user.StatsDelta) error {
+	if len(deltas) == 0 {
+		return nil
+	}
+	err := s.Write(ctx, func(q *sqlcgen.Queries) error {
+		for _, d := range deltas {
+			if _, err := q.AddUserStats(ctx, sqlcgen.AddUserStatsParams{
+				WatchMinutes:   d.WatchMinutes,
+				Messages:       d.Messages,
+				CommandsRun:    d.CommandsRun,
+				Mentions:       d.Mentions,
+				StreamsWatched: d.StreamsWatched,
+				FirstSeen:      nullMillis(d.Seen),
+				LastSeen:       nullMillis(d.Seen),
+				UserID:         d.UserID.String(),
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("add statistics: %w", err)
+	}
+	return nil
+}
+
 // UpsertIdentity implements user.Repository.
 func (s *Store) UpsertIdentity(ctx context.Context, ident user.Identity) (u user.User, created bool, err error) {
 	if err := ident.Validate(); err != nil {

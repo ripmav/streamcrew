@@ -10,6 +10,46 @@ import (
 	"database/sql"
 )
 
+const addUserStats = `-- name: AddUserStats :execrows
+UPDATE user_stats SET
+    watch_minutes   = watch_minutes + ?,
+    messages        = messages + ?,
+    commands_run    = commands_run + ?,
+    mentions        = mentions + ?,
+    streams_watched = streams_watched + ?,
+    first_seen      = COALESCE(first_seen, ?),
+    last_seen       = COALESCE(?, last_seen)
+WHERE user_id = ?
+`
+
+type AddUserStatsParams struct {
+	WatchMinutes   int64
+	Messages       int64
+	CommandsRun    int64
+	Mentions       int64
+	StreamsWatched int64
+	FirstSeen      sql.NullInt64
+	LastSeen       sql.NullInt64
+	UserID         string
+}
+
+func (q *Queries) AddUserStats(ctx context.Context, arg AddUserStatsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, addUserStats,
+		arg.WatchMinutes,
+		arg.Messages,
+		arg.CommandsRun,
+		arg.Mentions,
+		arg.StreamsWatched,
+		arg.FirstSeen,
+		arg.LastSeen,
+		arg.UserID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteUser = `-- name: DeleteUser :execrows
 DELETE FROM users WHERE id = ?
 `

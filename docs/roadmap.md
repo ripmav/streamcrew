@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12); Phase 2 abgeschlossen (PR #36); Phase 3 abgeschlossen, M1 erreicht (PR #143) |
-| **Stand** | 2026-10-04 |
+| **Stand** | 2026-10-14 |
 | **Grundlage** | [`plan.md`](plan.md) (Architektur, Prioritäten, Risiken), [`starting.md`](starting.md), [`adr/`](adr/README.md) |
-| **Aktuelle Phase** | Phase 3: Engine, Templates, Actions, Mock (in Arbeit) |
+| **Aktuelle Phase** | Phase 5: Core-Services (in Arbeit; 5.1 und 5.2.1 abgeschlossen) |
 
 > **Name:** Das Projekt heißt vorerst `streamcrew` (Codename, [ADR-0008](adr/0008-codename-streamcrew.md)); Binary `streamcrew`. Der endgültige Name wird vor Gate O geprüft.
 
@@ -94,7 +94,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
 | Phase 3: Engine, Templates, Actions, Mock | abgeschlossen 2026-10-07, M1 erreicht (PR #143, CI grün); vertagt: die Schwelle der Sammelgeschenke (3.4, P1) |
 | Phase 4: Twitch | 4.1 (Authentifizierung), 4.2 (Helix-Client), 4.3 (EventSub), 4.4 (Funktionen) und 4.5 (Tests) abgeschlossen; das Exit-Kriterium des manuellen 4-h-Test-Streams (4.5) ist noch offen |
-| Phase 5: Core-Services | offen |
+| Phase 5: Core-Services | in Arbeit: 5.1 abgeschlossen, 5.2.1 abgeschlossen; offen: 5.2.2–5.2.6, 5.3–5.6 |
 | Phase 6: API, CLI, TUI | offen |
 | Phase 7: Overlays und Medien | offen |
 | Phase 8: Economy, Community, Spiele | offen |
@@ -634,7 +634,7 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 
 ### 5.2 Nutzer
 
-- [ ] Aktive Nutzer (Join, Leave, Aktivität), Watchtime (nur während live), Statistiken wie Nachrichten, Commands und Tags (M)
+- [x] Aktive Nutzer (Join, Leave, Aktivität), Watchtime (nur während live), Statistiken wie Nachrichten, Commands und Tags (M), erledigt 2026-10-14 in [`internal/userservice`](../internal/userservice) (Aktive je Plattform-Sitzung aus Join/Leave/Nachrichten; Watchtime je Minute für die Aktiven einer Live-Plattform, Batch je Tick; Statistiken B9 aus den Bus-Ereignissen: Nachrichten, Erwähnungen „@Login“, abgeschlossene Command-Instanzen, gesehene Streams (Join bei live) und First/LastSeen; `store.AddStats` als Batch; Ranglisten und Zufallsauswahl kommen mit 5.2.5)
 - [ ] Rollen plattformübergreifend, Regular ab ganzen Stunden Watchtime (Standard 0 = aus, am Nutzer, sofort neu bewertet, [`users-and-roles.md`](spec/users-and-roles.md), B26), Follow- und Abo-Daten bei Bedarf mit Cache (M)
 - [ ] Titelregeln mit Name, Mindestrolle und Mindestmonaten, ohne Treffer „Kein Titel“ ([`users-and-roles.md`](spec/users-and-roles.md), B5) (S)
 - [ ] Konten verknüpfen und Nutzer zusammenführen (M) (P1)

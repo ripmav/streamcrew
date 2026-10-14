@@ -81,3 +81,14 @@ ORDER BY updated_at DESC, platform_user_id LIMIT 1;
 
 -- name: ResetStrikes :exec
 UPDATE user_stats SET strikes = 0 WHERE strikes <> 0;
+
+-- name: AddUserStats :execrows
+UPDATE user_stats SET
+    watch_minutes   = watch_minutes + ?,
+    messages        = messages + ?,
+    commands_run    = commands_run + ?,
+    mentions        = mentions + ?,
+    streams_watched = streams_watched + ?,
+    first_seen      = COALESCE(first_seen, ?),
+    last_seen       = COALESCE(?, last_seen)
+WHERE user_id = ?;

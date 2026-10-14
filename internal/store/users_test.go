@@ -249,3 +249,45 @@ func TestResetStrikes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, got.Stats.Strikes)
 }
+
+// TestAddStats covers the batch update of the user statistics
+// (users-and-roles.md, B9): counters add up, FirstSeen is set only once,
+// LastSeen follows the latest contact, and an empty batch changes nothing.
+func TestAddStats(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+
+	ident := twitchIdentity("1001", "ada")
+	u, _, err := s.UpsertIdentity(ctx, ident)
+	require.NoError(t, err)
+
+	t0 := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, s.AddStats(ctx, nil), "an empty batch is a no-op")
+
+	require.NoError(t, s.AddStats(ctx, []user.StatsDelta{
+		{UserID: u.ID, Messages: 3, StreamsWatched: 1, Seen: t0},
+		{UserID: u.ID, Mentions: 2, WatchMinutes: 5},
+	}))
+	loaded, err := s.User(ctx, u.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), loaded.Stats.Messages)
+	assert.Equal(t, int64(2), loaded.Stats.Mentions)
+	assert.Equal(t, int64(1), loaded.Stats.StreamsWatched)
+	assert.Equal(t, int64(5), loaded.Stats.WatchMinutes)
+	assert.Equal(t, t0, loaded.Stats.FirstSeen)
+	assert.Equal(t, t0, loaded.Stats.LastSeen)
+
+	// An older Seen does not move LastSeen; FirstSeen stays.
+	t1 := t0.Add(10 * time.Minute)
+	tOld := t0.Add(time.Minute)
+	require.NoError(t, s.AddStats(ctx, []user.StatsDelta{
+		{UserID: u.ID, CommandsRun: 1, Seen: tOld},
+		{UserID: u.ID, Seen: t1},
+	}))
+	loaded, err = s.User(ctx, u.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), loaded.Stats.CommandsRun)
+	assert.Equal(t, t0, loaded.Stats.FirstSeen)
+	assert.Equal(t, t1, loaded.Stats.LastSeen)
+}

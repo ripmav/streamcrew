@@ -1,6 +1,6 @@
 # Plan: Roadmap 5.2.1 — Aktive Nutzer, Watchtime, Statistiken
 
-**Status:** in Arbeit
+**Status:** abgeschlossen (Tasks 1–4 erledigt, Stack #233)
 **Stand:** 2026-10-14, `main` bei `5351093`
 **Scope:** nur 5.2.1 (Nutzer-Service mit Aktivität, Watchtime und
 Statistiken). Regular (5.2.2), Titel (5.2.3), Ausschlüsse (5.2.5) und die
@@ -77,9 +77,21 @@ Ports (5.2.6) bleiben offen.
 
 ## 4. Tasks
 
-- [ ] T1: sqlc-Query `AddUserStats` + `store.AddStats` + Integrationstest
-- [ ] T2: `internal/userservice`: Aktivität, Statistiken, Watchtime-Ticker,
+- [x] T1: sqlc-Query `AddUserStats` + `store.AddStats` + Integrationstest
+- [x] T2: `internal/userservice`: Aktivität, Statistiken, Watchtime-Ticker,
   `Active(p)`; Tests mit Fake-Store und `testing/synctest`
-- [ ] T3: Wiring in `internal/app`, E2E-Test über die Mock-Plattform
-- [ ] T4: Doku (Roadmap 5.2.1 abhaken, Spezifikation
+- [x] T3: Wiring in `internal/app`, E2E-Test über die Mock-Plattform
+- [x] T4: Doku (Roadmap 5.2.1 abhaken, Spezifikation
   `users-and-roles.md` um Akzeptanzkriterien ergänzen), Pre-Commit-Checkliste
+
+## 5. Festlegungen beim Arbeiten
+
+- **Erwähnungen nur unter Aktiven:** `Mentions` zählt je Nachricht die
+  anderen aktiven Nutzer derselben Plattform, deren Login mit `@` vorkommt
+  (ASCII-schreibunabhängig, nicht als Präfix eines längeren Logins).
+- **`StreamsWatched` nur bei live:** `chat.user.join` zählt nur, wenn die
+  Sitzung der Plattform gerade `live` ist.
+- **`CommandsRun` nur bei `completed`:** fehlgeschlagene und abgebrochene
+  Instanzen zählen nicht (B9 „Zahl ausgeführter Commands").
+- **Watchtime ohne Restminuten:** bei Stopp geht der Rest der laufenden
+  Minute verloren; nur ganze Minuten zählen (B9).
