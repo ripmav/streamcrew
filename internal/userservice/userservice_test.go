@@ -4,6 +4,7 @@ package userservice_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -21,8 +22,11 @@ import (
 	"github.com/ripmav/streamcrew/internal/userservice"
 )
 
-// memStore keeps the statistics and the stream sessions in memory.
+// memStore keeps the statistics and the stream sessions in memory; the
+// service reads them from its goroutine, the test writes them from its
+// own, so mu guards both maps.
 type memStore struct {
+	mu       sync.Mutex
 	stats    map[id.ID]user.Stats
 	sessions map[platform.Name]stream.Session
 }
@@ -32,6 +36,8 @@ func newMemStore() *memStore {
 }
 
 func (m *memStore) AddStats(_ context.Context, deltas []user.StatsDelta) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for _, d := range deltas {
 		st := m.stats[d.UserID]
 		st.WatchMinutes += d.WatchMinutes
@@ -53,6 +59,8 @@ func (m *memStore) AddStats(_ context.Context, deltas []user.StatsDelta) error {
 }
 
 func (m *memStore) StreamSessions(context.Context) ([]stream.Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	var out []stream.Session
 	for _, s := range m.sessions {
 		out = append(out, s)
@@ -61,7 +69,15 @@ func (m *memStore) StreamSessions(context.Context) ([]stream.Session, error) {
 }
 
 func (m *memStore) setSession(s stream.Session) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.sessions[s.Platform] = s
+}
+
+func (m *memStore) stat(u id.ID) user.Stats {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.stats[u]
 }
 
 // fixture is the service against the bus and the fake store.
@@ -150,17 +166,17 @@ func TestMessageStats(t *testing.T) {
 		f.publish(t, eventtype.ChatUserJoin, &ada, eventtype.Details{}, at)
 		settle(t)
 		assert.Contains(t, f.activeLogins(t), "ada")
-		assert.Equal(t, int64(1), f.store.stats[ada.ID].StreamsWatched)
-		assert.Equal(t, at, f.store.stats[ada.ID].FirstSeen)
-		assert.Equal(t, at, f.store.stats[ada.ID].LastSeen)
+		assert.Equal(t, int64(1), f.store.stat(ada.ID).StreamsWatched)
+		assert.Equal(t, at, f.store.stat(ada.ID).FirstSeen)
+		assert.Equal(t, at, f.store.stat(ada.ID).LastSeen)
 
 		// Bob arrives by message and mentions Ada.
 		f.publish(t, eventtype.ChatMessage, &bob,
 			eventtype.Details{Message: &eventtype.Message{ID: "m1", Text: "hello @ada"}}, at.Add(time.Second))
 		settle(t)
 		assert.Contains(t, f.activeLogins(t), "bob")
-		assert.Equal(t, int64(1), f.store.stats[bob.ID].Messages)
-		assert.Equal(t, int64(1), f.store.stats[ada.ID].Mentions, "Bob mentioned Ada")
+		assert.Equal(t, int64(1), f.store.stat(bob.ID).Messages)
+		assert.Equal(t, int64(1), f.store.stat(ada.ID).Mentions, "Bob mentioned Ada")
 
 		// Ada writes back: her own "@ada" does not count.
 		f.publish(t, eventtype.ChatMessage, &ada,
@@ -170,16 +186,16 @@ func TestMessageStats(t *testing.T) {
 		f.publish(t, eventtype.ChatMessage, &adaL,
 			eventtype.Details{Message: &eventtype.Message{ID: "m3", Text: "yo @ada_l"}}, at.Add(3*time.Second))
 		settle(t)
-		assert.Equal(t, int64(1), f.store.stats[ada.ID].Messages)
-		assert.Equal(t, int64(1), f.store.stats[bob.ID].Mentions, "Ada mentioned Bob")
-		assert.Equal(t, int64(1), f.store.stats[ada.ID].Mentions, "her own mention stays at one, @ada_l does not count")
+		assert.Equal(t, int64(1), f.store.stat(ada.ID).Messages)
+		assert.Equal(t, int64(1), f.store.stat(bob.ID).Mentions, "Ada mentioned Bob")
+		assert.Equal(t, int64(1), f.store.stat(ada.ID).Mentions, "her own mention stays at one, @ada_l does not count")
 
 		// A completed instance counts the command of its user.
 		env := event.New(event.Source{Kind: event.SourceSystem, Name: "engine"}, engine.TypeInstanceCompleted,
 			engine.Instance{ID: id.New(), UserID: ada.ID, State: engine.StateCompleted})
 		require.NoError(t, f.bus.Publish(t.Context(), env))
 		settle(t)
-		assert.Equal(t, int64(1), f.store.stats[ada.ID].CommandsRun)
+		assert.Equal(t, int64(1), f.store.stat(ada.ID).CommandsRun)
 
 		// A leave removes the user from the active set.
 		f.publish(t, eventtype.ChatUserLeave, &bob, eventtype.Details{}, at.Add(4*time.Second))
@@ -212,21 +228,21 @@ func TestWatchTime(t *testing.T) {
 		// After the first minute, both have one minute.
 		time.Sleep(time.Minute)
 		settle(t)
-		assert.Equal(t, int64(1), f.store.stats[ada.ID].WatchMinutes)
-		assert.Equal(t, int64(1), f.store.stats[bob.ID].WatchMinutes)
+		assert.Equal(t, int64(1), f.store.stat(ada.ID).WatchMinutes)
+		assert.Equal(t, int64(1), f.store.stat(bob.ID).WatchMinutes)
 
 		// Bob leaves; the next minute counts Ada only.
 		f.publish(t, eventtype.ChatUserLeave, &bob, eventtype.Details{}, at.Add(65*time.Second))
 		time.Sleep(time.Minute)
 		settle(t)
-		assert.Equal(t, int64(2), f.store.stats[ada.ID].WatchMinutes)
-		assert.Equal(t, int64(1), f.store.stats[bob.ID].WatchMinutes, "the leaver stops counting")
+		assert.Equal(t, int64(2), f.store.stat(ada.ID).WatchMinutes)
+		assert.Equal(t, int64(1), f.store.stat(bob.ID).WatchMinutes, "the leaver stops counting")
 
 		// The stream goes to the grace period: the minute counts nothing.
 		f.store.setSession(stream.Session{Platform: platform.Mock, State: stream.StateGrace, Since: at.Add(2 * time.Minute)})
 		time.Sleep(time.Minute)
 		settle(t)
-		assert.Equal(t, int64(2), f.store.stats[ada.ID].WatchMinutes, "grace does not count")
+		assert.Equal(t, int64(2), f.store.stat(ada.ID).WatchMinutes, "grace does not count")
 	})
 }
 
@@ -248,6 +264,6 @@ func TestJoinOffline(t *testing.T) {
 		f.publish(t, eventtype.ChatUserJoin, &ada, eventtype.Details{}, at)
 		settle(t)
 		assert.Contains(t, f.activeLogins(t), "ada")
-		assert.Zero(t, f.store.stats[ada.ID].StreamsWatched)
+		assert.Zero(t, f.store.stat(ada.ID).StreamsWatched)
 	})
 }
