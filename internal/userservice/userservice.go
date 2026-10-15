@@ -3,8 +3,10 @@
 // Package userservice is the user service of roadmap 5.2: it keeps the
 // statistics of the users (users-and-roles.md, B9) up to date from the
 // events of the core, it tracks who is active in the chat of each
-// platform, for the watch time, and it evaluates the regular role (B26)
-// from the watch time.
+// platform, for the watch time, it evaluates the regular role (B26) from
+// the watch time, and it keeps the follow and subscription data of the
+// identities fresh (B10), fetched from the platform on contact when the
+// cache is missing or stale.
 //
 // The watch time counts whole minutes: every minute, each user active in
 // the chat of a platform whose stream is live gets one minute. A user is
@@ -25,6 +27,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
@@ -44,6 +47,10 @@ var ErrAlreadyRunning = errors.New("the user service runs already")
 // watchTick is the interval of the watch time (B9, "Watchtime in Minuten").
 const watchTick = time.Minute
 
+// dataTTL is how long the cached platform data of an identity stays fresh
+// (users-and-roles.md, B10); older data is refetched on the next contact.
+const dataTTL = time.Hour
+
 // Store keeps the statistics and the stream sessions; *store.Store
 // implements it.
 type Store interface {
@@ -56,6 +63,9 @@ type Store interface {
 	ListUsersRegular(ctx context.Context) ([]user.RegularSweep, error)
 	// UpdateUser changes the user, e.g. the regular role (B26).
 	UpdateUser(ctx context.Context, userID id.ID, fn func(*user.User) error) (user.User, error)
+	// SetPlatformData replaces the cached platform data of an identity
+	// (users-and-roles.md, B10).
+	SetPlatformData(ctx context.Context, p platform.Name, platformUserID string, data user.PlatformData) error
 }
 
 // Ports are what the service needs. All are required.
@@ -65,6 +75,18 @@ type Ports struct {
 	// Settings reads the settings section "users" on the watch tick, so a
 	// changed regular threshold applies from the next tick (B26).
 	Settings func(ctx context.Context) (settings.Users, error)
+	// Platforms returns the platform adapters of the profile, for the
+	// refresh of the follow and subscription data (B10); nil skips the
+	// refresh.
+	Platforms Platforms
+}
+
+// Platforms returns the platform adapters of the profile; the app's
+// platformSet implements it.
+type Platforms interface {
+	// Platform returns the adapter by name; ok is false if the profile
+	// has no platform by the name.
+	Platform(name platform.Name) (connector.Platform, bool)
 }
 
 // Option configures a Service. An option without a valid value makes New
@@ -97,11 +119,14 @@ type Service struct {
 	ports  Ports
 	logger *slog.Logger
 
-	// mu guards active and the started state.
+	// mu guards active, the started state and lastData.
 	mu      sync.Mutex
 	started bool
 	// active are the users of the current session by platform, by user ID.
 	active map[platform.Name]map[id.ID]*Active
+	// lastData is when the service last fetched the platform data (B10),
+	// by platform, by platform user ID.
+	lastData map[platform.Name]map[string]time.Time
 }
 
 // New returns a service with the ports p.
@@ -110,7 +135,7 @@ func New(p Ports, opts ...Option) (*Service, error) {
 	case p.Store == nil, p.Bus == nil, p.Settings == nil:
 		return nil, fmt.Errorf("new user service: %w: missing port", ErrInvalidOption)
 	}
-	s := &Service{ports: p, logger: slog.New(slog.DiscardHandler), active: make(map[platform.Name]map[id.ID]*Active)}
+	s := &Service{ports: p, logger: slog.New(slog.DiscardHandler), active: make(map[platform.Name]map[id.ID]*Active), lastData: make(map[platform.Name]map[string]time.Time)}
 	for _, opt := range opts {
 		if err := opt(s); err != nil {
 			return nil, fmt.Errorf("new user service: %w", err)
@@ -200,6 +225,7 @@ func (s *Service) join(ctx context.Context, env event.Envelope) {
 		return
 	}
 	s.markActive(payload.Platform, payload.User, env.Time)
+	s.refreshData(ctx, payload.Platform, payload.User)
 	if !s.live(ctx, payload.Platform) {
 		return
 	}
@@ -250,6 +276,7 @@ func (s *Service) message(ctx context.Context, env event.Envelope) {
 		return
 	}
 	s.markActive(payload.Platform, payload.User, env.Time)
+	s.refreshData(ctx, payload.Platform, payload.User)
 
 	deltas := []user.StatsDelta{{UserID: payload.User.ID, Messages: 1, Seen: env.Time}}
 	if m := payload.Details.Message; m != nil {
@@ -336,6 +363,53 @@ func (s *Service) evaluateRegular(ctx context.Context) {
 			s.logger.ErrorContext(ctx, "setting the regular role failed", "error", err)
 		}
 	}
+}
+
+// refreshData fetches the follow and subscription data of the user's
+// identity on p when it is not fetched within dataTTL (users-and-roles.md,
+// B10), and stores it. It runs in the service goroutine, so the event
+// path never blocks on the platform; a platform without the capability or
+// an error leave the cache as it is. The event payload of the user does
+// not carry the cached data, so the memo lastData decides the TTL.
+func (s *Service) refreshData(ctx context.Context, p platform.Name, u *user.User) {
+	if s.ports.Platforms == nil {
+		return
+	}
+	adapter, ok := s.ports.Platforms.Platform(p)
+	if !ok {
+		return
+	}
+	f, ok := adapter.(connector.PlatformData)
+	if !ok {
+		return
+	}
+	ident, ok := u.Identity(p)
+	if !ok {
+		return
+	}
+	s.mu.Lock()
+	last, fresh := s.lastData[p][ident.PlatformUserID]
+	s.mu.Unlock()
+	if fresh && time.Since(last) < dataTTL {
+		return
+	}
+	data, err := f.UserPlatformData(ctx, ident.PlatformUserID)
+	if err != nil {
+		s.logger.DebugContext(ctx, "the platform data is not available", "platform", p, "error", err)
+		return
+	}
+	data.UpdatedAt = time.Now()
+	if err := s.ports.Store.SetPlatformData(ctx, p, ident.PlatformUserID, data); err != nil {
+		s.logger.ErrorContext(ctx, "storing the platform data failed", "error", err)
+		return
+	}
+	s.mu.Lock()
+	if m := s.lastData[p]; m != nil {
+		m[ident.PlatformUserID] = data.UpdatedAt
+	} else {
+		s.lastData[p] = map[string]time.Time{ident.PlatformUserID: data.UpdatedAt}
+	}
+	s.mu.Unlock()
 }
 
 // markActive records u as active on p at t; the event data of the user

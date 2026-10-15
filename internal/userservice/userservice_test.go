@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
@@ -31,10 +32,11 @@ type memStore struct {
 	stats    map[id.ID]user.Stats
 	regular  map[id.ID]bool
 	sessions map[platform.Name]stream.Session
+	data     map[string]user.PlatformData
 }
 
 func newMemStore() *memStore {
-	return &memStore{stats: make(map[id.ID]user.Stats), regular: make(map[id.ID]bool), sessions: make(map[platform.Name]stream.Session)}
+	return &memStore{stats: make(map[id.ID]user.Stats), regular: make(map[id.ID]bool), sessions: make(map[platform.Name]stream.Session), data: make(map[string]user.PlatformData)}
 }
 
 func (m *memStore) AddStats(_ context.Context, deltas []user.StatsDelta) error {
@@ -117,11 +119,75 @@ func (m *memStore) UpdateUser(_ context.Context, u id.ID, fn func(*user.User) er
 	return loaded, nil
 }
 
+func (m *memStore) SetPlatformData(_ context.Context, p platform.Name, platformUserID string, data user.PlatformData) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.data[string(p)+"/"+platformUserID] = data
+	return nil
+}
+
+func (m *memStore) dataOf(p platform.Name, platformUserID string) user.PlatformData {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.data[string(p)+"/"+platformUserID]
+}
+
+// fakePlatform is the platform adapter of the tests: the PlatformData
+// capability works, the rest stays unused. mu guards calls and answer,
+// which the service writes from its goroutine and the test reads from its
+// own.
+type fakePlatform struct {
+	mu     sync.Mutex
+	calls  int
+	answer user.PlatformData
+}
+
+func newFakePlatform() *fakePlatform { return &fakePlatform{} }
+
+func (f *fakePlatform) setAnswer(data user.PlatformData) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.answer = data
+}
+
+func (f *fakePlatform) callsCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+// UserPlatformData implements connector.PlatformData.
+func (f *fakePlatform) UserPlatformData(_ context.Context, _ string) (user.PlatformData, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	return f.answer, nil
+}
+
+// The rest of connector.Platform stays unused by the service.
+func (f *fakePlatform) Name() platform.Name              { return platform.Mock }
+func (f *fakePlatform) Status() connector.Status         { return connector.Status{} }
+func (f *fakePlatform) Chat() connector.Chat             { return nil }
+func (f *fakePlatform) Moderation() connector.Moderation { return nil }
+func (f *fakePlatform) Users() connector.Users           { return nil }
+func (f *fakePlatform) Channel(context.Context) (connector.ChannelInfo, error) {
+	return connector.ChannelInfo{}, nil
+}
+
+// Platform implements userservice.Platforms for platform.Mock only.
+func (f *fakePlatform) Platform(p platform.Name) (connector.Platform, bool) {
+	if p == platform.Mock {
+		return f, true
+	}
+	return nil, false
+}
+
 // fixture is the service against the bus and the fake store.
 type fixture struct {
-	store *memStore
-	bus   *event.Bus
-	svc   *userservice.Service
+	store     *memStore
+	platforms *fakePlatform
+	bus       *event.Bus
+	svc       *userservice.Service
 	// users is the settings section "users" the service reads on the tick;
 	// the test changes it to test a changed threshold.
 	users settings.Users
@@ -135,12 +201,13 @@ type fixture struct {
 // with the bubble.
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	f := &fixture{store: newMemStore(), bus: event.NewBus(nil)}
+	f := &fixture{store: newMemStore(), platforms: newFakePlatform(), bus: event.NewBus(nil)}
 	var err error
 	f.svc, err = userservice.New(userservice.Ports{
-		Store:    f.store,
-		Bus:      f.bus,
-		Settings: f.usersSettings,
+		Store:     f.store,
+		Bus:       f.bus,
+		Settings:  f.usersSettings,
+		Platforms: f.platforms,
 	})
 	require.NoError(t, err)
 	return f
@@ -401,5 +468,50 @@ func TestRegularThreshold(t *testing.T) {
 		settle(t)
 		assert.False(t, f.store.regularOf(ada.ID))
 		assert.False(t, f.store.regularOf(bob.ID))
+	})
+}
+
+// TestPlatformDataCache covers the follow and subscription cache
+// (users-and-roles.md, B10): missing data is fetched on contact and
+// stamped, fresh data is not refetched, and stale data is refetched after
+// the TTL.
+func TestPlatformDataCache(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		stop := f.run(t)
+		defer stop()
+		// Wait until the service has subscribed, so that the published
+		// events below are not lost.
+		synctest.Wait()
+		followed := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+		f.platforms.setAnswer(user.PlatformData{FollowedAt: followed})
+		at := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+
+		// Missing data: the join fetches it and the cache is stamped.
+		ada := mockUser("ada")
+		f.publish(t, eventtype.ChatUserJoin, &ada, eventtype.Details{}, at)
+		settle(t)
+		data := f.store.dataOf(platform.Mock, "ada")
+		assert.Equal(t, followed, data.FollowedAt)
+		require.False(t, data.UpdatedAt.IsZero(), "the cache is stamped")
+		assert.Equal(t, 1, f.platforms.callsCount())
+
+		// Fresh cache: the next contact does not refetch.
+		f.publish(t, eventtype.ChatMessage, &ada,
+			eventtype.Details{Message: &eventtype.Message{ID: "m1", Text: "hi"}}, at.Add(time.Second))
+		settle(t)
+		assert.Equal(t, 1, f.platforms.callsCount())
+
+		// Stale cache: after the TTL, the next contact refetches.
+		f.platforms.setAnswer(user.PlatformData{FollowedAt: at.Add(2 * time.Hour), SubTier: 1})
+		time.Sleep(time.Hour + time.Minute)
+		f.publish(t, eventtype.ChatMessage, &ada,
+			eventtype.Details{Message: &eventtype.Message{ID: "m2", Text: "hi again"}}, at.Add(2*time.Hour))
+		settle(t)
+		assert.Equal(t, 2, f.platforms.callsCount())
+		data = f.store.dataOf(platform.Mock, "ada")
+		assert.Equal(t, at.Add(2*time.Hour), data.FollowedAt)
+		assert.Equal(t, 1, data.SubTier)
 	})
 }

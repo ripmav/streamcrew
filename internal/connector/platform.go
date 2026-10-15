@@ -132,6 +132,17 @@ type Chatters interface {
 	Chatters(ctx context.Context) ([]user.Identity, error)
 }
 
+// PlatformData is the optional capability of a Platform to report the
+// data it keeps about an account's relationship to its home channel
+// (users-and-roles.md, B10): the follow and the subscription.
+type PlatformData interface {
+	// UserPlatformData returns the data of the account; the zero value
+	// for what the platform does not report or the account does not have.
+	// The UpdatedAt of the result is zero; the caller sets it. The error
+	// wraps ErrUnknownUser if the platform has no such account.
+	UserPlatformData(ctx context.Context, platformUserID string) (user.PlatformData, error)
+}
+
 // Chat is the chat of the channel on a platform.
 type Chat interface {
 	// Send sends m to the chat of m.Channel (empty: the home channel). The

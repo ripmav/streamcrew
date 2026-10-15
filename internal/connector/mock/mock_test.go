@@ -527,3 +527,24 @@ func TestMultiChannel(t *testing.T) {
 		assert.Equal(t, []connector.Channel{"other", ""}, r.joinChs)
 	})
 }
+
+// TestUserPlatformData covers the mock's follow and subscription data
+// (roadmap 5.2.2, users-and-roles.md, B10): a known account follows the
+// channel, an unknown one has no data.
+func TestUserPlatformData(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		p, _, _ := start(t)
+		fan, err := p.AddUser(mock.UserSpec{Login: "fan"})
+		require.NoError(t, err)
+
+		data, err := p.UserPlatformData(t.Context(), fan.PlatformUserID)
+		require.NoError(t, err)
+		assert.WithinDuration(t, time.Now().Add(-30*24*time.Hour), data.FollowedAt, time.Minute)
+		assert.Zero(t, data.SubTier)
+		assert.True(t, data.SubscribedAt.IsZero())
+
+		_, err = p.UserPlatformData(t.Context(), "99999")
+		require.ErrorIs(t, err, connector.ErrUnknownUser)
+	})
+}

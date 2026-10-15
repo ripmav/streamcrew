@@ -114,6 +114,13 @@ func (s *opsServer) handler(t *testing.T) http.HandlerFunc {
 			_, _ = w.Write([]byte(`{"data":[{"id":"3","login":"user","display_name":"User"}]}`))
 		case r.URL.Path == "/channels":
 			_, _ = w.Write([]byte(`{"data":[{"id":"7","title":"T","game_name":"G"}]}`))
+		case r.URL.Path == "/users/follows":
+			assert.Equal(t, "3", r.URL.Query().Get("from_id"))
+			assert.Equal(t, "7", r.URL.Query().Get("to_id"))
+			_, _ = w.Write([]byte(`{"data":[{"from_id":"3","to_id":"7","followed_at":"2026-09-14T12:00:00Z"}],"pagination":{}}`))
+		case r.URL.Path == "/subscriptions":
+			assert.Equal(t, "7", r.URL.Query().Get("broadcaster_id"))
+			_, _ = w.Write([]byte(`{"data":[{"broadcaster_id":"7","subscriber_id":"3","tier":"2000"}],"pagination":{}}`))
 		case r.URL.Path == "/streams":
 			if s.offline {
 				_, _ = w.Write([]byte(`{"data":[]}`))
@@ -363,4 +370,17 @@ func TestIdentities(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatal("the streamer identity never became known")
+}
+
+// TestUserPlatformData covers the mapping of the follow and subscription
+// data of Helix (roadmap 5.2.2, users-and-roles.md, B10).
+func TestUserPlatformData(t *testing.T) {
+	s := &opsServer{}
+	p := opsPlatform(t, readyAuth(), s)
+	data, err := p.UserPlatformData(context.Background(), "3")
+	require.NoError(t, err)
+	assert.Equal(t, time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC), data.FollowedAt)
+	assert.Equal(t, 2, data.SubTier)
+	assert.True(t, data.SubscribedAt.IsZero(), "Helix reports no subscription start date")
+	assert.True(t, data.UpdatedAt.IsZero(), "the caller stamps the cache")
 }
