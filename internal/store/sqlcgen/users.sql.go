@@ -327,6 +327,29 @@ func (q *Queries) ListUsersRegular(ctx context.Context) ([]ListUsersRegularRow, 
 	return items, nil
 }
 
+const moveIdentitiesToUser = `-- name: MoveIdentitiesToUser :execrows
+UPDATE user_identities
+SET user_id = ?, updated_at = ?
+WHERE user_id = ?
+`
+
+type MoveIdentitiesToUserParams struct {
+	UserID    string
+	UpdatedAt int64
+	UserID_2  string
+}
+
+// Roadmap 5.2.4: move every platform identity of one user to another
+// (linking the accounts; the dropped user is deleted after its statistics
+// are folded in). users-and-roles.md, B3/B40.
+func (q *Queries) MoveIdentitiesToUser(ctx context.Context, arg MoveIdentitiesToUserParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, moveIdentitiesToUser, arg.UserID, arg.UpdatedAt, arg.UserID_2)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const putUserStats = `-- name: PutUserStats :exec
 INSERT INTO user_stats (
     user_id, watch_minutes, messages, commands_run, mentions, streams_watched,

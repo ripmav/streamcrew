@@ -39,6 +39,7 @@ type Root struct {
 	Schema     schemaCmd  `cmd:"" help:"Export the JSON Schema of commands as code."`
 	Command    commandCmd `cmd:"" help:"Check files of commands as code."`
 	Auth       authCmd    `cmd:"" help:"Log in, check, and remove the platform accounts of a profile."`
+	User       userCmd    `cmd:"" help:"Manage the users of a profile. Changes need a stopped core."`
 }
 
 // Env is bound to the Run methods of the commands, together with the context
