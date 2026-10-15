@@ -142,6 +142,8 @@ type App struct {
 	events       *eventservice.Service
 	userSvc      *userservice.Service
 	catalog      *event.Catalog
+	// messages renders the localized texts of the core (ADR-0022).
+	messages *i18n.Catalog
 	// twitchHelix is the resilient HTTP client of the Helix API, shared by
 	// the Twitch platform and the twitch action's operations (roadmap 4.4).
 	twitchHelix *httpclient.Client
@@ -295,6 +297,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if err != nil {
 		return a, err
 	}
+	a.messages = messageCatalog
 	requirements, err := requirement.New(requirement.Ports{
 		Catalog:   messageCatalog,
 		Language:  localeLanguage{settings: a.settings},

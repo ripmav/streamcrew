@@ -346,7 +346,24 @@ func (a *App) engineConfig(ctx context.Context) (engine.Config, error) {
 	if err != nil {
 		return engine.Config{}, fmt.Errorf("settings locale: %w", err)
 	}
-	return engine.Config{Commands: c, Location: loc, Locale: a.formatLocale(ctx, l.Locale)}, nil
+	// The title rules and the "no title" text of the templates
+	// (users-and-roles.md, B5); the text is rendered in the language of the
+	// profile.
+	u, err := settings.Load(ctx, a.settings, settings.DefaultUsers())
+	if err != nil {
+		return engine.Config{}, fmt.Errorf("settings users: %w", err)
+	}
+	noTitle, err := a.messages.Render(l.Language, i18n.Message{Key: i18n.KeyNoTitle})
+	if err != nil {
+		return engine.Config{}, fmt.Errorf("render no title: %w", err)
+	}
+	return engine.Config{
+		Commands:   c,
+		Location:   loc,
+		Locale:     a.formatLocale(ctx, l.Locale),
+		TitleRules: u.TitleRules,
+		NoTitle:    noTitle,
+	}, nil
 }
 
 // formatLocale resolves the locale of the section to a locale of the core
