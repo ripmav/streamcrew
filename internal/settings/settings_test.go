@@ -229,6 +229,9 @@ func TestValidation(t *testing.T) {
 		settings.Users{TitleRules: []user.TitleRule{{Name: "", MinRole: role.Follower, MinMonths: 0}}},
 		settings.Users{TitleRules: []user.TitleRule{{Name: "Fan", MinRole: "vip", MinMonths: 0}}},
 		settings.Users{TitleRules: []user.TitleRule{{Name: "Fan", MinRole: role.Follower, MinMonths: -1}}},
+		settings.Timers{Interval: polydoc.Duration(-time.Second)},
+		settings.Timers{MinChatMessages: -1},
+		settings.Timers{Order: "sometimes"},
 	} {
 		assert.Error(t, settings.Save(ctx, svc, s), "%+v", s)
 	}
