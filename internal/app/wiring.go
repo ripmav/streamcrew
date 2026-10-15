@@ -100,6 +100,16 @@ func (p *platformSet) Connected() []connector.Platform {
 	return p.set.Connected()
 }
 
+// ConnectedNames returns the names of the platforms that are connected now.
+func (p *platformSet) ConnectedNames() []platform.Name {
+	conns := p.Connected()
+	names := make([]platform.Name, 0, len(conns))
+	for _, pl := range conns {
+		names = append(names, pl.Name())
+	}
+	return names
+}
+
 // All returns the platforms of the profile, in the order of the set.
 func (p *platformSet) All() []connector.Platform {
 	p.mu.RLock()
@@ -196,6 +206,13 @@ func (l *lateSwitches) SwitchGroup(ctx context.Context, groupID id.ID, sw comman
 	}
 	return s.SwitchGroup(ctx, groupID, sw)
 }
+
+// timerPlatforms adapts *platformSet to the Platforms port of the timer:
+// it names the connected platforms.
+type timerPlatforms struct{ set *platformSet }
+
+// Connected implements the Platforms port of the timer.
+func (t timerPlatforms) Connected() []platform.Name { return t.set.ConnectedNames() }
 
 // engineConfig reads the settings the engine reads for every instance: the
 // sections "commands" and "locale", and the time zone of the profile
@@ -296,4 +313,9 @@ func (a *App) channelPointsSettings(ctx context.Context) (settings.ChannelPoints
 // usersSettings reads the section "users" (roadmap 5.2.2, users-and-roles.md, B26).
 func (a *App) usersSettings(ctx context.Context) (settings.Users, error) {
 	return settings.Load(ctx, a.settings, settings.DefaultUsers())
+}
+
+// timersSettings reads the section "timers" (roadmap 5.4, commands.md, B21, B31).
+func (a *App) timersSettings(ctx context.Context) (settings.Timers, error) {
+	return settings.Load(ctx, a.settings, settings.DefaultTimers())
 }

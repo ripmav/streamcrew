@@ -529,6 +529,25 @@ func TestStreamSession(t *testing.T) {
 	})
 }
 
+// TestIsLive covers the live state the timer reads for "live only"
+// (roadmap 5.4): live is true only while the session's state is live, not
+// during the grace period.
+func TestIsLive(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		stop := run(t, f.service)
+		defer stop()
+		ctx := t.Context()
+
+		assert.False(t, f.service.IsLive(platform.Mock), "no session")
+		require.NoError(t, f.service.Stream(ctx, platform.Mock, true))
+		assert.True(t, f.service.IsLive(platform.Mock), "live")
+		require.NoError(t, f.service.Stream(ctx, platform.Mock, false))
+		assert.False(t, f.service.IsLive(platform.Mock), "grace is not live")
+	})
+}
+
 // TestGreetingsWithAnotherLiveStream covers the canceling of greetings:
 // only when no stream is live any more.
 func TestGreetingsWithAnotherLiveStream(t *testing.T) {

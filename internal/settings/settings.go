@@ -61,6 +61,7 @@ func New(repo Repository) (*Service, error) {
 		{Type: sectionGeneral, Version: 1, Decode: decode[General]},
 		{Type: sectionChat, Version: 1, Decode: decode[Chat]},
 		{Type: sectionUsers, Version: 1, Decode: decode[Users]},
+		{Type: sectionTimers, Version: 1, Decode: decode[Timers]},
 	} {
 		if err := r.Register(e); err != nil {
 			return nil, err
@@ -127,6 +128,7 @@ const (
 	sectionGeneral       = "general"
 	sectionChat          = "chat"
 	sectionUsers         = "users"
+	sectionTimers        = "timers"
 )
 
 // Limits of the section "events" (spec events.md, B5, B8, B10).
@@ -335,6 +337,69 @@ func (u Users) validate() error {
 		if r.MinMonths < 0 {
 			return fmt.Errorf("title rule %d: months %d must be 0 or more", i, r.MinMonths)
 		}
+	}
+	return nil
+}
+
+// TimerOrder is the order the timer runs its commands in one tick (roadmap
+// 5.4).
+type TimerOrder string
+
+// Orders of a timer tick (roadmap 5.4).
+const (
+	// OrderFixed runs the timer commands in their stored order (by ID).
+	OrderFixed TimerOrder = "fixed"
+	// OrderRandom runs them in a new random order every tick.
+	OrderRandom TimerOrder = "random"
+)
+
+// Valid reports whether o is a known order.
+func (o TimerOrder) Valid() bool {
+	switch o {
+	case OrderFixed, OrderRandom:
+		return true
+	default:
+		return false
+	}
+}
+
+// Timers is the global timer schedule of timer commands (roadmap 5.4,
+// spec commands.md, B21, B31). It applies to timer commands that have no
+// group with its own interval; such a group runs on its own schedule (B31).
+type Timers struct {
+	// Interval is how often the global timer fires; 0 turns the timer off.
+	Interval polydoc.Duration `json:"interval"`
+	// MinChatMessages is how many chat messages a platform needs in the
+	// last Interval before the timer fires there; 0 for no check.
+	MinChatMessages int `json:"minChatMessages"`
+	// LiveOnly keeps the timer from firing while a platform's stream is
+	// not live.
+	LiveOnly bool `json:"liveOnly"`
+	// Order is the order of the commands in one tick (OrderFixed or
+	// OrderRandom).
+	Order TimerOrder `json:"order"`
+}
+
+// DefaultTimers returns the defaults: the timer is off (roadmap 5.4).
+func DefaultTimers() Timers {
+	return Timers{Order: OrderFixed}
+}
+
+// DocType implements polydoc.Document.
+func (Timers) DocType() string { return sectionTimers }
+
+// Validate checks the section.
+func (t Timers) Validate() error { return t.validate() }
+
+func (t Timers) validate() error {
+	if t.Interval.Std() < 0 {
+		return fmt.Errorf("timer interval %s must be 0 or more", t.Interval.Std())
+	}
+	if t.MinChatMessages < 0 {
+		return fmt.Errorf("timer min chat messages %d must be 0 or more", t.MinChatMessages)
+	}
+	if !t.Order.Valid() {
+		return fmt.Errorf("timer order %q is unknown", t.Order)
 	}
 	return nil
 }

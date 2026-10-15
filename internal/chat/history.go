@@ -90,6 +90,20 @@ func (r *ring) get() []Entry {
 	return slices.Clone(r.es)
 }
 
+// countSince counts the entries since (inclusive) that are not from the bot;
+// the entries are stored oldest first.
+func (r *ring) countSince(since time.Time) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, e := range r.es {
+		if !e.Time.Before(since) && !e.FromBot {
+			n++
+		}
+	}
+	return n
+}
+
 // history returns the history of p, created if new.
 func (s *Service) history(p platform.Name) *ring {
 	s.mu.Lock()
@@ -137,6 +151,13 @@ func (s *Service) Record(ctx context.Context, e Entry) error {
 // History returns the chat history of p, oldest first (B12, B16).
 func (s *Service) History(p platform.Name) []Entry {
 	return s.history(p).get()
+}
+
+// MessagesSince counts the chat messages of p since (inclusive) that were
+// not written by the bot (roadmap 5.4): the timer uses it for its minimum
+// of chat messages. It is bounded by the history size.
+func (s *Service) MessagesSince(p platform.Name, since time.Time) int {
+	return s.history(p).countSince(since)
 }
 
 // protocolFile returns the protocol file of p, created if new (B17, B18).

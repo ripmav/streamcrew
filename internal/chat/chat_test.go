@@ -339,6 +339,26 @@ func TestRecord(t *testing.T) {
 	assert.Equal(t, "hi", f.svc.History(platform.Kick)[0].Text)
 }
 
+// TestMessagesSince covers the count of the non-bot messages since a time
+// (roadmap 5.4), bounded by the history.
+func TestMessagesSince(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := t.Context()
+	f.cfg.HistorySize = 10
+	for i := 1; i <= 5; i++ {
+		require.NoError(t, f.svc.Record(ctx, entry(i, fmt.Sprintf("msg %d", i))))
+	}
+	assert.Equal(t, 3, f.svc.MessagesSince(platform.Twitch, time.Unix(3, 0).UTC()), "since 3 inclusive")
+	assert.Equal(t, 5, f.svc.MessagesSince(platform.Twitch, time.Unix(1, 0).UTC()), "since 1 inclusive")
+	assert.Equal(t, 0, f.svc.MessagesSince(platform.Twitch, time.Unix(6, 0).UTC()), "nothing since 6")
+	bot := entry(6, "bot msg")
+	bot.FromBot = true
+	require.NoError(t, f.svc.Record(ctx, bot))
+	assert.Equal(t, 5, f.svc.MessagesSince(platform.Twitch, time.Unix(1, 0).UTC()), "the bot is excluded")
+	assert.Equal(t, 0, f.svc.MessagesSince(platform.Kick, time.Unix(1, 0).UTC()), "per platform")
+}
+
 // TestRecordSettings covers the settings error of Record.
 func TestRecordSettings(t *testing.T) {
 	t.Parallel()

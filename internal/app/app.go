@@ -61,6 +61,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/store"
 	"github.com/ripmav/streamcrew/internal/supervisor"
 	"github.com/ripmav/streamcrew/internal/template"
+	timersvc "github.com/ripmav/streamcrew/internal/timer"
 	"github.com/ripmav/streamcrew/internal/twitch"
 	"github.com/ripmav/streamcrew/internal/userservice"
 	"github.com/ripmav/streamcrew/internal/vault"
@@ -139,6 +140,7 @@ type App struct {
 	commands     *command.Service
 	engine       *engine.Engine
 	events       *eventservice.Service
+	timer        *timersvc.Service
 	userSvc      *userservice.Service
 	catalog      *event.Catalog
 	// messages renders the localized texts of the core (ADR-0022).
@@ -396,6 +398,17 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if err != nil {
 		return a, err
 	}
+	a.timer, err = timersvc.New(timersvc.Ports{
+		Commands:  a.commands,
+		Engine:    a.engine,
+		Platforms: timerPlatforms{set: a.platforms},
+		Live:      a.events,
+		Messages:  a.chat,
+		Settings:  a.timersSettings,
+	}, timersvc.WithLogger(component(logger, "timer")))
+	if err != nil {
+		return a, err
+	}
 	a.sup = supervisor.New(component(logger, "supervisor"),
 		supervisor.WithStatusFunc(a.onStatus),
 		supervisor.WithShutdownTimeout(cfg.ShutdownTimeout),
@@ -414,6 +427,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		a.sup.Add("backup", scheduler),
 		a.sup.Add("http", a.http, supervisor.WithCritical()),
 		a.sup.Add("events", a.events),
+		a.sup.Add("timer", a.timer),
 		a.sup.Add("users", a.userSvc),
 	)
 	// The platform stops after the engine on shutdown, so that the engine

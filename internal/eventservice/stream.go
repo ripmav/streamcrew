@@ -62,6 +62,16 @@ func (s *Service) Stream(ctx context.Context, p platform.Name, live bool) error 
 	return nil
 }
 
+// IsLive reports whether the stream of p is live now (roadmap 5.4): the
+// timer uses it for "live only". A session without the live state, e.g.
+// a platform that never streamed in this run, is not live.
+func (s *Service) IsLive(p platform.Name) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ses, ok := s.sessions[p]
+	return ok && ses.State == stream.StateLive
+}
+
 // sessionLocked returns the session of p, the initial one if p never had
 // one. s.mu is held.
 func (s *Service) sessionLocked(p platform.Name) *session {
