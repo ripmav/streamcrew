@@ -37,10 +37,12 @@ type memStore struct {
 	excluded map[id.ID]bool
 	sessions map[platform.Name]stream.Session
 	data     map[string]user.PlatformData
+	users    map[id.ID]user.User
+	ident    map[string]id.ID
 }
 
 func newMemStore() *memStore {
-	return &memStore{stats: make(map[id.ID]user.Stats), regular: make(map[id.ID]bool), excluded: make(map[id.ID]bool), sessions: make(map[platform.Name]stream.Session), data: make(map[string]user.PlatformData)}
+	return &memStore{stats: make(map[id.ID]user.Stats), regular: make(map[id.ID]bool), excluded: make(map[id.ID]bool), sessions: make(map[platform.Name]stream.Session), data: make(map[string]user.PlatformData), users: make(map[id.ID]user.User), ident: make(map[string]id.ID)}
 }
 
 func (m *memStore) AddStats(_ context.Context, deltas []user.StatsDelta) error {
@@ -115,12 +117,88 @@ func (m *memStore) ListUsersRegular(context.Context) ([]user.RegularSweep, error
 func (m *memStore) UpdateUser(_ context.Context, u id.ID, fn func(*user.User) error) (user.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	loaded := user.User{ID: u, Regular: m.regular[u], Stats: m.stats[u]}
+	loaded, ok := m.users[u]
+	if !ok {
+		loaded = user.User{ID: u}
+	}
+	loaded.Regular = m.regular[u]
+	loaded.Stats = m.stats[u]
 	if err := fn(&loaded); err != nil {
 		return user.User{}, err
 	}
+	m.users[loaded.ID] = loaded
 	m.regular[loaded.ID] = loaded.Regular
+	m.stats[loaded.ID] = loaded.Stats
 	return loaded, nil
+}
+
+// userOf returns the stored user, for the tests.
+func (m *memStore) userOf(u id.ID) user.User {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.users[u]
+}
+
+// UpsertIdentity implements the Store port: it stores an account like a
+// newly seen one, or updates its names if the core knows it (B4).
+func (m *memStore) UpsertIdentity(_ context.Context, ident user.Identity) (user.User, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	key := string(ident.Platform) + "/" + ident.PlatformUserID
+	if uid, ok := m.ident[key]; ok {
+		u := m.users[uid]
+		for i := range u.Identities {
+			if u.Identities[i].Platform == ident.Platform && u.Identities[i].PlatformUserID == ident.PlatformUserID {
+				u.Identities[i].Login = ident.Login
+				u.Identities[i].DisplayName = ident.DisplayName
+			}
+		}
+		m.users[uid] = u
+		return u, false, nil
+	}
+	uid := id.New()
+	u := user.User{ID: uid, Identities: []user.Identity{ident}}
+	m.users[uid] = u
+	m.ident[key] = uid
+	return u, true, nil
+}
+
+// UserByLogin implements the Store port, case-insensitively for ASCII.
+func (m *memStore) UserByLogin(_ context.Context, p platform.Name, login string) (user.User, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, u := range m.users {
+		for _, i := range u.Identities {
+			if i.Platform == p && strings.EqualFold(i.Login, login) {
+				return u, true, nil
+			}
+		}
+	}
+	return user.User{}, false, nil
+}
+
+// UserByPlatformID implements the Store port.
+func (m *memStore) UserByPlatformID(_ context.Context, p platform.Name, platformUserID string) (user.User, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if uid, ok := m.ident[string(p)+"/"+platformUserID]; ok {
+		return m.users[uid], true, nil
+	}
+	return user.User{}, false, nil
+}
+
+// ResetStrikes implements the Store port (B84).
+func (m *memStore) ResetStrikes(context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for uid, u := range m.users {
+		u.Stats.Strikes = 0
+		m.users[uid] = u
+		st := m.stats[uid]
+		st.Strikes = 0
+		m.stats[uid] = st
+	}
+	return nil
 }
 
 func (m *memStore) SetPlatformData(_ context.Context, p platform.Name, platformUserID string, data user.PlatformData) error {
@@ -182,16 +260,25 @@ func stValue(stat user.Stat, st user.Stats) int64 {
 }
 
 // fakePlatform is the platform adapter of the tests: the PlatformData
-// capability works, the rest stays unused. mu guards calls and answer,
-// which the service writes from its goroutine and the test reads from its
-// own.
+// capability works, and the lookup, the channel's accounts and the chatters
+// work when the test turns them on. mu guards calls and answer, which the
+// service writes from its goroutine and the test reads from its own.
 type fakePlatform struct {
-	mu     sync.Mutex
-	calls  int
-	answer user.PlatformData
+	mu        sync.Mutex
+	calls     int
+	answer    user.PlatformData
+	connected bool
+	byLogin   map[string]user.Identity
+	byID      map[string]user.Identity
+	lookupErr error
+	streamer  user.Identity
+	bot       user.Identity
+	chatters  []user.Identity
 }
 
-func newFakePlatform() *fakePlatform { return &fakePlatform{} }
+func newFakePlatform() *fakePlatform {
+	return &fakePlatform{byLogin: make(map[string]user.Identity), byID: make(map[string]user.Identity)}
+}
 
 func (f *fakePlatform) setAnswer(data user.PlatformData) {
 	f.mu.Lock()
@@ -205,6 +292,39 @@ func (f *fakePlatform) callsCount() int {
 	return f.calls
 }
 
+// connect makes the platform report its streamer as connected (B62) and
+// keeps the lookup of the platform available.
+func (f *fakePlatform) connect(streamer, bot user.Identity) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.connected = true
+	f.streamer = streamer
+	f.bot = bot
+}
+
+// user puts an account of the platform, for the lookup by login and by ID.
+func (f *fakePlatform) user(ident user.Identity) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.byLogin[strings.ToLower(ident.Login)] = ident
+	f.byID[ident.PlatformUserID] = ident
+}
+
+// setLookupError makes the lookup over the platform fail with err, for the
+// B91 error case.
+func (f *fakePlatform) setLookupError(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.lookupErr = err
+}
+
+// setChatters sets the accounts in the chat, for the Chatters capability.
+func (f *fakePlatform) setChatters(cs ...user.Identity) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.chatters = cs
+}
+
 // UserPlatformData implements connector.PlatformData.
 func (f *fakePlatform) UserPlatformData(_ context.Context, _ string) (user.PlatformData, error) {
 	f.mu.Lock()
@@ -213,15 +333,67 @@ func (f *fakePlatform) UserPlatformData(_ context.Context, _ string) (user.Platf
 	return f.answer, nil
 }
 
-// The rest of connector.Platform stays unused by the service.
-func (f *fakePlatform) Name() platform.Name              { return platform.Mock }
-func (f *fakePlatform) Status() connector.Status         { return connector.Status{} }
+// The rest of connector.Platform for the lookup tests.
+func (f *fakePlatform) Name() platform.Name { return platform.Mock }
+func (f *fakePlatform) Status() connector.Status {
+	return connector.Status{Streamer: f.connected, Bot: f.connected}
+}
 func (f *fakePlatform) Chat() connector.Chat             { return nil }
 func (f *fakePlatform) Moderation() connector.Moderation { return nil }
-func (f *fakePlatform) Users() connector.Users           { return nil }
+func (f *fakePlatform) Users() connector.Users           { return fakeUsers{f} }
 func (f *fakePlatform) Channel(context.Context) (connector.ChannelInfo, error) {
 	return connector.ChannelInfo{}, nil
 }
+
+// Identity implements connector.Identities for the channel's accounts.
+func (f *fakePlatform) Identity(a connector.Account) (user.Identity, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	switch a {
+	case connector.AccountStreamer:
+		return f.streamer, f.streamer.PlatformUserID != ""
+	case connector.AccountBot:
+		return f.bot, f.bot.PlatformUserID != ""
+	}
+	return user.Identity{}, false
+}
+
+// Chatters implements connector.Chatters for the chat of the platform.
+func (f *fakePlatform) Chatters(context.Context) ([]user.Identity, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.chatters, nil
+}
+
+// fakeUsers is the connector.Users of the test platform.
+type fakeUsers struct{ p *fakePlatform }
+
+func (u fakeUsers) UserByLogin(_ context.Context, login string) (user.Identity, error) {
+	u.p.mu.Lock()
+	defer u.p.mu.Unlock()
+	if u.p.lookupErr != nil {
+		return user.Identity{}, u.p.lookupErr
+	}
+	if i, ok := u.p.byLogin[strings.ToLower(login)]; ok {
+		return i, nil
+	}
+	return user.Identity{}, connector.ErrUnknownUser
+}
+
+func (u fakeUsers) UserByID(_ context.Context, platformUserID string) (user.Identity, error) {
+	u.p.mu.Lock()
+	defer u.p.mu.Unlock()
+	if u.p.lookupErr != nil {
+		return user.Identity{}, u.p.lookupErr
+	}
+	if i, ok := u.p.byID[platformUserID]; ok {
+		return i, nil
+	}
+	return user.Identity{}, connector.ErrUnknownUser
+}
+
+// All implements userservice.Platforms for platform.Mock only.
+func (f *fakePlatform) All() []connector.Platform { return []connector.Platform{f} }
 
 // Platform implements userservice.Platforms for platform.Mock only.
 func (f *fakePlatform) Platform(p platform.Name) (connector.Platform, bool) {
@@ -573,16 +745,25 @@ func TestRankings(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	store := newMemStore()
+	plats := newFakePlatform()
+	// The streamer's and the bot's accounts on the platform, which the core
+	// knows; the service resolves them for the exclusion (roadmap 5.2.5).
+	streamerIdent := user.Identity{Platform: platform.Mock, PlatformUserID: "s1", Login: "streamy", DisplayName: "streamy"}
+	botIdent := user.Identity{Platform: platform.Mock, PlatformUserID: "b1", Login: "botbot", DisplayName: "botbot"}
+	plats.connect(streamerIdent, botIdent)
+	streamer, _, err := store.UpsertIdentity(ctx, streamerIdent)
+	require.NoError(t, err)
+	bot, _, err := store.UpsertIdentity(ctx, botIdent)
+	require.NoError(t, err)
 
 	alice, bob, carol := id.New(), id.New(), id.New()
-	streamer, bot := id.New(), id.New()
 	dan := id.New()
 	require.NoError(t, store.AddStats(ctx, []user.StatsDelta{
 		{UserID: alice, Messages: 30},
 		{UserID: bob, Messages: 20},
 		{UserID: carol, Messages: 10},
-		{UserID: streamer, Messages: 999},
-		{UserID: bot, Messages: 998},
+		{UserID: streamer.ID, Messages: 999},
+		{UserID: bot.ID, Messages: 998},
 		{UserID: dan, Messages: 0},
 	}))
 	// excl is exempt from rankings (B7).
@@ -593,12 +774,10 @@ func TestRankings(t *testing.T) {
 	store.mu.Unlock()
 
 	svc, err := userservice.New(userservice.Ports{
-		Store:    store,
-		Bus:      event.NewBus(nil),
-		Settings: func(context.Context) (settings.Users, error) { return settings.Users{}, nil },
-		AccountUsers: func(context.Context) ([]id.ID, error) {
-			return []id.ID{streamer, bot}, nil
-		},
+		Store:     store,
+		Bus:       event.NewBus(nil),
+		Settings:  func(context.Context) (settings.Users, error) { return settings.Users{}, nil },
+		Platforms: plats,
 	})
 	require.NoError(t, err)
 

@@ -105,15 +105,6 @@ type Platforms interface {
 	Platform(name platform.Name) (p connector.Platform, ok bool)
 }
 
-// Users are the users the core knows; the user service implements it
-// (roadmap 5.2).
-type Users interface {
-	// UpsertIdentity stores an account found over a platform like a newly
-	// seen one, or updates its names if the core knows it (spec
-	// users-and-roles.md, B4); it returns the user.
-	UpsertIdentity(ctx context.Context, ident user.Identity) (u user.User, created bool, err error)
-}
-
 // Strikes change the strikes of users (B84); the user service implements
 // it (roadmap 5.2).
 type Strikes interface {
@@ -122,6 +113,14 @@ type Strikes interface {
 	UpdateUser(ctx context.Context, userID id.ID, fn func(*user.User) error) (user.User, error)
 	// ResetStrikes sets the strikes of every user to 0.
 	ResetStrikes(ctx context.Context) error
+}
+
+// Lookup finds a user on a platform without storing an account found over
+// the platform (actions.md, B81); the user service implements it.
+type Lookup interface {
+	// Lookup finds the user with the login name on p, regardless of case,
+	// or with the platform ID; ok is false if there is none.
+	Lookup(ctx context.Context, p platform.Name, name string) (u user.User, ok bool, err error)
 }
 
 // ChatMute is the muted chat (B85): while it is on, the chat service
@@ -141,9 +140,8 @@ type Ports struct {
 	Templates *template.Engine
 	// Platforms are the platforms the action acts on.
 	Platforms Platforms
-	// Users finds the users the core knows and stores those found over a
-	// platform for a strike.
-	Users Users
+	// Lookup finds the user the kinds act on, without storing (B81).
+	Lookup Lookup
 	// Strikes changes strikes.
 	Strikes Strikes
 	// Mute is the muted chat.
@@ -168,8 +166,8 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("moderation action types: no template engine")
 	case p.Platforms == nil:
 		return nil, errors.New("moderation action types: no platforms")
-	case p.Users == nil:
-		return nil, errors.New("moderation action types: no users")
+	case p.Lookup == nil:
+		return nil, errors.New("moderation action types: no user lookup")
 	case p.Strikes == nil:
 		return nil, errors.New("moderation action types: no strikes")
 	case p.Mute == nil:
@@ -414,17 +412,40 @@ func (m Moderation) moderate(ctx context.Context, run *engine.Run, targets []con
 		return connector.JoinErrors("failed", targets, errs)
 	}
 	for _, target := range targets {
-		on := []connector.Platform{target}
-		ident, err := connector.FindAccount(ctx, run, target, in.login)
-		switch {
-		case errors.Is(err, connector.ErrUnknownUser):
+		if in.login == "" {
 			continue
+		}
+		on := []connector.Platform{target}
+		u, ok, err := m.ports.Lookup.Lookup(ctx, target.Name(), in.login)
+		switch {
 		case err != nil:
 			return field("user", connector.JoinErrors("failed", on, []error{err}))
+		case !ok:
+			continue
+		}
+		ident, ok := identityOn(u, target.Name(), in.login)
+		if !ok {
+			continue
 		}
 		return connector.JoinErrors("failed", on, []error{m.act(ctx, target.Moderation(), ch, &ident, in)})
 	}
 	return field("user", unknown(in.login, p.Platform))
+}
+
+// identityOn returns the account of u on platform p: the one with the login
+// name login, regardless of case, or the first one on the platform.
+func identityOn(u user.User, p platform.Name, login string) (user.Identity, bool) {
+	for _, i := range u.Identities {
+		if i.Platform == p && strings.EqualFold(i.Login, login) {
+			return i, true
+		}
+	}
+	for _, i := range u.Identities {
+		if i.Platform == p {
+			return i, true
+		}
+	}
+	return user.Identity{}, false
 }
 
 // act does what the kind says on one platform, in the channel ch; to is the
@@ -493,31 +514,13 @@ func (m Moderation) addStrikes(ctx context.Context, userID id.ID) error {
 
 // find returns the user with the login name on platform name: a known one,
 // found through the lookup of the run (spec command-engine.md, B17), or one
-// the platform reports if it is connected, which is then stored; ok is
-// false if there is none.
+// the platform reports, which the user service stores (B91); ok is false
+// if there is none.
 func (m Moderation) find(ctx context.Context, run *engine.Run, name platform.Name, login string) (u user.User, ok bool, err error) {
 	if login == "" {
 		return user.User{}, false, nil
 	}
-	if u, ok, err := run.UserByName(ctx, name, login); err != nil || ok {
-		return u, ok, err
-	}
-	target, ok := m.ports.Platforms.Platform(name)
-	if !ok || !target.Status().Connected() {
-		return user.User{}, false, nil
-	}
-	ident, err := target.Users().UserByLogin(ctx, login)
-	if errors.Is(err, connector.ErrUnknownUser) {
-		return user.User{}, false, nil
-	}
-	if err != nil {
-		return user.User{}, false, fmt.Errorf("find %q on %s: %w", login, name, err)
-	}
-	u, _, err = m.ports.Users.UpsertIdentity(ctx, ident)
-	if err != nil {
-		return user.User{}, false, fmt.Errorf("store %q of %s: %w", login, name, err)
-	}
-	return u, true, nil
+	return run.UserByName(ctx, name, login)
 }
 
 // unknown returns the error of a user that was not found (B81).

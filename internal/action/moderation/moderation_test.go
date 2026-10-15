@@ -58,14 +58,27 @@ func (l *logs) String() string {
 	return l.buf.String()
 }
 
-// store is a fake of the users the core knows, with their strikes.
+// store is a fake of the users the core knows, with their strikes; it
+// plays the user service for the run's lookup, so a user the core does not
+// know is found over the platform and stored (actions.md, B91).
 type store struct {
-	mu    sync.Mutex
-	users []user.User
-	err   error
+	mu        sync.Mutex
+	users     []user.User
+	err       error
+	platforms *connector.Set
 }
 
-func (s *store) UserByName(_ context.Context, p platform.Name, name string) (user.User, bool, error) {
+func (s *store) UserByName(ctx context.Context, p platform.Name, name string) (user.User, bool, error) {
+	return s.search(ctx, p, name, true)
+}
+
+// Lookup implements the moderation Lookup port: as UserByName, but without
+// storing an account found over the platform (actions.md, B81).
+func (s *store) Lookup(ctx context.Context, p platform.Name, name string) (user.User, bool, error) {
+	return s.search(ctx, p, name, false)
+}
+
+func (s *store) search(ctx context.Context, p platform.Name, name string, store bool) (user.User, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.err != nil {
@@ -78,12 +91,30 @@ func (s *store) UserByName(_ context.Context, p platform.Name, name string) (use
 			return u, true, nil
 		}
 	}
+	pl, pok := s.platforms.Platform(p)
+	if pok && pl.Status().Connected() {
+		ident, err := pl.Users().UserByLogin(ctx, name)
+		if err != nil {
+			if errors.Is(err, connector.ErrUnknownUser) {
+				return user.User{}, false, nil
+			}
+			return user.User{}, false, err
+		}
+		if !store {
+			return user.User{Identities: []user.Identity{ident}}, true, nil
+		}
+		return s.upsertLocked(ident)
+	}
 	return user.User{}, false, nil
 }
 
 func (s *store) UpsertIdentity(_ context.Context, ident user.Identity) (user.User, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.upsertLocked(ident)
+}
+
+func (s *store) upsertLocked(ident user.Identity) (user.User, bool, error) {
 	for _, u := range s.users {
 		for _, i := range u.Identities {
 			if i.Platform == ident.Platform && i.PlatformUserID == ident.PlatformUserID {
@@ -221,7 +252,8 @@ func newFixture(t *testing.T) *fixture {
 	// first (B82).
 	set, err := connector.NewSet(f.kick, f.youtube, f.twitch)
 	require.NoError(t, err)
-	f.reg = registry(t, moderation.Ports{Platforms: set, Users: f.store, Strikes: f.store, Mute: f.mute, General: f.general.get},
+	f.store.platforms = set
+	f.reg = registry(t, moderation.Ports{Platforms: set, Lookup: f.store, Strikes: f.store, Mute: f.mute, General: f.general.get},
 		slog.New(slog.NewTextHandler(f.logs, nil)))
 	// The run finds known users through the engine (spec command-engine.md,
 	// B17).
@@ -285,7 +317,7 @@ func timer() engine.Params {
 
 func TestConformance(t *testing.T) {
 	t.Parallel()
-	reg := registry(t, moderation.Ports{Platforms: &connector.Set{}, Users: &store{}, Strikes: &store{}, Mute: &mute{}, General: staticGeneral},
+	reg := registry(t, moderation.Ports{Platforms: &connector.Set{}, Lookup: &store{}, Strikes: &store{}, Mute: &mute{}, General: staticGeneral},
 		slog.New(slog.DiscardHandler))
 	d, ok := reg.Descriptor(moderation.TypeModeration)
 	require.True(t, ok)
@@ -531,14 +563,14 @@ func TestLookupFails(t *testing.T) {
 		f.store.err = errors.New("database locked")
 		in := f.start(onTwitch(), f.on(moderation.KindBan, "bob"), f.on(moderation.KindAddStrike, "bob"))
 		require.Len(t, in.Errors, 2)
-		assert.Equal(t, `user: failed on twitch: twitch: find account "bob" on twitch: look up user "bob" on twitch after 3 attempts: database locked`, in.Errors[0].Message)
+		assert.Equal(t, `user: failed on twitch: twitch: database locked`, in.Errors[0].Message)
 		assert.Equal(t, `user: look up user "bob" on twitch after 3 attempts: database locked`, in.Errors[1].Message)
 		assert.Empty(t, f.twitch.Calls())
 	})
 }
 
 // TestTimeoutRange covers actions.md B4 and B80: a duration from a template
-// outside the range lets the action fail before the platform is asked.
+// outside the range lets the action fail without acting on the platform.
 func TestTimeoutRange(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
@@ -550,7 +582,7 @@ func TestTimeoutRange(t *testing.T) {
 			require.Len(t, in.Errors, 1, arg)
 			assert.True(t, strings.HasPrefix(in.Errors[0].Message, "seconds: invalid action: "), in.Errors[0].Message)
 		}
-		assert.Empty(t, f.twitch.Calls())
+		assert.NotContains(t, f.twitch.Ops(), connectortest.OpTimeout, "no timeout is sent")
 	})
 }
 
@@ -648,7 +680,7 @@ func TestPorts(t *testing.T) {
 	full := moderation.Ports{
 		Templates: template.New(nil),
 		Platforms: &connector.Set{},
-		Users:     &store{},
+		Lookup:    &store{},
 		Strikes:   &store{},
 		Mute:      &mute{},
 		General:   staticGeneral,
@@ -659,7 +691,7 @@ func TestPorts(t *testing.T) {
 	for name, edit := range map[string]func(*moderation.Ports){
 		"templates": func(p *moderation.Ports) { p.Templates = nil },
 		"platforms": func(p *moderation.Ports) { p.Platforms = nil },
-		"users":     func(p *moderation.Ports) { p.Users = nil },
+		"lookup":    func(p *moderation.Ports) { p.Lookup = nil },
 		"strikes":   func(p *moderation.Ports) { p.Strikes = nil },
 		"mute":      func(p *moderation.Ports) { p.Mute = nil },
 		"general":   func(p *moderation.Ports) { p.General = nil },

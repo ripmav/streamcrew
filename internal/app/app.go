@@ -128,7 +128,6 @@ type App struct {
 	// muted chat, and the template engine, the action types, the command
 	// service, the engine and the event service.
 	platforms  *platformSet
-	users      *userLookup
 	chat       *chatsvc.Service
 	programEnv []string
 	// systemLocale is the locale of the environment, read once at start
@@ -282,7 +281,21 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	// The platforms of the profile are built after the event service,
 	// which is their receiver; until then the set is empty.
 	a.platforms = newPlatformSet()
-	a.users = &userLookup{store: a.store, set: a.platforms}
+	// The user service is the implementation of the user ports of the core
+	// (roadmap 5.2.6): it counts the user statistics and the watch time
+	// from the events on the bus (5.2.1), evaluates the regular role and
+	// keeps the follow and subscription data of the identities fresh
+	// (5.2.2), and looks up users by login name, over the platform for
+	// unknown ones (command-engine.md, B17; actions.md, B91), the channel's
+	// accounts and the strikes.
+	if a.userSvc, err = userservice.New(userservice.Ports{
+		Store:     userStore{a.store},
+		Bus:       a.bus,
+		Settings:  a.usersSettings,
+		Platforms: a.platforms,
+	}, userservice.WithLogger(component(logger, "users"))); err != nil {
+		return a, err
+	}
 	a.chat, err = chatsvc.New(chatsvc.Ports{
 		Platforms: a.platforms,
 		Settings:  a.chatSettings,
@@ -303,7 +316,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Language:  localeLanguage{settings: a.settings},
 		Platforms: a.platforms,
 		Cooldowns: a.store,
-		Streamer:  a.users,
+		Streamer:  a.userSvc,
 		General:   a.generalSettings,
 		Chat:      a.chatSettings,
 		Logger:    component(logger, "requirement"),
@@ -318,7 +331,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	identifiers, err := template.NewRegistry(
 		template.CharacterFamily(),
 		template.RunFamily(),
-		template.UserFamily(a.users),
+		template.UserFamily(a.userSvc),
 		template.DateTimeFamily(),
 		template.MessageFamily(),
 		template.StreamFamily(streamStates{set: a.platforms}),
@@ -366,7 +379,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		engine.WithConfig(a.engineConfig),
 		engine.WithShutdownTimeout(cfg.ShutdownTimeout),
 		engine.WithRequirements(requirements),
-		engine.WithUsers(a.users),
+		engine.WithUsers(a.userSvc),
 	)
 	if err != nil {
 		return a, err
@@ -383,20 +396,6 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if err != nil {
 		return a, err
 	}
-	// The user service counts the user statistics and the watch time from
-	// the events on the bus, evaluates the regular role, and keeps the
-	// follow and subscription data of the identities fresh (roadmap
-	// 5.2.1 and 5.2.2).
-	if a.userSvc, err = userservice.New(userservice.Ports{
-		Store:        a.store,
-		Bus:          a.bus,
-		Settings:     a.usersSettings,
-		Platforms:    a.platforms,
-		AccountUsers: a.users.accountUserIDs,
-	}, userservice.WithLogger(component(logger, "users"))); err != nil {
-		return a, err
-	}
-
 	a.sup = supervisor.New(component(logger, "supervisor"),
 		supervisor.WithStatusFunc(a.onStatus),
 		supervisor.WithShutdownTimeout(cfg.ShutdownTimeout),
@@ -493,8 +492,8 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches)
 	add(moderation.Descriptors(moderation.Ports{
 		Templates: a.templates,
 		Platforms: a.platforms,
-		Users:     a.users,
-		Strikes:   a.store,
+		Lookup:    a.userSvc,
+		Strikes:   a.userSvc,
 		Mute:      a.chat,
 		General:   a.generalSettings,
 		Logger:    component(a.logger, "action"),
@@ -509,8 +508,6 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches)
 	}))
 	add(users.Descriptors(users.Ports{
 		Templates: a.templates,
-		Platforms: a.platforms,
-		Users:     a.users,
 		Logger:    component(a.logger, "action"),
 	}))
 	add(values.Descriptors(values.Ports{
