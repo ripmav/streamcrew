@@ -388,10 +388,11 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	// follow and subscription data of the identities fresh (roadmap
 	// 5.2.1 and 5.2.2).
 	if a.userSvc, err = userservice.New(userservice.Ports{
-		Store:     a.store,
-		Bus:       a.bus,
-		Settings:  a.usersSettings,
-		Platforms: a.platforms,
+		Store:        a.store,
+		Bus:          a.bus,
+		Settings:     a.usersSettings,
+		Platforms:    a.platforms,
+		AccountUsers: a.users.accountUserIDs,
 	}, userservice.WithLogger(component(logger, "users"))); err != nil {
 		return a, err
 	}

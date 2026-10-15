@@ -320,3 +320,81 @@ func TestListUsersRegular(t *testing.T) {
 		{ID: bob.ID, Regular: false, WatchMinutes: 125},
 	}, rows)
 }
+
+// TestTopUsers covers the top lists (roadmap 5.2.5): the order is by value
+// down, ties by ID, excluded users (B7) and zero values never appear, and
+// the list has at most n entries.
+func TestTopUsers(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+
+	ada, _, err := s.UpsertIdentity(ctx, twitchIdentity("1001", "ada"))
+	require.NoError(t, err)
+	bob, _, err := s.UpsertIdentity(ctx, twitchIdentity("1002", "bob"))
+	require.NoError(t, err)
+	carol, _, err := s.UpsertIdentity(ctx, twitchIdentity("1003", "carol"))
+	require.NoError(t, err)
+	excl, _, err := s.UpsertIdentity(ctx, twitchIdentity("1004", "excl"))
+	require.NoError(t, err)
+	require.NoError(t, s.AddStats(ctx, []user.StatsDelta{
+		{UserID: ada.ID, WatchMinutes: 125, Messages: 3},
+		{UserID: bob.ID, WatchMinutes: 125, Messages: 30},
+		{UserID: carol.ID, WatchMinutes: 60, Messages: 30}, // 0 watch tie below
+		{UserID: excl.ID, WatchMinutes: 999, Messages: 30},
+	}))
+	// carol has zero messages below via a second user; make dan zero.
+	dan, _, err := s.UpsertIdentity(ctx, twitchIdentity("1005", "dan"))
+	require.NoError(t, err)
+	require.NoError(t, s.AddStats(ctx, []user.StatsDelta{{UserID: dan.ID}}))
+	// excl is exempt from rankings (B7).
+	_, err = s.UpdateUser(ctx, excl.ID, func(u *user.User) error {
+		u.Excluded = true
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Top 3 by watch minutes: bob and ada (125, tie by ID), then carol (60);
+	// excl (999, but B7) and dan (0) never appear.
+	top, err := s.TopUsers(ctx, user.StatWatchMinutes, 3)
+	require.NoError(t, err)
+	assert.Equal(t, []id.ID{ada.ID, bob.ID, carol.ID}, ids(top))
+	assert.Equal(t, []int64{125, 125, 60}, vals(top))
+
+	// Limit 2: the two 125s.
+	top, err = s.TopUsers(ctx, user.StatWatchMinutes, 2)
+	require.NoError(t, err)
+	assert.Equal(t, []id.ID{ada.ID, bob.ID}, ids(top))
+
+	// Top 2 by messages: bob and carol (30, tie by ID); ada (3) third, dan 0.
+	top, err = s.TopUsers(ctx, user.StatMessages, 2)
+	require.NoError(t, err)
+	assert.Equal(t, []id.ID{bob.ID, carol.ID}, ids(top))
+
+	// A statistic nobody has: empty, not an error.
+	top, err = s.TopUsers(ctx, user.StatCommandsRun, 5)
+	require.NoError(t, err)
+	assert.Empty(t, top)
+
+	// Invalid arguments.
+	_, err = s.TopUsers(ctx, user.Stat("donated_cents"), 1)
+	require.ErrorIs(t, err, user.ErrInvalid)
+	_, err = s.TopUsers(ctx, user.StatWatchMinutes, 0)
+	require.ErrorIs(t, err, user.ErrInvalid)
+}
+
+func ids(top []user.Ranked) []id.ID {
+	out := make([]id.ID, 0, len(top))
+	for _, r := range top {
+		out = append(out, r.User.ID)
+	}
+	return out
+}
+
+func vals(top []user.Ranked) []int64 {
+	out := make([]int64, 0, len(top))
+	for _, r := range top {
+		out = append(out, r.Value)
+	}
+	return out
+}

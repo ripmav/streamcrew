@@ -382,6 +382,194 @@ func (q *Queries) ResetStrikes(ctx context.Context) error {
 	return err
 }
 
+const topUsersCommandsRun = `-- name: TopUsersCommandsRun :many
+SELECT u.id AS id, s.commands_run AS val
+FROM user_stats s
+JOIN users u ON u.id = s.user_id
+WHERE u.excluded = 0 AND s.commands_run > 0
+ORDER BY s.commands_run DESC, u.id
+LIMIT ?
+`
+
+type TopUsersCommandsRunRow struct {
+	ID  string
+	Val int64
+}
+
+func (q *Queries) TopUsersCommandsRun(ctx context.Context, limit int64) ([]TopUsersCommandsRunRow, error) {
+	rows, err := q.db.QueryContext(ctx, topUsersCommandsRun, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TopUsersCommandsRunRow{}
+	for rows.Next() {
+		var i TopUsersCommandsRunRow
+		if err := rows.Scan(&i.ID, &i.Val); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const topUsersMentions = `-- name: TopUsersMentions :many
+SELECT u.id AS id, s.mentions AS val
+FROM user_stats s
+JOIN users u ON u.id = s.user_id
+WHERE u.excluded = 0 AND s.mentions > 0
+ORDER BY s.mentions DESC, u.id
+LIMIT ?
+`
+
+type TopUsersMentionsRow struct {
+	ID  string
+	Val int64
+}
+
+func (q *Queries) TopUsersMentions(ctx context.Context, limit int64) ([]TopUsersMentionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, topUsersMentions, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TopUsersMentionsRow{}
+	for rows.Next() {
+		var i TopUsersMentionsRow
+		if err := rows.Scan(&i.ID, &i.Val); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const topUsersMessages = `-- name: TopUsersMessages :many
+SELECT u.id AS id, s.messages AS val
+FROM user_stats s
+JOIN users u ON u.id = s.user_id
+WHERE u.excluded = 0 AND s.messages > 0
+ORDER BY s.messages DESC, u.id
+LIMIT ?
+`
+
+type TopUsersMessagesRow struct {
+	ID  string
+	Val int64
+}
+
+func (q *Queries) TopUsersMessages(ctx context.Context, limit int64) ([]TopUsersMessagesRow, error) {
+	rows, err := q.db.QueryContext(ctx, topUsersMessages, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TopUsersMessagesRow{}
+	for rows.Next() {
+		var i TopUsersMessagesRow
+		if err := rows.Scan(&i.ID, &i.Val); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const topUsersStreamsWatched = `-- name: TopUsersStreamsWatched :many
+SELECT u.id AS id, s.streams_watched AS val
+FROM user_stats s
+JOIN users u ON u.id = s.user_id
+WHERE u.excluded = 0 AND s.streams_watched > 0
+ORDER BY s.streams_watched DESC, u.id
+LIMIT ?
+`
+
+type TopUsersStreamsWatchedRow struct {
+	ID  string
+	Val int64
+}
+
+func (q *Queries) TopUsersStreamsWatched(ctx context.Context, limit int64) ([]TopUsersStreamsWatchedRow, error) {
+	rows, err := q.db.QueryContext(ctx, topUsersStreamsWatched, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TopUsersStreamsWatchedRow{}
+	for rows.Next() {
+		var i TopUsersStreamsWatchedRow
+		if err := rows.Scan(&i.ID, &i.Val); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const topUsersWatchMinutes = `-- name: TopUsersWatchMinutes :many
+SELECT u.id AS id, s.watch_minutes AS val
+FROM user_stats s
+JOIN users u ON u.id = s.user_id
+WHERE u.excluded = 0 AND s.watch_minutes > 0
+ORDER BY s.watch_minutes DESC, u.id
+LIMIT ?
+`
+
+type TopUsersWatchMinutesRow struct {
+	ID  string
+	Val int64
+}
+
+// One top list per statistic (roadmap 5.2.5): excluded users are never
+// ranked (users-and-roles.md, B7), neither are users whose value is 0; ties
+// are ordered by user ID.
+func (q *Queries) TopUsersWatchMinutes(ctx context.Context, limit int64) ([]TopUsersWatchMinutesRow, error) {
+	rows, err := q.db.QueryContext(ctx, topUsersWatchMinutes, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TopUsersWatchMinutesRow{}
+	for rows.Next() {
+		var i TopUsersWatchMinutesRow
+		if err := rows.Scan(&i.ID, &i.Val); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateIdentityData = `-- name: UpdateIdentityData :execrows
 UPDATE user_identities SET
     followed_at = ?,

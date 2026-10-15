@@ -7,6 +7,49 @@ FROM users u
 JOIN user_stats s ON s.user_id = u.id
 ORDER BY u.id;
 
+-- One top list per statistic (roadmap 5.2.5): excluded users are never
+-- ranked (users-and-roles.md, B7), neither are users whose value is 0; ties
+-- are ordered by user ID.
+-- name: TopUsersWatchMinutes :many
+SELECT u.id AS id, s.watch_minutes AS val
+FROM user_stats s
+JOIN users u ON u.id = s.user_id
+WHERE u.excluded = 0 AND s.watch_minutes > 0
+ORDER BY s.watch_minutes DESC, u.id
+LIMIT ?;
+
+-- name: TopUsersMessages :many
+SELECT u.id AS id, s.messages AS val
+FROM user_stats s
+JOIN users u ON u.id = s.user_id
+WHERE u.excluded = 0 AND s.messages > 0
+ORDER BY s.messages DESC, u.id
+LIMIT ?;
+
+-- name: TopUsersCommandsRun :many
+SELECT u.id AS id, s.commands_run AS val
+FROM user_stats s
+JOIN users u ON u.id = s.user_id
+WHERE u.excluded = 0 AND s.commands_run > 0
+ORDER BY s.commands_run DESC, u.id
+LIMIT ?;
+
+-- name: TopUsersMentions :many
+SELECT u.id AS id, s.mentions AS val
+FROM user_stats s
+JOIN users u ON u.id = s.user_id
+WHERE u.excluded = 0 AND s.mentions > 0
+ORDER BY s.mentions DESC, u.id
+LIMIT ?;
+
+-- name: TopUsersStreamsWatched :many
+SELECT u.id AS id, s.streams_watched AS val
+FROM user_stats s
+JOIN users u ON u.id = s.user_id
+WHERE u.excluded = 0 AND s.streams_watched > 0
+ORDER BY s.streams_watched DESC, u.id
+LIMIT ?;
+
 -- name: InsertUser :exec
 INSERT INTO users (id, title, notes, excluded, regular, entrance_command_id, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?);

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/role"
 	"github.com/ripmav/streamcrew/internal/domain/user"
@@ -196,12 +197,19 @@ func argUser(users Users, n int) subject {
 }
 
 // randomUser returns the subject of a random user from the chat whose roles
-// match. Users with the exception of B7 of the user spec are never picked;
-// the streamer and the bot can be (B22).
+// match. Users with the exception of B7 of the user spec are never picked,
+// neither are the channel's accounts, the streamer and the bot (roadmap
+// 5.2.5, template.md B22).
 func randomUser(users Users, name string, match func(role.Set) bool) subject {
 	return func(ctx context.Context, s *Scope) (user.User, bool, error) {
 		if users == nil {
 			return user.User{}, false, nil
+		}
+		var skip []id.ID
+		for _, a := range []Account{StreamerAccount, BotAccount} {
+			if u, ok, err := users.Account(ctx, s.Platform, a); err == nil && ok {
+				skip = append(skip, u.ID)
+			}
 		}
 		chatters, err := users.Chatters(ctx, s.Platform)
 		if err != nil {
@@ -209,7 +217,7 @@ func randomUser(users Users, name string, match func(role.Set) bool) subject {
 		}
 		var candidates []user.User
 		for _, u := range chatters {
-			if !u.Excluded && match(u.Roles(s.Platform)) {
+			if !u.Excluded && !slices.Contains(skip, u.ID) && match(u.Roles(s.Platform)) {
 				candidates = append(candidates, u)
 			}
 		}

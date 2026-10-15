@@ -101,6 +101,46 @@ func (p *platformSet) Connected() []connector.Platform {
 	return p.set.Connected()
 }
 
+// All returns the platforms of the profile, in the order of the set.
+func (p *platformSet) All() []connector.Platform {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.set.All()
+}
+
+// accountUserIDs returns the IDs of the users of the channel's accounts
+// (streamer, bot) on every platform of the profile (roadmap 5.2.5); an
+// account the core has not seen yet is skipped, as is a platform without
+// the capability.
+func (l *userLookup) accountUserIDs(ctx context.Context) ([]id.ID, error) {
+	var out []id.ID
+	seen := map[id.ID]bool{}
+	for _, pl := range l.set.All() {
+		idents, ok := pl.(connector.Identities)
+		if !ok {
+			continue
+		}
+		for _, a := range connector.Accounts() {
+			ident, ok := idents.Identity(a)
+			if !ok {
+				continue
+			}
+			u, err := l.store.UserByIdentity(ctx, pl.Name(), ident.PlatformUserID)
+			if err != nil {
+				if errors.Is(err, store.ErrNotFound) {
+					continue
+				}
+				return nil, fmt.Errorf("account users: %s %s: %w", pl.Name(), a, err)
+			}
+			if !seen[u.ID] {
+				seen[u.ID] = true
+				out = append(out, u.ID)
+			}
+		}
+	}
+	return out, nil
+}
+
 // userLookup is the lookup of the users the core knows, until the user
 // service replaces it (roadmap 5.2): the users by their login name, and
 // the streamer's and the bot's accounts of the platforms, which it stores

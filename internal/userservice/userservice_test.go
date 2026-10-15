@@ -3,7 +3,10 @@
 package userservice_test
 
 import (
+	"cmp"
 	"context"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -31,12 +34,13 @@ type memStore struct {
 	mu       sync.Mutex
 	stats    map[id.ID]user.Stats
 	regular  map[id.ID]bool
+	excluded map[id.ID]bool
 	sessions map[platform.Name]stream.Session
 	data     map[string]user.PlatformData
 }
 
 func newMemStore() *memStore {
-	return &memStore{stats: make(map[id.ID]user.Stats), regular: make(map[id.ID]bool), sessions: make(map[platform.Name]stream.Session), data: make(map[string]user.PlatformData)}
+	return &memStore{stats: make(map[id.ID]user.Stats), regular: make(map[id.ID]bool), excluded: make(map[id.ID]bool), sessions: make(map[platform.Name]stream.Session), data: make(map[string]user.PlatformData)}
 }
 
 func (m *memStore) AddStats(_ context.Context, deltas []user.StatsDelta) error {
@@ -130,6 +134,51 @@ func (m *memStore) dataOf(p platform.Name, platformUserID string) user.PlatformD
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.data[string(p)+"/"+platformUserID]
+}
+
+// TopUsers implements the Store port of the tests: the users with a value
+// for stat, not excluded, from the highest value down, ties by ID, at most
+// n (roadmap 5.2.5).
+func (m *memStore) TopUsers(_ context.Context, stat user.Stat, n int) ([]user.Ranked, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []user.Ranked
+	for u, st := range m.stats {
+		if m.excluded[u] {
+			continue
+		}
+		v := stValue(stat, st)
+		if v == 0 {
+			continue
+		}
+		out = append(out, user.Ranked{User: user.User{ID: u, Stats: st}, Value: v})
+	}
+	slices.SortFunc(out, func(a, b user.Ranked) int {
+		if a.Value != b.Value {
+			return -cmp.Compare(a.Value, b.Value)
+		}
+		return strings.Compare(a.User.ID.String(), b.User.ID.String())
+	})
+	if len(out) > n {
+		out = out[:n]
+	}
+	return out, nil
+}
+
+func stValue(stat user.Stat, st user.Stats) int64 {
+	switch stat {
+	case user.StatWatchMinutes:
+		return st.WatchMinutes
+	case user.StatMessages:
+		return st.Messages
+	case user.StatCommandsRun:
+		return st.CommandsRun
+	case user.StatMentions:
+		return st.Mentions
+	case user.StatStreamsWatched:
+		return st.StreamsWatched
+	}
+	return 0
 }
 
 // fakePlatform is the platform adapter of the tests: the PlatformData
@@ -514,4 +563,81 @@ func TestPlatformDataCache(t *testing.T) {
 		assert.Equal(t, at.Add(2*time.Hour), data.FollowedAt)
 		assert.Equal(t, 1, data.SubTier)
 	})
+}
+
+// TestRankings covers the exclusion of the channel's accounts from the
+// top lists (roadmap 5.2.5): the streamer's and the bot's user are never
+// ranked, the list is refilled, excluded users (B7) and zero values are
+// absent, and invalid arguments fail.
+func TestRankings(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	store := newMemStore()
+
+	alice, bob, carol := id.New(), id.New(), id.New()
+	streamer, bot := id.New(), id.New()
+	dan := id.New()
+	require.NoError(t, store.AddStats(ctx, []user.StatsDelta{
+		{UserID: alice, Messages: 30},
+		{UserID: bob, Messages: 20},
+		{UserID: carol, Messages: 10},
+		{UserID: streamer, Messages: 999},
+		{UserID: bot, Messages: 998},
+		{UserID: dan, Messages: 0},
+	}))
+	// excl is exempt from rankings (B7).
+	excl := id.New()
+	require.NoError(t, store.AddStats(ctx, []user.StatsDelta{{UserID: excl, Messages: 500}}))
+	store.mu.Lock()
+	store.excluded[excl] = true
+	store.mu.Unlock()
+
+	svc, err := userservice.New(userservice.Ports{
+		Store:    store,
+		Bus:      event.NewBus(nil),
+		Settings: func(context.Context) (settings.Users, error) { return settings.Users{}, nil },
+		AccountUsers: func(context.Context) ([]id.ID, error) {
+			return []id.ID{streamer, bot}, nil
+		},
+	})
+	require.NoError(t, err)
+
+	// Top 3 by messages: alice, bob, carol. The streamer (999), the bot
+	// (998) and the excluded (500) are absent, and dan has 0.
+	top, err := svc.Rankings(ctx, user.StatMessages, 3)
+	require.NoError(t, err)
+	assert.Equal(t, []id.ID{alice, bob, carol}, rankedIDs(top))
+	assert.Equal(t, []int64{30, 20, 10}, rankedVals(top))
+
+	// Top 5: only the three non-zero, non-excluded users exist.
+	top, err = svc.Rankings(ctx, user.StatMessages, 5)
+	require.NoError(t, err)
+	assert.Equal(t, []id.ID{alice, bob, carol}, rankedIDs(top))
+
+	// A statistic nobody has: empty, not an error.
+	top, err = svc.Rankings(ctx, user.StatCommandsRun, 3)
+	require.NoError(t, err)
+	assert.Empty(t, top)
+
+	// Invalid arguments.
+	_, err = svc.Rankings(ctx, user.Stat("donated_cents"), 1)
+	require.ErrorIs(t, err, user.ErrInvalid)
+	_, err = svc.Rankings(ctx, user.StatMessages, 0)
+	require.ErrorIs(t, err, user.ErrInvalid)
+}
+
+func rankedIDs(top []user.Ranked) []id.ID {
+	out := make([]id.ID, 0, len(top))
+	for _, r := range top {
+		out = append(out, r.User.ID)
+	}
+	return out
+}
+
+func rankedVals(top []user.Ranked) []int64 {
+	out := make([]int64, 0, len(top))
+	for _, r := range top {
+		out = append(out, r.Value)
+	}
+	return out
 }
