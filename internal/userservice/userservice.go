@@ -61,6 +61,9 @@ type Store interface {
 	// ListUsersRegular returns the users and their watch minutes for the
 	// sweep of the regular role (users-and-roles.md, B26).
 	ListUsersRegular(ctx context.Context) ([]user.RegularSweep, error)
+	// TopUsers returns the users ranked by stat, from the highest value
+	// down (roadmap 5.2.5).
+	TopUsers(ctx context.Context, stat user.Stat, n int) ([]user.Ranked, error)
 	// UpdateUser changes the user, e.g. the regular role (B26).
 	UpdateUser(ctx context.Context, userID id.ID, fn func(*user.User) error) (user.User, error)
 	// SetPlatformData replaces the cached platform data of an identity
@@ -79,6 +82,10 @@ type Ports struct {
 	// refresh of the follow and subscription data (B10); nil skips the
 	// refresh.
 	Platforms Platforms
+	// AccountUsers returns the IDs of the users of the channel's accounts
+	// (streamer, bot), which the rankings exclude (roadmap 5.2.5); nil
+	// skips the exclusion.
+	AccountUsers func(ctx context.Context) ([]id.ID, error)
 }
 
 // Platforms returns the platform adapters of the profile; the app's
@@ -195,6 +202,46 @@ func (s *Service) Active(p platform.Name) []Active {
 		return strings.Compare(a.User.ID.String(), b.User.ID.String())
 	})
 	return out
+}
+
+// Rankings returns up to n users ranked by stat, from the highest value
+// down (roadmap 5.2.5). Excluded users are never ranked (users-and-roles.md,
+// B7, in the store); the channel's accounts (streamer, bot) are excluded
+// here, so the result has at most n entries and is refilled with the next
+// users.
+func (s *Service) Rankings(ctx context.Context, stat user.Stat, n int) ([]user.Ranked, error) {
+	if !stat.Valid() {
+		return nil, fmt.Errorf("rankings: %w: %s", user.ErrInvalid, stat)
+	}
+	if n < 1 {
+		return nil, fmt.Errorf("rankings: %w: n = %d", user.ErrInvalid, n)
+	}
+	var exclude map[id.ID]bool
+	if s.ports.AccountUsers != nil {
+		ids, err := s.ports.AccountUsers(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("rankings: %w", err)
+		}
+		exclude = make(map[id.ID]bool, len(ids))
+		for _, account := range ids {
+			exclude[account] = true
+		}
+	}
+	rows, err := s.ports.Store.TopUsers(ctx, stat, n+len(exclude))
+	if err != nil {
+		return nil, fmt.Errorf("rankings: %w", err)
+	}
+	var out []user.Ranked
+	for _, r := range rows {
+		if exclude[r.User.ID] {
+			continue
+		}
+		out = append(out, r)
+		if len(out) == n {
+			break
+		}
+	}
+	return out, nil
 }
 
 // handle applies one event to the statistics.

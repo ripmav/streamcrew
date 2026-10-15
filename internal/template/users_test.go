@@ -154,6 +154,34 @@ func TestUserFamily_RandomUserOncePerRender_B22(t *testing.T) {
 	assert.Greater(t, len(seen), 1, "different renders pick different users")
 }
 
+// TestUserFamily_RandomUserSkipsAccounts_5_2_5 checks that the random user
+// never picks the channel's accounts, the streamer and the bot, even though
+// they are in the chat (roadmap 5.2.5, template.md B22).
+func TestUserFamily_RandomUserSkipsAccounts_5_2_5(t *testing.T) {
+	t.Parallel()
+	_, _, users := testUsers()
+	streamer, bot := *users.streamer, *users.bot
+	users.chatters = []user.User{streamer, bot}
+	e := template.New(userRegistry(t, users))
+	s := template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch}
+
+	// Only the accounts chatter: no candidate, the identifier has no value.
+	assert.Equal(t, "$randomusername", render(t, e, "$randomusername", &s))
+
+	// With a viewer in the chat, only the viewer is ever picked.
+	viewers := map[string]bool{}
+	for i := range 5 {
+		name := "viewer" + string(rune('a'+i))
+		viewers[name] = true
+		users.chatters = append(users.chatters, twitchUser(id.New().String(), name, strings.ToUpper(name)))
+	}
+	e = template.New(userRegistry(t, users))
+	for range 40 {
+		out := render(t, e, "$randomusername", &s)
+		assert.True(t, viewers[out], out)
+	}
+}
+
 func TestUserFamily_NoUsers(t *testing.T) {
 	t.Parallel()
 	alice, _, users := testUsers()

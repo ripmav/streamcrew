@@ -133,6 +133,87 @@ func (s *Store) ListUsersRegular(ctx context.Context) ([]user.RegularSweep, erro
 	return out, nil
 }
 
+// TopUsers returns up to n users ranked by stat, from the highest value down
+// (roadmap 5.2.5): excluded users are never ranked (users-and-roles.md, B7),
+// neither are users whose value of the statistic is 0, and ties are ordered
+// by user ID.
+func (s *Store) TopUsers(ctx context.Context, stat user.Stat, n int) ([]user.Ranked, error) {
+	if !stat.Valid() {
+		return nil, fmt.Errorf("top users: %w: %s", user.ErrInvalid, stat)
+	}
+	if n < 1 {
+		return nil, fmt.Errorf("top users: %w: n = %d", user.ErrInvalid, n)
+	}
+	var out []user.Ranked
+	err := s.readTx(ctx, func(q *sqlcgen.Queries) error {
+		var (
+			rs  any
+			err error
+		)
+		switch stat {
+		case user.StatWatchMinutes:
+			rs, err = q.TopUsersWatchMinutes(ctx, int64(n))
+		case user.StatMessages:
+			rs, err = q.TopUsersMessages(ctx, int64(n))
+		case user.StatCommandsRun:
+			rs, err = q.TopUsersCommandsRun(ctx, int64(n))
+		case user.StatMentions:
+			rs, err = q.TopUsersMentions(ctx, int64(n))
+		case user.StatStreamsWatched:
+			rs, err = q.TopUsersStreamsWatched(ctx, int64(n))
+		}
+		if err != nil {
+			return err
+		}
+		out, err = s.ranked(ctx, q, rs)
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("top users: %w", err)
+	}
+	return out, nil
+}
+
+// ranked loads the users of a top list and pairs them with their value; the
+// rows are the generated rows of one of the TopUsers* queries.
+func (s *Store) ranked(ctx context.Context, q *sqlcgen.Queries, rows any) ([]user.Ranked, error) {
+	var ids []string
+	var vals []int64
+	switch rs := rows.(type) {
+	case []sqlcgen.TopUsersWatchMinutesRow:
+		for _, r := range rs {
+			ids, vals = append(ids, r.ID), append(vals, r.Val)
+		}
+	case []sqlcgen.TopUsersMessagesRow:
+		for _, r := range rs {
+			ids, vals = append(ids, r.ID), append(vals, r.Val)
+		}
+	case []sqlcgen.TopUsersCommandsRunRow:
+		for _, r := range rs {
+			ids, vals = append(ids, r.ID), append(vals, r.Val)
+		}
+	case []sqlcgen.TopUsersMentionsRow:
+		for _, r := range rs {
+			ids, vals = append(ids, r.ID), append(vals, r.Val)
+		}
+	case []sqlcgen.TopUsersStreamsWatchedRow:
+		for _, r := range rs {
+			ids, vals = append(ids, r.ID), append(vals, r.Val)
+		}
+	default:
+		return nil, fmt.Errorf("ranked: %w: unknown row type", user.ErrInvalid)
+	}
+	out := make([]user.Ranked, 0, len(ids))
+	for i, idStr := range ids {
+		u, err := loadUser(ctx, q, idStr)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, user.Ranked{User: u, Value: vals[i]})
+	}
+	return out, nil
+}
+
 // UpsertIdentity implements user.Repository.
 func (s *Store) UpsertIdentity(ctx context.Context, ident user.Identity) (u user.User, created bool, err error) {
 	if err := ident.Validate(); err != nil {

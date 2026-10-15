@@ -60,6 +60,11 @@ func (s *Set) Connected() []Platform {
 	return out
 }
 
+// All returns the platforms of the set, in the order of the set.
+func (s *Set) All() []Platform {
+	return slices.Clone(s.list)
+}
+
 // DefaultFirst returns ps with the platform def first and the others in
 // their order (general.defaultPlatform, actions.md B82; spec
 // chat-service.md, B27); ps stays as it is.
