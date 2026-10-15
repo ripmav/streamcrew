@@ -8,12 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	chatsvc "github.com/ripmav/streamcrew/internal/chat"
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/decimal"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
+	"github.com/ripmav/streamcrew/internal/domain/feed"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/role"
 	"github.com/ripmav/streamcrew/internal/domain/user"
@@ -251,6 +253,7 @@ func (s *Service) Event(ctx context.Context, e connector.Event) error {
 			return nil
 		}
 	}
+	s.recordFeed(ctx, e.Type, payload)
 	s.fire(ctx, e.Platform, e.Type, payload)
 	return nil
 }
@@ -311,6 +314,7 @@ func (s *Service) checkEvent(e connector.Event) (eventtype.Descriptor, error) {
 // the mass gift alone, below it one gift per recipient, never both (B5).
 // s.mu is held.
 func (s *Service) massGiftLocked(ctx context.Context, e connector.Event, single event.Type, payload eventtype.Payload) error {
+	s.recordFeed(ctx, e.Type, payload)
 	cfg, err := s.settings(ctx)
 	if err != nil {
 		return fmt.Errorf("mass gift: %w", err)
@@ -347,6 +351,24 @@ func (s *Service) fireOn(ctx context.Context, p platform.Name, neutral event.Typ
 		t = neutral
 	}
 	s.fire(ctx, p, t, payload)
+}
+
+// recordFeed takes a feed event into the event feed and the statistics of
+// the current session of its platform (roadmap 5.3). It runs once per
+// incoming event; a type that is not a feed type is skipped. s.mu is held.
+func (s *Service) recordFeed(ctx context.Context, t event.Type, payload eventtype.Payload) {
+	ev, ok := feed.FromPayload(t, payload)
+	if !ok {
+		return
+	}
+	ev.Time = time.Now().UTC()
+	var sessionStarted time.Time
+	if ses := s.sessions[payload.Platform]; ses != nil {
+		sessionStarted = ses.StartedAt
+	}
+	if err := s.ports.Store.RecordFeedEvent(ctx, ev, sessionStarted); err != nil {
+		s.logger.ErrorContext(ctx, "recording the feed event failed", "type", t, "error", err)
+	}
 }
 
 // fire publishes an event of type t from platform p and, after it, its

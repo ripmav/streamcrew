@@ -5,7 +5,7 @@
 | **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12); Phase 2 abgeschlossen (PR #36); Phase 3 abgeschlossen, M1 erreicht (PR #143) |
 | **Stand** | 2026-10-14 |
 | **Grundlage** | [`plan.md`](plan.md) (Architektur, Prioritäten, Risiken), [`starting.md`](starting.md), [`adr/`](adr/README.md) |
-| **Aktuelle Phase** | Phase 5: Core-Services (in Arbeit; 5.1, 5.2.1, 5.2.2, 5.2.3, 5.2.4, 5.2.5 und 5.2.6 abgeschlossen) |
+| **Aktuelle Phase** | Phase 5: Core-Services (in Arbeit; 5.1, 5.2.1, 5.2.2, 5.2.3, 5.2.4, 5.2.5, 5.2.6 und 5.3 abgeschlossen) |
 
 > **Name:** Das Projekt heißt vorerst `streamcrew` (Codename, [ADR-0008](adr/0008-codename-streamcrew.md)); Binary `streamcrew`. Der endgültige Name wird vor Gate O geprüft.
 
@@ -94,7 +94,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 2: Domäne und Persistenz | abgeschlossen 2026-09-29, alle Exit-Kriterien erfüllt; übertragen: weitere Settings-Sektionen (3.2), Zuordnung zu den numerischen Ereignis-IDs (10.2) |
 | Phase 3: Engine, Templates, Actions, Mock | abgeschlossen 2026-10-07, M1 erreicht (PR #143, CI grün); vertagt: die Schwelle der Sammelgeschenke (3.4, P1) |
 | Phase 4: Twitch | 4.1 (Authentifizierung), 4.2 (Helix-Client), 4.3 (EventSub), 4.4 (Funktionen) und 4.5 (Tests) abgeschlossen; das Exit-Kriterium des manuellen 4-h-Test-Streams (4.5) ist noch offen |
-| Phase 5: Core-Services | in Arbeit: 5.1, 5.2.1, 5.2.2, 5.2.3, 5.2.4, 5.2.5 und 5.2.6 abgeschlossen; offen: 5.3–5.6 |
+| Phase 5: Core-Services | in Arbeit: 5.1, 5.2.1, 5.2.2, 5.2.3, 5.2.4, 5.2.5, 5.2.6 und 5.3 abgeschlossen; offen: 5.4–5.6 |
 | Phase 6: API, CLI, TUI | offen |
 | Phase 7: Overlays und Medien | offen |
 | Phase 8: Economy, Community, Spiele | offen |
@@ -643,7 +643,7 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 
 ### 5.3 Events, Feed, Statistik
 
-- [ ] Letzte Ereignisse (Follower, Abo, Raid, Cheer, Spende), Event-Feed für Frontends, Session-Statistiken (M)
+- [x] Letzte Ereignisse (Follower, Abo, Raid, Cheer, Spende), Event-Feed für Frontends, Session-Statistiken (M), erledigt 2026-10-15 in [`internal/domain/feed`](../internal/domain/feed), [`internal/store`](../internal/store) und [`internal/eventservice`](../internal/eventservice) (Feed-Typen plattformneutral: `channel.follow`, `channel.subscribe`, `channel.resubscribe`, `channel.subscription.gift`, `channel.subscription.mass_gift`, `channel.raid`, `twitch.bits.cheer`; `donation.receive` wartet auf Phase 9, die Spalte `cents` ist schon da. Das Event-Service nimmt je eingehendes Feed-Ereignis genau ein Eintrag in den Feed auf – nach der „einmal je Sitzung“-Filterung, Geschenke im Geschenkweg – mit Login-/Namens-Snapshot, Betrag (Bits, Zuschauer, Geschenk-Anzahl), Stufe, Text und Zeit. Migration 0019: `event_feed` (begrenzt auf die letzten 200 via `PruneFeed`) und `session_stats` (je Plattform-Sitzung, Zähler für Follower, Abo, Resub, Geschenke, Raids, Cheers, Spenden, Bits, Spende-Summe). `store.RecordFeedEvent` setzt Feed-Zeile, Prune und – nur wenn die Plattform eine Sitzung mit Start hat – die Sitzungsstatistik in einer Transaktion. Lesen für Frontends (API kommt in Phase 6): `LatestFeed` (neueste, älteste zuerst), `CurrentSessionStats` (Sitzung ohne Ereignisse = Null-Zähler), `SessionStats` (nach Start) und `RecentSessions` (neueste Sitzungen); kein E2E: Domain-, Store- und Event-Service-Tests decken Abbildung, Aufnehmen, Dedupe, Prune und Sitzungsstatistik ab)
 
 ### 5.4 Timer
 

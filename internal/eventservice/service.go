@@ -30,6 +30,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
+	"github.com/ripmav/streamcrew/internal/domain/feed"
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/role"
@@ -72,6 +73,9 @@ type Store interface {
 	// FirstForUser records an event of type t for the user and reports
 	// whether it is the first one ever.
 	FirstForUser(ctx context.Context, userID id.ID, t event.Type) (bool, error)
+	// RecordFeedEvent takes ev into the event feed and, if sessionStarted
+	// is set, adds it to that session's statistics (roadmap 5.3).
+	RecordFeedEvent(ctx context.Context, ev feed.Event, sessionStarted time.Time) error
 }
 
 // Commands finds the commands to trigger; *command.Service implements it.

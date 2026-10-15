@@ -83,6 +83,20 @@ type Counter struct {
 	NameKey      string
 }
 
+type EventFeed struct {
+	ID          int64
+	Platform    string
+	Type        string
+	UserID      sql.NullString
+	Login       string
+	DisplayName string
+	OccurredAt  int64
+	Amount      sql.NullInt64
+	Cents       sql.NullInt64
+	Tier        sql.NullInt64
+	Text        sql.NullString
+}
+
 type Meta struct {
 	Key   string
 	Value string
@@ -111,6 +125,20 @@ type SessionEvent struct {
 	Platform string
 	Type     string
 	UserID   string
+}
+
+type SessionStat struct {
+	Platform           string
+	StartedAt          int64
+	Followers          int64
+	Subscribers        int64
+	Resubscribers      int64
+	GiftSubscriptions  int64
+	Raids              int64
+	Cheers             int64
+	Donations          int64
+	BitsTotal          int64
+	DonationCentsTotal int64
 }
 
 type Setting struct {
