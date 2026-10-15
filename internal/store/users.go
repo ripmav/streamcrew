@@ -371,6 +371,113 @@ func (s *Store) DeleteUser(ctx context.Context, userID id.ID) error {
 	})
 }
 
+// MergeUsers folds drop into keep (roadmap 5.2.4, users-and-roles.md
+// B40): every platform identity of drop is linked to keep, the
+// statistics are added, and drop is deleted. The two users must not share
+// a platform account (B3); that is a conflict. keep's own data is kept;
+// its statistics gain drop's, its seen times span both. One transaction.
+func (s *Store) MergeUsers(ctx context.Context, keep, drop id.ID) (user.User, error) {
+	if keep == drop {
+		return user.User{}, errors.New("merge users: keep and drop are the same user")
+	}
+	var merged user.User
+	err := s.Atomically(ctx, func(tx *Store) error {
+		k, err := tx.User(ctx, keep)
+		if err != nil {
+			return err
+		}
+		d, err := tx.User(ctx, drop)
+		if err != nil {
+			return err
+		}
+		if err := mergeConflict(k, d); err != nil {
+			return err
+		}
+		err = tx.Write(ctx, func(q *sqlcgen.Queries) error {
+			_, err := q.MoveIdentitiesToUser(ctx, sqlcgen.MoveIdentitiesToUserParams{
+				UserID:    keep.String(),
+				UpdatedAt: now().UnixMilli(),
+				UserID_2:  drop.String(),
+			})
+			return err
+		})
+		if err != nil {
+			return fmt.Errorf("link identities: %w", err)
+		}
+		merged, err = tx.UpdateUser(ctx, keep, func(u *user.User) error {
+			u.Stats = mergeStats(k.Stats, d.Stats)
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		return tx.DeleteUser(ctx, drop)
+	})
+	if err != nil {
+		return user.User{}, fmt.Errorf("merge %s into %s: %w", drop, keep, err)
+	}
+	return merged, nil
+}
+
+// mergeConflict reports a platform account that belongs to both users (B3):
+// the account is already linked, so the merge is refused.
+func mergeConflict(k, d user.User) error {
+	for _, ki := range k.Identities {
+		for _, di := range d.Identities {
+			if ki.Platform == di.Platform && ki.PlatformUserID == di.PlatformUserID {
+				return fmt.Errorf("%s account %q already belongs to both users", ki.Platform, ki.PlatformUserID)
+			}
+		}
+	}
+	return nil
+}
+
+// mergeStats adds b to a; the seen times span both (first is the earlier,
+// last the later), with a zero time meaning "never seen".
+func mergeStats(a, b user.Stats) user.Stats {
+	s := a
+	s.WatchMinutes += b.WatchMinutes
+	s.Messages += b.Messages
+	s.CommandsRun += b.CommandsRun
+	s.Mentions += b.Mentions
+	s.StreamsWatched += b.StreamsWatched
+	s.DonatedCents += b.DonatedCents
+	s.Strikes += b.Strikes
+	s.FirstSeen = earliest(a.FirstSeen, b.FirstSeen)
+	s.LastSeen = latest(a.LastSeen, b.LastSeen)
+	return s
+}
+
+// earliest returns the earlier of two seen times; a zero time means
+// "never seen" and loses to a real time, two zero times stay zero.
+func earliest(a, b time.Time) time.Time {
+	switch {
+	case a.IsZero():
+		return b
+	case b.IsZero():
+		return a
+	case b.Before(a):
+		return b
+	default:
+		return a
+	}
+}
+
+// latest returns the later of two seen times; a zero time means "never
+// seen" and loses to a real time, two zero times stay zero.
+func latest(a, b time.Time) time.Time {
+	switch {
+	case a.IsZero():
+		return b
+	case b.IsZero():
+		return a
+	case b.After(a):
+		return b
+	default:
+		return a
+	}
+}
+
 func insertUser(ctx context.Context, q *sqlcgen.Queries, userID string, t time.Time) error {
 	err := q.InsertUser(ctx, sqlcgen.InsertUserParams{ID: userID, CreatedAt: t.UnixMilli(), UpdatedAt: t.UnixMilli()})
 	if err != nil {

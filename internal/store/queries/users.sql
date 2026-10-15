@@ -141,3 +141,11 @@ UPDATE user_stats SET
     first_seen      = COALESCE(first_seen, ?),
     last_seen       = COALESCE(?, last_seen)
 WHERE user_id = ?;
+
+-- Roadmap 5.2.4: move every platform identity of one user to another
+-- (linking the accounts; the dropped user is deleted after its statistics
+-- are folded in). users-and-roles.md, B3/B40.
+-- name: MoveIdentitiesToUser :execrows
+UPDATE user_identities
+SET user_id = ?, updated_at = ?
+WHERE user_id = ?;

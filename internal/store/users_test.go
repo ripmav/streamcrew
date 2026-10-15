@@ -79,6 +79,52 @@ func TestAccountBelongsToOneUser(t *testing.T) {
 	require.ErrorIs(t, s.AddIdentity(ctx, id.New(), twitchIdentity("2002", "x")), store.ErrNotFound)
 }
 
+// TestMergeUsers covers roadmap 5.2.4 and B40: the identities of the dropped
+// user are linked to the kept one, the statistics are added (the seen times
+// span both), and the dropped user is deleted.
+func TestMergeUsers(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s := openStore(t)
+
+	// keep: twitch + youtube; drop: kick. Same login, different platforms
+	// (B40: two users until linked).
+	keep, _, err := s.UpsertIdentity(ctx, twitchIdentity("1001", "ada"))
+	require.NoError(t, err)
+	require.NoError(t, s.AddIdentity(ctx, keep.ID, user.Identity{Platform: platform.YouTube, PlatformUserID: "UC7", Login: "ada", DisplayName: "Ada"}))
+	drop, _, err := s.UpsertIdentity(ctx, user.Identity{Platform: platform.Kick, PlatformUserID: "k9", Login: "ada", DisplayName: "Ada"})
+	require.NoError(t, err)
+
+	last := time.Now().UTC().Truncate(time.Millisecond)
+	first := last.Add(-time.Hour)
+	_, err = s.UpdateUser(ctx, keep.ID, func(u *user.User) error {
+		u.Stats = user.Stats{WatchMinutes: 10, Messages: 3, FirstSeen: first, LastSeen: last}
+		return nil
+	})
+	require.NoError(t, err)
+	_, err = s.UpdateUser(ctx, drop.ID, func(u *user.User) error {
+		u.Stats = user.Stats{WatchMinutes: 5, Messages: 2, CommandsRun: 1, FirstSeen: first, LastSeen: first}
+		return nil
+	})
+	require.NoError(t, err)
+
+	merged, err := s.MergeUsers(ctx, keep.ID, drop.ID)
+	require.NoError(t, err)
+	assert.Equal(t, keep.ID, merged.ID, "the kept user survives")
+	require.Len(t, merged.Identities, 3, "all identities are on the kept user")
+	byIdent, err := s.UserByIdentity(ctx, platform.Kick, "k9")
+	require.NoError(t, err)
+	assert.Equal(t, keep.ID, byIdent.ID, "the dropped account is linked to the kept user")
+	assert.Equal(t, user.Stats{WatchMinutes: 15, Messages: 5, CommandsRun: 1, FirstSeen: first, LastSeen: last}, merged.Stats)
+	_, err = s.User(ctx, drop.ID)
+	require.ErrorIs(t, err, store.ErrNotFound, "the dropped user is gone")
+
+	_, err = s.MergeUsers(ctx, keep.ID, keep.ID)
+	require.Error(t, err, "keep and drop are the same user")
+	_, err = s.MergeUsers(ctx, keep.ID, id.New())
+	require.ErrorIs(t, err, store.ErrNotFound, "a missing user is an error")
+}
+
 // TestRolesAcrossIdentities covers B24 and B42.
 func TestRolesAcrossIdentities(t *testing.T) {
 	t.Parallel()
