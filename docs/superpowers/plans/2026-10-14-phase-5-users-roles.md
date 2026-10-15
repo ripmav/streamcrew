@@ -1,6 +1,6 @@
 # Plan: Phase 5, Teil 5.2.2 – Cross-platform roles, Regular role, follow/subscription cache
 
-Status: **in Arbeit** (PR 1: Regular-Rolle; PR 2: Follow-/Abo-Cache)
+Status: **abgeschlossen** (PR 1: Regular-Rolle; PR 2: Follow-/Abo-Cache)
 
 **Goal:** The regular role (B26) from whole hours of watch time, and follow/subscription data with on-demand cache (B10).
 

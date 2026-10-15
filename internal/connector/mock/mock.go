@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
@@ -357,6 +358,22 @@ func (p *Platform) Chatters(context.Context) ([]user.Identity, error) {
 		out = append(out, p.users[k])
 	}
 	return out, nil
+}
+
+var _ connector.PlatformData = (*Platform)(nil)
+
+// UserPlatformData implements connector.PlatformData (roadmap 5.2.2,
+// users-and-roles.md, B10): a known account follows the channel since 30
+// days, and has no subscription; an unknown account has no data.
+func (p *Platform) UserPlatformData(_ context.Context, platformUserID string) (user.PlatformData, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, u := range p.users {
+		if u.PlatformUserID == platformUserID {
+			return user.PlatformData{FollowedAt: time.Now().Add(-30 * 24 * time.Hour)}, nil
+		}
+	}
+	return user.PlatformData{}, connector.ErrUnknownUser
 }
 
 // setPresent records whether the user with the login name is in the chat.

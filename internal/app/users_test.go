@@ -2,11 +2,12 @@
 
 package app_test
 
-// The test covers roadmap 5.2.1 (users-and-roles.md, B9) at the app level
-// against the mock platform: the user service counts the watched stream,
-// the messages, the mentions, the commands and the seen times of the users
-// from the events of the chat pipeline. The watch time is counted per whole
-// minute and is covered by the unit tests of internal/userservice.
+// The test covers roadmap 5.2.1 and 5.2.2 (users-and-roles.md, B9, B10)
+// at the app level against the mock platform: the user service counts the
+// watched stream, the messages, the mentions, the commands and the seen
+// times of the users from the events of the chat pipeline, and it keeps
+// the follow data of the identities fresh. The watch time is counted per
+// whole minute and is covered by the unit tests of internal/userservice.
 
 import (
 	"testing"
@@ -97,4 +98,19 @@ func TestUserStatsE2E(t *testing.T) {
 	assert.False(t, alice.FirstSeen.IsZero())
 	assert.False(t, alice.LastSeen.IsZero())
 	assert.True(t, alice.LastSeen.After(alice.FirstSeen))
+
+	// The follow data of the identities is refreshed on contact and cached
+	// (users-and-roles.md, B10).
+	var aliceUser user.User
+	require.Eventually(t, func() bool {
+		var err error
+		aliceUser, err = st.UserByLogin(ctx, platform.Mock, "alice")
+		if err != nil || aliceUser.ID.IsZero() {
+			return false
+		}
+		if i, ok := aliceUser.Identity(platform.Mock); ok {
+			return !i.Data.UpdatedAt.IsZero() && !i.Data.FollowedAt.IsZero()
+		}
+		return false
+	}, 5*time.Second, 10*time.Millisecond, "the follow data is cached on contact")
 }
