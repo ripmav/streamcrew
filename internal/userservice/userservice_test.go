@@ -19,6 +19,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
+	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/userservice"
 )
 
@@ -28,11 +29,12 @@ import (
 type memStore struct {
 	mu       sync.Mutex
 	stats    map[id.ID]user.Stats
+	regular  map[id.ID]bool
 	sessions map[platform.Name]stream.Session
 }
 
 func newMemStore() *memStore {
-	return &memStore{stats: make(map[id.ID]user.Stats), sessions: make(map[platform.Name]stream.Session)}
+	return &memStore{stats: make(map[id.ID]user.Stats), regular: make(map[id.ID]bool), sessions: make(map[platform.Name]stream.Session)}
 }
 
 func (m *memStore) AddStats(_ context.Context, deltas []user.StatsDelta) error {
@@ -80,11 +82,52 @@ func (m *memStore) stat(u id.ID) user.Stats {
 	return m.stats[u]
 }
 
+func (m *memStore) regularOf(u id.ID) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.regular[u]
+}
+
+// seed sets the stored watch minutes of a user, for the regular role
+// tests.
+func (m *memStore) seed(u id.ID, watchMinutes int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.stats[u] = user.Stats{WatchMinutes: watchMinutes}
+}
+
+func (m *memStore) ListUsersRegular(context.Context) ([]user.RegularSweep, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []user.RegularSweep
+	for u, st := range m.stats {
+		out = append(out, user.RegularSweep{ID: u, Regular: m.regular[u], WatchMinutes: st.WatchMinutes})
+	}
+	return out, nil
+}
+
+func (m *memStore) UpdateUser(_ context.Context, u id.ID, fn func(*user.User) error) (user.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	loaded := user.User{ID: u, Regular: m.regular[u], Stats: m.stats[u]}
+	if err := fn(&loaded); err != nil {
+		return user.User{}, err
+	}
+	m.regular[loaded.ID] = loaded.Regular
+	return loaded, nil
+}
+
 // fixture is the service against the bus and the fake store.
 type fixture struct {
 	store *memStore
 	bus   *event.Bus
 	svc   *userservice.Service
+	// users is the settings section "users" the service reads on the tick;
+	// the test changes it to test a changed threshold.
+	users settings.Users
+	// mu guards users, which the service reads from its goroutine and the
+	// test writes from its own.
+	mu sync.Mutex
 }
 
 // newFixture builds the service; run starts its Run in the test's bubble
@@ -94,9 +137,26 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	f := &fixture{store: newMemStore(), bus: event.NewBus(nil)}
 	var err error
-	f.svc, err = userservice.New(userservice.Ports{Store: f.store, Bus: f.bus})
+	f.svc, err = userservice.New(userservice.Ports{
+		Store:    f.store,
+		Bus:      f.bus,
+		Settings: f.usersSettings,
+	})
 	require.NoError(t, err)
 	return f
+}
+
+func (f *fixture) usersSettings(context.Context) (settings.Users, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.users, nil
+}
+
+func (f *fixture) setUsers(t *testing.T, u settings.Users) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.users = u
 }
 
 func (f *fixture) run(t *testing.T) (stop func()) {
@@ -265,5 +325,81 @@ func TestJoinOffline(t *testing.T) {
 		settle(t)
 		assert.Contains(t, f.activeLogins(t), "ada")
 		assert.Zero(t, f.store.stat(ada.ID).StreamsWatched)
+	})
+}
+
+// TestRegularRole covers the regular role from whole hours of watch time
+// (users-and-roles.md, B26): granted at the threshold, not below it, on
+// the user and thus on every platform.
+func TestRegularRole(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		stop := f.run(t)
+		defer stop()
+		// Wait until the service has subscribed, so that the published
+		// events below are not lost.
+		synctest.Wait()
+		at := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+		f.store.setSession(stream.Session{Platform: platform.Mock, State: stream.StateLive, StartedAt: at})
+
+		ada, bob := mockUser("ada"), mockUser("bob")
+		// Ada has 59 watch minutes, Bob a full hour.
+		f.store.seed(ada.ID, 59)
+		f.store.seed(bob.ID, 60)
+		f.setUsers(t, settings.Users{RegularHours: 1})
+		f.publish(t, eventtype.ChatUserJoin, &ada, eventtype.Details{}, at)
+		f.publish(t, eventtype.ChatUserJoin, &bob, eventtype.Details{}, at.Add(time.Second))
+
+		// After the first minute, Ada crossed the hour; both are regular.
+		time.Sleep(time.Minute)
+		settle(t)
+		assert.True(t, f.store.regularOf(ada.ID), "59 + 1 minute is a whole hour")
+		assert.True(t, f.store.regularOf(bob.ID))
+
+		// A user below the threshold stays without the role.
+		cara := mockUser("cara")
+		f.publish(t, eventtype.ChatUserJoin, &cara, eventtype.Details{}, at.Add(2*time.Second))
+		time.Sleep(time.Minute)
+		settle(t)
+		assert.False(t, f.store.regularOf(cara.ID))
+	})
+}
+
+// TestRegularThreshold covers the re-evaluation when the threshold changes
+// (users-and-roles.md, B26): the next tick re-evaluates every user, and 0
+// revokes the role for everyone.
+func TestRegularThreshold(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		stop := f.run(t)
+		defer stop()
+		synctest.Wait()
+
+		ada, bob := mockUser("ada"), mockUser("bob")
+		f.store.seed(ada.ID, 60)
+		f.store.seed(bob.ID, 120)
+		f.setUsers(t, settings.Users{RegularHours: 1})
+
+		// The first tick evaluates everyone, without any contact.
+		time.Sleep(time.Minute)
+		settle(t)
+		assert.True(t, f.store.regularOf(ada.ID))
+		assert.True(t, f.store.regularOf(bob.ID))
+
+		// The threshold goes up: Ada falls below, Bob stays.
+		f.setUsers(t, settings.Users{RegularHours: 2})
+		time.Sleep(time.Minute)
+		settle(t)
+		assert.False(t, f.store.regularOf(ada.ID))
+		assert.True(t, f.store.regularOf(bob.ID))
+
+		// The threshold 0 turns the role off for everyone.
+		f.setUsers(t, settings.Users{})
+		time.Sleep(time.Minute)
+		settle(t)
+		assert.False(t, f.store.regularOf(ada.ID))
+		assert.False(t, f.store.regularOf(bob.ID))
 	})
 }

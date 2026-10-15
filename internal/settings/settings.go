@@ -59,6 +59,7 @@ func New(repo Repository) (*Service, error) {
 		{Type: sectionChannels, Version: 1, Decode: decode[Channels]},
 		{Type: sectionGeneral, Version: 1, Decode: decode[General]},
 		{Type: sectionChat, Version: 1, Decode: decode[Chat]},
+		{Type: sectionUsers, Version: 1, Decode: decode[Users]},
 	} {
 		if err := r.Register(e); err != nil {
 			return nil, err
@@ -124,6 +125,7 @@ const (
 	sectionChannels      = "channels"
 	sectionGeneral       = "general"
 	sectionChat          = "chat"
+	sectionUsers         = "users"
 )
 
 // Limits of the section "events" (spec events.md, B5, B8, B10).
@@ -285,6 +287,33 @@ func (c Chat) Validate() error { return c.validate() }
 func (c Chat) validate() error {
 	if c.HistorySize < MinChatHistorySize || c.HistorySize > MaxChatHistorySize {
 		return fmt.Errorf("history size %d is not between %d and %d", c.HistorySize, MinChatHistorySize, MaxChatHistorySize)
+	}
+	return nil
+}
+
+// Users configures the user service (roadmap 5.2). The section holds the
+// knobs the user service reads on its watch tick, so a change applies from
+// the next tick.
+type Users struct {
+	// RegularHours is the whole hours of watch time a user needs for the
+	// regular role (users-and-roles.md, B26); 0 turns the role off.
+	RegularHours int `json:"regularHours"`
+}
+
+// DefaultUsers returns the defaults: no regular role (B26).
+func DefaultUsers() Users {
+	return Users{}
+}
+
+// DocType implements polydoc.Document.
+func (Users) DocType() string { return sectionUsers }
+
+// Validate checks the section.
+func (u Users) Validate() error { return u.validate() }
+
+func (u Users) validate() error {
+	if u.RegularHours < 0 {
+		return fmt.Errorf("regular hours %d must be 0 or more", u.RegularHours)
 	}
 	return nil
 }

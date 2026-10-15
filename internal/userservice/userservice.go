@@ -2,12 +2,15 @@
 
 // Package userservice is the user service of roadmap 5.2: it keeps the
 // statistics of the users (users-and-roles.md, B9) up to date from the
-// events of the core, and it tracks who is active in the chat of each
-// platform, for the watch time.
+// events of the core, it tracks who is active in the chat of each
+// platform, for the watch time, and it evaluates the regular role (B26)
+// from the watch time.
 //
 // The watch time counts whole minutes: every minute, each user active in
 // the chat of a platform whose stream is live gets one minute. A user is
-// active from its join or its first message until it leaves (B9).
+// active from its join or its first message until it leaves (B9). The
+// regular role is set from the whole hours of watch time and the
+// threshold of the settings, on the tick (B26).
 package userservice
 
 import (
@@ -29,6 +32,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
+	"github.com/ripmav/streamcrew/internal/settings"
 )
 
 // ErrInvalidOption is returned by New for a missing port.
@@ -47,12 +51,20 @@ type Store interface {
 	AddStats(ctx context.Context, deltas []user.StatsDelta) error
 	// StreamSessions returns the stored sessions.
 	StreamSessions(ctx context.Context) ([]stream.Session, error)
+	// ListUsersRegular returns the users and their watch minutes for the
+	// sweep of the regular role (users-and-roles.md, B26).
+	ListUsersRegular(ctx context.Context) ([]user.RegularSweep, error)
+	// UpdateUser changes the user, e.g. the regular role (B26).
+	UpdateUser(ctx context.Context, userID id.ID, fn func(*user.User) error) (user.User, error)
 }
 
 // Ports are what the service needs. All are required.
 type Ports struct {
 	Store Store
 	Bus   *event.Bus
+	// Settings reads the settings section "users" on the watch tick, so a
+	// changed regular threshold applies from the next tick (B26).
+	Settings func(ctx context.Context) (settings.Users, error)
 }
 
 // Option configures a Service. An option without a valid value makes New
@@ -95,7 +107,7 @@ type Service struct {
 // New returns a service with the ports p.
 func New(p Ports, opts ...Option) (*Service, error) {
 	switch {
-	case p.Store == nil, p.Bus == nil:
+	case p.Store == nil, p.Bus == nil, p.Settings == nil:
 		return nil, fmt.Errorf("new user service: %w: missing port", ErrInvalidOption)
 	}
 	s := &Service{ports: p, logger: slog.New(slog.DiscardHandler), active: make(map[platform.Name]map[id.ID]*Active)}
@@ -268,7 +280,8 @@ func (s *Service) instance(ctx context.Context, env event.Envelope) {
 }
 
 // watchTick adds one minute of watch time to every active user of a live
-// platform (B9, "Watchtime (nur während live)").
+// platform (B9, "Watchtime (nur während live)"), and evaluates the
+// regular role of all users (users-and-roles.md, B26).
 func (s *Service) watchTick(ctx context.Context) {
 	sessions, err := s.ports.Store.StreamSessions(ctx)
 	if err != nil {
@@ -286,11 +299,42 @@ func (s *Service) watchTick(ctx context.Context) {
 		}
 	}
 	s.mu.Unlock()
-	if len(deltas) == 0 {
+	if len(deltas) > 0 {
+		if err := s.ports.Store.AddStats(ctx, deltas); err != nil {
+			s.logger.ErrorContext(ctx, "adding the watch time failed", "error", err)
+			return
+		}
+	}
+	s.evaluateRegular(ctx)
+}
+
+// evaluateRegular sets the regular role of every user from its whole
+// hours of watch time and the threshold of the settings
+// (users-and-roles.md, B26). The watch time only changes in the tick and
+// a changed threshold applies from the next one, so the role follows the
+// state within at most one minute.
+func (s *Service) evaluateRegular(ctx context.Context) {
+	cfg, err := s.ports.Settings(ctx)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "reading the users settings failed", "error", err)
 		return
 	}
-	if err := s.ports.Store.AddStats(ctx, deltas); err != nil {
-		s.logger.ErrorContext(ctx, "adding the watch time failed", "error", err)
+	users, err := s.ports.Store.ListUsersRegular(ctx)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "reading the users for the regular role failed", "error", err)
+		return
+	}
+	for _, u := range users {
+		regular := cfg.RegularHours > 0 && u.WatchMinutes >= int64(cfg.RegularHours)*60
+		if regular == u.Regular {
+			continue
+		}
+		if _, err := s.ports.Store.UpdateUser(ctx, u.ID, func(u *user.User) error {
+			u.Regular = regular
+			return nil
+		}); err != nil {
+			s.logger.ErrorContext(ctx, "setting the regular role failed", "error", err)
+		}
 	}
 }
 

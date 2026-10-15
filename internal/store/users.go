@@ -108,6 +108,31 @@ func (s *Store) AddStats(ctx context.Context, deltas []user.StatsDelta) error {
 	return nil
 }
 
+// ListUsersRegular returns the users and their watch minutes for the sweep
+// of the regular role (users-and-roles.md, B26), ordered by ID.
+func (s *Store) ListUsersRegular(ctx context.Context) ([]user.RegularSweep, error) {
+	var out []user.RegularSweep
+	err := s.readTx(ctx, func(q *sqlcgen.Queries) error {
+		rows, err := q.ListUsersRegular(ctx)
+		if err != nil {
+			return err
+		}
+		out = make([]user.RegularSweep, 0, len(rows))
+		for _, r := range rows {
+			uid, err := id.Parse(r.ID)
+			if err != nil {
+				return err
+			}
+			out = append(out, user.RegularSweep{ID: uid, Regular: r.Regular != 0, WatchMinutes: r.WatchMinutes})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list users for the regular role: %w", err)
+	}
+	return out, nil
+}
+
 // UpsertIdentity implements user.Repository.
 func (s *Store) UpsertIdentity(ctx context.Context, ident user.Identity) (u user.User, created bool, err error) {
 	if err := ident.Validate(); err != nil {
