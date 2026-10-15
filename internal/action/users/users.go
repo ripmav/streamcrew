@@ -12,8 +12,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/ripmav/streamcrew/internal/action"
 	"github.com/ripmav/streamcrew/internal/action/schema"
@@ -50,46 +48,12 @@ func Results() []string {
 	return []string{ResultUserName, ResultDisplayName, ResultID, ResultAvatarURL, ResultSuccess}
 }
 
-// LookupInterval is how often the core looks up a user over a platform at
-// most, across all user lookups (B92).
-const LookupInterval = time.Minute
-
-// Platforms are the platforms of the profile; *connector.Set implements it.
-type Platforms interface {
-	// Platform returns the platform name; ok is false if the profile has
-	// none.
-	Platform(name platform.Name) (p connector.Platform, ok bool)
-}
-
-// Users are the users the core knows; the user service implements it
-// (roadmap 5.2).
-type Users interface {
-	// UserByPlatformID finds the user with the account platformUserID on
-	// platform p; ok is false if there is none.
-	UserByPlatformID(ctx context.Context, p platform.Name, platformUserID string) (u user.User, ok bool, err error)
-	// UpsertIdentity stores an account found over a platform like a newly
-	// seen one, or updates its names if the core knows it (spec
-	// users-and-roles.md, B4).
-	UpsertIdentity(ctx context.Context, ident user.Identity) (u user.User, created bool, err error)
-}
-
 // Ports are what the user lookup needs.
 type Ports struct {
 	// Templates renders the name or ID.
 	Templates *template.Engine
-	// Platforms are the platforms users are looked up on.
-	Platforms Platforms
-	// Users are the users the core knows.
-	Users Users
-	// Logger records why a lookup over a platform did not happen (B92).
+	// Logger records why a lookup had no result.
 	Logger *slog.Logger
-}
-
-// ports are the ports of the user lookup, with the limit of lookups over a
-// platform, which all user lookups of the registry share (B92).
-type ports struct {
-	Ports
-	limit limiter
 }
 
 // Descriptors returns the user lookup with its ports.
@@ -97,15 +61,10 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 	switch {
 	case p.Templates == nil:
 		return nil, errors.New("user action types: no template engine")
-	case p.Platforms == nil:
-		return nil, errors.New("user action types: no platforms")
-	case p.Users == nil:
-		return nil, errors.New("user action types: no users")
 	case p.Logger == nil:
 		return nil, errors.New("user action types: no logger")
 	}
-	ports := &ports{Ports: p}
-	return descriptors(ports), nil
+	return descriptors(&p), nil
 }
 
 // Catalog returns the user types without ports, for the type catalog and
@@ -117,7 +76,7 @@ func Catalog() []action.Descriptor {
 
 // descriptors returns the user types with ports, which are nil in the
 // catalog.
-func descriptors(ports *ports) []action.Descriptor {
+func descriptors(ports *Ports) []action.Descriptor {
 	return []action.Descriptor{
 		action.Descriptor{
 			Type:     TypeUserLookup,
@@ -144,7 +103,7 @@ type UserLookup struct {
 	// User is the login name, with or without "@", or the platform ID, as a
 	// template; a new action has none.
 	User  action.Template `json:"user,omitzero"`
-	ports *ports
+	ports *Ports
 }
 
 // DocType implements command.Action.
@@ -188,96 +147,42 @@ func (l UserLookup) Perform(ctx context.Context, run *engine.Run) error {
 }
 
 // find returns the account with the login name key, regardless of case, or
-// with the platform ID key (B91): first among the known users, by name
-// before ID, then over the platform at most once per LookupInterval (B92).
-// An account found over the platform is stored. found is false if there is
-// none, also for an empty key.
-func (l UserLookup) find(ctx context.Context, run *engine.Run, key string) (ident user.Identity, found bool, err error) {
+// with the platform ID key (B91): among the users the core knows, then over
+// the platform, through the user service, at most once per lookup interval
+// (B92; command-engine.md, B17). found is false if there is none, also for
+// an empty key.
+func (l UserLookup) find(ctx context.Context, run *engine.Run, key string) (user.Identity, bool, error) {
 	if key == "" {
 		l.ports.Logger.InfoContext(ctx, "user lookup without result: empty name",
 			"instance_id", run.InstanceID(), "platform", l.Platform)
 		return user.Identity{}, false, nil
 	}
-	if ident, ok, err := l.known(ctx, run, key); err != nil || ok {
-		return ident, ok, err
-	}
-	target, ok := l.ports.Platforms.Platform(l.Platform)
-	if !ok || !target.Status().Connected() {
-		l.ports.Logger.InfoContext(ctx, "user lookup without result: platform not connected",
-			"instance_id", run.InstanceID(), "platform", l.Platform)
-		return user.Identity{}, false, nil
-	}
-	if !l.ports.limit.allow() {
-		l.ports.Logger.InfoContext(ctx, "user lookup without result: one lookup over a platform per minute",
-			"instance_id", run.InstanceID(), "platform", l.Platform)
-		return user.Identity{}, false, nil
-	}
-	ident, err = target.Users().UserByLogin(ctx, key)
-	if errors.Is(err, connector.ErrUnknownUser) {
-		ident, err = target.Users().UserByID(ctx, key)
-	}
-	switch {
-	case errors.Is(err, connector.ErrUnknownUser):
-		return user.Identity{}, false, nil
-	case err != nil:
-		return user.Identity{}, false, fmt.Errorf("look up %q on %s: %w", key, l.Platform, err)
-	}
-	if _, _, err := l.ports.Users.UpsertIdentity(ctx, ident); err != nil {
-		return user.Identity{}, false, fmt.Errorf("store %q of %s: %w", key, l.Platform, err)
-	}
-	return ident, true, nil
-}
-
-// known returns the account of a known user with the login name key,
-// found through the lookup of the run (spec command-engine.md, B17), or
-// with the platform ID key.
-func (l UserLookup) known(ctx context.Context, run *engine.Run, key string) (user.Identity, bool, error) {
 	u, ok, err := run.UserByName(ctx, l.Platform, key)
 	if err != nil {
 		return user.Identity{}, false, err
 	}
-	if ok {
-		if ident, ok := account(u, l.Platform, func(i user.Identity) bool { return strings.EqualFold(i.Login, key) }); ok {
-			return ident, true, nil
-		}
+	if !ok {
+		return user.Identity{}, false, nil
 	}
-	u, ok, err = l.ports.Users.UserByPlatformID(ctx, l.Platform, key)
-	if err != nil || !ok {
-		return user.Identity{}, false, err
-	}
-	ident, ok := account(u, l.Platform, func(i user.Identity) bool { return i.PlatformUserID == key })
+	ident, ok := account(u, l.Platform, key)
 	return ident, ok, nil
 }
 
-// account returns the account of u on platform p that match accepts.
-func account(u user.User, p platform.Name, match func(user.Identity) bool) (user.Identity, bool) {
+// account returns the account of u on platform p: the one with the login
+// name key, regardless of case, or the platform ID key, or the first one on
+// the platform.
+func account(u user.User, p platform.Name, key string) (user.Identity, bool) {
 	for _, i := range u.Identities {
-		if i.Platform == p && match(i) {
+		if i.Platform == p && (strings.EqualFold(i.Login, key) || i.PlatformUserID == key) {
+			return i, true
+		}
+	}
+	for _, i := range u.Identities {
+		if i.Platform == p {
 			return i, true
 		}
 	}
 	return user.Identity{}, false
-}
-
-// limiter lets one lookup over a platform through per LookupInterval
-// (B92). It is safe for concurrent use; the zero value lets the first one
-// through.
-type limiter struct {
-	mu   sync.Mutex
-	next time.Time
-}
-
-// allow reports whether a lookup over a platform may happen now; if so, the
-// next one may happen after LookupInterval.
-func (l *limiter) allow() bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	now := time.Now()
-	if now.Before(l.next) {
-		return false
-	}
-	l.next = now.Add(LookupInterval)
-	return true
 }
 
 // field names the field of an error (actions.md B6); nil stays nil.

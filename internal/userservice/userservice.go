@@ -51,8 +51,8 @@ const watchTick = time.Minute
 // (users-and-roles.md, B10); older data is refetched on the next contact.
 const dataTTL = time.Hour
 
-// Store keeps the statistics and the stream sessions; *store.Store
-// implements it.
+// Store keeps the statistics and the stream sessions and the users the
+// core knows; *store.Store implements it.
 type Store interface {
 	// AddStats adds the deltas to the stored statistics.
 	AddStats(ctx context.Context, deltas []user.StatsDelta) error
@@ -64,11 +64,24 @@ type Store interface {
 	// TopUsers returns the users ranked by stat, from the highest value
 	// down (roadmap 5.2.5).
 	TopUsers(ctx context.Context, stat user.Stat, n int) ([]user.Ranked, error)
-	// UpdateUser changes the user, e.g. the regular role (B26).
+	// UpdateUser changes the user, e.g. the regular role (B26) or the
+	// strikes (actions.md, B84).
 	UpdateUser(ctx context.Context, userID id.ID, fn func(*user.User) error) (user.User, error)
 	// SetPlatformData replaces the cached platform data of an identity
 	// (users-and-roles.md, B10).
 	SetPlatformData(ctx context.Context, p platform.Name, platformUserID string, data user.PlatformData) error
+	// UserByLogin finds the user with the login name on p, regardless of
+	// case for ASCII letters; ok is false if there is none.
+	UserByLogin(ctx context.Context, p platform.Name, login string) (u user.User, ok bool, err error)
+	// UserByPlatformID finds the user of the account on p; ok is false if
+	// there is none.
+	UserByPlatformID(ctx context.Context, p platform.Name, platformUserID string) (u user.User, ok bool, err error)
+	// UpsertIdentity stores an account like a newly seen one, or updates
+	// its names if the core knows it (users-and-roles.md, B4); created
+	// reports a new user.
+	UpsertIdentity(ctx context.Context, ident user.Identity) (u user.User, created bool, err error)
+	// ResetStrikes sets the strikes of every user to 0 (actions.md, B84).
+	ResetStrikes(ctx context.Context) error
 }
 
 // Ports are what the service needs. All are required.
@@ -79,21 +92,20 @@ type Ports struct {
 	// changed regular threshold applies from the next tick (B26).
 	Settings func(ctx context.Context) (settings.Users, error)
 	// Platforms returns the platform adapters of the profile, for the
-	// refresh of the follow and subscription data (B10); nil skips the
-	// refresh.
+	// refresh of the follow and subscription data (B10), the lookup of the
+	// channel's accounts and of users over the platform (B91), and the
+	// exclusion of the rankings (5.2.5); nil skips them.
 	Platforms Platforms
-	// AccountUsers returns the IDs of the users of the channel's accounts
-	// (streamer, bot), which the rankings exclude (roadmap 5.2.5); nil
-	// skips the exclusion.
-	AccountUsers func(ctx context.Context) ([]id.ID, error)
 }
 
-// Platforms returns the platform adapters of the profile; the app's
-// platformSet implements it.
+// Platforms is the platform set of the profile; the app's platformSet
+// implements it.
 type Platforms interface {
 	// Platform returns the adapter by name; ok is false if the profile
 	// has no platform by the name.
 	Platform(name platform.Name) (connector.Platform, bool)
+	// All returns the adapters of the profile, in the order of the set.
+	All() []connector.Platform
 }
 
 // Option configures a Service. An option without a valid value makes New
@@ -126,7 +138,7 @@ type Service struct {
 	ports  Ports
 	logger *slog.Logger
 
-	// mu guards active, the started state and lastData.
+	// mu guards active, the started state, lastData and lookup.
 	mu      sync.Mutex
 	started bool
 	// active are the users of the current session by platform, by user ID.
@@ -134,6 +146,8 @@ type Service struct {
 	// lastData is when the service last fetched the platform data (B10),
 	// by platform, by platform user ID.
 	lastData map[platform.Name]map[string]time.Time
+	// lookup limits the lookups over a platform (actions.md, B92).
+	lookup lookupLimiter
 }
 
 // New returns a service with the ports p.
@@ -217,8 +231,8 @@ func (s *Service) Rankings(ctx context.Context, stat user.Stat, n int) ([]user.R
 		return nil, fmt.Errorf("rankings: %w: n = %d", user.ErrInvalid, n)
 	}
 	var exclude map[id.ID]bool
-	if s.ports.AccountUsers != nil {
-		ids, err := s.ports.AccountUsers(ctx)
+	if s.ports.Platforms != nil {
+		ids, err := s.accountUserIDs(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("rankings: %w", err)
 		}

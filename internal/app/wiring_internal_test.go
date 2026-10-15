@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/settings"
-	"github.com/ripmav/streamcrew/internal/store"
 	"github.com/ripmav/streamcrew/internal/template"
 )
 
@@ -34,20 +32,6 @@ func (nopReceiver) Join(context.Context, platform.Name, connector.Channel, user.
 }
 func (nopReceiver) Event(context.Context, connector.Event) error      { return nil }
 func (nopReceiver) Stream(context.Context, platform.Name, bool) error { return nil }
-
-// openStore returns a store in a temporary directory, closed with the test.
-func openStore(t *testing.T) *store.Store {
-	t.Helper()
-	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "profile.db"),
-		store.WithLogger(slog.New(slog.DiscardHandler)))
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		if err := st.Close(); err != nil {
-			t.Errorf("close store: %v", err)
-		}
-	})
-	return st
-}
 
 // runPlatform runs the mock platform until the test ends and waits for the
 // streamer to connect.
@@ -76,82 +60,6 @@ func TestCatalog(t *testing.T) {
 	assert.Contains(t, types, eventtype.AuthLoginCompleted)
 	assert.Contains(t, types, eventtype.AuthLoginFailed)
 	assert.Contains(t, types, TypeSupervisorStatus)
-}
-
-// TestUserLookup covers the lookup the core uses until the user service
-// replaces it (roadmap 5.2): the users by login name, the accounts of the
-// platforms, stored when seen, and the state of the stream.
-func TestUserLookup(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	st := openStore(t)
-	set := newPlatformSet()
-	l := &userLookup{store: st, set: set}
-
-	// Without platforms nothing is found, and the streamer is unknown.
-	_, ok, err := l.UserByName(ctx, platform.Mock, "alice")
-	assert.NoError(t, err)
-	assert.False(t, ok)
-	_, ok, err = l.Account(ctx, platform.Mock, template.StreamerAccount)
-	assert.NoError(t, err)
-	assert.False(t, ok)
-	_, err = l.StreamerUser(ctx, platform.Mock)
-	assert.Error(t, err)
-	_, err = l.Chatters(ctx, platform.Mock)
-	assert.Error(t, err)
-	_, ok, err = l.UserByPlatformID(ctx, platform.Mock, "42")
-	assert.NoError(t, err)
-	assert.False(t, ok)
-
-	// With the mock platform the accounts are found and stored when seen.
-	mp, err := mock.New(nopReceiver{}, mock.WithStreamer("streamy"), mock.WithBot("botbot"))
-	require.NoError(t, err)
-	require.NoError(t, set.fill(mp))
-
-	u, ok, err := l.UserByName(ctx, platform.Mock, "streamy")
-	require.NoError(t, err)
-	require.True(t, ok)
-	streamIdent, ok := u.Identity(platform.Mock)
-	require.True(t, ok)
-	assert.Equal(t, "streamy", streamIdent.Login)
-	_, ok, err = l.UserByName(ctx, platform.Mock, "BOTBOT")
-	assert.NoError(t, err)
-	assert.True(t, ok)
-	_, ok, err = l.UserByName(ctx, platform.Mock, "alice")
-	assert.NoError(t, err)
-	assert.False(t, ok)
-
-	_, ok, err = l.Account(ctx, platform.Mock, template.StreamerAccount)
-	assert.NoError(t, err)
-	assert.True(t, ok)
-	_, ok, err = l.Account(ctx, platform.Mock, template.BotAccount)
-	assert.NoError(t, err)
-	assert.True(t, ok)
-
-	sid, err := l.StreamerUser(ctx, platform.Mock)
-	assert.NoError(t, err)
-	assert.Equal(t, u.ID, sid)
-
-	// The chat of the platform: a simulated user joins and is a chatter,
-	// stored like a newly seen one.
-	runPlatform(t, mp)
-	ident, err := mp.AddUser(mock.UserSpec{Login: "alice"})
-	require.NoError(t, err)
-	require.NoError(t, mp.Join(ctx, "alice"))
-	chat, err := l.Chatters(ctx, platform.Mock)
-	require.NoError(t, err)
-	require.Len(t, chat, 1)
-	chatIdent, ok := chat[0].Identity(platform.Mock)
-	require.True(t, ok)
-	assert.Equal(t, "alice", chatIdent.Login)
-	found, ok, err := l.UserByPlatformID(ctx, platform.Mock, ident.PlatformUserID)
-	assert.NoError(t, err)
-	assert.True(t, ok)
-	assert.Equal(t, chat[0].ID, found.ID)
-	again, created, err := l.UpsertIdentity(ctx, ident)
-	assert.NoError(t, err)
-	assert.False(t, created)
-	assert.Equal(t, chat[0].ID, again.ID)
 }
 
 // TestPlatformSet covers the set the composition root fills after the

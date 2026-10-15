@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
@@ -108,191 +107,26 @@ func (p *platformSet) All() []connector.Platform {
 	return p.set.All()
 }
 
-// accountUserIDs returns the IDs of the users of the channel's accounts
-// (streamer, bot) on every platform of the profile (roadmap 5.2.5); an
-// account the core has not seen yet is skipped, as is a platform without
-// the capability.
-func (l *userLookup) accountUserIDs(ctx context.Context) ([]id.ID, error) {
-	var out []id.ID
-	seen := map[id.ID]bool{}
-	for _, pl := range l.set.All() {
-		idents, ok := pl.(connector.Identities)
-		if !ok {
-			continue
-		}
-		for _, a := range connector.Accounts() {
-			ident, ok := idents.Identity(a)
-			if !ok {
-				continue
-			}
-			u, err := l.store.UserByIdentity(ctx, pl.Name(), ident.PlatformUserID)
-			if err != nil {
-				if errors.Is(err, store.ErrNotFound) {
-					continue
-				}
-				return nil, fmt.Errorf("account users: %s %s: %w", pl.Name(), a, err)
-			}
-			if !seen[u.ID] {
-				seen[u.ID] = true
-				out = append(out, u.ID)
-			}
-		}
-	}
-	return out, nil
-}
+// userStore adapts *store.Store to the Store port of the user service:
+// the store reports a missing user with an error, the service wants ok.
+type userStore struct{ *store.Store }
 
-// userLookup is the lookup of the users the core knows, until the user
-// service replaces it (roadmap 5.2): the users by their login name, and
-// the streamer's and the bot's accounts of the platforms, which it stores
-// when it sees them (spec users-and-roles.md, B4).
-type userLookup struct {
-	store *store.Store
-	set   *platformSet
-}
-
-// UserByName implements template.Users and engine.Users (B81): the user
-// the core knows by login name, and the streamer's and the bot's account
-// with the login name, stored like a newly seen one.
-func (l *userLookup) UserByName(ctx context.Context, p platform.Name, name string) (user.User, bool, error) {
-	u, err := l.store.UserByLogin(ctx, p, name)
-	switch {
-	case err == nil:
-		return u, true, nil
-	case !errors.Is(err, store.ErrNotFound):
-		return user.User{}, false, err
-	}
-	return l.accountByName(ctx, p, name)
-}
-
-// accountByName returns the streamer's or the bot's account with the
-// login name on p, stored like a newly seen one.
-func (l *userLookup) accountByName(ctx context.Context, p platform.Name, name string) (user.User, bool, error) {
-	ident, ok := l.identityByLogin(ctx, p, name)
-	if !ok {
+// UserByLogin implements the Store port of the user service.
+func (a userStore) UserByLogin(ctx context.Context, p platform.Name, login string) (user.User, bool, error) {
+	u, err := a.Store.UserByLogin(ctx, p, login)
+	if errors.Is(err, store.ErrNotFound) {
 		return user.User{}, false, nil
 	}
-	u, _, err := l.store.UpsertIdentity(ctx, ident)
 	return u, err == nil, err
 }
 
-// identityByLogin returns the streamer's or the bot's account with the
-// login name on p; ok is false if the platform does not report one.
-func (l *userLookup) identityByLogin(_ context.Context, p platform.Name, name string) (user.Identity, bool) {
-	pl, ok := l.set.Platform(p)
-	if !ok {
-		return user.Identity{}, false
-	}
-	idents, ok := pl.(connector.Identities)
-	if !ok {
-		return user.Identity{}, false
-	}
-	login := connector.Login(name)
-	if login == "" {
-		return user.Identity{}, false
-	}
-	for _, a := range []connector.Account{connector.AccountStreamer, connector.AccountBot} {
-		ident, ok := idents.Identity(a)
-		if ok && strings.EqualFold(ident.Login, login) {
-			return ident, true
-		}
-	}
-	return user.Identity{}, false
-}
-
-// Account implements template.Users: the streamer's or the bot's account
-// on p, stored like a newly seen one.
-func (l *userLookup) Account(ctx context.Context, p platform.Name, a template.Account) (user.User, bool, error) {
-	pl, ok := l.set.Platform(p)
-	if !ok {
+// UserByPlatformID implements the Store port of the user service.
+func (a userStore) UserByPlatformID(ctx context.Context, p platform.Name, platformUserID string) (user.User, bool, error) {
+	u, err := a.UserByIdentity(ctx, p, platformUserID)
+	if errors.Is(err, store.ErrNotFound) {
 		return user.User{}, false, nil
 	}
-	idents, ok := pl.(connector.Identities)
-	if !ok {
-		return user.User{}, false, nil
-	}
-	ident, ok := idents.Identity(connectorAccount(a))
-	if !ok {
-		return user.User{}, false, nil
-	}
-	u, _, err := l.store.UpsertIdentity(ctx, ident)
 	return u, err == nil, err
-}
-
-// Chatters implements template.Users (B22): the users in the chat on p,
-// stored like newly seen ones.
-func (l *userLookup) Chatters(ctx context.Context, p platform.Name) ([]user.User, error) {
-	pl, ok := l.set.Platform(p)
-	if !ok {
-		return nil, fmt.Errorf("chatters: %s: no platform", p)
-	}
-	ch, ok := pl.(connector.Chatters)
-	if !ok {
-		return nil, fmt.Errorf("chatters: %s: %w", p, connector.ErrNotConnected)
-	}
-	idents, err := ch.Chatters(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("chatters: %s: %w", p, err)
-	}
-	out := make([]user.User, 0, len(idents))
-	for _, ident := range idents {
-		u, _, err := l.store.UpsertIdentity(ctx, ident)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, u)
-	}
-	return out, nil
-}
-
-// UserByPlatformID implements the Users port of the user action: the user
-// with the account on p; ok is false if the core has not seen it.
-func (l *userLookup) UserByPlatformID(ctx context.Context, p platform.Name, platformUserID string) (user.User, bool, error) {
-	u, err := l.store.UserByIdentity(ctx, p, platformUserID)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return user.User{}, false, nil
-		}
-		return user.User{}, false, err
-	}
-	return u, true, nil
-}
-
-// UpsertIdentity implements the Users port of the user and the moderation
-// action (users-and-roles.md, B4).
-func (l *userLookup) UpsertIdentity(ctx context.Context, ident user.Identity) (user.User, bool, error) {
-	return l.store.UpsertIdentity(ctx, ident)
-}
-
-// StreamerUser implements requirement.Streamer (requirements.md, B4): the
-// user of the streamer's account on p, stored like a newly seen one; an
-// error means it is not known.
-func (l *userLookup) StreamerUser(ctx context.Context, p platform.Name) (id.ID, error) {
-	pl, ok := l.set.Platform(p)
-	if !ok {
-		return id.ID{}, fmt.Errorf("streamer on %s: no platform", p)
-	}
-	idents, ok := pl.(connector.Identities)
-	if !ok {
-		return id.ID{}, fmt.Errorf("streamer on %s: no identities", p)
-	}
-	ident, ok := idents.Identity(connector.AccountStreamer)
-	if !ok {
-		return id.ID{}, fmt.Errorf("streamer on %s: no account", p)
-	}
-	u, _, err := l.store.UpsertIdentity(ctx, ident)
-	if err != nil {
-		return id.ID{}, err
-	}
-	return u.ID, nil
-}
-
-// connectorAccount returns the account of the platform the account of the
-// template is.
-func connectorAccount(a template.Account) connector.Account {
-	if a == template.BotAccount {
-		return connector.AccountBot
-	}
-	return connector.AccountStreamer
 }
 
 // streamStates reports the state of the stream from the channel of the
