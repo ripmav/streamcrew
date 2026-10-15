@@ -211,6 +211,40 @@ func TestOncePerSession(t *testing.T) {
 	})
 }
 
+// TestFeedRecording covers roadmap 5.3: a fired feed event goes into the
+// event feed and, while the platform has a session, to that session's
+// statistics; a deduplicated event is not recorded twice.
+func TestFeedRecording(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, on(eventtype.ChannelFollow))
+		f.settings.set(grace(0))
+		ctx := t.Context()
+		follow := func(login string) connector.Event {
+			who := account(platform.Mock, login)
+			return connector.Event{Platform: platform.Mock, Type: eventtype.ChannelFollow, User: &who}
+		}
+
+		// Before the session: in the feed, but without session statistics.
+		require.NoError(t, f.service.Event(ctx, follow("ada")))
+		require.Len(t, f.store.feed, 1)
+		assert.Equal(t, eventtype.ChannelFollow, f.store.feed[0].Type)
+		assert.Equal(t, "ada", f.store.feed[0].Login)
+		assert.Empty(t, f.store.sessionStats)
+
+		require.NoError(t, f.service.Stream(ctx, platform.Mock, true))
+		require.NoError(t, f.service.Event(ctx, follow("ada")))
+		require.NoError(t, f.service.Event(ctx, follow("ada")), "deduplicated")
+		require.NoError(t, f.service.Event(ctx, follow("bob")))
+		require.Len(t, f.store.feed, 3, "the deduplicated follow is not recorded")
+
+		require.Len(t, f.store.sessionStats, 1)
+		for _, st := range f.store.sessionStats {
+			assert.Equal(t, int64(2), st.Followers)
+		}
+	})
+}
+
 // TestSpecificAndNeutral covers B2 and B12: a platform-specific event fires
 // with its neutral type after it, each with its event command.
 func TestSpecificAndNeutral(t *testing.T) {

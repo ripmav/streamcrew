@@ -10,12 +10,14 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	chatsvc "github.com/ripmav/streamcrew/internal/chat"
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/command"
+	"github.com/ripmav/streamcrew/internal/domain/feed"
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/role"
@@ -40,6 +42,8 @@ type memStore struct {
 	sessions      map[platform.Name]stream.Session
 	sessionEvents map[string]bool
 	userEvents    map[string]bool
+	feed          []feed.Event
+	sessionStats  map[string]feed.SessionStats
 }
 
 func newMemStore() *memStore {
@@ -47,6 +51,7 @@ func newMemStore() *memStore {
 		sessions:      make(map[platform.Name]stream.Session),
 		sessionEvents: make(map[string]bool),
 		userEvents:    make(map[string]bool),
+		sessionStats:  make(map[string]feed.SessionStats),
 	}
 }
 
@@ -131,6 +136,33 @@ func (m *memStore) FirstForUser(_ context.Context, userID id.ID, t event.Type) (
 	first := !m.userEvents[k]
 	m.userEvents[k] = true
 	return first, nil
+}
+
+// RecordFeedEvent appends ev to the in-memory feed and, if sessionStarted
+// is set, adds it to that session's statistics (roadmap 5.3).
+func (m *memStore) RecordFeedEvent(_ context.Context, ev feed.Event, sessionStarted time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.feed = append(m.feed, ev)
+	if sessionStarted.IsZero() {
+		return nil
+	}
+	k := fmt.Sprintf("%s/%d", ev.Platform, sessionStarted.UnixMilli())
+	st := m.sessionStats[k]
+	st.Platform = ev.Platform
+	st.StartedAt = sessionStarted
+	d := ev.StatsDelta()
+	st.Followers += d.Followers
+	st.Subscribers += d.Subscribers
+	st.Resubscribers += d.Resubscribers
+	st.Gifts += d.Gifts
+	st.Raids += d.Raids
+	st.Cheers += d.Cheers
+	st.Donations += d.Donations
+	st.BitsTotal += d.BitsTotal
+	st.DonationCents += d.DonationCents
+	m.sessionStats[k] = st
+	return nil
 }
 
 // mockSession returns the stored session of the mock platform.
