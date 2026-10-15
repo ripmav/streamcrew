@@ -23,6 +23,7 @@ import (
 	"unicode"
 
 	"github.com/ripmav/streamcrew/internal/domain/platform"
+	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/polydoc"
 	"github.com/ripmav/streamcrew/internal/template"
@@ -293,14 +294,20 @@ func (c Chat) validate() error {
 
 // Users configures the user service (roadmap 5.2). The section holds the
 // knobs the user service reads on its watch tick, so a change applies from
-// the next tick.
+// the next tick, and the title rules the templates apply at once.
 type Users struct {
 	// RegularHours is the whole hours of watch time a user needs for the
 	// regular role (users-and-roles.md, B26); 0 turns the role off.
 	RegularHours int `json:"regularHours"`
+	// TitleRules are the streamer's title rules (users-and-roles.md, B5),
+	// in the order the streamer set them; empty for none. A document
+	// without the key decodes with the empty list, so the section stayed
+	// at version 1.
+	TitleRules []user.TitleRule `json:"titleRules"`
 }
 
-// DefaultUsers returns the defaults: no regular role (B26).
+// DefaultUsers returns the defaults: no regular role and no title rules
+// (users-and-roles.md, B5, B26).
 func DefaultUsers() Users {
 	return Users{}
 }
@@ -314,6 +321,20 @@ func (u Users) Validate() error { return u.validate() }
 func (u Users) validate() error {
 	if u.RegularHours < 0 {
 		return fmt.Errorf("regular hours %d must be 0 or more", u.RegularHours)
+	}
+	for i, r := range u.TitleRules {
+		if r.Name == "" {
+			return fmt.Errorf("title rule %d: empty title", i)
+		}
+		if strings.IndexFunc(r.Name, unicode.IsControl) >= 0 {
+			return fmt.Errorf("title rule %d: the title contains a control character", i)
+		}
+		if !r.MinRole.Valid() {
+			return fmt.Errorf("title rule %d: unknown role %q", i, r.MinRole)
+		}
+		if r.MinMonths < 0 {
+			return fmt.Errorf("title rule %d: months %d must be 0 or more", i, r.MinMonths)
+		}
 	}
 	return nil
 }

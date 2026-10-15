@@ -41,4 +41,8 @@ const (
 	// requirement of the command (requirements.md, B8); the user is not
 	// told.
 	KeyRequirementUnknown Key = "requirement.unknown"
+
+	// KeyNoTitle is the title of a user without a custom title and without
+	// a matching title rule (users-and-roles.md, B5).
+	KeyNoTitle Key = "user.no_title"
 )

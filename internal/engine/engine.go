@@ -22,6 +22,7 @@ import (
 
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/id"
+	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/template"
@@ -93,6 +94,13 @@ type Config struct {
 	// Locale is the locale of the formats of dates and times in the
 	// templates (B41); the zero value takes en-US.
 	Locale template.Locale
+	// TitleRules are the streamer's title rules of the templates
+	// (users-and-roles.md, B5); nil for none.
+	TitleRules []user.TitleRule
+	// NoTitle is the localized title of a user without a custom title and
+	// without a matching rule (users-and-roles.md, B5); empty takes the
+	// legacy fallback of the primary role name.
+	NoTitle string
 }
 
 // DefaultConfig returns the settings the engine reads unless WithConfig

@@ -236,6 +236,49 @@ func TestUserFamily_Properties(t *testing.T) {
 	}
 }
 
+// TestUserFamily_TitleRules_B5 covers the precedence of $usertitle
+// (users-and-roles.md, B5): the custom title, then the first matching rule,
+// then the localized "no title", and without it the legacy role name.
+func TestUserFamily_TitleRules_B5(t *testing.T) {
+	t.Parallel()
+	e := template.New(userRegistry(t, nil))
+	// A follower since 1 January 2025 and a subscriber since 1 March 2025.
+	follower := twitchUser("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d", "fan", "Fan", role.Follower)
+	follower.Identities[0].Data.FollowedAt = time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
+	subscriber := twitchUser("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d", "sub", "Sub", role.Subscriber, role.Follower)
+	subscriber.Identities[0].Data.FollowedAt = time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
+	subscriber.Identities[0].Data.SubscribedAt = time.Date(2025, time.March, 1, 0, 0, 0, 0, time.UTC)
+	plain := twitchUser("0192f0c4-8f7e-7c3a-9b1d-2f4e6a8c0b1d", "plain", "Plain", role.Follower)
+	plain.Identities[0].Data.FollowedAt = time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
+	withTitle := plain
+	withTitle.Title = "Super Fan"
+	rules := []user.TitleRule{
+		{Name: "New Follower", MinRole: role.Follower, MinMonths: 0},
+		{Name: "Subscriber", MinRole: role.Subscriber, MinMonths: 0},
+	}
+	tests := []struct {
+		name  string
+		scope template.Scope
+		want  string
+	}{
+		{"custom title wins", template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch, User: &withTitle, TitleRules: rules, NoTitle: "No title"}, "Super Fan"},
+		{"the first matching rule", template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch, User: &follower, TitleRules: rules, NoTitle: "No title"}, "New Follower"},
+		{"a subscriber gets the subscriber rule", template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch, User: &subscriber, TitleRules: rules, NoTitle: "No title"}, "Subscriber"},
+		{"no match, the localized no title", template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch, User: &plain, TitleRules: []user.TitleRule{{Name: "VIP", MinRole: role.TwitchVIP, MinMonths: 0}}, NoTitle: "No title"}, "No title"},
+		{"no rules and no text, the legacy role name", template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch, User: &plain}, "Follower"},
+		{"a rule too young for the months", template.Scope{Location: time.UTC, ArgDelimiter: "|", Platform: platform.Twitch, User: &plain, TitleRules: []user.TitleRule{{Name: "Fan", MinRole: role.Follower, MinMonths: 99}}, NoTitle: "No title"}, "No title"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				sleepUntil(time.Date(2025, time.March, 1, 12, 0, 0, 0, time.UTC))
+				assert.Equal(t, tc.want, render(t, e, "$usertitle", &tc.scope))
+			})
+		})
+	}
+}
+
 // TestUserFamily_RoleKinds covers users B20: the identifiers of a kind of
 // role hold its levels on all platforms, also for random users.
 func TestUserFamily_RoleKinds(t *testing.T) {

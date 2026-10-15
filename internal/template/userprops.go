@@ -48,9 +48,20 @@ func userProperties() map[string]property {
 			return roleName(set.Primary())
 		}),
 		"title": func(s *Scope, u user.User) (Value, bool) {
-			// Until the default titles of phase 5.2, the default title is
-			// the primary role (users B5).
-			return TextValue(cmp.Or(u.Title, roleName(userRoles(s, u).Primary()))), true
+			// The custom title of the user, then the first matching title
+			// rule, then "no title" (users-and-roles.md, B5).
+			if u.Title != "" {
+				return TextValue(u.Title), true
+			}
+			if r, ok := u.DefaultTitle(s.Platform, time.Now(), s.TitleRules); ok {
+				return TextValue(r.Name), true
+			}
+			if s.NoTitle != "" {
+				return TextValue(s.NoTitle), true
+			}
+			// A scope without the localized text, e.g. in unit tests, keeps
+			// the legacy fallback of the primary role name.
+			return TextValue(roleName(userRoles(s, u).Primary())), true
 		},
 		"notes":               func(_ *Scope, u user.User) (Value, bool) { return TextValue(u.Notes), true },
 		"isspecialtyexcluded": func(_ *Scope, u user.User) (Value, bool) { return boolValue(u.Excluded), true },

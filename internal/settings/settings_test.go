@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ripmav/streamcrew/internal/domain/platform"
+	"github.com/ripmav/streamcrew/internal/domain/role"
+	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/polydoc"
 	"github.com/ripmav/streamcrew/internal/settings"
@@ -167,14 +169,14 @@ func TestSaveAndLoad(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"type":"chat","schemaVersion":1,"historySize":1000,"protocol":true,"deleteTriggerMessage":true}`, string(doc))
 
-	users := settings.Users{RegularHours: 3}
+	users := settings.Users{RegularHours: 3, TitleRules: []user.TitleRule{{Name: "Fan", MinRole: role.Follower, MinMonths: 3}}}
 	require.NoError(t, settings.Save(ctx, svc, users))
 	gotUsers, err := settings.Load(ctx, svc, settings.DefaultUsers())
 	require.NoError(t, err)
 	assert.Equal(t, users, gotUsers)
 	doc, _, err = s.Settings(ctx, "users")
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"type":"users","schemaVersion":1,"regularHours":3}`, string(doc))
+	assert.JSONEq(t, `{"type":"users","schemaVersion":1,"regularHours":3,"titleRules":[{"name":"Fan","minRole":"follower","minMonths":3}]}`, string(doc))
 }
 
 func TestValidation(t *testing.T) {
@@ -224,6 +226,9 @@ func TestValidation(t *testing.T) {
 		settings.Chat{HistorySize: 0},
 		settings.Chat{HistorySize: 10_001},
 		settings.Users{RegularHours: -1},
+		settings.Users{TitleRules: []user.TitleRule{{Name: "", MinRole: role.Follower, MinMonths: 0}}},
+		settings.Users{TitleRules: []user.TitleRule{{Name: "Fan", MinRole: "vip", MinMonths: 0}}},
+		settings.Users{TitleRules: []user.TitleRule{{Name: "Fan", MinRole: role.Follower, MinMonths: -1}}},
 	} {
 		assert.Error(t, settings.Save(ctx, svc, s), "%+v", s)
 	}
@@ -356,6 +361,19 @@ func TestNewerStoredVersionFallsBackToDefaults(t *testing.T) {
 	b, err := settings.Load(t.Context(), svc, settings.DefaultBackups())
 	require.Error(t, err)
 	assert.Equal(t, settings.DefaultBackups(), b)
+}
+
+// TestUsersWithoutTitleRules: a users document stored before the title
+// rules (without the key) decodes with the empty list (B5, plan 5.2.3).
+func TestUsersWithoutTitleRules(t *testing.T) {
+	t.Parallel()
+	v1 := `{"type":"users","schemaVersion":1,"regularHours":2}`
+	svc, err := settings.New(fakeRepo{doc: []byte(v1)})
+	require.NoError(t, err)
+	got, err := settings.Load(t.Context(), svc, settings.DefaultUsers())
+	require.NoError(t, err)
+	assert.Equal(t, settings.Users{RegularHours: 2}, got)
+	assert.Empty(t, got.TitleRules)
 }
 
 func TestUnloadableTimeZoneFallsBackToUTC(t *testing.T) {

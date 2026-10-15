@@ -57,6 +57,13 @@ type Scope struct {
 	// Locale is the locale of the formats of dates and times in the
 	// templates (B41); the zero value takes en-US.
 	Locale Locale
+	// TitleRules are the streamer's title rules (users-and-roles.md, B5);
+	// nil for none.
+	TitleRules []user.TitleRule
+	// NoTitle is the localized title of a user without a custom title and
+	// without a matching rule (users-and-roles.md, B5); empty takes the
+	// legacy fallback of the primary role name.
+	NoTitle string
 	// Finder finds users by name for the run, e.g. for $arg1user, so that
 	// the run shares what it found (spec command-engine.md, B17); nil to
 	// find them through the Users of the engine.
