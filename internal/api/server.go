@@ -71,6 +71,8 @@ type Config struct {
 	Backups Backup
 	// Auth manages the platform logins; nil to skip the service.
 	Auth Auth
+	// Commands manages the profile commands; nil to skip the service.
+	Commands Commands
 	// Shutdown stops the core; nil if the API must not stop it.
 	Shutdown func()
 }
@@ -108,7 +110,10 @@ func (s *Server) Handler() http.Handler {
 	if au := s.cfg.Auth; au != nil {
 		mux.Handle(streamcrewv1alpha1connect.NewAuthServiceHandler(&authService{a: au}))
 	}
-	// The remaining services (Stream, Command, Agent)
+	if cm := s.cfg.Commands; cm != nil {
+		mux.Handle(streamcrewv1alpha1connect.NewCommandServiceHandler(&commandService{c: cm}))
+	}
+	// The remaining services (Stream, Agent)
 	// are added as their application surface is wired (roadmap 6.2.1).
 	return mux
 }

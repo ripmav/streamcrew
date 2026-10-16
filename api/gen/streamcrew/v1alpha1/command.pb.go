@@ -270,8 +270,8 @@ type ListCommandsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// kind filters by command kind; empty is every kind.
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
-	// enabled filters by the active switch; null is every state.
-	Enabled bool `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	// enabled filters by the active switch; unset is every state.
+	Enabled *bool `protobuf:"varint,2,opt,name=enabled,proto3,oneof" json:"enabled,omitempty"`
 	// prefix filters by a case-insensitive name prefix; empty is all.
 	Prefix        string `protobuf:"bytes,3,opt,name=prefix,proto3" json:"prefix,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -316,8 +316,8 @@ func (x *ListCommandsRequest) GetKind() string {
 }
 
 func (x *ListCommandsRequest) GetEnabled() bool {
-	if x != nil {
-		return x.Enabled
+	if x != nil && x.Enabled != nil {
+		return *x.Enabled
 	}
 	return false
 }
@@ -1802,11 +1802,13 @@ const file_streamcrew_v1alpha1_command_proto_rawDesc = "" +
 	"\n" +
 	"started_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x125\n" +
 	"\bended_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\x12\x14\n" +
-	"\x05error\x18\t \x01(\tR\x05error\"[\n" +
+	"\x05error\x18\t \x01(\tR\x05error\"l\n" +
 	"\x13ListCommandsRequest\x12\x12\n" +
-	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x18\n" +
-	"\aenabled\x18\x02 \x01(\bR\aenabled\x12\x16\n" +
-	"\x06prefix\x18\x03 \x01(\tR\x06prefix\"W\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x1d\n" +
+	"\aenabled\x18\x02 \x01(\bH\x00R\aenabled\x88\x01\x01\x12\x16\n" +
+	"\x06prefix\x18\x03 \x01(\tR\x06prefixB\n" +
+	"\n" +
+	"\b_enabled\"W\n" +
 	"\x14ListCommandsResponse\x12?\n" +
 	"\bcommands\x18\x01 \x03(\v2#.streamcrew.v1alpha1.CommandSummaryR\bcommands\"#\n" +
 	"\x11GetCommandRequest\x12\x0e\n" +
@@ -2002,6 +2004,7 @@ func file_streamcrew_v1alpha1_command_proto_init() {
 	if File_streamcrew_v1alpha1_command_proto != nil {
 		return
 	}
+	file_streamcrew_v1alpha1_command_proto_msgTypes[2].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

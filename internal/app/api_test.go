@@ -402,3 +402,83 @@ func TestAPIServesTheAuthService(t *testing.T) {
 	_, err = client.CancelLogin(ctx, connect.NewRequest(&v1alpha1.CancelLoginRequest{Platform: "nope"}))
 	require.NoError(t, err)
 }
+
+// TestAPIServesTheCommandService exercises the CommandService through the
+// real ConnectRPC client (roadmap 6.2.1): create, list, get, export, the
+// type catalog, the instance queue and delete.
+func TestAPIServesTheCommandService(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	a, _, _ := apiCore(t, cfg, settings.DefaultChat())
+	ctx := t.Context()
+
+	base := "http://" + a.HTTPServer().Addr().String()
+	client := streamcrewv1alpha1connect.NewCommandServiceClient(http.DefaultClient, base)
+
+	// The fresh profile comes with the preset commands.
+	l0, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{}))
+	require.NoError(t, err)
+	count0 := len(l0.Msg.Commands)
+	assert.NotEmpty(t, l0.Msg.Commands)
+
+	// Create a chat command from its document.
+	doc := "apiVersion: streamcrew/v1alpha1\n" +
+		"kind: ChatCommand\n" +
+		"metadata: {name: hug}\n" +
+		"spec:\n" +
+		"  triggers: [hug]\n" +
+		"  triggerMode: exclamation\n" +
+		"  errorPolicy: abort\n" +
+		"  actions:\n" +
+		"    - {type: chat, kind: message, message: \"hi\"}\n"
+	cr, err := client.Create(ctx, connect.NewRequest(&v1alpha1.CreateCommandRequest{Document: doc, Format: "yaml"}))
+	require.NoError(t, err)
+	assert.Equal(t, "hug", cr.Msg.Command.Name)
+	id := cr.Msg.Command.Id
+	assert.NotEmpty(t, id)
+
+	// The prefix filter finds the new command, and the list grew by one.
+	l1, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{Prefix: "hu"}))
+	require.NoError(t, err)
+	assert.Len(t, l1.Msg.Commands, 1)
+	assert.Equal(t, "hug", l1.Msg.Commands[0].Name)
+	all, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{}))
+	require.NoError(t, err)
+	assert.Len(t, all.Msg.Commands, count0+1)
+
+	// Get returns the command and its document.
+	g, err := client.Get(ctx, connect.NewRequest(&v1alpha1.GetCommandRequest{Id: id}))
+	require.NoError(t, err)
+	assert.Equal(t, "hug", g.Msg.Summary.Name)
+	assert.NotEmpty(t, g.Msg.Document)
+	assert.Equal(t, "yaml", g.Msg.Format)
+
+	// Export writes the commands to a document.
+	ex, err := client.Export(ctx, connect.NewRequest(&v1alpha1.ExportCommandsRequest{Format: "yaml"}))
+	require.NoError(t, err)
+	assert.Contains(t, ex.Msg.Document, "hug")
+
+	// TypeCatalog lists the action types.
+	tc, err := client.TypeCatalog(ctx, connect.NewRequest(&v1alpha1.TypeCatalogRequest{}))
+	require.NoError(t, err)
+	assert.NotEmpty(t, tc.Msg.Actions)
+
+	// The instance queue is not paused at first.
+	li, err := client.ListInstances(ctx, connect.NewRequest(&v1alpha1.ListInstancesRequest{}))
+	require.NoError(t, err)
+	assert.False(t, li.Msg.Paused)
+
+	// Pause and resume the queue.
+	pq, err := client.PauseQueue(ctx, connect.NewRequest(&v1alpha1.PauseQueueRequest{Pause: true}))
+	require.NoError(t, err)
+	assert.True(t, pq.Msg.Paused)
+	_, err = client.PauseQueue(ctx, connect.NewRequest(&v1alpha1.PauseQueueRequest{Pause: false}))
+	require.NoError(t, err)
+
+	// Delete removes the command; the list is back to the presets.
+	_, err = client.Delete(ctx, connect.NewRequest(&v1alpha1.DeleteCommandRequest{Id: id}))
+	require.NoError(t, err)
+	l2, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{Prefix: "hu"}))
+	require.NoError(t, err)
+	assert.Empty(t, l2.Msg.Commands)
+}

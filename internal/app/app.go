@@ -489,6 +489,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Chat:      apiChat{a: a},
 		Backups:   apiBackup{a: a},
 		Auth:      newAPIAuth(a),
+		Commands:  apiCommands{a: a},
 		Shutdown:  a.Shutdown,
 	})
 	a.http.SetAPI(a.api.Handler())
