@@ -144,6 +144,28 @@ func TestWordFilterDiscards(t *testing.T) {
 	assert.Len(t, f.chat.taken(), 1)
 }
 
+// TestWordFilterStrike covers B9, B10 and B11: a violation raises the
+// author's strikes and runs the follow-up command of the reached level with
+// the parameters of the message; the message is discarded.
+func TestWordFilterStrike(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, append(allChatEvents(), chat("strike", "strike"))...)
+	ctx := t.Context()
+	ada := account(platform.Mock, "ada")
+	u, _, err := f.store.UpsertIdentity(ctx, ada)
+	require.NoError(t, err)
+
+	f.mod.set(settings.Moderation{
+		Filters:      []settings.Filter{{Kind: settings.FilterWord, Word: "badword"}},
+		StrikeLevels: []settings.StrikeLevel{{Level: 1, Command: "strike"}},
+	})
+	require.NoError(t, f.service.Message(ctx, message(ada, "m1", "hey badword")))
+	assert.Empty(t, f.pub.types(), "no events (B1)")
+	assert.Equal(t, []string{"strike"}, f.engine.runs(), "the follow-up command runs (B10)")
+	assert.Equal(t, int64(1), f.mod.strikes.count(u.ID), "B9")
+	assert.Empty(t, f.chat.taken(), "not recorded (B11)")
+}
+
 // TestMutedChatNotJoins covers B25: the muted chat does not apply to
 // joins without a message.
 func TestMutedChatNotJoins(t *testing.T) {

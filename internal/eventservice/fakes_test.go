@@ -406,8 +406,11 @@ func (s *eventSettings) set(change func(*settings.Events)) {
 // section, so the pipeline tests can set the filters. The default is the
 // empty section (no filters), which lets every message through.
 type fakeModeration struct {
-	mu  sync.Mutex
-	cfg settings.Moderation
+	mu      sync.Mutex
+	cfg     settings.Moderation
+	cmds    commands
+	engine  *fakeEngine
+	strikes *memStrikes
 }
 
 func (f *fakeModeration) get(context.Context) (settings.Moderation, error) {
@@ -424,11 +427,38 @@ func (f *fakeModeration) set(cfg settings.Moderation) {
 }
 
 func (f *fakeModeration) Check(ctx context.Context, m moderation.Message) (moderation.Decision, error) {
-	svc, err := moderation.New(moderation.Ports{Settings: f.get})
+	svc, err := moderation.New(moderation.Ports{
+		Settings: f.get, Strikes: f.strikes, Commands: f.cmds, Engine: f.engine,
+	})
 	if err != nil {
 		return moderation.Decision{}, err
 	}
 	return svc.Check(ctx, m)
+}
+
+// memStrikes implements the moderation Strikes port in memory.
+type memStrikes struct {
+	mu      sync.Mutex
+	strikes map[id.ID]int64
+}
+
+func newMemStrikes() *memStrikes { return &memStrikes{strikes: map[id.ID]int64{}} }
+
+func (m *memStrikes) UpdateUser(_ context.Context, u id.ID, fn func(*user.User) error) (user.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	uu := user.User{ID: u, Stats: user.Stats{Strikes: m.strikes[u]}}
+	if err := fn(&uu); err != nil {
+		return user.User{}, err
+	}
+	m.strikes[u] = uu.Stats.Strikes
+	return uu, nil
+}
+
+func (m *memStrikes) count(u id.ID) int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.strikes[u]
 }
 
 type fixture struct {
@@ -458,8 +488,13 @@ func newFixture(t *testing.T, cmds ...command.Command) *fixture {
 		settings: &eventSettings{cfg: settings.DefaultEvents()},
 		points:   &channelPointsSettings{cfg: settings.DefaultChannelPoints()},
 		chat:     &fakeChat{},
-		mod:      &fakeModeration{},
 		cmds:     commands{list: cmds},
+	}
+	f.mod = &fakeModeration{
+		cfg:     settings.DefaultModeration(),
+		cmds:    f.cmds,
+		engine:  f.engine,
+		strikes: newMemStrikes(),
 	}
 	f.service = f.restart(t)
 	return f
