@@ -6,6 +6,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -188,6 +189,7 @@ type fx struct {
 	strikes  *memStrikes
 	commands *fakeCommands
 	engine   *fakeEngine
+	now      func() time.Time
 }
 
 func newFX(t *testing.T, cfg settings.Moderation, cmds map[string]command.Command) *fx {
@@ -196,12 +198,14 @@ func newFX(t *testing.T, cfg settings.Moderation, cmds map[string]command.Comman
 		strikes:  newMemStrikes(),
 		commands: &fakeCommands{cmds: cmds},
 		engine:   &fakeEngine{},
+		now:      func() time.Time { return time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC) },
 	}
 	s, err := New(Ports{
 		Settings: func(context.Context) (settings.Moderation, error) { return cfg, nil },
 		Strikes:  f.strikes,
 		Commands: f.commands,
 		Engine:   f.engine,
+		Now:      f.now,
 	})
 	require.NoError(t, err)
 	f.svc = s
@@ -305,4 +309,100 @@ func TestExemptRoleRunsThrough(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, d.Allow, "a plain user is not exempt")
 	assert.Equal(t, int64(1), f.strikes.count(plain.ID))
+}
+
+// fxPart is an fx with the fixed clock of newFX (2026-10-16 12:00 UTC).
+func fxPart(t *testing.T, cfg settings.Moderation) *fx {
+	return newFX(t, cfg, nil)
+}
+
+func userFull(roles role.Set, watchMinutes int64, followedAt time.Time) user.User {
+	return user.User{
+		ID:    id.New(),
+		Stats: user.Stats{WatchMinutes: watchMinutes},
+		Identities: []user.Identity{{
+			Platform: platform.Twitch,
+			Login:    "alice",
+			Roles:    roles,
+			Data:     user.PlatformData{FollowedAt: followedAt},
+		}},
+	}
+}
+
+func TestParticipationNoRules(t *testing.T) {
+	t.Parallel()
+	// B24: without any rule, everyone may chat.
+	f := fxPart(t, settings.Moderation{})
+	u := userFull(role.NewSet(role.User), 0, time.Time{})
+	d, err := f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "hello", User: u})
+	require.NoError(t, err)
+	assert.True(t, d.Allow)
+}
+
+func TestParticipationMinRole(t *testing.T) {
+	t.Parallel()
+	f := fxPart(t, settings.Moderation{MinRole: role.Regular})
+	yes := userFull(role.NewSet(role.Regular), 0, time.Time{})
+	d, err := f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "hi", User: yes})
+	require.NoError(t, err)
+	assert.True(t, d.Allow, "a regular meets the minimum")
+	no := userFull(role.NewSet(role.User), 0, time.Time{})
+	d, err = f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "hi", User: no})
+	require.NoError(t, err)
+	assert.False(t, d.Allow, "a plain user does not")
+	assert.Equal(t, int64(0), f.strikes.count(no.ID), "no strike (B3)")
+}
+
+func TestParticipationWatchTime(t *testing.T) {
+	t.Parallel()
+	f := fxPart(t, settings.Moderation{MinWatchMinutes: 100})
+	yes := userFull(role.NewSet(role.User), 100, time.Time{})
+	d, _ := f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "hi", User: yes})
+	assert.True(t, d.Allow)
+	no := userFull(role.NewSet(role.User), 99, time.Time{})
+	d, _ = f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "hi", User: no})
+	assert.False(t, d.Allow)
+	assert.Equal(t, int64(0), f.strikes.count(no.ID))
+}
+
+func TestParticipationFollowDays(t *testing.T) {
+	t.Parallel()
+	f := fxPart(t, settings.Moderation{MinFollowDays: 30})
+	now := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
+	yes := userFull(role.NewSet(role.User), 0, now.Add(-31*24*time.Hour))
+	d, _ := f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "hi", User: yes})
+	assert.True(t, d.Allow, "31 whole days is enough")
+	no := userFull(role.NewSet(role.User), 0, now.Add(-29*24*time.Hour))
+	d, _ = f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "hi", User: no})
+	assert.False(t, d.Allow, "29 days is not")
+	unknown := userFull(role.NewSet(role.User), 0, time.Time{})
+	d, _ = f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "hi", User: unknown})
+	assert.False(t, d.Allow, "an unknown follow date is not met")
+}
+
+func TestParticipationFailureNoStrike(t *testing.T) {
+	t.Parallel()
+	f := fxPart(t, settings.Moderation{
+		MinWatchMinutes: 100,
+		Filters:         []settings.Filter{{Kind: settings.FilterWord, Word: "badword"}},
+		StrikeLevels:    []settings.StrikeLevel{{Level: 1, Command: "x"}},
+	})
+	// Not enough watch time and a banned word: the participation rules
+	// reject it before the filters, so there is no strike or command.
+	u := userFull(role.NewSet(role.User), 0, time.Time{})
+	d, err := f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "badword", User: u})
+	require.NoError(t, err)
+	assert.False(t, d.Allow)
+	assert.Equal(t, int64(0), d.Strikes)
+	assert.Empty(t, d.Command)
+	assert.Empty(t, f.engine.requests(), "no command runs")
+}
+
+func TestParticipationStreamer(t *testing.T) {
+	t.Parallel()
+	f := fxPart(t, settings.Moderation{MinWatchMinutes: 100})
+	u := userFull(role.NewSet(role.Streamer), 0, time.Time{})
+	d, err := f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "hi", User: u})
+	require.NoError(t, err)
+	assert.True(t, d.Allow, "the streamer runs through (B2)")
 }
