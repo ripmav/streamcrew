@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -292,6 +293,45 @@ func TestNewResetsCounters(t *testing.T) {
 	total, err := s.Counter(ctx, "total")
 	require.NoError(t, err)
 	assert.Equal(t, "5", total.Value.String())
+}
+
+// TestNewSeedsPresets covers roadmap 5.6 (P0): a fresh profile gets the
+// ready-made commands, and a later start keeps them without re-adding.
+func TestNewSeedsPresets(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	cfg := testConfig(t)
+	var console bytes.Buffer
+
+	first, err := app.New(ctx, cfg, app.WithConsole(&console), app.WithKeyring(nil))
+	require.NoError(t, err)
+	path := first.Profile().Path
+	require.NoError(t, first.Close())
+
+	s, err := store.Open(ctx, path)
+	require.NoError(t, err)
+	recs, err := s.Commands(ctx)
+	require.NoError(t, err)
+	names := map[string]bool{}
+	for _, r := range recs {
+		names[strings.ToLower(r.Name)] = true
+	}
+	require.NoError(t, s.Close())
+	for _, want := range []string{"uptime", "followage", "title", "game"} {
+		assert.True(t, names[want], "preset %q is seeded", want)
+	}
+
+	// a later start does not re-add the presets
+	second, err := app.New(ctx, cfg, app.WithConsole(&console), app.WithKeyring(nil))
+	require.NoError(t, err)
+	require.NoError(t, second.Close())
+
+	s, err = store.Open(ctx, path)
+	require.NoError(t, err)
+	defer s.Close()
+	recs, err = s.Commands(ctx)
+	require.NoError(t, err)
+	assert.Len(t, recs, 4, "the presets are not added again")
 }
 
 func TestPreMigrationBackup(t *testing.T) {
