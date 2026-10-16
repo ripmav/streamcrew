@@ -14,6 +14,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/role"
 	"github.com/ripmav/streamcrew/internal/event"
+	"github.com/ripmav/streamcrew/internal/settings"
 )
 
 // TestChatHistory covers spec chat-service.md, B1 and B14: an accepted
@@ -115,6 +116,32 @@ func TestMutedChatExceptions(t *testing.T) {
 	assert.Empty(t, f.pub.types())
 	assert.Empty(t, f.chat.taken())
 	assert.Equal(t, []string{"mock//m3"}, f.chat.deletes(), "the delete was asked for")
+}
+
+// TestWordFilterDiscards covers spec moderation.md, B1, B4 to B8 and B11:
+// a message that violates a word filter is discarded at the moderation
+// stage, like the muted chat, without events, trigger or history; a clean
+// message runs through.
+func TestWordFilterDiscards(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, allChatEvents()...)
+	ctx := t.Context()
+	ada := account(platform.Mock, "ada")
+
+	require.NoError(t, f.service.Message(ctx, message(ada, "m1", "hello")))
+	assert.Len(t, f.chat.taken(), 1)
+	f.pub.types()
+	f.engine.runs()
+
+	f.mod.set(settings.Moderation{Filters: []settings.Filter{{Kind: settings.FilterWord, Word: "badword"}}})
+	require.NoError(t, f.service.Message(ctx, message(ada, "m2", "hey badword")))
+	assert.Empty(t, f.pub.types(), "no events")
+	assert.Empty(t, f.engine.runs(), "no trigger")
+	assert.Empty(t, f.chat.taken(), "not recorded")
+
+	require.NoError(t, f.service.Message(ctx, message(ada, "m3", "hello")))
+	assert.Equal(t, []event.Type{eventtype.ChatMessage}, f.pub.types())
+	assert.Len(t, f.chat.taken(), 1)
 }
 
 // TestMutedChatNotJoins covers B25: the muted chat does not apply to

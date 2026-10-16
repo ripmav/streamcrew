@@ -21,6 +21,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
+	"github.com/ripmav/streamcrew/internal/moderation"
 	"github.com/ripmav/streamcrew/internal/template"
 )
 
@@ -63,6 +64,22 @@ func (s *Service) Message(ctx context.Context, m connector.Incoming) error {
 	// nothing; messages of the streamer run through (B22, B31).
 	if s.ports.Chat.Muted() && !m.Author.Roles.Has(role.Streamer) {
 		return s.muteDeleteLocked(ctx, m)
+	}
+	// The word filters are the next check of the moderation stage (spec
+	// moderation.md, B1, B4 to B8): a violated message is discarded, like
+	// the muted chat, without events, trigger or history.
+	if d, err := s.ports.Moderation.Check(ctx, moderation.Message{
+		Platform:  m.Platform,
+		Channel:   string(m.Channel),
+		Text:      m.Message.Text,
+		Emotes:    m.Message.Emotes,
+		MessageID: m.Message.ID,
+		User:      u,
+	}); err != nil {
+		return fmt.Errorf("chat message: %w", err)
+	} else if !d.Allow {
+		s.logger.DebugContext(ctx, "message discarded by the moderation", "platform", m.Platform)
+		return nil
 	}
 	if err := s.seeLocked(ctx, m.Platform, m.Channel, u); err != nil {
 		return fmt.Errorf("chat message: %w", err)
