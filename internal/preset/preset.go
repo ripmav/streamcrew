@@ -9,8 +9,10 @@ package preset
 import (
 	"github.com/ripmav/streamcrew/internal/action"
 	chataction "github.com/ripmav/streamcrew/internal/action/chat"
+	"github.com/ripmav/streamcrew/internal/action/commandadmin"
 	streamaction "github.com/ripmav/streamcrew/internal/action/stream"
 	"github.com/ripmav/streamcrew/internal/domain/command"
+	"github.com/ripmav/streamcrew/internal/domain/role"
 )
 
 // Commands returns the ready-made commands. The app seeds the ones that do
@@ -24,6 +26,9 @@ func Commands() []command.Command {
 		answer("commands", "$commands"),
 		setStream("settitle", streamaction.KindSetTitle),
 		setStream("setgame", streamaction.KindSetGame),
+		admin("addcmd", commandadmin.KindAdd),
+		admin("updatecmd", commandadmin.KindUpdate),
+		admin("disablecmd", commandadmin.KindDisable),
 	}
 }
 
@@ -61,6 +66,27 @@ func setStream(name string, kind streamaction.Kind) command.Command {
 				Kind: kind,
 				Text: action.Template("$allargs"),
 			},
+		},
+	}
+}
+
+// admin returns a command that manages commands (roadmap 5.6, AddCommand,
+// UpdateCommand, DisableCommand): !addcmd <name> <answer>,
+// !updatecmd <name> <answer>, !disablecmd <name>. It needs the moderator
+// role, so that the chat cannot change the commands of the profile.
+func admin(name string, kind commandadmin.Kind) command.Command {
+	return command.Command{
+		Name:        name,
+		Kind:        command.KindChat,
+		Enabled:     true,
+		TriggerMode: command.TriggerExclamation,
+		Triggers:    []string{name},
+		ErrorPolicy: command.ErrorContinue,
+		Requirements: []command.Requirement{
+			command.RoleRequirement{Role: role.Moderator},
+		},
+		Actions: []command.Action{
+			commandadmin.CommandAdmin{Kind: kind},
 		},
 	}
 }

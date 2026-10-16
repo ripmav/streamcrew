@@ -28,6 +28,7 @@ import (
 
 	"github.com/ripmav/streamcrew/internal/action"
 	"github.com/ripmav/streamcrew/internal/action/chat"
+	"github.com/ripmav/streamcrew/internal/action/commandadmin"
 	"github.com/ripmav/streamcrew/internal/action/commands"
 	"github.com/ripmav/streamcrew/internal/action/flow"
 	"github.com/ripmav/streamcrew/internal/action/host"
@@ -370,7 +371,8 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	// The command action switches through the service, which the late port
 	// names once it is built.
 	late := &lateSwitches{}
-	if a.actions, err = a.actionTypes(globals, late); err != nil {
+	lateCmds := &lateCommands{}
+	if a.actions, err = a.actionTypes(globals, late, lateCmds); err != nil {
 		return a, err
 	}
 	codec, err := command.NewCodec(a.actions.Entries()...)
@@ -392,6 +394,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		return a, err
 	}
 	late.set(a.commands)
+	lateCmds.set(a.commands)
 	if err = a.seedPresets(ctx); err != nil {
 		return a, err
 	}
@@ -502,7 +505,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 // actionTypes returns the registry of the action types with their ports,
 // so that the engine runs them (Code-ADR-0013, point 3); switches is the
 // port of the command action, set once the command service is built.
-func (a *App) actionTypes(globals *template.Globals, switches commands.Switches) (*action.Registry, error) {
+func (a *App) actionTypes(globals *template.Globals, switches commands.Switches, cmds commandadmin.Commands) (*action.Registry, error) {
 	var descs []action.Descriptor
 	var errs []error
 	add := func(d []action.Descriptor, err error) {
@@ -520,6 +523,10 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches)
 		Templates: a.templates,
 		Switches:  switches,
 		Logger:    component(a.logger, "action"),
+	}))
+	add(commandadmin.Descriptors(commandadmin.Ports{
+		Commands: cmds,
+		Logger:   component(a.logger, "action"),
 	}))
 	add(flow.Descriptors(flow.Ports{
 		Templates: a.templates,

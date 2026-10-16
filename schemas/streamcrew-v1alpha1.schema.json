@@ -590,6 +590,9 @@
           "$ref": "#/$defs/action.command"
         },
         {
+          "$ref": "#/$defs/action.command_admin"
+        },
+        {
           "$ref": "#/$defs/action.conditional"
         },
         {
@@ -1286,6 +1289,30 @@
           "additionalProperties": false
         }
       ]
+    },
+    "action.command_admin": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "command_admin"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "kind": {
+          "type": "string",
+          "default": "add",
+          "x-ui": "choice"
+        }
+      },
+      "required": [
+        "type",
+        "kind"
+      ],
+      "additionalProperties": false
     },
     "action.conditional": {
       "type": "object",

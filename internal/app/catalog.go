@@ -7,6 +7,7 @@ import (
 
 	"github.com/ripmav/streamcrew/internal/action"
 	"github.com/ripmav/streamcrew/internal/action/chat"
+	"github.com/ripmav/streamcrew/internal/action/commandadmin"
 	"github.com/ripmav/streamcrew/internal/action/commands"
 	"github.com/ripmav/streamcrew/internal/action/flow"
 	"github.com/ripmav/streamcrew/internal/action/host"
@@ -38,6 +39,7 @@ func ActionCatalog(granted capability.Source) (*action.Registry, error) {
 		users.Catalog(),
 		values.Catalog(),
 		streamaction.Catalog(),
+		commandadmin.Catalog(),
 	)...)
 }
 
