@@ -83,6 +83,8 @@ type options struct {
 	envKey   string
 	file     *config.FileResolver
 	platform func(ctx context.Context, b PlatformBuilder) (connector.Platform, error)
+	// watchTick shortens the watch time tick of the user service (tests).
+	watchTick time.Duration
 }
 
 // WithConsole sets the destination of the console log; the default is
@@ -95,6 +97,12 @@ func WithConsole(w io.Writer) Option {
 // keyring. The default is vault.SystemKeyring.
 func WithKeyring(k vault.Keyring) Option {
 	return func(o *options) { o.keyring = k }
+}
+
+// WithWatchTick shortens the watch time tick of the user service, for the
+// end-to-end tests; the default is a minute. It must be positive.
+func WithWatchTick(d time.Duration) Option {
+	return func(o *options) { o.watchTick = d }
 }
 
 // WithConfigFile passes the resolver of the configuration file, so that
@@ -295,12 +303,16 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	// (5.2.2), and looks up users by login name, over the platform for
 	// unknown ones (command-engine.md, B17; actions.md, B91), the channel's
 	// accounts and the strikes.
+	userOpts := []userservice.Option{userservice.WithLogger(component(logger, "users"))}
+	if o.watchTick > 0 {
+		userOpts = append(userOpts, userservice.WithWatchTick(o.watchTick))
+	}
 	if a.userSvc, err = userservice.New(userservice.Ports{
 		Store:     userStore{a.store},
 		Bus:       a.bus,
 		Settings:  a.usersSettings,
 		Platforms: a.platforms,
-	}, userservice.WithLogger(component(logger, "users"))); err != nil {
+	}, userOpts...); err != nil {
 		return a, err
 	}
 	a.chat, err = chatsvc.New(chatsvc.Ports{
