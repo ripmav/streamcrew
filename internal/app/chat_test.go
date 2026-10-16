@@ -217,6 +217,11 @@ func runCore(t *testing.T, cfg config.Config, path, commands string, appOpts []a
 	errc := make(chan error, 1)
 	go func() { errc <- a.Run(runCtx) }()
 	require.Eventually(t, a.Ready, 10*time.Second, 10*time.Millisecond)
+	// The supervisor reports StateRunning before the platform's Run sets its
+	// connection, so Ready can be true while the platform still rejects chat
+	// messages ("account not connected"); wait for the platform to connect.
+	require.Eventually(t, func() bool { return mp.Status().Connected() },
+		5*time.Second, 10*time.Millisecond, "the mock platform to connect")
 	t.Cleanup(func() {
 		cancel()
 		require.NoError(t, <-errc)
