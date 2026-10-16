@@ -144,7 +144,11 @@ type App struct {
 	// startedAt is when the core started; it is reported by the API's Status
 	// (roadmap 6.2.1). shutdownCancel stops the core on request, e.g. the
 	// API's Shutdown RPC; it is the cancel of the run context.
-	startedAt      time.Time
+	startedAt time.Time
+	// runCtx is the context of the whole core; it is set when Run starts and
+	// ends with it. Long-running work the API starts (e.g. a login) is
+	// derived from it.
+	runCtx         context.Context
 	shutdownOnce   sync.Once
 	shutdownCancel context.CancelFunc
 
@@ -484,6 +488,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Users:     apiUsers{a: a},
 		Chat:      apiChat{a: a},
 		Backups:   apiBackup{a: a},
+		Auth:      newAPIAuth(a),
 		Shutdown:  a.Shutdown,
 	})
 	a.http.SetAPI(a.api.Handler())
@@ -698,6 +703,7 @@ func (a *App) Run(ctx context.Context) (err error) {
 	// ends or when the core is stopped on request (e.g. the API's Shutdown
 	// RPC, roadmap 6.2.1).
 	runCtx, cancel := context.WithCancel(ctx)
+	a.runCtx = runCtx
 	defer cancel()
 	a.shutdownCancel = cancel
 

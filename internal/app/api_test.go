@@ -366,3 +366,39 @@ func TestAPIServesTheBackupService(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 }
+
+// TestAPIServesTheAuthService exercises the AuthService through the real
+// ConnectRPC client (roadmap 6.2.1): listing accounts, the refused login of
+// an unknown platform, and a cancel with no login in progress.
+func TestAPIServesTheAuthService(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	var console bytes.Buffer
+	a, err := app.New(t.Context(), cfg, app.WithConsole(&console), app.WithKeyring(nil))
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	errRun := make(chan error, 1)
+	go func() { errRun <- a.Run(ctx) }()
+	select {
+	case <-a.HTTPServer().Listening():
+	case err := <-errRun:
+		t.Fatalf("Run returned early: %v", err)
+	}
+
+	base := "http://" + a.HTTPServer().Addr().String()
+	client := streamcrewv1alpha1connect.NewAuthServiceClient(http.DefaultClient, base)
+
+	// ListAccounts succeeds (the fresh profile has no logged-in account).
+	l, err := client.ListAccounts(ctx, connect.NewRequest(&v1alpha1.ListAccountsRequest{}))
+	require.NoError(t, err)
+	assert.Empty(t, l.Msg.Accounts)
+
+	// Starting a login of an unknown platform is refused.
+	_, err = client.StartLogin(ctx, connect.NewRequest(&v1alpha1.StartLoginRequest{Platform: "nope"}))
+	require.Error(t, err)
+
+	// Canceling a login that is not in progress is a no-op.
+	_, err = client.CancelLogin(ctx, connect.NewRequest(&v1alpha1.CancelLoginRequest{Platform: "nope"}))
+	require.NoError(t, err)
+}
