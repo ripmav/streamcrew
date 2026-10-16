@@ -12,9 +12,12 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/ripmav/streamcrew/internal/domain/command"
+	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/role"
 	"github.com/ripmav/streamcrew/internal/domain/user"
+	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/settings"
 )
 
@@ -45,11 +48,17 @@ func (m Message) Roles() role.Set {
 	return ident.Roles
 }
 
-// Decision is what the pipeline does with the message: Allow is false for a
-// message that is discarded (no events, no trigger, no history, spec
-// moderation.md, B1, B11).
+// Decision is what the pipeline does with the message and what the
+// moderation did: Allow is false for a message that is discarded (no
+// events, no trigger, no history, spec moderation.md, B1, B11); Filter is
+// the violated filter, Strikes the author's strikes after the raise and
+// Command the follow-up command that ran (the zero values if there is
+// none).
 type Decision struct {
-	Allow bool
+	Allow   bool
+	Filter  settings.Filter
+	Strikes int64
+	Command string
 }
 
 // Ports are what the service needs. All are required.
@@ -57,6 +66,37 @@ type Ports struct {
 	// Settings reads the section "moderation" whenever a message is
 	// checked, so a change applies from the next message (B13).
 	Settings func(ctx context.Context) (settings.Moderation, error)
+	// Strikes changes a user in one transaction (B9); the user service
+	// implements it.
+	Strikes Strikes
+	// Commands finds the follow-up commands by name (B10).
+	Commands Commands
+	// Engine runs the follow-up commands without waiting for the decision
+	// (B10, B11).
+	Engine Engine
+}
+
+// Strikes changes the strikes of a user in one transaction; the user
+// service implements it (B9, users-and-roles.md, B9).
+type Strikes interface {
+	// UpdateUser changes the user with the ID in one transaction: fn gets
+	// the stored user and changes it; an error from fn discards the
+	// changes.
+	UpdateUser(ctx context.Context, userID id.ID, fn func(*user.User) error) (user.User, error)
+}
+
+// Commands finds the follow-up commands (B10).
+type Commands interface {
+	// CommandByName returns the command with the name, case-insensitively;
+	// ok is false if there is none.
+	CommandByName(ctx context.Context, name string) (cmd command.Command, ok bool, err error)
+}
+
+// Engine runs the follow-up commands (B10, B11).
+type Engine interface {
+	// Submit triggers a command without waiting for the decision
+	// (command-engine.md, B16).
+	Submit(ctx context.Context, req engine.Request, done func(engine.Result, error)) error
 }
 
 // Option configures a Service. An option without a valid value makes New
@@ -83,8 +123,15 @@ type Service struct {
 // New returns a service with the ports p. A missing port fails with
 // ErrInvalidOption.
 func New(p Ports, opts ...Option) (*Service, error) {
-	if p.Settings == nil {
+	switch {
+	case p.Settings == nil:
 		return nil, fmt.Errorf("new moderation: %w: missing settings", ErrInvalidOption)
+	case p.Strikes == nil:
+		return nil, fmt.Errorf("new moderation: %w: missing strikes", ErrInvalidOption)
+	case p.Commands == nil:
+		return nil, fmt.Errorf("new moderation: %w: missing commands", ErrInvalidOption)
+	case p.Engine == nil:
+		return nil, fmt.Errorf("new moderation: %w: missing engine", ErrInvalidOption)
 	}
 	s := &Service{ports: p, logger: slog.New(slog.DiscardHandler)}
 	var errs []error
@@ -100,7 +147,9 @@ func New(p Ports, opts ...Option) (*Service, error) {
 // Check applies the moderation rules to m (spec moderation.md, B1 to B11).
 // The word filters (B4 to B8) run for every message that the muted chat
 // did not already discard; the streamer runs through (B2). A message that
-// violates a filter is discarded.
+// violates a filter is a violation: it raises the author's strikes (B9) and
+// runs the follow-up command of the reached level (B10), and it is
+// discarded.
 func (s *Service) Check(ctx context.Context, m Message) (Decision, error) {
 	cfg, err := s.ports.Settings(ctx)
 	if err != nil {
@@ -114,10 +163,85 @@ func (s *Service) Check(ctx context.Context, m Message) (Decision, error) {
 				continue // the author is exempt from the filter (B22)
 			}
 			if violates(f, m.Text, m.Emotes) {
-				s.logger.DebugContext(ctx, "message violates the filter", "filter", f.Kind)
-				return Decision{Allow: false}, nil
+				return s.violate(ctx, cfg, m, f), nil
 			}
 		}
 	}
 	return Decision{Allow: true}, nil
+}
+
+// violate handles a violated filter f (B9 to B11, B23, B25): it raises the
+// author's strikes by one and, for the reached level, runs the follow-up
+// command with the parameters of the message.
+func (s *Service) violate(ctx context.Context, cfg settings.Moderation, m Message, f settings.Filter) Decision {
+	d := Decision{Allow: false, Filter: f}
+	u, err := s.ports.Strikes.UpdateUser(ctx, m.User.ID, func(u *user.User) error {
+		u.Stats.Strikes++
+		return nil
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "raising the strikes failed", "user", m.User.ID, "error", err)
+		// The violation still counts: the message is discarded (B11).
+		return d
+	}
+	d.Strikes = u.Stats.Strikes
+	lvl, ok := strikeLevel(cfg.StrikeLevels, u.Stats.Strikes)
+	if !ok || lvl.Command == "" {
+		return d // only the counter (B25)
+	}
+	cmd, ok, err := s.ports.Commands.CommandByName(ctx, lvl.Command)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "finding the follow-up command failed", "command", lvl.Command, "error", err)
+		return d
+	}
+	if !ok {
+		s.logger.WarnContext(ctx, "the follow-up command is not found", "command", lvl.Command)
+		return d
+	}
+	d.Command = lvl.Command
+	s.submit(ctx, cmd, m)
+	return d
+}
+
+// strikeLevel resolves the follow-up level for the strike count n (B10,
+// B23): the exact level, if set; above the highest set level, the highest;
+// otherwise none (B25).
+func strikeLevel(levels []settings.StrikeLevel, n int64) (settings.StrikeLevel, bool) {
+	var exact, highest settings.StrikeLevel
+	hasExact, hasHighest := false, false
+	for _, l := range levels {
+		if int64(l.Level) == n {
+			exact, hasExact = l, true
+		}
+		if !hasHighest || l.Level > highest.Level {
+			highest, hasHighest = l, true
+		}
+	}
+	if hasExact {
+		return exact, true
+	}
+	if hasHighest && n > int64(highest.Level) {
+		return highest, true
+	}
+	return settings.StrikeLevel{}, false
+}
+
+// submit runs the follow-up command c for the message m without waiting for
+// the decision; the outcome is logged (B10, B11, B26).
+func (s *Service) submit(ctx context.Context, c command.Command, m Message) {
+	req := engine.Request{
+		Command: c,
+		Source:  engine.SourceChat,
+		Params:  engine.Params{Platform: m.Platform, Channel: m.Channel, User: &m.User, Message: m.Text, MessageID: m.MessageID, Emotes: m.Emotes},
+	}
+	err := s.ports.Engine.Submit(ctx, req, func(r engine.Result, err error) {
+		if err != nil {
+			s.logger.WarnContext(ctx, "the follow-up command failed", "command", c.Name, "error", err)
+			return
+		}
+		s.logger.DebugContext(ctx, "the follow-up command ran", "command", c.Name, "outcome", r.Outcome)
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "submitting the follow-up command failed", "command", c.Name, "error", err)
+	}
 }

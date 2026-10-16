@@ -390,6 +390,9 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	}
 	a.moderation, err = modsvc.New(modsvc.Ports{
 		Settings: a.moderationSettings,
+		Strikes:  a.userSvc,
+		Commands: a.commands,
+		Engine:   a.engine,
 	}, modsvc.WithLogger(component(logger, "moderation")))
 	if err != nil {
 		return a, err
