@@ -655,7 +655,7 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 - [ ] Wortfilter und Bannwörter mit Wildcards, Links, Großbuchstaben/Satzzeichen/Emotes (absolut oder prozentual), Ausnahmen je Rolle (M)
 - [ ] Strikes mit Folge-Commands je Stufe; Maßnahmen: löschen, Timeout, Bann (S)
 - [ ] Teilnahmeregeln: Chat erst ab Follow-Dauer, Watchtime oder Rolle (S) (P1)
-- [ ] Settings-Sektion „moderation“ mit ihren Funktionen, aus 3.2 übertragen (S)
+- [x] Settings-Sektion „moderation“ mit ihren Funktionen, aus 3.2 übertragen (S), erledigt 2026-10-16 in [`internal/settings`](../internal/settings) (Sektion `moderation`: Teilnahmeregeln `minFollowDays`/`minWatchMinutes`/`minRole` (0 bzw. leer = keine Regel, B3), `filters` (je Filter `kind` `word`/`link`/`uppercase`/`punctuation`/`emote`, Bannwort `word` mit Wildcards, Schwelle `threshold` absolut oder prozentual `percent` für die letzten drei, Ausnahmen `exempt` je Rolle, B4–B7), `strikeLevels` (je Stufe `level` ab 1 ein `command`, keine doppelten Stufen, B10); Validierung; Defaults leer = alles läuft durch (B3, B20, B24))
 
 ### 5.6 Vorgefertigte Commands und Counter
 

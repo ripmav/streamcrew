@@ -232,6 +232,16 @@ func TestValidation(t *testing.T) {
 		settings.Timers{Interval: polydoc.Duration(-time.Second)},
 		settings.Timers{MinChatMessages: -1},
 		settings.Timers{Order: "sometimes"},
+		settings.Moderation{MinFollowDays: -1},
+		settings.Moderation{MinWatchMinutes: -1},
+		settings.Moderation{MinRole: "vip"},
+		settings.Moderation{Filters: []settings.Filter{{Kind: "unknown"}}},
+		settings.Moderation{Filters: []settings.Filter{{Kind: settings.FilterWord}}},
+		settings.Moderation{Filters: []settings.Filter{{Kind: settings.FilterUppercase, Threshold: -1}}},
+		settings.Moderation{Filters: []settings.Filter{{Kind: settings.FilterUppercase, Threshold: 101, Percent: true}}},
+		settings.Moderation{Filters: []settings.Filter{{Kind: settings.FilterWord, Word: "x", Exempt: []role.Role{"vip"}}}},
+		settings.Moderation{StrikeLevels: []settings.StrikeLevel{{Level: 0}}},
+		settings.Moderation{StrikeLevels: []settings.StrikeLevel{{Level: 1}, {Level: 1}}},
 	} {
 		assert.Error(t, settings.Save(ctx, svc, s), "%+v", s)
 	}

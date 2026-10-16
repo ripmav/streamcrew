@@ -23,6 +23,7 @@ import (
 	"unicode"
 
 	"github.com/ripmav/streamcrew/internal/domain/platform"
+	"github.com/ripmav/streamcrew/internal/domain/role"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/polydoc"
@@ -62,6 +63,7 @@ func New(repo Repository) (*Service, error) {
 		{Type: sectionChat, Version: 1, Decode: decode[Chat]},
 		{Type: sectionUsers, Version: 1, Decode: decode[Users]},
 		{Type: sectionTimers, Version: 1, Decode: decode[Timers]},
+		{Type: sectionModeration, Version: 1, Decode: decode[Moderation]},
 	} {
 		if err := r.Register(e); err != nil {
 			return nil, err
@@ -129,6 +131,7 @@ const (
 	sectionChat          = "chat"
 	sectionUsers         = "users"
 	sectionTimers        = "timers"
+	sectionModeration    = "moderation"
 )
 
 // Limits of the section "events" (spec events.md, B5, B8, B10).
@@ -400,6 +403,149 @@ func (t Timers) validate() error {
 	}
 	if !t.Order.Valid() {
 		return fmt.Errorf("timer order %q is unknown", t.Order)
+	}
+	return nil
+}
+
+// FilterKind is what a moderation filter checks (spec moderation.md, B4).
+type FilterKind string
+
+// Kinds of a moderation filter (spec moderation.md, B4).
+const (
+	// FilterWord is a banned word or pattern with wildcards (B5).
+	FilterWord FilterKind = "word"
+	// FilterLink is a link in the message (B6).
+	FilterLink FilterKind = "link"
+	// FilterUppercase is the amount of uppercase (B7).
+	FilterUppercase FilterKind = "uppercase"
+	// FilterPunctuation is the amount of punctuation (B7).
+	FilterPunctuation FilterKind = "punctuation"
+	// FilterEmote is the amount of emotes (B7).
+	FilterEmote FilterKind = "emote"
+)
+
+// Valid reports whether k is a known kind.
+func (k FilterKind) Valid() bool {
+	switch k {
+	case FilterWord, FilterLink, FilterUppercase, FilterPunctuation, FilterEmote:
+		return true
+	default:
+		return false
+	}
+}
+
+// Filter is one rule the moderation checks a message against (spec
+// moderation.md, B4 to B7). A threshold filter (uppercase, punctuation,
+// emote) is off with a threshold of 0 (B7).
+type Filter struct {
+	// Kind is what the filter checks.
+	Kind FilterKind `json:"kind"`
+	// Word is the banned word or pattern for FilterWord; `*` at the
+	// start, the end or both is a wildcard (B5).
+	Word string `json:"word"`
+	// Threshold is the limit of a threshold filter (B7).
+	Threshold int `json:"threshold"`
+	// Percent makes Threshold a percentage of the letters or words instead
+	// of a count (B7).
+	Percent bool `json:"percent"`
+	// Exempt are the roles that are exempt from the filter (B4, B22).
+	Exempt []role.Role `json:"exempt"`
+}
+
+// StrikeLevel assigns the follow-up command to a strike level (spec
+// moderation.md, B10). The levels run from 1; a level without a command
+// raises the counter only (B10, B25).
+type StrikeLevel struct {
+	// Level is the strike count the level is for, from 1.
+	Level int `json:"level"`
+	// Command is the name of the follow-up command; empty for none.
+	Command string `json:"command"`
+}
+
+// Moderation is the settings of the chat moderation stage (spec
+// moderation.md, B3, B4, B10, B13): the participation rules, the filters
+// and the strike levels.
+type Moderation struct {
+	// MinFollowDays is the whole days a user must have followed before
+	// chatting (B3); 0 for no requirement.
+	MinFollowDays int `json:"minFollowDays"`
+	// MinWatchMinutes is the whole minutes of watch time a user needs
+	// before chatting (B3); 0 for no requirement.
+	MinWatchMinutes int `json:"minWatchMinutes"`
+	// MinRole is the role a user needs before chatting (B3); empty for no
+	// requirement.
+	MinRole role.Role `json:"minRole"`
+	// Filters are the rules, in the order they are checked; the first
+	// violated one counts (B8, B13).
+	Filters []Filter `json:"filters"`
+	// StrikeLevels are the follow-up commands per strike count (B10, B13).
+	StrikeLevels []StrikeLevel `json:"strikeLevels"`
+}
+
+// DefaultModeration returns the defaults: no participation rules, no
+// filters, no strike levels — every message runs through (spec
+// moderation.md, B3, B20, B24).
+func DefaultModeration() Moderation {
+	return Moderation{}
+}
+
+// DocType implements polydoc.Document.
+func (Moderation) DocType() string { return sectionModeration }
+
+// Validate checks the section.
+func (m Moderation) Validate() error { return m.validate() }
+
+func (m Moderation) validate() error {
+	if m.MinFollowDays < 0 {
+		return fmt.Errorf("min follow days %d must be 0 or more", m.MinFollowDays)
+	}
+	if m.MinWatchMinutes < 0 {
+		return fmt.Errorf("min watch minutes %d must be 0 or more", m.MinWatchMinutes)
+	}
+	if m.MinRole != "" && !m.MinRole.Valid() {
+		return fmt.Errorf("min role %q is unknown", m.MinRole)
+	}
+	for i, f := range m.Filters {
+		if err := f.validate(); err != nil {
+			return fmt.Errorf("filter %d: %w", i, err)
+		}
+	}
+	seen := make(map[int]struct{}, len(m.StrikeLevels))
+	for i, l := range m.StrikeLevels {
+		if l.Level < 1 {
+			return fmt.Errorf("strike level %d: %d must be 1 or more", i, l.Level)
+		}
+		if _, dup := seen[l.Level]; dup {
+			return fmt.Errorf("strike level %d: level %d is set twice", i, l.Level)
+		}
+		seen[l.Level] = struct{}{}
+	}
+	return nil
+}
+
+func (f Filter) validate() error {
+	if !f.Kind.Valid() {
+		return fmt.Errorf("kind %q is unknown", f.Kind)
+	}
+	switch f.Kind {
+	case FilterWord:
+		if f.Word == "" {
+			return errors.New("empty word")
+		}
+	case FilterUppercase, FilterPunctuation, FilterEmote:
+		if f.Threshold < 0 {
+			return fmt.Errorf("threshold %d must be 0 or more", f.Threshold)
+		}
+		if f.Percent && (f.Threshold < 0 || f.Threshold > 100) {
+			return fmt.Errorf("threshold %d is not between 0 and 100", f.Threshold)
+		}
+	default:
+		// FilterLink has no further fields.
+	}
+	for _, r := range f.Exempt {
+		if !r.Valid() {
+			return fmt.Errorf("exempt role %q is unknown", r)
+		}
 	}
 	return nil
 }
