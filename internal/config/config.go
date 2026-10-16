@@ -45,6 +45,7 @@ type Config struct {
 	Mode            Mode          `enum:"desktop,daemon,server" default:"daemon" help:"Operating mode: ${enum}."`
 	Listen          string        `placeholder:"HOST:PORT" help:"Address of the HTTP server. Default: 127.0.0.1:8740, in server mode :8740."`
 	Dev             bool          `help:"Developer mode: serves pprof under /debug/pprof/. Requires a loopback listen address."`
+	CorsAllow       []string      `name:"cors-allow" placeholder:"ORIGIN" help:"Origins allowed to call the API cross-origin (CORS), e.g. http://localhost:5173. Repeatable. Default: none — cross-origin requests are refused."`
 	DryRun          bool          `name:"dry-run" help:"Dry run: the platforms read the channel and log what they would do, instead of doing it (chat, moderation, twitch actions)."`
 	ShutdownTimeout time.Duration `default:"15s" help:"Time limit for the whole shutdown."`
 	Log             LogConfig     `embed:"" prefix:"log-"`

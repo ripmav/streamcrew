@@ -75,6 +75,9 @@ type Config struct {
 	Commands Commands
 	// Stream delivers the live events and answers prompts; nil to skip.
 	Stream Stream
+	// Tokens protects the API with access tokens (roadmap 6.2.2); nil for
+	// an open API.
+	Tokens Tokens
 	// Shutdown stops the core; nil if the API must not stop it.
 	Shutdown func()
 }
@@ -120,5 +123,8 @@ func (s *Server) Handler() http.Handler {
 	}
 	// The remaining services (Agent) are added as their application
 	// surface is wired (roadmap 6.2.1, 6.1.5).
+	if t := s.cfg.Tokens; t != nil {
+		return tokenAuth(t, mux)
+	}
 	return mux
 }

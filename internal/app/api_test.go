@@ -15,6 +15,7 @@ import (
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
+	"github.com/ripmav/streamcrew/internal/apitoken"
 	"github.com/ripmav/streamcrew/internal/app"
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/connector"
@@ -535,4 +536,72 @@ func TestAPIServesTheStreamService(t *testing.T) {
 		}
 		return catchup.Msg().GetChat() != nil && catchup.Msg().GetChat().GetText() == "hello stream"
 	}, 5*time.Second, 10*time.Millisecond, "the catch-up of the chat message")
+}
+
+// withAuth returns the client option that sends the bearer token of value
+// with every unary call.
+func withAuth(value string) connect.Option {
+	return connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			req.Header().Set("Authorization", "Bearer "+value)
+			return next(ctx, req)
+		}
+	}))
+}
+
+// TestAPITokensProtectTheAPI covers the token access control (roadmap
+// 6.2.2): without tokens the API is open; with tokens a valid bearer token
+// with the required scope is mandatory.
+func TestAPITokensProtectTheAPI(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	a, _, _ := apiCore(t, cfg, settings.DefaultChat())
+	ctx := t.Context()
+
+	base := "http://" + a.HTTPServer().Addr().String()
+
+	// Without tokens the API is open.
+	open := streamcrewv1alpha1connect.NewCounterServiceClient(http.DefaultClient, base)
+	_, err := open.List(ctx, connect.NewRequest(&v1alpha1.ListCountersRequest{}))
+	require.NoError(t, err)
+
+	// With tokens the API is protected.
+	s := apitoken.Open(cfg.DataDir)
+	_, readValue, err := s.Create("read", []apitoken.Scope{apitoken.Read})
+	require.NoError(t, err)
+	_, adminValue, err := s.Create("admin", []apitoken.Scope{apitoken.Admin})
+	require.NoError(t, err)
+	_, overlayValue, err := s.Create("overlay", []apitoken.Scope{apitoken.Overlay})
+	require.NoError(t, err)
+
+	// Without or with an invalid token: unauthenticated.
+	_, err = open.List(ctx, connect.NewRequest(&v1alpha1.ListCountersRequest{}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+
+	bogus := streamcrewv1alpha1connect.NewCounterServiceClient(http.DefaultClient, base, withAuth("sc_bogus"))
+	_, err = bogus.List(ctx, connect.NewRequest(&v1alpha1.ListCountersRequest{}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+
+	// A read token can read, but not create.
+	read := streamcrewv1alpha1connect.NewCounterServiceClient(http.DefaultClient, base, withAuth(readValue))
+	_, err = read.List(ctx, connect.NewRequest(&v1alpha1.ListCountersRequest{}))
+	require.NoError(t, err)
+	_, err = read.Create(ctx, connect.NewRequest(&v1alpha1.CreateCounterRequest{Name: "hugs"}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+
+	// An admin token can create.
+	admin := streamcrewv1alpha1connect.NewCounterServiceClient(http.DefaultClient, base, withAuth(adminValue))
+	_, err = admin.Create(ctx, connect.NewRequest(&v1alpha1.CreateCounterRequest{Name: "hugs"}))
+	require.NoError(t, err)
+
+	// An overlay token can read, but not control.
+	overlay := streamcrewv1alpha1connect.NewChatServiceClient(http.DefaultClient, base, withAuth(overlayValue))
+	_, err = overlay.History(ctx, connect.NewRequest(&v1alpha1.HistoryChatRequest{}))
+	require.NoError(t, err)
+	_, err = overlay.Send(ctx, connect.NewRequest(&v1alpha1.SendChatRequest{Text: "nope"}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 }

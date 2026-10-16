@@ -159,6 +159,13 @@ func (l *syncedLog) String() string {
 	return l.b.String()
 }
 
+// Reset empties the log.
+func (l *syncedLog) Reset() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.b.Reset()
+}
+
 // TestMockConsoleBadLine covers that an error of a console line is reported
 // and the console keeps running.
 func TestMockConsoleBadLine(t *testing.T) {

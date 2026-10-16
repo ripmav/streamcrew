@@ -33,6 +33,9 @@ type Config struct {
 	Addr string
 	// Dev serves pprof under /debug/pprof/. Only for loopback addresses.
 	Dev bool
+	// CorsAllow lists the origins allowed to call the server cross-origin
+	// (CORS); an empty list refuses every cross-origin request.
+	CorsAllow []string
 	// ShutdownTimeout limits the graceful shutdown of open connections;
 	// connections still open afterwards are closed. It must stay below the
 	// supervisor's shutdown timeout, because net/http waits up to 5 s for
@@ -66,7 +69,7 @@ func New(cfg Config, logger *slog.Logger, ready func() bool) *Server {
 		ready = func() bool { return true }
 	}
 	s := &Server{cfg: cfg, logger: logger, listening: make(chan struct{})}
-	s.handler = s.buildMux(cfg.Dev, ready)
+	s.handler = CrossOriginProtection(originIn(cfg.CorsAllow), s.buildMux(cfg.Dev, ready))
 	return s
 }
 

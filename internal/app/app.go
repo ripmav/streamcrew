@@ -40,6 +40,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/users"
 	"github.com/ripmav/streamcrew/internal/action/values"
 	"github.com/ripmav/streamcrew/internal/api"
+	"github.com/ripmav/streamcrew/internal/apitoken"
 	"github.com/ripmav/streamcrew/internal/auth"
 	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/breaker"
@@ -474,6 +475,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	a.http = httpserver.New(httpserver.Config{
 		Addr:            cfg.Listen,
 		Dev:             cfg.Dev,
+		CorsAllow:       cfg.CorsAllow,
 		ShutdownTimeout: httpShutdownTimeout(cfg.ShutdownTimeout),
 	}, component(logger, "http"), a.ready.Ready)
 	scheduler := backup.NewScheduler(a.store, backups,
@@ -499,6 +501,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Auth:      newAPIAuth(a),
 		Commands:  apiCommands{a: a},
 		Stream:    newAPIStream(a),
+		Tokens:    apitoken.Open(cfg.DataDir),
 		Shutdown:  a.Shutdown,
 	})
 	a.http.SetAPI(a.api.Handler())
