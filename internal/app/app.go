@@ -36,6 +36,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/network"
 	streamaction "github.com/ripmav/streamcrew/internal/action/stream"
 	twitchaction "github.com/ripmav/streamcrew/internal/action/twitch"
+	"github.com/ripmav/streamcrew/internal/action/usercommand"
 	"github.com/ripmav/streamcrew/internal/action/users"
 	"github.com/ripmav/streamcrew/internal/action/values"
 	"github.com/ripmav/streamcrew/internal/auth"
@@ -527,6 +528,12 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches,
 	add(commandadmin.Descriptors(commandadmin.Ports{
 		Commands: cmds,
 		Logger:   component(a.logger, "action"),
+	}))
+	add(usercommand.Descriptors(usercommand.Ports{
+		Templates: a.templates,
+		Chat:      a.chat,
+		Answers:   a.store,
+		Logger:    component(a.logger, "action"),
 	}))
 	add(flow.Descriptors(flow.Ports{
 		Templates: a.templates,

@@ -15,6 +15,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/network"
 	streamaction "github.com/ripmav/streamcrew/internal/action/stream"
 	twitchaction "github.com/ripmav/streamcrew/internal/action/twitch"
+	"github.com/ripmav/streamcrew/internal/action/usercommand"
 	"github.com/ripmav/streamcrew/internal/action/users"
 	"github.com/ripmav/streamcrew/internal/action/values"
 	"github.com/ripmav/streamcrew/internal/capability"
@@ -40,6 +41,7 @@ func ActionCatalog(granted capability.Source) (*action.Registry, error) {
 		values.Catalog(),
 		streamaction.Catalog(),
 		commandadmin.Catalog(),
+		usercommand.Catalog(),
 	)...)
 }
 
