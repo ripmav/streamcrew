@@ -65,6 +65,8 @@ type Config struct {
 	Settings Settings
 	// Users manages the profile users; nil to skip the service.
 	Users Users
+	// Chat sends and manages chat messages; nil to skip the service.
+	Chat Chat
 	// Shutdown stops the core; nil if the API must not stop it.
 	Shutdown func()
 }
@@ -93,7 +95,10 @@ func (s *Server) Handler() http.Handler {
 	if u := s.cfg.Users; u != nil {
 		mux.Handle(streamcrewv1alpha1connect.NewUserServiceHandler(&userService{u: u}))
 	}
-	// The remaining services (Auth, Stream, Chat, Command, Backup, Agent)
+	if c := s.cfg.Chat; c != nil {
+		mux.Handle(streamcrewv1alpha1connect.NewChatServiceHandler(&chatService{c: c}))
+	}
+	// The remaining services (Auth, Stream, Command, Backup, Agent)
 	// are added as their application surface is wired (roadmap 6.2.1).
 	return mux
 }
