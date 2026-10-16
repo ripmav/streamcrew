@@ -317,7 +317,7 @@ func TestNewSeedsPresets(t *testing.T) {
 		names[strings.ToLower(r.Name)] = true
 	}
 	require.NoError(t, s.Close())
-	for _, want := range []string{"uptime", "followage", "title", "game", "settitle", "setgame"} {
+	for _, want := range []string{"uptime", "followage", "title", "game", "commands", "settitle", "setgame"} {
 		assert.True(t, names[want], "preset %q is seeded", want)
 	}
 
@@ -331,7 +331,7 @@ func TestNewSeedsPresets(t *testing.T) {
 	defer s.Close()
 	recs, err = s.Commands(ctx)
 	require.NoError(t, err)
-	assert.Len(t, recs, 6, "the presets are not added again")
+	assert.Len(t, recs, 7, "the presets are not added again")
 }
 
 func TestPreMigrationBackup(t *testing.T) {

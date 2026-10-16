@@ -350,7 +350,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	}
 	a.templates = template.New(identifiers,
 		template.WithLogger(component(logger, "template")),
-		template.WithSources(globals, template.CounterSource(a.store)),
+		template.WithSources(globals, template.CounterSource(a.store), template.CommandSource(a.store)),
 	)
 
 	// The command service decodes commands with the types that have ports,
