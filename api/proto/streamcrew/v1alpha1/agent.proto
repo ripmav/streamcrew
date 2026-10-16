@@ -1,0 +1,122 @@
+// SPDX-License-Identifier: MIT
+
+// AgentService (Plan §6.19, Phase 9): the agent interface, sketched as a
+// contract now so that v1 can adopt it later. An agent (the desktop app or
+// `streamcrew agent`) registers with the core with its capabilities, and the
+// core delegates host-bound actions to it. The agent connects to the core and
+// receives tasks through a server stream; it reports the result of a task
+// with an RPC. Implementation is P2 (Phase 9); this is the contract only.
+syntax = "proto3";
+
+package streamcrew.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1;streamcrewv1alpha1";
+
+// AgentService is the interface between the core and host agents.
+service AgentService {
+  // Register registers an agent with its name and capabilities.
+  rpc Register(RegisterAgentRequest) returns (RegisterAgentResponse);
+  // Unregister removes a registered agent.
+  rpc Unregister(UnregisterAgentRequest) returns (UnregisterAgentResponse);
+  // ListAgents lists the registered agents.
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+  // Tasks streams host-bound tasks to the agent until the agent cancels.
+  rpc Tasks(TasksRequest) returns (stream AgentTask);
+  // SubmitTaskResult reports the result of a task.
+  rpc SubmitTaskResult(SubmitTaskResultRequest) returns (SubmitTaskResultResponse);
+}
+
+// AgentCapability is one capability an agent offers (Plan §6.15).
+message AgentCapability {
+  // name is the capability, e.g. "host:process", "host:input", "host:audio",
+  // "hotkeys".
+  string name = 1;
+  // granted is true while the capability is currently available.
+  bool granted = 2;
+}
+
+// AgentInfo is one registered agent.
+message AgentInfo {
+  // id is the agent ID.
+  string id = 1;
+  // name is the agent name, e.g. "desktop", "streaming-pc".
+  string name = 2;
+  // capabilities are the capabilities the agent offers.
+  repeated AgentCapability capabilities = 3;
+  // registered_at is when the agent registered.
+  google.protobuf.Timestamp registered_at = 4;
+  // online is true while the agent is connected.
+  bool online = 5;
+}
+
+// AgentTask is one host-bound task delegated to an agent.
+message AgentTask {
+  // id is the task ID, used to report the result.
+  string id = 1;
+  // agent_id is the ID of the agent the task is for.
+  string agent_id = 2;
+  // kind is the task kind, e.g. "run_program", "hotkey", "audio_play".
+  string kind = 3;
+  // payload is the task payload as a JSON document; the shape depends on
+  // kind, so the contract stays stable as task kinds are added.
+  string payload = 4;
+  // deadline is when the task is due; null if no deadline.
+  google.protobuf.Timestamp deadline = 5;
+}
+
+// RegisterAgentRequest is the request of Register.
+message RegisterAgentRequest {
+  // name is the agent name.
+  string name = 1;
+  // capabilities are the capabilities the agent offers.
+  repeated AgentCapability capabilities = 2;
+}
+
+// RegisterAgentResponse is the response of Register.
+message RegisterAgentResponse {
+  // agent is the registered agent, with its ID.
+  AgentInfo agent = 1;
+}
+
+// UnregisterAgentRequest is the request of Unregister.
+message UnregisterAgentRequest {
+  // id is the agent ID.
+  string id = 1;
+}
+
+// UnregisterAgentResponse is the response of Unregister.
+message UnregisterAgentResponse {}
+
+// ListAgentsRequest is the request of ListAgents.
+message ListAgentsRequest {}
+
+// ListAgentsResponse is the response of ListAgents.
+message ListAgentsResponse {
+  // agents are the registered agents.
+  repeated AgentInfo agents = 1;
+}
+
+// TasksRequest is the request of Tasks.
+message TasksRequest {
+  // agent_id is the agent that receives the tasks.
+  string agent_id = 1;
+  // kinds filters by task kind; empty is every kind.
+  repeated string kinds = 2;
+}
+
+// SubmitTaskResultRequest is the request of SubmitTaskResult.
+message SubmitTaskResultRequest {
+  // task_id is the ID of the task.
+  string task_id = 1;
+  // success is true if the task succeeded.
+  bool success = 2;
+  // result is the task result as a JSON document; empty if none.
+  string result = 3;
+  // error is the error message; empty if the task succeeded.
+  string error = 4;
+}
+
+// SubmitTaskResultResponse is the response of SubmitTaskResult.
+message SubmitTaskResultResponse {}
