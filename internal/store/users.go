@@ -70,6 +70,32 @@ func (s *Store) UserByLogin(ctx context.Context, p platform.Name, login string) 
 	return u, nil
 }
 
+// ListUsers returns the users that have an identity whose login starts with
+// the prefix (case-insensitive, empty prefix is all users), ordered by ID,
+// at most limit (roadmap 6.2.1, API).
+func (s *Store) ListUsers(ctx context.Context, prefix string, limit int) ([]user.User, error) {
+	var out []user.User
+	err := s.readTx(ctx, func(q *sqlcgen.Queries) error {
+		ids, err := q.ListUserIDs(ctx, sqlcgen.ListUserIDsParams{LOWER: prefix, Limit: int64(limit)})
+		if err != nil {
+			return err
+		}
+		out = make([]user.User, 0, len(ids))
+		for _, idStr := range ids {
+			u, err := loadUser(ctx, q, idStr)
+			if err != nil {
+				return err
+			}
+			out = append(out, u)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", translate(err))
+	}
+	return out, nil
+}
+
 // ResetStrikes sets the strikes of every user to 0 (actions.md, B84).
 func (s *Store) ResetStrikes(ctx context.Context) error {
 	if err := s.Write(ctx, func(q *sqlcgen.Queries) error { return q.ResetStrikes(ctx) }); err != nil {

@@ -470,10 +470,10 @@ type UpdateUserRequest struct {
 	Role string `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"`
 	// title is the new title; empty clears it.
 	Title string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
-	// excluded sets the excluded switch; null keeps it.
-	Excluded bool `protobuf:"varint,4,opt,name=excluded,proto3" json:"excluded,omitempty"`
-	// strikes sets the strike counter; null keeps it.
-	Strikes       uint32 `protobuf:"varint,5,opt,name=strikes,proto3" json:"strikes,omitempty"`
+	// excluded sets the excluded switch; unset keeps it.
+	Excluded *bool `protobuf:"varint,4,opt,name=excluded,proto3,oneof" json:"excluded,omitempty"`
+	// strikes sets the strike counter; unset keeps it.
+	Strikes       *uint32 `protobuf:"varint,5,opt,name=strikes,proto3,oneof" json:"strikes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -530,15 +530,15 @@ func (x *UpdateUserRequest) GetTitle() string {
 }
 
 func (x *UpdateUserRequest) GetExcluded() bool {
-	if x != nil {
-		return x.Excluded
+	if x != nil && x.Excluded != nil {
+		return *x.Excluded
 	}
 	return false
 }
 
 func (x *UpdateUserRequest) GetStrikes() uint32 {
-	if x != nil {
-		return x.Strikes
+	if x != nil && x.Strikes != nil {
+		return *x.Strikes
 	}
 	return 0
 }
@@ -936,13 +936,16 @@ const file_streamcrew_v1alpha1_user_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
 	"\x0eplatform_login\x18\x02 \x01(\tR\rplatformLogin\"D\n" +
 	"\x0fGetUserResponse\x121\n" +
-	"\x04user\x18\x01 \x01(\v2\x1d.streamcrew.v1alpha1.UserViewR\x04user\"\x83\x01\n" +
+	"\x04user\x18\x01 \x01(\v2\x1d.streamcrew.v1alpha1.UserViewR\x04user\"\xa6\x01\n" +
 	"\x11UpdateUserRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04role\x18\x02 \x01(\tR\x04role\x12\x14\n" +
-	"\x05title\x18\x03 \x01(\tR\x05title\x12\x1a\n" +
-	"\bexcluded\x18\x04 \x01(\bR\bexcluded\x12\x18\n" +
-	"\astrikes\x18\x05 \x01(\rR\astrikes\"G\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x1f\n" +
+	"\bexcluded\x18\x04 \x01(\bH\x00R\bexcluded\x88\x01\x01\x12\x1d\n" +
+	"\astrikes\x18\x05 \x01(\rH\x01R\astrikes\x88\x01\x01B\v\n" +
+	"\t_excludedB\n" +
+	"\n" +
+	"\b_strikes\"G\n" +
 	"\x12UpdateUserResponse\x121\n" +
 	"\x04user\x18\x01 \x01(\v2\x1d.streamcrew.v1alpha1.UserViewR\x04user\"u\n" +
 	"\x11MergeUsersRequest\x12.\n" +
@@ -1031,6 +1034,7 @@ func file_streamcrew_v1alpha1_user_proto_init() {
 	if File_streamcrew_v1alpha1_user_proto != nil {
 		return
 	}
+	file_streamcrew_v1alpha1_user_proto_msgTypes[6].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

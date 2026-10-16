@@ -101,10 +101,10 @@ message UpdateUserRequest {
   string role = 2;
   // title is the new title; empty clears it.
   string title = 3;
-  // excluded sets the excluded switch; null keeps it.
-  bool excluded = 4;
-  // strikes sets the strike counter; null keeps it.
-  uint32 strikes = 5;
+  // excluded sets the excluded switch; unset keeps it.
+  optional bool excluded = 4;
+  // strikes sets the strike counter; unset keeps it.
+  optional uint32 strikes = 5;
 }
 
 // UpdateUserResponse is the response of Update.

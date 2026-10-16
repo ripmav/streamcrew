@@ -15,6 +15,10 @@ import (
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
 	"github.com/ripmav/streamcrew/internal/app"
+	"github.com/ripmav/streamcrew/internal/domain/platform"
+	"github.com/ripmav/streamcrew/internal/domain/user"
+	"github.com/ripmav/streamcrew/internal/profile"
+	"github.com/ripmav/streamcrew/internal/store"
 )
 
 // TestAPIServesTheCounterAndSettings exercises the Counter and Settings
@@ -139,4 +143,82 @@ func TestAPIServesTheCore(t *testing.T) {
 		}
 	}
 	assert.True(t, seen, "the active profile is in the list")
+}
+
+// TestAPIServesTheUserService exercises the UserService through the real
+// ConnectRPC client (roadmap 6.2.1): list, get by login and ID, update,
+// rankings and merge.
+func TestAPIServesTheUserService(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	var console bytes.Buffer
+	a, err := app.New(t.Context(), cfg, app.WithConsole(&console), app.WithKeyring(nil))
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	errRun := make(chan error, 1)
+	go func() { errRun <- a.Run(ctx) }()
+	select {
+	case <-a.HTTPServer().Listening():
+	case err := <-errRun:
+		t.Fatalf("Run returned early: %v", err)
+	}
+
+	// Create two users with chat activity directly in the store.
+	st, err := store.Open(ctx, profile.NewManager(cfg.DataDir).Path(profile.DefaultID))
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, st.Close()) })
+	alice, _, err := st.UpsertIdentity(ctx, user.Identity{Platform: platform.Mock, PlatformUserID: "alice-id", Login: "alice", DisplayName: "Alice"})
+	require.NoError(t, err)
+	bob, _, err := st.UpsertIdentity(ctx, user.Identity{Platform: platform.Mock, PlatformUserID: "bob-id", Login: "bob", DisplayName: "Bob"})
+	require.NoError(t, err)
+	require.NoError(t, st.AddStats(ctx, []user.StatsDelta{{UserID: alice.ID, Messages: 5}, {UserID: bob.ID, Messages: 2}}))
+
+	base := "http://" + a.HTTPServer().Addr().String()
+	client := streamcrewv1alpha1connect.NewUserServiceClient(http.DefaultClient, base)
+
+	l, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListUsersRequest{}))
+	require.NoError(t, err)
+	logins := map[string]bool{}
+	for _, u := range l.Msg.Users {
+		for _, i := range u.Identities {
+			logins[i.Login] = true
+		}
+	}
+	assert.True(t, logins["alice"] && logins["bob"], "both created users are listed")
+
+	g, err := client.Get(ctx, connect.NewRequest(&v1alpha1.GetUserRequest{PlatformLogin: "mock/alice"}))
+	require.NoError(t, err)
+	assert.Equal(t, "alice", g.Msg.User.Identities[0].Login)
+	aliceID := g.Msg.User.Id
+
+	gi, err := client.Get(ctx, connect.NewRequest(&v1alpha1.GetUserRequest{Id: aliceID}))
+	require.NoError(t, err)
+	assert.Equal(t, aliceID, gi.Msg.User.Id)
+
+	three := uint32(3)
+	up, err := client.Update(ctx, connect.NewRequest(&v1alpha1.UpdateUserRequest{Id: aliceID, Title: "Queen", Strikes: &three}))
+	require.NoError(t, err)
+	assert.Equal(t, "Queen", up.Msg.User.Title)
+	assert.Equal(t, uint32(3), up.Msg.User.Strikes)
+
+	r, err := client.Rankings(ctx, connect.NewRequest(&v1alpha1.RankingsRequest{}))
+	require.NoError(t, err)
+	var msgs *v1alpha1.Ranking
+	for _, k := range r.Msg.Rankings {
+		if k.Stat == "messages" {
+			msgs = k
+		}
+	}
+	require.NotNil(t, msgs, "the messages ranking is present")
+	require.NotEmpty(t, msgs.Users, "the messages ranking has users")
+	assert.EqualValues(t, 5, msgs.Users[0].Value, "alice is on top with 5 messages")
+
+	m, err := client.Merge(ctx, connect.NewRequest(&v1alpha1.MergeUsersRequest{KeepPlatformLogin: "mock/alice", MergePlatformLogin: "mock/bob"}))
+	require.NoError(t, err)
+	assert.Equal(t, aliceID, m.Msg.Id, "the keep user remains")
+
+	gb, err := client.Get(ctx, connect.NewRequest(&v1alpha1.GetUserRequest{PlatformLogin: "mock/bob"}))
+	require.NoError(t, err)
+	assert.Equal(t, aliceID, gb.Msg.User.Id, "the merged login now resolves to the keep user")
 }
