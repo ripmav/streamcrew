@@ -59,6 +59,10 @@ type Config struct {
 	Profiles Profiles
 	// Platforms reports the connected platforms; nil if none.
 	Platforms Platforms
+	// Counters manages the profile counters; nil to skip the service.
+	Counters Counters
+	// Settings manages the profile settings sections; nil to skip the service.
+	Settings Settings
 	// Shutdown stops the core; nil if the API must not stop it.
 	Shutdown func()
 }
@@ -78,8 +82,13 @@ func New(cfg Config) *Server {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle(streamcrewv1alpha1connect.NewSystemServiceHandler(&systemService{s: s}))
-	// The remaining services (Auth, Stream, Chat, Command, User, Counter,
-	// Settings, Backup, Agent) are added as their application surface is
-	// wired (roadmap 6.2.1).
+	if c := s.cfg.Counters; c != nil {
+		mux.Handle(streamcrewv1alpha1connect.NewCounterServiceHandler(&counterService{c: c}))
+	}
+	if st := s.cfg.Settings; st != nil {
+		mux.Handle(streamcrewv1alpha1connect.NewSettingsServiceHandler(&settingsService{s: st}))
+	}
+	// The remaining services (Auth, Stream, Chat, Command, User, Backup, Agent)
+	// are added as their application surface is wired (roadmap 6.2.1).
 	return mux
 }

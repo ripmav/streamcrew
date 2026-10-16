@@ -112,6 +112,71 @@ func Save(ctx context.Context, svc *Service, s Section) error {
 	return svc.repo.PutSettings(ctx, s.DocType(), doc)
 }
 
+// Sections returns the names of the known settings sections.
+func (s *Service) Sections() []string {
+	return s.registry.Types()
+}
+
+// Document returns the stored document of the section; found is false if the
+// section was never saved, so its defaults apply (roadmap 6.2.1, API).
+func (s *Service) Document(ctx context.Context, section string) (doc []byte, found bool, err error) {
+	return s.repo.Settings(ctx, section)
+}
+
+// DefaultDocument returns the encoded defaults of the section.
+func (s *Service) DefaultDocument(section string) ([]byte, error) {
+	d, ok := defaultSection(section)
+	if !ok {
+		return nil, fmt.Errorf("unknown settings section %q", section)
+	}
+	return s.registry.Encode(d)
+}
+
+// SetDocument validates doc against the section and stores it (roadmap
+// 6.2.1, API). The document must name the section as its type.
+func (s *Service) SetDocument(ctx context.Context, section string, doc []byte) error {
+	v, err := s.registry.Decode(doc)
+	if err != nil {
+		return fmt.Errorf("settings %q: %w", section, err)
+	}
+	if v.DocType() != section {
+		return fmt.Errorf("settings %q: the document has type %q", section, v.DocType())
+	}
+	return s.repo.PutSettings(ctx, section, doc)
+}
+
+// defaultSection returns the defaults of the section, computed on the call so
+// the time defaults follow the system time zone.
+func defaultSection(section string) (Section, bool) {
+	switch section {
+	case sectionBackups:
+		return DefaultBackups(), true
+	case sectionTime:
+		return DefaultTime(), true
+	case sectionCommands:
+		return DefaultCommands(), true
+	case sectionLocale:
+		return DefaultLocale(), true
+	case sectionEvents:
+		return DefaultEvents(), true
+	case sectionChannelPoints:
+		return DefaultChannelPoints(), true
+	case sectionChannels:
+		return DefaultChannels(), true
+	case sectionGeneral:
+		return DefaultGeneral(), true
+	case sectionChat:
+		return DefaultChat(), true
+	case sectionUsers:
+		return DefaultUsers(), true
+	case sectionTimers:
+		return DefaultTimers(), true
+	case sectionModeration:
+		return DefaultModeration(), true
+	}
+	return nil, false
+}
+
 // unknown keeps a section this version cannot read.
 type unknown struct{ polydoc.Unknown }
 
