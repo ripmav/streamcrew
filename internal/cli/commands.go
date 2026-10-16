@@ -10,13 +10,12 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log/slog"
 	"os"
 	"text/tabwriter"
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/ripmav/streamcrew/internal/app"
+	"github.com/ripmav/streamcrew/core"
 	"github.com/ripmav/streamcrew/internal/buildinfo"
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/doctor"
@@ -81,20 +80,38 @@ type output struct {
 
 type serveCmd struct{}
 
-// Run starts the core and blocks until the context ends.
+// Run starts the core and blocks until the context ends. It uses the same
+// function as the self-start of the desktop app (ADR-0006).
 func (serveCmd) Run(ctx context.Context, e *Env) error {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
 	}
-	a, err := app.New(ctx, *cfg, app.WithConsole(e.Stderr), app.WithSecretKey(e.SecretKey), app.WithConfigFile(e.File))
-	if err != nil {
-		return err
-	}
-	// Route output of dependencies that use the log package or slog's
-	// default logger into the same handlers (Code-ADR-0003).
-	slog.SetDefault(a.Logger())
-	if err := a.Run(ctx); err != nil {
+	if err := core.Run(ctx, core.Options{
+		DataDir:           cfg.DataDir,
+		Profile:           cfg.Profile,
+		Mode:              string(cfg.Mode),
+		Listen:            cfg.Listen,
+		Dev:               cfg.Dev,
+		DryRun:            cfg.DryRun,
+		CorsAllow:         cfg.CorsAllow,
+		TLSCert:           cfg.TLSCert,
+		TLSKey:            cfg.TLSKey,
+		Grant:             cfg.Grant,
+		Revoke:            cfg.Revoke,
+		FileRoot:          cfg.FileRoot,
+		OutboundAllow:     cfg.OutboundAllow,
+		LogLevel:          cfg.Log.Level,
+		LogFormat:         cfg.Log.Format,
+		LogFile:           cfg.Log.File,
+		LogMaxSize:        cfg.Log.MaxSize,
+		LogMaxFiles:       cfg.Log.MaxFiles,
+		LogComponentLevel: cfg.Log.ComponentLevel,
+		ShutdownTimeout:   cfg.ShutdownTimeout,
+		SecretKey:         e.SecretKey,
+		LogWriter:         e.Stderr,
+		ConfigFile:        e.File.Path(),
+	}); err != nil {
 		return &reportedError{err: err}
 	}
 	return nil
