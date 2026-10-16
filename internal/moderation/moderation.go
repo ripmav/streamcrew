@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/id"
@@ -74,6 +75,9 @@ type Ports struct {
 	// Engine runs the follow-up commands without waiting for the decision
 	// (B10, B11).
 	Engine Engine
+	// Now is the clock for the participation rules; it defaults to
+	// time.Now. The tests set a fixed time.
+	Now func() time.Time
 }
 
 // Strikes changes the strikes of a user in one transaction; the user
@@ -133,6 +137,9 @@ func New(p Ports, opts ...Option) (*Service, error) {
 	case p.Engine == nil:
 		return nil, fmt.Errorf("new moderation: %w: missing engine", ErrInvalidOption)
 	}
+	if p.Now == nil {
+		p.Now = time.Now
+	}
 	s := &Service{ports: p, logger: slog.New(slog.DiscardHandler)}
 	var errs []error
 	for _, opt := range opts {
@@ -158,6 +165,13 @@ func (s *Service) Check(ctx context.Context, m Message) (Decision, error) {
 	roles := m.Roles()
 	// The streamer runs through the filters (B2).
 	if !roles.Has(role.Streamer) {
+		// The participation rules run before the filters (B1, B3): a
+		// failure discards the message without a strike or a follow-up
+		// command.
+		if !s.participation(m, cfg) {
+			s.logger.DebugContext(ctx, "message discarded by the participation rules", "platform", m.Platform)
+			return Decision{Allow: false}, nil
+		}
 		for _, f := range cfg.Filters {
 			if len(f.Exempt) > 0 && roles.HasAny(f.Exempt...) {
 				continue // the author is exempt from the filter (B22)
@@ -168,6 +182,42 @@ func (s *Service) Check(ctx context.Context, m Message) (Decision, error) {
 		}
 	}
 	return Decision{Allow: true}, nil
+}
+
+// participation reports whether the author meets all the set participation
+// rules (B3): the minimum role, the minimum watch time and the minimum
+// follow time. A rule that is not set does not apply; without any rule,
+// everyone may chat (B24).
+func (s *Service) participation(m Message, cfg settings.Moderation) bool {
+	ident, ok := m.User.Identity(m.Platform)
+	if !ok {
+		return false
+	}
+	// The minimum role (B3).
+	if cfg.MinRole != "" && !ident.Roles.Meets(cfg.MinRole) {
+		return false
+	}
+	// The minimum watch time, in whole minutes (B3).
+	if cfg.MinWatchMinutes > 0 && m.User.Stats.WatchMinutes < int64(cfg.MinWatchMinutes) {
+		return false
+	}
+	// The minimum follow time, in whole days since the follow (B3);
+	// unknown is not met.
+	if cfg.MinFollowDays > 0 {
+		followed := ident.Data.FollowedAt
+		if followed.IsZero() || wholeDays(followed, s.ports.Now()) < int64(cfg.MinFollowDays) {
+			return false
+		}
+	}
+	return true
+}
+
+// wholeDays is the whole days between t and now; 0 if now is before t.
+func wholeDays(t, now time.Time) int64 {
+	if now.Before(t) {
+		return 0
+	}
+	return int64(now.Sub(t).Hours() / 24)
 }
 
 // violate handles a violated filter f (B9 to B11, B23, B25): it raises the
