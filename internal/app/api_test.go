@@ -319,3 +319,50 @@ func apiCore(t *testing.T, cfg config.Config, ch settings.Chat) (*app.App, *mock
 	})
 	return a, mp, coll
 }
+
+// TestAPIServesTheBackupService exercises the BackupService through the real
+// ConnectRPC client (roadmap 6.2.1): create, list and the refused restore
+// while the app runs.
+func TestAPIServesTheBackupService(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	var console bytes.Buffer
+	a, err := app.New(t.Context(), cfg, app.WithConsole(&console), app.WithKeyring(nil))
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	errRun := make(chan error, 1)
+	go func() { errRun <- a.Run(ctx) }()
+	select {
+	case <-a.HTTPServer().Listening():
+	case err := <-errRun:
+		t.Fatalf("Run returned early: %v", err)
+	}
+
+	base := "http://" + a.HTTPServer().Addr().String()
+	client := streamcrewv1alpha1connect.NewBackupServiceClient(http.DefaultClient, base)
+
+	// Create a manual backup.
+	c, err := client.Create(ctx, connect.NewRequest(&v1alpha1.CreateBackupRequest{}))
+	require.NoError(t, err)
+	created := c.Msg.Backup
+	assert.NotEmpty(t, created.Id)
+	assert.Equal(t, "manual", created.Kind)
+	assert.NotZero(t, created.SchemaVersion)
+
+	// List finds the created backup.
+	l, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListBackupsRequest{}))
+	require.NoError(t, err)
+	var found bool
+	for _, b := range l.Msg.Backups {
+		if b.Id == created.Id {
+			found = true
+		}
+	}
+	assert.True(t, found, "the created backup is listed")
+
+	// Restore is refused while the app runs (the profile is open).
+	_, err = client.Restore(ctx, connect.NewRequest(&v1alpha1.RestoreBackupRequest{Id: created.Id}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+}

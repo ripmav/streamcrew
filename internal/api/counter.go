@@ -56,6 +56,8 @@ func apiError(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, store.ErrConflict):
 		return connect.NewError(connect.CodeAlreadyExists, err)
+	case errors.Is(err, ErrRestoreRunning):
+		return connect.NewError(connect.CodeFailedPrecondition, err)
 	case errors.Is(err, counter.ErrInvalid), errors.Is(err, counter.ErrOverflow):
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}

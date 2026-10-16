@@ -131,6 +131,7 @@ type App struct {
 	profile  profile.Profile
 	profiles *profile.Manager
 	store    *store.Store
+	backups  string
 	settings *settings.Service
 	vault    *vault.Vault
 	auth     *auth.Service
@@ -204,6 +205,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		return a, err
 	}
 	backups := BackupDir(cfg.DataDir)
+	a.backups = backups
 	storeOpts := []store.Option{
 		store.WithLogger(component(logger, "store")),
 		store.WithBeforeMigrate(PreMigrationBackup(backups, a.version, component(logger, "backup"))),
@@ -481,6 +483,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Settings:  a.settings,
 		Users:     apiUsers{a: a},
 		Chat:      apiChat{a: a},
+		Backups:   apiBackup{a: a},
 		Shutdown:  a.Shutdown,
 	})
 	a.http.SetAPI(a.api.Handler())
