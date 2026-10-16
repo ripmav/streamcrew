@@ -22,6 +22,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/httpclient"
 	"github.com/ripmav/streamcrew/internal/lockfile"
 	"github.com/ripmav/streamcrew/internal/profile"
+	"github.com/ripmav/streamcrew/internal/prompt"
 	"github.com/ripmav/streamcrew/internal/store"
 	"github.com/ripmav/streamcrew/internal/supervisor"
 )
@@ -53,6 +54,7 @@ func newCatalog() (*event.Catalog, error) {
 		auth.RegisterEvents(c),
 		engine.RegisterEvents(c),
 		eventservice.RegisterEvents(c),
+		prompt.RegisterEvents(c),
 	)
 }
 

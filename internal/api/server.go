@@ -73,6 +73,8 @@ type Config struct {
 	Auth Auth
 	// Commands manages the profile commands; nil to skip the service.
 	Commands Commands
+	// Stream delivers the live events and answers prompts; nil to skip.
+	Stream Stream
 	// Shutdown stops the core; nil if the API must not stop it.
 	Shutdown func()
 }
@@ -113,7 +115,10 @@ func (s *Server) Handler() http.Handler {
 	if cm := s.cfg.Commands; cm != nil {
 		mux.Handle(streamcrewv1alpha1connect.NewCommandServiceHandler(&commandService{c: cm}))
 	}
-	// The remaining services (Stream, Agent)
-	// are added as their application surface is wired (roadmap 6.2.1).
+	if st := s.cfg.Stream; st != nil {
+		mux.Handle(streamcrewv1alpha1connect.NewStreamServiceHandler(&streamService{s: st}))
+	}
+	// The remaining services (Agent) are added as their application
+	// surface is wired (roadmap 6.2.1, 6.1.5).
 	return mux
 }
