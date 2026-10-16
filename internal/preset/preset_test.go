@@ -9,14 +9,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	chataction "github.com/ripmav/streamcrew/internal/action/chat"
+	"github.com/ripmav/streamcrew/internal/action/commandadmin"
 	streamaction "github.com/ripmav/streamcrew/internal/action/stream"
 	"github.com/ripmav/streamcrew/internal/domain/command"
+	"github.com/ripmav/streamcrew/internal/domain/role"
 )
 
 func TestCommands(t *testing.T) {
 	t.Parallel()
 	cmds := Commands()
-	require.Len(t, cmds, 7)
+	require.Len(t, cmds, 10)
 
 	// the display presets answer with their identifier
 	answer := map[string]string{
@@ -44,16 +46,33 @@ func TestCommands(t *testing.T) {
 		}
 
 		// the stream presets set title or category from the arguments
-		act, isStream := c.Actions[0].(streamaction.Stream)
-		require.True(t, isStream, c.Name)
-		assert.Equal(t, "$allargs", string(act.Text), c.Name)
+		if act, isStream := c.Actions[0].(streamaction.Stream); isStream {
+			assert.Equal(t, "$allargs", string(act.Text), c.Name)
+			switch c.Name {
+			case "settitle":
+				assert.Equal(t, streamaction.KindSetTitle, act.Kind, c.Name)
+			case "setgame":
+				assert.Equal(t, streamaction.KindSetGame, act.Kind, c.Name)
+			default:
+				t.Fatalf("unexpected stream preset %q", c.Name)
+			}
+			continue
+		}
+
+		// the admin presets manage commands and need the moderator role
+		act, isAdmin := c.Actions[0].(commandadmin.CommandAdmin)
+		require.True(t, isAdmin, c.Name)
+		require.Len(t, c.Requirements, 1, c.Name)
+		assert.Equal(t, command.RoleRequirement{Role: role.Moderator}, c.Requirements[0], c.Name)
 		switch c.Name {
-		case "settitle":
-			assert.Equal(t, streamaction.KindSetTitle, act.Kind, c.Name)
-		case "setgame":
-			assert.Equal(t, streamaction.KindSetGame, act.Kind, c.Name)
+		case "addcmd":
+			assert.Equal(t, commandadmin.KindAdd, act.Kind, c.Name)
+		case "updatecmd":
+			assert.Equal(t, commandadmin.KindUpdate, act.Kind, c.Name)
+		case "disablecmd":
+			assert.Equal(t, commandadmin.KindDisable, act.Kind, c.Name)
 		default:
-			t.Fatalf("unexpected preset %q", c.Name)
+			t.Fatalf("unexpected admin preset %q", c.Name)
 		}
 	}
 }

@@ -207,6 +207,57 @@ func (l *lateSwitches) SwitchGroup(ctx context.Context, groupID id.ID, sw comman
 	return s.SwitchGroup(ctx, groupID, sw)
 }
 
+// lateCommands is the Commands port of the command-admin action: it resolves
+// the command service once it is built, like lateSwitches.
+type lateCommands struct {
+	mu sync.RWMutex
+	s  *command.Service
+}
+
+// set names the command service.
+func (l *lateCommands) set(s *command.Service) {
+	l.mu.Lock()
+	l.s = s
+	l.mu.Unlock()
+}
+
+func (l *lateCommands) service() (*command.Service, error) {
+	l.mu.RLock()
+	s := l.s
+	l.mu.RUnlock()
+	if s == nil {
+		return nil, errSwitchesNotSet
+	}
+	return s, nil
+}
+
+// Commands implements commandadmin.Commands.
+func (l *lateCommands) Commands(ctx context.Context) ([]command.Command, error) {
+	s, err := l.service()
+	if err != nil {
+		return nil, fmt.Errorf("list commands: %w", err)
+	}
+	return s.Commands(ctx)
+}
+
+// Save implements commandadmin.Commands.
+func (l *lateCommands) Save(ctx context.Context, cmd command.Command) (command.Saved, error) {
+	s, err := l.service()
+	if err != nil {
+		return command.Saved{}, fmt.Errorf("save command: %w", err)
+	}
+	return s.Save(ctx, cmd)
+}
+
+// SwitchCommand implements commandadmin.Commands.
+func (l *lateCommands) SwitchCommand(ctx context.Context, commandID id.ID, sw command.Switch) (command.Command, error) {
+	s, err := l.service()
+	if err != nil {
+		return command.Command{}, fmt.Errorf("switch command: %w", err)
+	}
+	return s.SwitchCommand(ctx, commandID, sw)
+}
+
 // timerPlatforms adapts *platformSet to the Platforms port of the timer:
 // it names the connected platforms.
 type timerPlatforms struct{ set *platformSet }
