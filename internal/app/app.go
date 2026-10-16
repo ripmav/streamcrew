@@ -39,6 +39,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/usercommand"
 	"github.com/ripmav/streamcrew/internal/action/users"
 	"github.com/ripmav/streamcrew/internal/action/values"
+	"github.com/ripmav/streamcrew/internal/api"
 	"github.com/ripmav/streamcrew/internal/auth"
 	"github.com/ripmav/streamcrew/internal/backup"
 	"github.com/ripmav/streamcrew/internal/breaker"
@@ -128,6 +129,7 @@ type App struct {
 	closeLog io.Closer
 	lock     *lockfile.Lock
 	profile  profile.Profile
+	profiles *profile.Manager
 	store    *store.Store
 	settings *settings.Service
 	vault    *vault.Vault
@@ -135,8 +137,15 @@ type App struct {
 	bus      *event.Bus
 	sup      *supervisor.Supervisor
 	http     *httpserver.Server
+	api      *api.Server
 	ready    *readiness
 	rights   *config.Live
+	// startedAt is when the core started; it is reported by the API's Status
+	// (roadmap 6.2.1). shutdownCancel stops the core on request, e.g. the
+	// API's Shutdown RPC; it is the cancel of the run context.
+	startedAt      time.Time
+	shutdownOnce   sync.Once
+	shutdownCancel context.CancelFunc
 
 	// The wiring of the command engine (roadmap 3.6): the platforms of the
 	// profile and their lookup of users, the state of the stream, the
@@ -184,7 +193,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if err != nil {
 		return nil, err
 	}
-	a = &App{cfg: cfg, version: buildinfo.Read().Version, logger: logger, closeLog: closeLog, ready: newReadiness()}
+	a = &App{cfg: cfg, version: buildinfo.Read().Version, logger: logger, closeLog: closeLog, ready: newReadiness(), startedAt: time.Now()}
 	defer func() {
 		if err != nil {
 			err = errors.Join(err, a.close())
@@ -200,6 +209,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		store.WithBeforeMigrate(PreMigrationBackup(backups, a.version, component(logger, "backup"))),
 	}
 	profiles := profile.NewManager(cfg.DataDir, storeOpts...)
+	a.profiles = profiles
 	if a.profile, err = profiles.Resolve(ctx, cfg.Profile); err != nil {
 		return a, err
 	}
@@ -456,6 +466,21 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		backup.Request{ProfileID: a.profile.ID, ProfileName: a.profile.Name, AppVersion: a.version},
 		a.backupSchedule, component(logger, "backup"))
 
+	// The API (roadmap 6.2.1): ConnectRPC handlers over the application
+	// services, mounted on the HTTP server as a catch-all. It reads the
+	// platforms live, so it is set before they are filled; the handlers
+	// see the current state at request time.
+	a.api = api.New(api.Config{
+		Version:   a.version,
+		Mode:      string(a.cfg.Mode),
+		Profile:   a.profile.Name,
+		StartedAt: a.startedAt,
+		Profiles:  apiProfiles{a: a},
+		Platforms: apiPlatforms{a: a},
+		Shutdown:  a.Shutdown,
+	})
+	a.http.SetAPI(a.api.Handler())
+
 	err = errors.Join(
 		a.sup.Add("auth", a.auth),
 		a.sup.Add("backup", scheduler),
@@ -662,6 +687,13 @@ func (a *App) Ready() bool {
 func (a *App) Run(ctx context.Context) (err error) {
 	defer func() { err = errors.Join(err, a.close()) }()
 
+	// runCtx is the context of the whole core: it ends when the caller's ctx
+	// ends or when the core is stopped on request (e.g. the API's Shutdown
+	// RPC, roadmap 6.2.1).
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	a.shutdownCancel = cancel
+
 	a.logger.InfoContext(ctx, "streamcrew starting",
 		"version", a.version, "mode", a.cfg.Mode, "profile", a.profile.ID,
 		"data_dir", a.cfg.DataDir, "pid", os.Getpid())
@@ -674,7 +706,7 @@ func (a *App) Run(ctx context.Context) (err error) {
 	config.LogRights(ctx, a.logger, a.rights.Rights())
 
 	supErr := make(chan error, 1)
-	go func() { supErr <- a.sup.Run(ctx) }()
+	go func() { supErr <- a.sup.Run(runCtx) }()
 
 	// "app.started" goes through the event service (events.md, B12), when
 	// the core is ready for the first time: the engine takes instances and
@@ -688,9 +720,9 @@ func (a *App) Run(ctx context.Context) (err error) {
 		// the engine, so the event commands of "app.started" are not
 		// dropped while it is still idle.
 		<-a.engine.Ready()
-		if ctx.Err() == nil {
+		if runCtx.Err() == nil {
 			if err := a.ready.publishStarted(func() error {
-				return a.events.Application(ctx, eventtype.AppStarted, Started{Version: a.version, Mode: string(a.cfg.Mode), Profile: a.profile.ID})
+				return a.events.Application(runCtx, eventtype.AppStarted, Started{Version: a.version, Mode: string(a.cfg.Mode), Profile: a.profile.ID})
 			}); err != nil {
 				a.logger.ErrorContext(ctx, "the started event failed", "error", err)
 			}
@@ -698,7 +730,7 @@ func (a *App) Run(ctx context.Context) (err error) {
 	case err := <-supErr:
 		a.logger.ErrorContext(ctx, "streamcrew stopped with an error", "error", err)
 		return err
-	case <-ctx.Done():
+	case <-runCtx.Done():
 	}
 
 	// The select returned when the core ran for the first time, so wait
@@ -707,12 +739,12 @@ func (a *App) Run(ctx context.Context) (err error) {
 	// components still run, so that the engine takes it for its event
 	// command and the bus still holds it for its subscribers.
 	select {
-	case <-ctx.Done():
+	case <-runCtx.Done():
 	case err := <-supErr:
 		a.logger.ErrorContext(ctx, "streamcrew stopped with an error", "error", err)
 		return err
 	}
-	a.stoppingEvent(ctx)
+	a.stoppingEvent(runCtx)
 
 	if err := <-supErr; err != nil {
 		a.logger.ErrorContext(ctx, "streamcrew stopped with an error", "error", err)
@@ -765,6 +797,17 @@ func (a *App) close() error {
 		a.closeLog = nil
 	}
 	return errors.Join(errs...)
+}
+
+// Shutdown stops the core on request (roadmap 6.2.1). It ends the run context
+// so the supervisor shuts the components down gracefully; the API's Shutdown
+// RPC calls it. It is a no-op before Run and after the core has stopped.
+func (a *App) Shutdown() {
+	a.shutdownOnce.Do(func() {
+		if a.shutdownCancel != nil {
+			a.shutdownCancel()
+		}
+	})
 }
 
 // resetCounters sets the counters that reset on start to 0 (spec
