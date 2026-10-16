@@ -33,6 +33,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/host"
 	"github.com/ripmav/streamcrew/internal/action/moderation"
 	"github.com/ripmav/streamcrew/internal/action/network"
+	streamaction "github.com/ripmav/streamcrew/internal/action/stream"
 	twitchaction "github.com/ripmav/streamcrew/internal/action/twitch"
 	"github.com/ripmav/streamcrew/internal/action/users"
 	"github.com/ripmav/streamcrew/internal/action/values"
@@ -536,6 +537,12 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches)
 			Allowlist: a.rights.Outbound,
 		},
 		Logger: component(a.logger, "action"),
+	}))
+	add(streamaction.Descriptors(streamaction.Ports{
+		Templates: a.templates,
+		Platforms: a.platforms,
+		General:   a.generalSettings,
+		Logger:    component(a.logger, "action"),
 	}))
 	add(users.Descriptors(users.Ports{
 		Templates: a.templates,

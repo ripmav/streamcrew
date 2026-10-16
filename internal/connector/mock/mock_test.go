@@ -187,6 +187,29 @@ func TestRun(t *testing.T) {
 	})
 }
 
+// TestSetTitleSetGame covers the stream control (roadmap 5.6, SetTitle,
+// SetGame): it sets the title or the category and keeps the other.
+func TestSetTitleSetGame(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		p, err := mock.New(&receiver{}, mock.WithBot("Bot"))
+		require.NoError(t, err)
+		require.NoError(t, p.GoLive(t.Context(), "Title", "Game"))
+
+		require.NoError(t, p.SetTitle(t.Context(), "", "New Title"))
+		info, err := p.Channel(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, "New Title", info.Title)
+		assert.Equal(t, "Game", info.Game, "the category stays")
+
+		require.NoError(t, p.SetGame(t.Context(), "", "Just Chatting"))
+		info, err = p.Channel(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, "New Title", info.Title, "the title stays")
+		assert.Equal(t, "Just Chatting", info.Game)
+	})
+}
+
 func TestSay(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {

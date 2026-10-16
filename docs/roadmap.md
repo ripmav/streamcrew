@@ -662,7 +662,7 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 - [x] Vorgefertigte-Commands-Mechanismus + Anzeige-Commands (S), erledigt 2026-10-16 in [`internal/preset`](../internal/preset) und [`internal/app`](../internal/app): Presets sind Commands-as-Code (`preset.Commands()`); die App legt beim Start jeden Preset an, solange kein Command mit dem Namen existiert (frisches Profil bekommt sie, spätere Starts behalten sie, ein gleichnamiges eigenes Command bleibt); Anzeige-Commands über die Chat-Action: `uptime` → `$streamuptimetotal`, `followage` → `$followage`, `title` → `$streamtitle`, `game` → `$streamgamename`
 - [ ] P0-Teilmenge (M), Rest:
   - Commands-Liste
-  - Titel und Kategorie setzen (SetTitle, SetGame)
+  - [x] Titel und Kategorie setzen (SetTitle, SetGame), erledigt 2026-10-16 in [`internal/action/stream`](../internal/action/stream), [`internal/connector`](../internal/connector) (StreamControl) und [`internal/preset`](../internal/preset): der Stream-Action-Typ `stream` (Kinds `set_title`, `set_game`) setzt über die optionale `connector.StreamControl`-Fähigkeit Titel/Kategorie der Plattform (Twitch: Helix `PATCH /channels`); die Presets `!settitle <text>` und `!setgame <name>`
   - Command hinzufügen, ändern, deaktivieren (AddCommand, UpdateCommand, DisableCommand)
 - [ ] Counter-Service mit Identifiern, persistiert (S)
 - [ ] Nutzerspezifische Chat-Commands (S) (P1)
