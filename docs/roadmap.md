@@ -659,10 +659,11 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 
 ### 5.6 Vorgefertigte Commands und Counter
 
-- [ ] P0-Teilmenge (M):
-  - Commands-Liste, Uptime, Followage
-  - Titel und Kategorie anzeigen und setzen
-  - Command hinzufügen, ändern, deaktivieren
+- [x] Vorgefertigte-Commands-Mechanismus + Anzeige-Commands (S), erledigt 2026-10-16 in [`internal/preset`](../internal/preset) und [`internal/app`](../internal/app): Presets sind Commands-as-Code (`preset.Commands()`); die App legt beim Start jeden Preset an, solange kein Command mit dem Namen existiert (frisches Profil bekommt sie, spätere Starts behalten sie, ein gleichnamiges eigenes Command bleibt); Anzeige-Commands über die Chat-Action: `uptime` → `$streamuptimetotal`, `followage` → `$followage`, `title` → `$streamtitle`, `game` → `$streamgamename`
+- [ ] P0-Teilmenge (M), Rest:
+  - Commands-Liste
+  - Titel und Kategorie setzen (SetTitle, SetGame)
+  - Command hinzufügen, ändern, deaktivieren (AddCommand, UpdateCommand, DisableCommand)
 - [ ] Counter-Service mit Identifiern, persistiert (S)
 - [ ] Nutzerspezifische Chat-Commands (S) (P1)
 

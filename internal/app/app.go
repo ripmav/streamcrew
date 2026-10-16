@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -56,6 +57,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/logging"
 	modsvc "github.com/ripmav/streamcrew/internal/moderation"
 	"github.com/ripmav/streamcrew/internal/netguard"
+	"github.com/ripmav/streamcrew/internal/preset"
 	"github.com/ripmav/streamcrew/internal/profile"
 	"github.com/ripmav/streamcrew/internal/requirement"
 	"github.com/ripmav/streamcrew/internal/settings"
@@ -377,6 +379,9 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		return a, err
 	}
 	late.set(a.commands)
+	if err = a.seedPresets(ctx); err != nil {
+		return a, err
+	}
 	a.engine, err = engine.New(a.commands, a.actions,
 		engine.WithLogger(component(logger, "engine")),
 		engine.WithPublisher(a.bus),
@@ -738,6 +743,31 @@ func (a *App) resetCounters(ctx context.Context) error {
 	}
 	if n > 0 {
 		a.logger.InfoContext(ctx, "counters reset on start", "count", n)
+	}
+	return nil
+}
+
+// seedPresets adds the ready-made commands of a fresh profile (roadmap 5.6,
+// P0): every preset that does not exist yet by name is saved, so a fresh
+// profile gets them and a later start keeps them. An existing command with a
+// preset's name is left as it is.
+func (a *App) seedPresets(ctx context.Context) error {
+	have := map[string]bool{}
+	cmds, err := a.commands.Commands(ctx)
+	if err != nil {
+		return fmt.Errorf("seeding presets: %w", err)
+	}
+	for _, c := range cmds {
+		have[strings.ToLower(c.Name)] = true
+	}
+	for _, c := range preset.Commands() {
+		if have[strings.ToLower(c.Name)] {
+			continue
+		}
+		if _, err := a.commands.Save(ctx, c); err != nil {
+			return fmt.Errorf("seeding preset %q: %w", c.Name, err)
+		}
+		a.logger.InfoContext(ctx, "preset command added", "command", c.Name)
 	}
 	return nil
 }
