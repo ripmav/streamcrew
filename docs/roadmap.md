@@ -667,7 +667,7 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 - [ ] Counter-Service mit Identifiern, persistiert (S)
 - [ ] Nutzerspezifische Chat-Commands (S) (P1)
 
-**Exit-Kriterien:** E2E-Tests mit der Mock-Plattform decken Chat-Pipeline, Timer, Moderation und Watchtime (simulierte Live-Session) ab.
+**Exit-Kriterien:** E2E-Tests mit der Mock-Plattform decken Chat-Pipeline, Timer, Moderation und Watchtime (simulierte Live-Session) ab, erledigt 2026-10-16 in [`internal/app`](../internal/app) (`phase5_e2e_test.go`): Chat-Pipeline in `chat_test.go`, Timer (Gruppen-Intervall), Wortfilter-Verstoß verwirft die Nachricht, Watchtime einer Live-Session (Tick über `app.WithWatchTick` verkürzt).
 
 ---
 

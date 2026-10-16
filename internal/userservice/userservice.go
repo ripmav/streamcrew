@@ -44,8 +44,9 @@ var ErrInvalidOption = errors.New("invalid option")
 // ErrAlreadyRunning is returned by a second call of Run.
 var ErrAlreadyRunning = errors.New("the user service runs already")
 
-// watchTick is the interval of the watch time (B9, "Watchtime in Minuten").
-const watchTick = time.Minute
+// watchTickDefault is the interval of the watch time (B9, "Watchtime in
+// Minuten").
+const watchTickDefault = time.Minute
 
 // dataTTL is how long the cached platform data of an identity stays fresh
 // (users-and-roles.md, B10); older data is refetched on the next contact.
@@ -123,6 +124,18 @@ func WithLogger(l *slog.Logger) Option {
 	}
 }
 
+// WithWatchTick sets the interval of the watch time; it must be positive.
+// The default is a minute (B9); a shorter interval is for tests.
+func WithWatchTick(d time.Duration) Option {
+	return func(s *Service) error {
+		if d <= 0 {
+			return fmt.Errorf("%w: watch tick %s", ErrInvalidOption, d)
+		}
+		s.watchTickDur = d
+		return nil
+	}
+}
+
 // Active is a user active in the chat of the session of its platform.
 type Active struct {
 	// User is the user as it came with the last event that made it
@@ -137,6 +150,9 @@ type Active struct {
 type Service struct {
 	ports  Ports
 	logger *slog.Logger
+	// watchTickDur is the interval of the watch time; zero for the default
+	// (watchTickDefault), set by WithWatchTick (tests, shorter ticks).
+	watchTickDur time.Duration
 
 	// mu guards active, the started state, lastData and lookup.
 	mu      sync.Mutex
@@ -165,9 +181,17 @@ func New(p Ports, opts ...Option) (*Service, error) {
 	return s, nil
 }
 
+// watchTickInterval returns the configured watch tick, or the default.
+func (s *Service) watchTickInterval() time.Duration {
+	if s.watchTickDur > 0 {
+		return s.watchTickDur
+	}
+	return watchTickDefault
+}
+
 // Run counts until ctx ends (Code-ADR-0004). It subscribes to the events
-// that change the statistics and ticks the watch time every minute. A
-// second call returns ErrAlreadyRunning.
+// that change the statistics and ticks the watch time on the watch interval.
+// A second call returns ErrAlreadyRunning.
 func (s *Service) Run(ctx context.Context) error {
 	s.mu.Lock()
 	if s.started {
@@ -186,7 +210,7 @@ func (s *Service) Run(ctx context.Context) error {
 			engine.TypeInstanceCompleted,
 		),
 	)
-	tick := time.NewTicker(watchTick)
+	tick := time.NewTicker(s.watchTickInterval())
 	defer tick.Stop()
 	for {
 		select {

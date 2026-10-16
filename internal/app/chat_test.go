@@ -135,9 +135,38 @@ func mockOp(e event.Envelope, op mock.Op, messageID string) bool {
 // runs until the test ends.
 func startedCore(t *testing.T, cfg config.Config, commands string, ch settings.Chat, opts ...mock.Option) (*mock.Platform, *eventCollector) {
 	t.Helper()
+	path := newProfileWithSettings(t, cfg, func(svc *settings.Service) {
+		require.NoError(t, settings.Save(t.Context(), svc, ch))
+	})
+	return runCore(t, cfg, path, commands, nil, opts...)
+}
+
+// startedCoreModeration is startedCore with the moderation section saved too.
+func startedCoreModeration(t *testing.T, cfg config.Config, commands string, ch settings.Chat, mods settings.Moderation, opts ...mock.Option) (*mock.Platform, *eventCollector) {
+	t.Helper()
+	path := newProfileWithSettings(t, cfg, func(svc *settings.Service) {
+		require.NoError(t, settings.Save(t.Context(), svc, ch))
+		require.NoError(t, settings.Save(t.Context(), svc, mods))
+	})
+	return runCore(t, cfg, path, commands, nil, opts...)
+}
+
+// startedCoreWatch is startedCore with a shorter watch time tick, for the
+// watch time end-to-end test.
+func startedCoreWatch(t *testing.T, cfg config.Config, commands string, ch settings.Chat, watchTick time.Duration, opts ...mock.Option) (*mock.Platform, *eventCollector) {
+	t.Helper()
+	path := newProfileWithSettings(t, cfg, func(svc *settings.Service) {
+		require.NoError(t, settings.Save(t.Context(), svc, ch))
+	})
+	return runCore(t, cfg, path, commands, []app.Option{app.WithWatchTick(watchTick)}, opts...)
+}
+
+// newProfileWithSettings returns a fresh profile path and applies save to its
+// settings before the profile is closed.
+func newProfileWithSettings(t *testing.T, cfg config.Config, save func(svc *settings.Service)) string {
+	t.Helper()
 	ctx := t.Context()
 
-	// Create the profile, its chat settings and the commands.
 	first, err := app.New(ctx, cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
 	require.NoError(t, err)
 	path := first.Profile().Path
@@ -147,8 +176,17 @@ func startedCore(t *testing.T, cfg config.Config, commands string, ch settings.C
 	require.NoError(t, err)
 	svc, err := settings.New(st)
 	require.NoError(t, err)
-	require.NoError(t, settings.Save(ctx, svc, ch))
+	save(svc)
 	require.NoError(t, st.Close())
+	return path
+}
+
+// runCore runs the profile at path with the mock platform and the imported
+// commands, and returns the platform and a collector for the command
+// instances and the mock outputs.
+func runCore(t *testing.T, cfg config.Config, path, commands string, appOpts []app.Option, opts ...mock.Option) (*mock.Platform, *eventCollector) {
+	t.Helper()
+	ctx := t.Context()
 
 	rights, err := cfg.Rights()
 	require.NoError(t, err)
@@ -159,12 +197,13 @@ func startedCore(t *testing.T, cfg config.Config, commands string, ch settings.C
 	require.True(t, report.Imported, "%+v", report)
 
 	var mp *mock.Platform
-	a, err := app.New(ctx, cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil),
-		app.WithPlatform(func(_ context.Context, b app.PlatformBuilder) (connector.Platform, error) {
-			o := append([]mock.Option{mock.WithLogger(b.Logger), mock.WithPublisher(b.Publisher)}, opts...)
-			mp, err = mock.New(b.Receiver, o...)
-			return mp, err
-		}))
+	coreOpts := append([]app.Option{app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil)}, appOpts...)
+	coreOpts = append(coreOpts, app.WithPlatform(func(_ context.Context, b app.PlatformBuilder) (connector.Platform, error) {
+		o := append([]mock.Option{mock.WithLogger(b.Logger), mock.WithPublisher(b.Publisher)}, opts...)
+		mp, err = mock.New(b.Receiver, o...)
+		return mp, err
+	}))
+	a, err := app.New(ctx, cfg, coreOpts...)
 	require.NoError(t, err)
 
 	coll := &eventCollector{}
