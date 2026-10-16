@@ -16,7 +16,7 @@ import (
 func TestCommands(t *testing.T) {
 	t.Parallel()
 	cmds := Commands()
-	require.Len(t, cmds, 6)
+	require.Len(t, cmds, 7)
 
 	// the display presets answer with their identifier
 	answer := map[string]string{
@@ -24,6 +24,7 @@ func TestCommands(t *testing.T) {
 		"followage": "$followage",
 		"title":     "$streamtitle",
 		"game":      "$streamgamename",
+		"commands":  "$commands",
 	}
 	for _, c := range cmds {
 		assert.Equal(t, command.KindChat, c.Kind, c.Name)

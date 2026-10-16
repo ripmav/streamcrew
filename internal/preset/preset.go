@@ -21,6 +21,7 @@ func Commands() []command.Command {
 		answer("followage", "$followage"),
 		answer("title", "$streamtitle"),
 		answer("game", "$streamgamename"),
+		answer("commands", "$commands"),
 		setStream("settitle", streamaction.KindSetTitle),
 		setStream("setgame", streamaction.KindSetGame),
 	}
