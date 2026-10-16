@@ -49,6 +49,7 @@ const (
 	CategoryUsers      Category = "users"      // user_lookup
 	CategoryHost       Category = "host"       // file, external_program
 	CategoryTwitch     Category = "twitch"     // twitch (clip, marker, ad, raid, shoutout, poll, prediction, reward)
+	CategoryStream     Category = "stream"     // stream (set_title, set_game)
 )
 
 // Categories returns every category, in the order of the type catalog.
@@ -56,7 +57,7 @@ func Categories() []Category {
 	return []Category{
 		CategoryFlow, CategoryCommands, CategoryValues, CategoryChat,
 		CategoryNetwork, CategoryModeration, CategoryUsers, CategoryHost,
-		CategoryTwitch,
+		CategoryTwitch, CategoryStream,
 	}
 }
 

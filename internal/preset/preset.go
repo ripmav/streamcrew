@@ -9,6 +9,7 @@ package preset
 import (
 	"github.com/ripmav/streamcrew/internal/action"
 	chataction "github.com/ripmav/streamcrew/internal/action/chat"
+	streamaction "github.com/ripmav/streamcrew/internal/action/stream"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 )
 
@@ -20,6 +21,8 @@ func Commands() []command.Command {
 		answer("followage", "$followage"),
 		answer("title", "$streamtitle"),
 		answer("game", "$streamgamename"),
+		setStream("settitle", streamaction.KindSetTitle),
+		setStream("setgame", streamaction.KindSetGame),
 	}
 }
 
@@ -37,6 +40,25 @@ func answer(name, message string) command.Command {
 				Kind:    chataction.KindMessage,
 				Message: action.Template(message),
 				Chat:    &chataction.MessageOptions{},
+			},
+		},
+	}
+}
+
+// setStream returns a command that sets the stream title or category to its
+// arguments (roadmap 5.6, SetTitle, SetGame): !settitle <text>, !setgame <name>.
+func setStream(name string, kind streamaction.Kind) command.Command {
+	return command.Command{
+		Name:        name,
+		Kind:        command.KindChat,
+		Enabled:     true,
+		TriggerMode: command.TriggerExclamation,
+		Triggers:    []string{name},
+		ErrorPolicy: command.ErrorContinue,
+		Actions: []command.Action{
+			streamaction.Stream{
+				Kind: kind,
+				Text: action.Template("$allargs"),
 			},
 		},
 	}

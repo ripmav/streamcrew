@@ -187,6 +187,15 @@ Nicht Teil dieser Spezifikation:
 | B116 | „Fenster anzeigen“ wirkt nur auf Systemen mit Fenstern; sonst entfällt es. „Über das System öffnen“ öffnet den Pfad mit dem Programm, das das Betriebssystem dafür vorsieht, etwa ein Dokument mit seiner Anwendung; es schließt „warten“ und „Ausgabe speichern“ aus, das prüft das Speichern. | Q16 |
 | B117 | Das Programm läuft im Verzeichnis, in dem es liegt. Es bekommt die Umgebungsvariablen des Cores außer denen, die mit `STREAMCREW_` beginnen, damit Konfiguration und Secrets des Cores nicht nach außen gelangen. | ADR-0013, A13 |
 
+### Stream
+
+| ID | Regel | Quellen |
+|---|---|---|
+| B118 | **Stream** (`stream`): Art (`set_title` oder `set_game`) und Text (Template, nicht leer). Die Action wirkt auf den Stream einer Plattform. | Roadmap 5.6, ADR-0013 |
+| B119 | Die Plattform ist die Plattform des Durchlaufs; ohne eine die Standardplattform des Profils (Einstellung `general.defaultPlatform`). Ist keine Plattform verbunden, scheitert die Action. | Roadmap 5.6 |
+| B120 | `set_title` setzt den Titel, `set_game` die Kategorie. Die Plattform muss die Stream-Steuerung beherrschen (die Fähigkeit `StreamControl` in `connector`); sonst scheitert die Action mit einer klaren Meldung. Auf Twitch geschieht das über Helix `PATCH /channels`. | Roadmap 5.6 |
+| B121 | Der gerenderte Text wird wie angegeben gesetzt: `set_title` als Titel, `set_game` als Kategorie. Auf Twitch wird der Kategoriename über Helix in eine Kategorie-ID aufgelöst; bleibt er unbekannt, scheitert die Action. Der Live-Zustand wird nicht geändert. | Roadmap 5.6 |
+
 ## Randfälle
 
 | ID | Situation | Erwartetes Verhalten | Quellen |
@@ -314,3 +323,4 @@ Keine.
 | 2026-10-03 | Textfunktionen (B53): Ein Funktionsname beginnt nicht nach einem Buchstaben, einem Zeichen, das einen Buchstaben verändert, oder einer Ziffer einer beliebigen Schrift, also auch nicht nach „ä“ (`Kätolower(A)` bleibt Text); bisher galten nur ASCII-Buchstaben und -Ziffern als Teil eines Worts ([`template.md`](template.md), B1). |
 | 2026-10-04 | B31: Commands und Gruppen, auf die eine Action verweist, lassen sich nicht löschen ([`commands.md`](commands.md), B8, Entscheidung des Projektinhabers). |
 | 2026-10-14 | Roadmap 5.2.6 (Nutzer-Service): die Suche über die Plattform für Unbekannte und die B92-Grenze (eine Plattformsuche je Minute) ziehen aus den Actions in den Nutzer-Service (`internal/userservice`); die Aktionen (Nutzersuche, Moderation, Flüstern) suchen über die gemeinsame Suche des Durchlaufs (`engine.Run.UserByName`, [`command-engine.md`](command-engine.md), B17) bzw. einen nicht-speichernden `Lookup`-Port des Services (die Kinds, die auf einer Plattform wirken, erzeugen keinen Nutzer). B91 und B92 gelten weiter wie beschrieben; der Ort der Umsetzung ändert sich. |
+| 2026-10-16 | Roadmap 5.6 (Preset SetTitle, SetGame): der Stream-Action-Typ `stream` (Kinds `set_title`, `set_game`) umgesetzt (`internal/action/stream`); Regeln B118–B121. Festlegungen dabei: Die Felder heißen `kind` und `text` (nicht leeres Template); eine neue Action hat die Art `set_title`. Die Plattform ist die des Durchlaufs, ohne eine die Standardplattform des Profils; ist keine verbunden, scheitert die Action. Die Plattform muss die optionale Fähigkeit `connector.StreamControl` umsetzen (Twitch: Helix `PATCH /channels`, Mock: in-memory), sonst scheitert die Action mit `connector.ErrNotImplemented`. `set_game` löst den Kategoriename über Helix in eine ID auf; ein unbekannter Name scheitert. Der Live-Zustand wird nicht geändert. Die Presets `!settitle <text>` und `!setgame <name>` (`internal/preset`) nutzen den Typ mit `$allargs`. |

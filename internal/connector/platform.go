@@ -143,6 +143,16 @@ type PlatformData interface {
 	UserPlatformData(ctx context.Context, platformUserID string) (user.PlatformData, error)
 }
 
+// StreamControl is the optional capability of a Platform to change the
+// title and the category of its stream (roadmap 5.6, SetTitle, SetGame).
+type StreamControl interface {
+	// SetTitle sets the title of the stream of the channel ch (empty: the
+	// home channel).
+	SetTitle(ctx context.Context, ch Channel, title string) error
+	// SetGame sets the category of the stream of the channel ch.
+	SetGame(ctx context.Context, ch Channel, game string) error
+}
+
 // Chat is the chat of the channel on a platform.
 type Chat interface {
 	// Send sends m to the chat of m.Channel (empty: the home channel). The

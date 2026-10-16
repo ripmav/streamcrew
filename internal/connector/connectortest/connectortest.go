@@ -38,6 +38,8 @@ const (
 	OpUserByLogin Op = "user_by_login"
 	OpUserByID    Op = "user_by_id"
 	OpChannel     Op = "channel"
+	OpSetTitle    Op = "set_title"
+	OpSetGame     Op = "set_game"
 )
 
 // Call is an operation a Platform was asked for, with what it got. Fields
@@ -208,6 +210,18 @@ func (p *Platform) Channel(ctx context.Context) (connector.ChannelInfo, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.channel, nil
+}
+
+// SetTitle records the stream title the platform was asked to set
+// (roadmap 5.6, SetTitle).
+func (p *Platform) SetTitle(ctx context.Context, ch connector.Channel, title string) error {
+	return p.record(ctx, Call{Op: OpSetTitle, Channel: string(ch), Text: title})
+}
+
+// SetGame records the stream category the platform was asked to set
+// (roadmap 5.6, SetGame).
+func (p *Platform) SetGame(ctx context.Context, ch connector.Channel, game string) error {
+	return p.record(ctx, Call{Op: OpSetGame, Channel: string(ch), Text: game})
 }
 
 // record records c and returns the error of its operation: ctx's error if

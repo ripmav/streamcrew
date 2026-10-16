@@ -265,6 +265,26 @@ func (p *Platform) GoOffline(ctx context.Context) error {
 	return nil
 }
 
+// SetTitle sets the title of the stream (roadmap 5.6, SetTitle). It does
+// not change the live state; it acts on the home channel's stream state.
+func (p *Platform) SetTitle(ctx context.Context, _ connector.Channel, title string) error {
+	p.mu.Lock()
+	p.channel.Title = title
+	p.mu.Unlock()
+	p.logger.InfoContext(ctx, "mock stream title set", "title", title)
+	return nil
+}
+
+// SetGame sets the category of the stream (roadmap 5.6, SetGame); it does
+// not change the live state.
+func (p *Platform) SetGame(ctx context.Context, _ connector.Channel, game string) error {
+	p.mu.Lock()
+	p.channel.Game = game
+	p.mu.Unlock()
+	p.logger.InfoContext(ctx, "mock stream category set", "game", game)
+	return nil
+}
+
 // connected returns an error wrapping connector.ErrNotConnected unless Run
 // runs.
 func (p *Platform) connected() error {
