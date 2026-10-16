@@ -46,6 +46,8 @@ type Config struct {
 	Listen          string        `placeholder:"HOST:PORT" help:"Address of the HTTP server. Default: 127.0.0.1:8740, in server mode :8740."`
 	Dev             bool          `help:"Developer mode: serves pprof under /debug/pprof/. Requires a loopback listen address."`
 	CorsAllow       []string      `name:"cors-allow" placeholder:"ORIGIN" help:"Origins allowed to call the API cross-origin (CORS), e.g. http://localhost:5173. Repeatable. Default: none — cross-origin requests are refused."`
+	TLSCert         string        `name:"tls-cert" placeholder:"FILE" help:"TLS certificate of the HTTP server (PEM). Together with --tls-key. Default: none — plain HTTP."`
+	TLSKey          string        `name:"tls-key" placeholder:"FILE" help:"TLS private key of the HTTP server (PEM). Together with --tls-cert. Default: none — plain HTTP."`
 	DryRun          bool          `name:"dry-run" help:"Dry run: the platforms read the channel and log what they would do, instead of doing it (chat, moderation, twitch actions)."`
 	ShutdownTimeout time.Duration `default:"15s" help:"Time limit for the whole shutdown."`
 	Log             LogConfig     `embed:"" prefix:"log-"`
@@ -105,6 +107,9 @@ func (c *Config) Resolve() error {
 		errs = append(errs, fmt.Errorf("--listen: %w", err))
 	} else if c.Dev && !isLoopback(host) {
 		errs = append(errs, fmt.Errorf("--dev: pprof is only served on a loopback address, not on %q", c.Listen))
+	}
+	if (c.TLSCert == "") != (c.TLSKey == "") {
+		errs = append(errs, errors.New("--tls-cert and --tls-key must be set together"))
 	}
 	if c.ShutdownTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("--shutdown-timeout: must be positive, got %s", c.ShutdownTimeout))

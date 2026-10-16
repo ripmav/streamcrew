@@ -4,10 +4,20 @@ package httpserver_test
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -121,4 +131,88 @@ func TestRunClosesIdleNewConnections(t *testing.T) {
 	cancel()
 	require.NoError(t, <-errc)
 	assert.Less(t, time.Since(begin), 2*time.Second, "stops after the shutdown timeout, not after net/http's 5 s")
+}
+
+// TestRunServesTLS covers the TLS mode (roadmap 6.2.3): with a certificate
+// pair the server speaks TLS and answers over https.
+func TestRunServesTLS(t *testing.T) {
+	t.Parallel()
+	certFile, keyFile := selfSignedCert(t)
+	srv := httpserver.New(httpserver.Config{
+		Addr:            "127.0.0.1:0",
+		ShutdownTimeout: 5 * time.Second,
+		TLSCert:         certFile,
+		TLSKey:          keyFile,
+	}, nil, nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	errc := make(chan error, 1)
+	go func() { errc <- srv.Run(ctx) }()
+
+	select {
+	case <-srv.Listening():
+	case err := <-errc:
+		t.Fatalf("Run returned early: %v", err)
+	}
+	client := &http.Client{Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // self-signed test certificate
+	}}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://"+srv.Addr().String()+"/healthz", nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "ok\n", string(body))
+
+	cancel()
+	require.NoError(t, <-errc)
+}
+
+// TestRunRejectsABrokenKeyPair covers that an unreadable or mismatching key
+// pair stops the server before it serves.
+func TestRunRejectsABrokenKeyPair(t *testing.T) {
+	t.Parallel()
+	certFile, _ := selfSignedCert(t)
+	srv := httpserver.New(httpserver.Config{
+		Addr:            "127.0.0.1:0",
+		ShutdownTimeout: time.Second,
+		TLSCert:         certFile,
+		TLSKey:          certFile, // not the key
+	}, nil, nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	errc := make(chan error, 1)
+	go func() { errc <- srv.Run(ctx) }()
+	err := <-errc
+	require.Error(t, err)
+	assert.True(t, supervisor.IsPermanent(err))
+}
+
+// selfSignedCert writes a self-signed certificate for 127.0.0.1 to the test
+// directory and returns the file paths.
+func selfSignedCert(t *testing.T) (string, string) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	tmpl := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "streamcrew test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	require.NoError(t, err)
+	dir := t.TempDir()
+	certFile := filepath.Join(dir, "cert.pem")
+	keyFile := filepath.Join(dir, "key.pem")
+	require.NoError(t, os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
+	require.NoError(t, os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600))
+	return certFile, keyFile
 }
