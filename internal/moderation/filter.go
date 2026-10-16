@@ -38,7 +38,7 @@ func wordViolates(text, pattern string) bool {
 	if !ok {
 		return false
 	}
-	for _, w := range strings.Fields(text) {
+	for w := range strings.FieldsSeq(text) {
 		if re.MatchString(w) {
 			return true
 		}
@@ -117,7 +117,7 @@ func emoteViolates(text string, emotes []string, threshold int, percent bool) bo
 // two letters).
 func allUpperWordCount(text string) int {
 	n := 0
-	for _, w := range strings.Fields(text) {
+	for w := range strings.FieldsSeq(text) {
 		l := letters(w)
 		if len(l) < 2 {
 			continue
@@ -165,7 +165,7 @@ func punctuationLetters(text string) (punct, total int) {
 // wordCount counts the words that have at least one letter.
 func wordCount(text string) int {
 	n := 0
-	for _, w := range strings.Fields(text) {
+	for w := range strings.FieldsSeq(text) {
 		if letters(w) != "" {
 			n++
 		}
