@@ -319,3 +319,9 @@ func (a *App) usersSettings(ctx context.Context) (settings.Users, error) {
 func (a *App) timersSettings(ctx context.Context) (settings.Timers, error) {
 	return settings.Load(ctx, a.settings, settings.DefaultTimers())
 }
+
+// moderationSettings reads the section "moderation" (roadmap 5.5, spec
+// moderation.md, B13).
+func (a *App) moderationSettings(ctx context.Context) (settings.Moderation, error) {
+	return settings.Load(ctx, a.settings, settings.DefaultModeration())
+}

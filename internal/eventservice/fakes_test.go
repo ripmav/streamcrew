@@ -26,6 +26,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/eventservice"
+	"github.com/ripmav/streamcrew/internal/moderation"
 	"github.com/ripmav/streamcrew/internal/polydoc"
 	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/store"
@@ -401,6 +402,35 @@ func (s *eventSettings) set(change func(*settings.Events)) {
 }
 
 // fixture is a service with fakes.
+// fakeModeration applies the real moderation rules with a configurable
+// section, so the pipeline tests can set the filters. The default is the
+// empty section (no filters), which lets every message through.
+type fakeModeration struct {
+	mu  sync.Mutex
+	cfg settings.Moderation
+}
+
+func (f *fakeModeration) get(context.Context) (settings.Moderation, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.cfg, nil
+}
+
+// set replaces the section; it applies from the next check.
+func (f *fakeModeration) set(cfg settings.Moderation) {
+	f.mu.Lock()
+	f.cfg = cfg
+	f.mu.Unlock()
+}
+
+func (f *fakeModeration) Check(ctx context.Context, m moderation.Message) (moderation.Decision, error) {
+	svc, err := moderation.New(moderation.Ports{Settings: f.get})
+	if err != nil {
+		return moderation.Decision{}, err
+	}
+	return svc.Check(ctx, m)
+}
+
 type fixture struct {
 	store    *memStore
 	engine   *fakeEngine
@@ -408,6 +438,7 @@ type fixture struct {
 	settings *eventSettings
 	points   *channelPointsSettings
 	chat     *fakeChat
+	mod      *fakeModeration
 	cmds     commands
 	service  *eventservice.Service
 }
@@ -427,6 +458,7 @@ func newFixture(t *testing.T, cmds ...command.Command) *fixture {
 		settings: &eventSettings{cfg: settings.DefaultEvents()},
 		points:   &channelPointsSettings{cfg: settings.DefaultChannelPoints()},
 		chat:     &fakeChat{},
+		mod:      &fakeModeration{},
 		cmds:     commands{list: cmds},
 	}
 	f.service = f.restart(t)
@@ -439,7 +471,7 @@ func (f *fixture) restart(t *testing.T) *eventservice.Service {
 	t.Helper()
 	svc, err := eventservice.New(t.Context(), eventservice.Ports{
 		Store: f.store, Commands: f.cmds, Engine: f.engine, Publisher: f.pub,
-		Chat: f.chat, Settings: f.settings.get, ChannelPoints: f.points.get,
+		Chat: f.chat, Moderation: f.mod, Settings: f.settings.get, ChannelPoints: f.points.get,
 	})
 	require.NoError(t, err)
 	return svc

@@ -38,6 +38,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
+	"github.com/ripmav/streamcrew/internal/moderation"
 	"github.com/ripmav/streamcrew/internal/settings"
 )
 
@@ -121,6 +122,12 @@ type Chat interface {
 	Delete(ctx context.Context, p platform.Name, ch connector.Channel, messageID string) error
 }
 
+// Moderation checks an incoming message at the moderation stage (spec
+// moderation.md, B1); *moderation.Service implements it.
+type Moderation interface {
+	Check(ctx context.Context, m moderation.Message) (moderation.Decision, error)
+}
+
 // Ports are what the service needs. All are required.
 type Ports struct {
 	Store     Store
@@ -128,6 +135,9 @@ type Ports struct {
 	Engine    Engine
 	Publisher Publisher
 	Chat      Chat
+	// Moderation checks the messages at the moderation stage, after the
+	// muted chat (spec moderation.md, B1, B3 of chat-service.md).
+	Moderation Moderation
 	// Settings reads the settings section "events" (B10) whenever a rule
 	// needs it, so changes apply at once.
 	Settings func(ctx context.Context) (settings.Events, error)
@@ -182,7 +192,7 @@ type session struct {
 // did not run ends the session without "channel.stream.stop" (B27).
 func New(ctx context.Context, p Ports, opts ...Option) (*Service, error) {
 	switch {
-	case p.Store == nil, p.Commands == nil, p.Engine == nil, p.Publisher == nil, p.Chat == nil, p.Settings == nil:
+	case p.Store == nil, p.Commands == nil, p.Engine == nil, p.Publisher == nil, p.Chat == nil, p.Moderation == nil, p.Settings == nil:
 		return nil, fmt.Errorf("new event service: %w: missing port", ErrInvalidOption)
 	}
 	s := &Service{ports: p, logger: slog.New(slog.DiscardHandler), sessions: make(map[platform.Name]*session)}

@@ -54,6 +54,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/lockfile"
 	"github.com/ripmav/streamcrew/internal/logging"
+	modsvc "github.com/ripmav/streamcrew/internal/moderation"
 	"github.com/ripmav/streamcrew/internal/netguard"
 	"github.com/ripmav/streamcrew/internal/profile"
 	"github.com/ripmav/streamcrew/internal/requirement"
@@ -140,6 +141,7 @@ type App struct {
 	commands     *command.Service
 	engine       *engine.Engine
 	events       *eventservice.Service
+	moderation   *modsvc.Service
 	timer        *timersvc.Service
 	userSvc      *userservice.Service
 	catalog      *event.Catalog
@@ -386,12 +388,19 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if err != nil {
 		return a, err
 	}
+	a.moderation, err = modsvc.New(modsvc.Ports{
+		Settings: a.moderationSettings,
+	}, modsvc.WithLogger(component(logger, "moderation")))
+	if err != nil {
+		return a, err
+	}
 	a.events, err = eventservice.New(ctx, eventservice.Ports{
 		Store:         a.store,
 		Commands:      a.commands,
 		Engine:        a.engine,
 		Publisher:     a.bus,
 		Chat:          a.chat,
+		Moderation:    a.moderation,
 		Settings:      a.eventsSettings,
 		ChannelPoints: a.channelPointsSettings,
 	}, eventservice.WithLogger(component(logger, "events")))
