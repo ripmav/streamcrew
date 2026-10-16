@@ -1,0 +1,164 @@
+// SPDX-License-Identifier: MIT
+
+// StreamService (Plan §6.14, ADR-0010): the single live-data stream.
+// Subscribe is a server stream that delivers chat, feed events, command
+// instances, platform status, logs and prompts. Clients answer prompts with
+// the AnswerPrompt RPC. No bidirectional streaming (ADR-0010).
+syntax = "proto3";
+
+package streamcrew.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+import "streamcrew/v1alpha1/system.proto";
+
+option go_package = "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1;streamcrewv1alpha1";
+
+// StreamService is the single source of live data for the frontends.
+service StreamService {
+  // Subscribe streams events to the client until the client cancels.
+  rpc Subscribe(SubscribeRequest) returns (stream Event);
+  // AnswerPrompt answers a prompt delivered through the stream.
+  rpc AnswerPrompt(AnswerPromptRequest) returns (AnswerPromptResponse);
+}
+
+// EventFilter limits which events are delivered; empty lists mean "all".
+message EventFilter {
+  // kinds are event type prefixes, e.g. "chat", "feed", "command",
+  // "platform", "log", "prompt"; empty matches everything.
+  repeated string kinds = 1;
+  // platforms are platform names; empty matches everything.
+  repeated string platforms = 2;
+  // channels are channel logins; empty matches everything.
+  repeated string channels = 3;
+}
+
+// SubscribeRequest is the request of Subscribe.
+message SubscribeRequest {
+  // filter limits the delivered events.
+  EventFilter filter = 1;
+  // since asks the server to resend the last N events it has in its buffer,
+  // so a reconnecting client can catch up without a full resync.
+  uint32 since = 2;
+}
+
+// ChatMessage is a chat message delivered through the stream.
+message ChatMessage {
+  // message_id is the platform message ID; empty if the platform has none.
+  string message_id = 1;
+  // login is the author login.
+  string login = 2;
+  // display_name is the author display name.
+  string display_name = 3;
+  // text is the message text.
+  string text = 4;
+  // emotes are the emote codes in the message.
+  repeated string emotes = 5;
+  // badges are the author badge IDs.
+  repeated string badges = 6;
+  // bot is true for the bot account, streamer for the streamer account.
+  bool bot = 7;
+  bool streamer = 8;
+  // reply_to is the login the message answers; empty if none.
+  string reply_to = 9;
+}
+
+// FeedItem is a feed event (follow, subscription, raid, cheer, donation).
+message FeedItem {
+  // type is the feed type, e.g. "channel.follow".
+  string type = 1;
+  // login is the involved user login; empty if none.
+  string login = 2;
+  // display_name is the involved user display name.
+  string display_name = 3;
+  // amount is the type number (bits, viewers, gift count).
+  int64 amount = 4;
+  // cents is a donation amount in cents.
+  int64 cents = 5;
+  // tier is a subscription tier.
+  int32 tier = 6;
+  // text is the shared text (cheer text, raid message).
+  string text = 7;
+}
+
+// CommandInstance is the state of one command instance.
+message CommandInstance {
+  // instance_id is the instance ID.
+  string instance_id = 1;
+  // command_id is the command ID.
+  string command_id = 2;
+  // command_name is the command name.
+  string command_name = 3;
+  // state is "queued", "running", "completed", "failed" or "canceled".
+  string state = 4;
+  // source is "chat", "event", "timer", "call" or "manual".
+  string source = 5;
+  // channel is the channel the instance runs in.
+  string channel = 6;
+  // error is the error message; empty if none.
+  string error = 7;
+}
+
+// LogEntry is a log line delivered through the stream.
+message LogEntry {
+  // level is "debug", "info", "warn" or "error".
+  string level = 1;
+  // component is the logging component, e.g. "engine".
+  string component = 2;
+  // message is the log message.
+  string message = 3;
+}
+
+// Prompt is a request for user input delivered through the stream
+// (Plan §6.14: prompts replace the dialogs of the original).
+message Prompt {
+  // id is the prompt ID, used to answer it.
+  string id = 1;
+  // kind is "information", "confirmation" or "input".
+  string kind = 2;
+  // text is the prompt text.
+  string text = 3;
+  // options are the selectable options; empty for information/input.
+  repeated string options = 4;
+}
+
+// Event is one item of the live stream.
+message Event {
+  // type is the event type, e.g. "chat.message", "feed", "command.instance",
+  // "platform.status", "log", "prompt".
+  string type = 1;
+  // platform is the platform; empty if not platform-specific.
+  string platform = 2;
+  // channel is the channel; empty if not channel-specific.
+  string channel = 3;
+  // occurred_at is when the event occurred.
+  google.protobuf.Timestamp occurred_at = 4;
+  oneof payload {
+    // chat is a chat message (type "chat.message").
+    ChatMessage chat = 5;
+    // feed is a feed event (type "feed").
+    FeedItem feed = 6;
+    // command is a command instance update (type "command.instance").
+    CommandInstance command = 7;
+    // platform_status is a platform connection update (type
+    // "platform.status"); reuses SystemService's PlatformStatus.
+    PlatformStatus platform_status = 8;
+    // log is a log line (type "log").
+    LogEntry log = 9;
+    // prompt is a prompt (type "prompt").
+    Prompt prompt = 10;
+  }
+}
+
+// AnswerPromptRequest is the request of AnswerPrompt.
+message AnswerPromptRequest {
+  // id is the ID of the prompt to answer.
+  string id = 1;
+  // value is the entered or selected value; empty for a pure confirmation.
+  string value = 2;
+  // confirmed is the confirmation result; meaningful for kind
+  // "confirmation".
+  bool confirmed = 3;
+}
+
+// AnswerPromptResponse is the response of AnswerPrompt.
+message AnswerPromptResponse {}

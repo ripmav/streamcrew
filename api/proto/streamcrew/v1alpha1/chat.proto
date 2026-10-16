@@ -1,0 +1,96 @@
+// SPDX-License-Identifier: MIT
+
+// ChatService (Plan §6.14): sending, deleting and clearing chat messages and
+// reading the history. Sending goes through the chat service (spec
+// chat-service.md), the only write path of the core into the platform chats.
+syntax = "proto3";
+
+package streamcrew.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1;streamcrewv1alpha1";
+
+// ChatService sends and manages chat messages.
+service ChatService {
+  // Send sends a chat message.
+  rpc Send(SendChatRequest) returns (SendChatResponse);
+  // Delete deletes a chat message by its platform ID.
+  rpc Delete(DeleteChatRequest) returns (DeleteChatResponse);
+  // Clear deletes all recent chat messages of a channel.
+  rpc Clear(ClearChatRequest) returns (ClearChatResponse);
+  // History returns the recent chat messages of a channel.
+  rpc History(HistoryChatRequest) returns (HistoryChatResponse);
+}
+
+// ChatMessageView is a chat message as returned by History.
+message ChatMessageView {
+  string message_id = 1;
+  string login = 2;
+  string display_name = 3;
+  string text = 4;
+  bool bot = 5;
+  bool streamer = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+}
+
+// SendChatRequest is the request of Send.
+message SendChatRequest {
+  // text is the message to send.
+  string text = 1;
+  // channel is the channel to send to; empty is the home channel.
+  string channel = 2;
+  // platform limits the send to one platform; empty sends to every
+  // connected platform.
+  string platform = 3;
+  // as_streamer sends from the streamer account even if a bot is connected.
+  bool as_streamer = 4;
+  // reply_message_id answers the message with this platform ID.
+  string reply_message_id = 5;
+}
+
+// SendChatResponse is the response of Send.
+message SendChatResponse {}
+
+// DeleteChatRequest is the request of Delete.
+message DeleteChatRequest {
+  // message_id is the platform ID of the message to delete.
+  string message_id = 1;
+  // channel is the channel of the message; empty is the home channel.
+  string channel = 2;
+  // platform is the platform of the message; empty is the platform of the
+  // message.
+  string platform = 3;
+}
+
+// DeleteChatResponse is the response of Delete.
+message DeleteChatResponse {}
+
+// ClearChatRequest is the request of Clear.
+message ClearChatRequest {
+  // channel is the channel to clear; empty is the home channel.
+  string channel = 1;
+  // platform limits the clear to one platform; empty clears on every
+  // connected platform.
+  string platform = 2;
+}
+
+// ClearChatResponse is the response of Clear.
+message ClearChatResponse {}
+
+// HistoryChatRequest is the request of History.
+message HistoryChatRequest {
+  // channel is the channel to read; empty is the home channel.
+  string channel = 1;
+  // platform limits the history to one platform; empty is every connected
+  // platform.
+  string platform = 2;
+  // limit is the maximum number of messages; 0 uses the default.
+  uint32 limit = 3;
+}
+
+// HistoryChatResponse is the response of History.
+message HistoryChatResponse {
+  // messages are the recent messages, newest last.
+  repeated ChatMessageView messages = 1;
+}

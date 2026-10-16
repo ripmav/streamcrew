@@ -1,0 +1,298 @@
+// SPDX-License-Identifier: MIT
+
+// CommandService (Plan §6.14): CRUD for commands, running them, the command
+// queue (pause, cancel, retry), the history of instances, the type catalog
+// for generic editors, and import/export.
+//
+// Commands are "commands as code": the API carries a command as its document
+// (YAML or JSON) plus a typed CommandSummary. The full poly command schema is
+// not mirrored into protobuf; the TypeCatalog provides the structure of the
+// action and requirement types for generic editors (Plan §7.1).
+syntax = "proto3";
+
+package streamcrew.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1;streamcrewv1alpha1";
+
+// CommandService manages the commands of a profile.
+service CommandService {
+  // List lists the commands, optionally filtered.
+  rpc List(ListCommandsRequest) returns (ListCommandsResponse);
+  // Get returns one command as its document and summary.
+  rpc Get(GetCommandRequest) returns (GetCommandResponse);
+  // Create creates a command from its document.
+  rpc Create(CreateCommandRequest) returns (CreateCommandResponse);
+  // Update replaces a command with its new document.
+  rpc Update(UpdateCommandRequest) returns (UpdateCommandResponse);
+  // Delete removes a command.
+  rpc Delete(DeleteCommandRequest) returns (DeleteCommandResponse);
+  // Run starts a command manually.
+  rpc Run(RunCommandRequest) returns (RunCommandResponse);
+  // ListInstances lists the command queue and recent instances.
+  rpc ListInstances(ListInstancesRequest) returns (ListInstancesResponse);
+  // Pause toggles the pause of the command queue.
+  rpc PauseQueue(PauseQueueRequest) returns (PauseQueueResponse);
+  // Cancel cancels a queued or running instance.
+  rpc CancelInstance(CancelInstanceRequest) returns (CancelInstanceResponse);
+  // Retry re-runs a failed instance.
+  rpc RetryInstance(RetryInstanceRequest) returns (RetryInstanceResponse);
+  // TypeCatalog returns the action and requirement types for generic
+  // editors.
+  rpc TypeCatalog(TypeCatalogRequest) returns (TypeCatalogResponse);
+  // Import reads commands from a document (YAML or JSON).
+  rpc Import(ImportCommandsRequest) returns (ImportCommandsResponse);
+  // Export writes commands to a document (YAML or JSON).
+  rpc Export(ExportCommandsRequest) returns (ExportCommandsResponse);
+}
+
+// CommandSummary is the typed view of a command for lists and details.
+message CommandSummary {
+  // id is the command ID (UUID).
+  string id = 1;
+  // name is the unique command name.
+  string name = 2;
+  // kind is "chat", "event", "timer" or "action_group".
+  string kind = 3;
+  // enabled is the "active" switch.
+  bool enabled = 4;
+  // triggers are the chat triggers; empty for non-chat commands.
+  repeated string triggers = 5;
+  // event_type is the event type; empty for non-event commands.
+  string event_type = 6;
+  // channel is the channel scope; empty means every operated channel.
+  string channel = 7;
+  // group is the command group name; empty if none.
+  string group = 8;
+  // updated_at is when the command was last changed.
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+// CommandInstanceView is the state of one command instance.
+message CommandInstanceView {
+  string instance_id = 1;
+  string command_id = 2;
+  string command_name = 3;
+  // state is "queued", "running", "completed", "failed" or "canceled".
+  string state = 4;
+  // source is "chat", "event", "timer", "call" or "manual".
+  string source = 5;
+  string channel = 6;
+  // started_at is when the instance started; null if still queued.
+  google.protobuf.Timestamp started_at = 7;
+  // ended_at is when the instance ended; null while running.
+  google.protobuf.Timestamp ended_at = 8;
+  // error is the error message; empty if none.
+  string error = 9;
+}
+
+// ListCommandsRequest is the request of List.
+message ListCommandsRequest {
+  // kind filters by command kind; empty is every kind.
+  string kind = 1;
+  // enabled filters by the active switch; null is every state.
+  bool enabled = 2;
+  // prefix filters by a case-insensitive name prefix; empty is all.
+  string prefix = 3;
+}
+
+// ListCommandsResponse is the response of List.
+message ListCommandsResponse {
+  repeated CommandSummary commands = 1;
+}
+
+// GetCommandRequest is the request of Get.
+message GetCommandRequest {
+  // id is the command ID.
+  string id = 1;
+}
+
+// GetCommandResponse is the response of Get.
+message GetCommandResponse {
+  // summary is the typed view of the command.
+  CommandSummary summary = 1;
+  // document is the command as code (YAML or JSON), as selected by
+  // ListCommands/Import or the default (YAML).
+  string document = 2;
+  // format is "yaml" or "json".
+  string format = 3;
+}
+
+// CreateCommandRequest is the request of Create.
+message CreateCommandRequest {
+  // document is the command as code.
+  string document = 1;
+  // format is "yaml" or "json".
+  string format = 2;
+}
+
+// CreateCommandResponse is the response of Create.
+message CreateCommandResponse {
+  CommandSummary command = 1;
+  // warnings are non-fatal problems, e.g. a missing capability.
+  repeated string warnings = 2;
+}
+
+// UpdateCommandRequest is the request of Update.
+message UpdateCommandRequest {
+  // id is the command ID to update.
+  string id = 1;
+  // document is the new command as code.
+  string document = 2;
+  // format is "yaml" or "json".
+  string format = 3;
+}
+
+// UpdateCommandResponse is the response of Update.
+message UpdateCommandResponse {
+  CommandSummary command = 1;
+  repeated string warnings = 2;
+}
+
+// DeleteCommandRequest is the request of Delete.
+message DeleteCommandRequest {
+  string id = 1;
+}
+
+// DeleteCommandResponse is the response of Delete.
+message DeleteCommandResponse {}
+
+// RunCommandRequest is the request of Run.
+message RunCommandRequest {
+  // id is the command ID to run.
+  string id = 1;
+  // args are the arguments, as they would follow the trigger.
+  repeated string args = 2;
+  // channel is the channel to run in; empty is the home channel.
+  string channel = 3;
+}
+
+// RunCommandResponse is the response of Run.
+message RunCommandResponse {
+  // instance_id is the ID of the started instance; empty if the command
+  // was rejected or inactive.
+  string instance_id = 1;
+  // result is "queued", "started", "inactive", "rejected" or "waiting".
+  string result = 2;
+  // reason is a short reason for rejected/waiting; empty otherwise.
+  string reason = 3;
+}
+
+// ListInstancesRequest is the request of ListInstances.
+message ListInstancesRequest {
+  // command_id filters by command; empty is every command.
+  string command_id = 1;
+  // states filters by instance state; empty is every state.
+  repeated string states = 2;
+  // limit is the maximum number of instances; 0 uses the default.
+  uint32 limit = 3;
+}
+
+// ListInstancesResponse is the response of ListInstances.
+message ListInstancesResponse {
+  // paused is true while the command queue is paused.
+  bool paused = 1;
+  // instances are the instances, newest first.
+  repeated CommandInstanceView instances = 2;
+}
+
+// PauseQueueRequest is the request of PauseQueue.
+message PauseQueueRequest {
+  // pause pauses the queue when true, resumes it when false.
+  bool pause = 1;
+}
+
+// PauseQueueResponse is the response of PauseQueue.
+message PauseQueueResponse {
+  // paused is the new state of the queue.
+  bool paused = 1;
+}
+
+// CancelInstanceRequest is the request of CancelInstance.
+message CancelInstanceRequest {
+  string instance_id = 1;
+}
+
+// CancelInstanceResponse is the response of CancelInstance.
+message CancelInstanceResponse {}
+
+// RetryInstanceRequest is the request of RetryInstance.
+message RetryInstanceRequest {
+  string instance_id = 1;
+}
+
+// RetryInstanceResponse is the response of RetryInstance.
+message RetryInstanceResponse {
+  // instance_id is the ID of the new instance.
+  string instance_id = 1;
+}
+
+// ActionTypeInfo is one action or requirement type of the catalog.
+message ActionTypeInfo {
+  // type is the type ID, e.g. "chat" or "role".
+  string type = 1;
+  // version is the schema version.
+  uint32 version = 2;
+  // category is the type category, e.g. "chat", "values", "users".
+  string category = 3;
+  // kinds are the kinds of the type; empty if the type has none.
+  repeated string kinds = 4;
+  // is_requirement is true for requirement types, false for action types.
+  bool is_requirement = 5;
+  // schema is the JSON schema of the type, for generic editors.
+  string schema = 6;
+}
+
+// TypeCatalogRequest is the request of TypeCatalog.
+message TypeCatalogRequest {}
+
+// TypeCatalogResponse is the response of TypeCatalog.
+message TypeCatalogResponse {
+  // actions are the action types.
+  repeated ActionTypeInfo actions = 1;
+  // requirements are the requirement types.
+  repeated ActionTypeInfo requirements = 2;
+}
+
+// ImportCommandsRequest is the request of Import.
+message ImportCommandsRequest {
+  // document is the import document (YAML or JSON), a list of commands.
+  string document = 1;
+  // format is "yaml" or "json".
+  string format = 2;
+}
+
+// ImportedCommand is the result of importing one command.
+message ImportedCommand {
+  // name is the command name.
+  string name = 1;
+  // id is the command ID; empty if the command was not created.
+  string id = 2;
+  // created is true if the command was created, false if updated.
+  bool created = 3;
+  // error is the import error; empty if the command was imported.
+  string error = 4;
+}
+
+// ImportCommandsResponse is the response of Import.
+message ImportCommandsResponse {
+  // results are the results per command, in document order.
+  repeated ImportedCommand results = 1;
+}
+
+// ExportCommandsRequest is the request of Export.
+message ExportCommandsRequest {
+  // ids are the command IDs to export; empty exports every command.
+  repeated string ids = 1;
+  // format is "yaml" or "json".
+  string format = 2;
+}
+
+// ExportCommandsResponse is the response of Export.
+message ExportCommandsResponse {
+  // document is the exported commands (YAML or JSON).
+  string document = 1;
+  // format is "yaml" or "json".
+  string format = 2;
+}

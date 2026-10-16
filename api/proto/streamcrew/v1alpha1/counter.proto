@@ -1,0 +1,145 @@
+// SPDX-License-Identifier: MIT
+
+// CounterService (Plan §6.14): management of the profile counters
+// (counters-and-quotes.md). Counters are profile-wide and persisted.
+syntax = "proto3";
+
+package streamcrew.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1;streamcrewv1alpha1";
+
+// CounterService manages the counters of a profile.
+service CounterService {
+  // List lists the counters.
+  rpc List(ListCountersRequest) returns (ListCountersResponse);
+  // Get returns one counter by name.
+  rpc Get(GetCounterRequest) returns (GetCounterResponse);
+  // Create creates a counter.
+  rpc Create(CreateCounterRequest) returns (CreateCounterResponse);
+  // Update changes the step and reset-on-start of a counter.
+  rpc Update(UpdateCounterRequest) returns (UpdateCounterResponse);
+  // Set sets the value of a counter.
+  rpc Set(SetCounterRequest) returns (SetCounterResponse);
+  // Add adds an amount to a counter.
+  rpc Add(AddCounterRequest) returns (AddCounterResponse);
+  // Reset sets a counter to its reset value.
+  rpc Reset(ResetCounterRequest) returns (ResetCounterResponse);
+  // Delete removes a counter.
+  rpc Delete(DeleteCounterRequest) returns (DeleteCounterResponse);
+}
+
+// CounterView is one counter of the profile.
+message CounterView {
+  // id is the counter ID.
+  string id = 1;
+  // name is the unique counter name.
+  string name = 2;
+  // value is the current value (exact decimal as string).
+  string value = 3;
+  // step is the step size used by increment/decrement (as string).
+  string step = 4;
+  // reset_on_start is true if the counter resets to its value on a new
+  // stream session.
+  bool reset_on_start = 5;
+  // updated_at is when the counter was last changed.
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// ListCountersRequest is the request of List.
+message ListCountersRequest {
+  // prefix filters by a case-insensitive name prefix; empty is all.
+  string prefix = 1;
+}
+
+// ListCountersResponse is the response of List.
+message ListCountersResponse {
+  repeated CounterView counters = 1;
+}
+
+// GetCounterRequest is the request of Get.
+message GetCounterRequest {
+  // name is the counter name.
+  string name = 1;
+}
+
+// GetCounterResponse is the response of Get.
+message GetCounterResponse {
+  CounterView counter = 1;
+}
+
+// CreateCounterRequest is the request of Create.
+message CreateCounterRequest {
+  // name is the unique counter name.
+  string name = 1;
+  // value is the initial value (as string); empty is 0.
+  string value = 2;
+  // step is the step size (as string); empty is the default.
+  string step = 3;
+  // reset_on_start is the reset-on-start switch.
+  bool reset_on_start = 4;
+}
+
+// CreateCounterResponse is the response of Create.
+message CreateCounterResponse {
+  CounterView counter = 1;
+}
+
+// UpdateCounterRequest is the request of Update.
+message UpdateCounterRequest {
+  // name is the counter name.
+  string name = 1;
+  // step is the new step size (as string); empty keeps it.
+  string step = 2;
+  // reset_on_start is the new reset-on-start switch; null keeps it.
+  bool reset_on_start = 3;
+}
+
+// UpdateCounterResponse is the response of Update.
+message UpdateCounterResponse {
+  CounterView counter = 1;
+}
+
+// SetCounterRequest is the request of Set.
+message SetCounterRequest {
+  string name = 1;
+  // value is the new value (as string).
+  string value = 2;
+}
+
+// SetCounterResponse is the response of Set.
+message SetCounterResponse {
+  CounterView counter = 1;
+}
+
+// AddCounterRequest is the request of Add.
+message AddCounterRequest {
+  string name = 1;
+  // amount is the amount to add (as string, may be negative); empty adds
+  // one step.
+  string amount = 2;
+}
+
+// AddCounterResponse is the response of Add.
+message AddCounterResponse {
+  CounterView counter = 1;
+}
+
+// ResetCounterRequest is the request of Reset.
+message ResetCounterRequest {
+  string name = 1;
+}
+
+// ResetCounterResponse is the response of Reset.
+message ResetCounterResponse {
+  CounterView counter = 1;
+}
+
+// DeleteCounterRequest is the request of Delete.
+message DeleteCounterRequest {
+  string name = 1;
+}
+
+// DeleteCounterResponse is the response of Delete.
+message DeleteCounterResponse {}

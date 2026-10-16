@@ -1,0 +1,96 @@
+// SPDX-License-Identifier: MIT
+
+// AuthService (Plan §6.14): accounts per platform, starting and cancelling
+// login flows, and logging out. The login flow follows ADR-0023 (authorization
+// code flow with the device code flow as fallback).
+syntax = "proto3";
+
+package streamcrew.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1;streamcrewv1alpha1";
+
+// AuthService manages the platform accounts of a profile.
+service AuthService {
+  // ListAccounts lists the accounts of the profile.
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+  // StartLogin starts a login flow for a platform account and returns the
+  // code and URL (authorization code flow) or the device code and URL
+  // (device code flow).
+  rpc StartLogin(StartLoginRequest) returns (StartLoginResponse);
+  // CancelLogin cancels a running login flow.
+  rpc CancelLogin(CancelLoginRequest) returns (CancelLoginResponse);
+  // Logout revokes the tokens of a platform account and removes them.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+}
+
+// Account is one platform account of the profile.
+message Account {
+  // platform is the platform name, e.g. "twitch".
+  string platform = 1;
+  // login is the account login name.
+  string login = 2;
+  // display_name is the account display name.
+  string display_name = 3;
+  // bot is true for the bot account, false for the streamer account.
+  bool bot = 4;
+  // scopes are the granted OAuth scopes.
+  repeated string scopes = 5;
+  // expires_at is when the access token expires; null if unknown.
+  google.protobuf.Timestamp expires_at = 6;
+}
+
+// ListAccountsRequest is the request of ListAccounts.
+message ListAccountsRequest {}
+
+// ListAccountsResponse is the response of ListAccounts.
+message ListAccountsResponse {
+  // accounts are the accounts of the profile.
+  repeated Account accounts = 1;
+}
+
+// StartLoginRequest is the request of StartLogin.
+message StartLoginRequest {
+  // platform is the platform to log in, e.g. "twitch".
+  string platform = 1;
+  // bot selects the bot account; false selects the streamer account.
+  bool bot = 2;
+  // device_flow requests the device code flow instead of the
+  // authorization code flow.
+  bool device_flow = 3;
+}
+
+// StartLoginResponse is the response of StartLogin.
+message StartLoginResponse {
+  // flow is "code" or "device".
+  string flow = 1;
+  // code is the authorization or device code.
+  string code = 2;
+  // url is the URL the user opens in the browser.
+  string url = 3;
+  // expires_at is when the code expires; null if unknown.
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+// CancelLoginRequest is the request of CancelLogin.
+message CancelLoginRequest {
+  // platform is the platform of the login flow.
+  string platform = 1;
+  // bot selects the bot account; false selects the streamer account.
+  bool bot = 2;
+}
+
+// CancelLoginResponse is the response of CancelLogin.
+message CancelLoginResponse {}
+
+// LogoutRequest is the request of Logout.
+message LogoutRequest {
+  // platform is the platform to log out.
+  string platform = 1;
+  // bot selects the bot account; false selects the streamer account.
+  bool bot = 2;
+}
+
+// LogoutResponse is the response of Logout.
+message LogoutResponse {}

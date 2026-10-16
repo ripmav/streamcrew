@@ -1,0 +1,154 @@
+// SPDX-License-Identifier: MIT
+
+// UserService (Plan §6.14): searching, details, editing, linking, merging and
+// rankings of users.
+syntax = "proto3";
+
+package streamcrew.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1;streamcrewv1alpha1";
+
+// UserService manages the users of a profile.
+service UserService {
+  // List lists the users, optionally filtered and ranked.
+  rpc List(ListUsersRequest) returns (ListUsersResponse);
+  // Get returns one user by ID or by platform login.
+  rpc Get(GetUserRequest) returns (GetUserResponse);
+  // Update edits the mutable fields of a user (roles, title, strikes,
+  // excluded).
+  rpc Update(UpdateUserRequest) returns (UpdateUserResponse);
+  // Link merges the accounts of two users into one.
+  rpc Merge(MergeUsersRequest) returns (MergeUsersResponse);
+  // Rankings returns the top users per statistic.
+  rpc Rankings(RankingsRequest) returns (RankingsResponse);
+}
+
+// UserView is one user of the profile.
+message UserView {
+  // id is the user ID.
+  string id = 1;
+  // role is the highest role, e.g. "user", "follower", "moderator".
+  string role = 2;
+  // title is the user's title; empty if none.
+  string title = 3;
+  // excluded is true if the user is excluded from rankings and random
+  // selection (bots and streamers).
+  bool excluded = 4;
+  // strikes is the current strike counter.
+  uint32 strikes = 5;
+  // identities are the platform accounts of the user.
+  repeated UserIdentity identities = 6;
+  // watch_minutes is the total watch time in minutes.
+  int64 watch_minutes = 7;
+  // messages is the number of chat messages.
+  int64 messages = 8;
+  // commands_run is the number of completed command instances.
+  int64 commands_run = 9;
+  // mentions is the number of mentions.
+  int64 mentions = 10;
+  // first_seen is when the user was first seen; null if unknown.
+  google.protobuf.Timestamp first_seen = 11;
+  // last_seen is when the user was last seen; null if unknown.
+  google.protobuf.Timestamp last_seen = 12;
+}
+
+// UserIdentity is one platform account of a user.
+message UserIdentity {
+  string platform = 1;
+  string platform_user_id = 2;
+  string login = 3;
+  string display_name = 4;
+  // followed_at is when the user followed; null if not a follower.
+  google.protobuf.Timestamp followed_at = 5;
+}
+
+// ListUsersRequest is the request of List.
+message ListUsersRequest {
+  // prefix filters by a case-insensitive login prefix; empty is all.
+  string prefix = 1;
+  // stat ranks by a statistic ("watch_minutes", "messages", "commands_run",
+  // "mentions"); empty lists by ID.
+  string stat = 2;
+  // limit is the maximum number of users; 0 uses the default.
+  uint32 limit = 3;
+}
+
+// ListUsersResponse is the response of List.
+message ListUsersResponse {
+  repeated UserView users = 1;
+}
+
+// GetUserRequest is the request of Get.
+message GetUserRequest {
+  // id is the user ID; and/or platform_login.
+  string id = 1;
+  // platform_login is a platform login, e.g. "twitch/ada".
+  string platform_login = 2;
+}
+
+// GetUserResponse is the response of Get.
+message GetUserResponse {
+  UserView user = 1;
+}
+
+// UpdateUserRequest is the request of Update.
+message UpdateUserRequest {
+  // id is the user ID.
+  string id = 1;
+  // role is the new role; empty keeps the current role.
+  string role = 2;
+  // title is the new title; empty clears it.
+  string title = 3;
+  // excluded sets the excluded switch; null keeps it.
+  bool excluded = 4;
+  // strikes sets the strike counter; null keeps it.
+  uint32 strikes = 5;
+}
+
+// UpdateUserResponse is the response of Update.
+message UpdateUserResponse {
+  UserView user = 1;
+}
+
+// MergeUsersRequest is the request of Merge.
+message MergeUsersRequest {
+  // keep_platform_login is the account to keep, e.g. "twitch/ada".
+  string keep_platform_login = 1;
+  // merge_platform_login is the account to merge, e.g. "youtube/bob".
+  string merge_platform_login = 2;
+}
+
+// MergeUsersResponse is the response of Merge.
+message MergeUsersResponse {
+  // id is the ID of the remaining user.
+  string id = 1;
+}
+
+// RankingsRequest is the request of Rankings.
+message RankingsRequest {
+  // limit is the number of top users per statistic; 0 uses the default.
+  uint32 limit = 1;
+}
+
+// Ranking is the top users of one statistic.
+message Ranking {
+  // stat is the statistic, e.g. "watch_minutes".
+  string stat = 1;
+  // users are the top users, ranked.
+  repeated RankedUser users = 2;
+}
+
+// RankedUser is one user in a ranking.
+message RankedUser {
+  string id = 1;
+  string login = 2;
+  // value is the statistic value.
+  int64 value = 3;
+}
+
+// RankingsResponse is the response of Rankings.
+message RankingsResponse {
+  repeated Ranking rankings = 1;
+}
