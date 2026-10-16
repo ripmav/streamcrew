@@ -166,6 +166,13 @@ type User struct {
 	UpdatedAt         int64
 }
 
+type UserAnswer struct {
+	UserID    string
+	Key       string
+	Answer    string
+	UpdatedAt int64
+}
+
 type UserEvent struct {
 	UserID string
 	Type   string
