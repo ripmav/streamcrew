@@ -50,6 +50,9 @@ type Server struct {
 	mu        sync.Mutex
 	addr      net.Addr
 	listening chan struct{}
+
+	apiMu      sync.RWMutex
+	apiHandler http.Handler
 }
 
 // New returns a server. ready reports whether the core is ready to serve
@@ -63,7 +66,7 @@ func New(cfg Config, logger *slog.Logger, ready func() bool) *Server {
 		ready = func() bool { return true }
 	}
 	s := &Server{cfg: cfg, logger: logger, listening: make(chan struct{})}
-	s.handler = newMux(cfg.Dev, ready)
+	s.handler = s.buildMux(cfg.Dev, ready)
 	return s
 }
 
@@ -144,12 +147,23 @@ func (s *Server) setAddr(addr net.Addr) {
 	s.addr = addr
 }
 
-func newMux(dev bool, ready func() bool) *http.ServeMux {
+func (s *Server) buildMux(dev bool, ready func() bool) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+	// The health routes are registered without a method so they win over the
+	// "/" catch-all for every method; anything but GET is a method error, as
+	// it was before the API catch-all existed.
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		writeText(w, http.StatusOK, "ok")
 	})
-	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		if ready() {
 			writeText(w, http.StatusOK, "ready")
 			return
@@ -164,7 +178,32 @@ func newMux(dev bool, ready func() bool) *http.ServeMux {
 		mux.HandleFunc("POST /debug/pprof/symbol", pprof.Symbol)
 		mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
 	}
+	// Everything that is not a health or pprof route goes to the API (roadmap
+	// 6.2). The more specific patterns above win over the "/" catch-all.
+	mux.HandleFunc("/", s.serveAPI)
 	return mux
+}
+
+// SetAPI names the handler for the API routes; it is safe for concurrent use
+// and may be called after the server is built, because the API needs services
+// that are wired after the HTTP server (Code-ADR-0002, late binding).
+func (s *Server) SetAPI(h http.Handler) {
+	s.apiMu.Lock()
+	s.apiHandler = h
+	s.apiMu.Unlock()
+}
+
+// serveAPI dispatches a request to the API handler, or answers 404 before the
+// API is set.
+func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request) {
+	s.apiMu.RLock()
+	h := s.apiHandler
+	s.apiMu.RUnlock()
+	if h == nil {
+		http.Error(w, "the API is not available", http.StatusNotFound)
+		return
+	}
+	h.ServeHTTP(w, r)
 }
 
 func writeText(w http.ResponseWriter, status int, body string) {
