@@ -63,6 +63,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/netguard"
 	"github.com/ripmav/streamcrew/internal/preset"
 	"github.com/ripmav/streamcrew/internal/profile"
+	"github.com/ripmav/streamcrew/internal/prompt"
 	"github.com/ripmav/streamcrew/internal/requirement"
 	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/store"
@@ -135,6 +136,7 @@ type App struct {
 	settings *settings.Service
 	vault    *vault.Vault
 	auth     *auth.Service
+	prompts  *prompt.Service
 	bus      *event.Bus
 	sup      *supervisor.Supervisor
 	http     *httpserver.Server
@@ -254,6 +256,12 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	}
 	a.catalog = catalog
 	a.bus = event.NewBus(component(logger, "event"), event.WithCatalog(catalog))
+	// The prompt mechanism (Plan §6.14): prompts are published to the bus,
+	// delivered through the live stream and answered with the API.
+	a.prompts = prompt.New(func(ctx context.Context, p prompt.Prompt) {
+		// A prompt that cannot be published is dropped; it is not fatal.
+		_ = a.bus.Publish(ctx, event.New(event.Source{Kind: event.SourceSystem, Name: "prompt"}, prompt.Type, p))
+	})
 
 	// The auth service keeps the platform logins and their tokens
 	// (roadmap 4.1, ADR-0014); in server mode its requests go through the
@@ -490,6 +498,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Backups:   apiBackup{a: a},
 		Auth:      newAPIAuth(a),
 		Commands:  apiCommands{a: a},
+		Stream:    newAPIStream(a),
 		Shutdown:  a.Shutdown,
 	})
 	a.http.SetAPI(a.api.Handler())

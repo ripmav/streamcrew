@@ -23,6 +23,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/profile"
+	"github.com/ripmav/streamcrew/internal/prompt"
 	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/store"
 )
@@ -481,4 +482,57 @@ func TestAPIServesTheCommandService(t *testing.T) {
 	l2, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{Prefix: "hu"}))
 	require.NoError(t, err)
 	assert.Empty(t, l2.Msg.Commands)
+}
+
+// TestAPIServesTheStreamService exercises the StreamService through the real
+// ConnectRPC client (roadmap 6.2.1): a chat message on the stream, a prompt
+// delivered through the stream, the refused answer of an unknown prompt and
+// the since catch-up for a reconnecting client.
+func TestAPIServesTheStreamService(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	a, mp, _ := apiCore(t, cfg, settings.DefaultChat())
+	ctx := t.Context()
+
+	base := "http://" + a.HTTPServer().Addr().String()
+	client := streamcrewv1alpha1connect.NewStreamServiceClient(http.DefaultClient, base)
+
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stream, err := client.Subscribe(subCtx, connect.NewRequest(&v1alpha1.SubscribeRequest{}))
+	require.NoError(t, err)
+
+	// A chat message arrives on the stream.
+	_, err = mp.Say(ctx, "alice", "hello stream")
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		if !stream.Receive() {
+			return false
+		}
+		return stream.Msg().GetChat() != nil && stream.Msg().GetChat().GetText() == "hello stream"
+	}, 5*time.Second, 10*time.Millisecond, "the chat message on the stream")
+
+	// A prompt is delivered through the stream.
+	p := prompt.Prompt{ID: "test-prompt", Kind: prompt.KindConfirmation, Text: "a prompt"}
+	require.NoError(t, a.Bus().Publish(ctx, event.New(event.Source{Kind: event.SourceSystem, Name: "prompt"}, prompt.Type, p)))
+	require.Eventually(t, func() bool {
+		if !stream.Receive() {
+			return false
+		}
+		return stream.Msg().GetPrompt() != nil && stream.Msg().GetPrompt().GetId() == "test-prompt"
+	}, 5*time.Second, 10*time.Millisecond, "the prompt on the stream")
+
+	// Answering a prompt that is not pending is refused.
+	_, err = client.AnswerPrompt(ctx, connect.NewRequest(&v1alpha1.AnswerPromptRequest{Id: "test-prompt"}))
+	require.Error(t, err)
+
+	// A reconnecting client catches up with the since buffer.
+	catchup, err := client.Subscribe(ctx, connect.NewRequest(&v1alpha1.SubscribeRequest{Since: 10}))
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		if !catchup.Receive() {
+			return false
+		}
+		return catchup.Msg().GetChat() != nil && catchup.Msg().GetChat().GetText() == "hello stream"
+	}, 5*time.Second, 10*time.Millisecond, "the catch-up of the chat message")
 }
