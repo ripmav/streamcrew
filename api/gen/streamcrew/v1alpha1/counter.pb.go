@@ -426,8 +426,8 @@ type UpdateCounterRequest struct {
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// step is the new step size (as string); empty keeps it.
 	Step string `protobuf:"bytes,2,opt,name=step,proto3" json:"step,omitempty"`
-	// reset_on_start is the new reset-on-start switch; null keeps it.
-	ResetOnStart  bool `protobuf:"varint,3,opt,name=reset_on_start,json=resetOnStart,proto3" json:"reset_on_start,omitempty"`
+	// reset_on_start is the new reset-on-start switch; unset keeps it.
+	ResetOnStart  *bool `protobuf:"varint,3,opt,name=reset_on_start,json=resetOnStart,proto3,oneof" json:"reset_on_start,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -477,8 +477,8 @@ func (x *UpdateCounterRequest) GetStep() string {
 }
 
 func (x *UpdateCounterRequest) GetResetOnStart() bool {
-	if x != nil {
-		return x.ResetOnStart
+	if x != nil && x.ResetOnStart != nil {
+		return *x.ResetOnStart
 	}
 	return false
 }
@@ -926,11 +926,12 @@ const file_streamcrew_v1alpha1_counter_proto_rawDesc = "" +
 	"\x04step\x18\x03 \x01(\tR\x04step\x12$\n" +
 	"\x0ereset_on_start\x18\x04 \x01(\bR\fresetOnStart\"S\n" +
 	"\x15CreateCounterResponse\x12:\n" +
-	"\acounter\x18\x01 \x01(\v2 .streamcrew.v1alpha1.CounterViewR\acounter\"d\n" +
+	"\acounter\x18\x01 \x01(\v2 .streamcrew.v1alpha1.CounterViewR\acounter\"|\n" +
 	"\x14UpdateCounterRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
-	"\x04step\x18\x02 \x01(\tR\x04step\x12$\n" +
-	"\x0ereset_on_start\x18\x03 \x01(\bR\fresetOnStart\"S\n" +
+	"\x04step\x18\x02 \x01(\tR\x04step\x12)\n" +
+	"\x0ereset_on_start\x18\x03 \x01(\bH\x00R\fresetOnStart\x88\x01\x01B\x11\n" +
+	"\x0f_reset_on_start\"S\n" +
 	"\x15UpdateCounterResponse\x12:\n" +
 	"\acounter\x18\x01 \x01(\v2 .streamcrew.v1alpha1.CounterViewR\acounter\"=\n" +
 	"\x11SetCounterRequest\x12\x12\n" +
@@ -1030,6 +1031,7 @@ func file_streamcrew_v1alpha1_counter_proto_init() {
 	if File_streamcrew_v1alpha1_counter_proto != nil {
 		return
 	}
+	file_streamcrew_v1alpha1_counter_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
