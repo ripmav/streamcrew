@@ -49,6 +49,7 @@ type Root struct {
 	Token      tokenCmd      `cmd:"" help:"Create, list, and revoke the API access tokens of the data directory."`
 	Chat       chatCmd       `cmd:"" help:"Send chat messages of a running core through the API."`
 	Event      eventCmd      `cmd:"" name:"event" help:"Simulate events of a running core through the API."`
+	TUI        tuiCmd        `cmd:"" help:"Run the terminal UI of a local or remote core."`
 	Completion completionCmd `cmd:"" help:"Print the shell completion script."`
 }
 
