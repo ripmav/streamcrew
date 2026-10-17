@@ -168,9 +168,28 @@ func WithShutdownTimeout(d time.Duration) Option {
 		if d <= 0 {
 			return fmt.Errorf("%w: shutdown timeout %s is not positive", ErrInvalidOption, d)
 		}
-		e.shutdownTimeout = d
+		e.shutdownDuration = d
 		return nil
 	}
+}
+
+// WithShutdownTimeoutFunc names the function that supplies the shutdown
+// timeout at shutdown time, so it can change at runtime (roadmap 6.6); it
+// wins over WithShutdownTimeout.
+func WithShutdownTimeoutFunc(f func() time.Duration) Option {
+	return func(e *Engine) error {
+		e.shutdownFunc = f
+		return nil
+	}
+}
+
+// shutdownTimeout returns how long running instances may go on when the
+// core stops.
+func (e *Engine) shutdownTimeout() time.Duration {
+	if e.shutdownFunc != nil {
+		return e.shutdownFunc()
+	}
+	return e.shutdownDuration
 }
 
 // noPublisher publishes nothing; it stands in without WithPublisher.
@@ -190,14 +209,17 @@ const (
 
 // Engine runs commands. It is safe for concurrent use.
 type Engine struct {
-	commands        Commands
-	types           ActionTypes
-	requirements    Requirements
-	users           Users
-	publisher       Publisher
-	logger          *slog.Logger
-	config          func(context.Context) (Config, error)
-	shutdownTimeout time.Duration
+	commands         Commands
+	types            ActionTypes
+	requirements     Requirements
+	users            Users
+	publisher        Publisher
+	logger           *slog.Logger
+	config           func(context.Context) (Config, error)
+	shutdownDuration time.Duration
+	// shutdownFunc supplies the timeout at shutdown time; it wins over
+	// shutdownDuration (roadmap 6.6).
+	shutdownFunc func() time.Duration
 
 	// wg has the goroutines of the instances.
 	wg sync.WaitGroup
@@ -247,17 +269,17 @@ func New(commands Commands, types ActionTypes, opts ...Option) (*Engine, error) 
 		return nil, fmt.Errorf("new command engine: %w: nil action types", ErrInvalidOption)
 	}
 	e := &Engine{
-		commands:        commands,
-		types:           types,
-		publisher:       noPublisher{},
-		logger:          slog.New(slog.DiscardHandler),
-		config:          func(context.Context) (Config, error) { return DefaultConfig(), nil },
-		shutdownTimeout: DefaultShutdownTimeout,
-		ready:           make(chan struct{}),
-		active:          make(map[id.ID]*instance),
-		held:            make(map[string]struct{}),
-		changed:         make(chan struct{}),
-		errorUntil:      make(map[id.ID]map[string]time.Time),
+		commands:         commands,
+		types:            types,
+		publisher:        noPublisher{},
+		logger:           slog.New(slog.DiscardHandler),
+		config:           func(context.Context) (Config, error) { return DefaultConfig(), nil },
+		shutdownDuration: DefaultShutdownTimeout,
+		ready:            make(chan struct{}),
+		active:           make(map[id.ID]*instance),
+		held:             make(map[string]struct{}),
+		changed:          make(chan struct{}),
+		errorUntil:       make(map[id.ID]map[string]time.Time),
 	}
 	var errs []error
 	for _, opt := range opts {
@@ -292,7 +314,8 @@ func (e *Engine) Run(ctx context.Context) error {
 	}
 	e.mu.Unlock()
 
-	grace := time.NewTimer(e.shutdownTimeout)
+	timeout := e.shutdownTimeout()
+	grace := time.NewTimer(timeout)
 	defer grace.Stop()
 	for {
 		e.mu.Lock()
@@ -310,7 +333,7 @@ func (e *Engine) Run(ctx context.Context) error {
 			e.mu.Lock()
 			e.phase = phaseClosed
 			e.logger.WarnContext(stopCtx, "command instances still running at shutdown, canceling them",
-				"count", len(e.active), "timeout", e.shutdownTimeout)
+				"count", len(e.active), "timeout", timeout)
 			for _, in := range e.active {
 				e.cancelLocked(stopCtx, in)
 			}

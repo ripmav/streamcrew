@@ -17,6 +17,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/connector/mock"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
+	"github.com/ripmav/streamcrew/internal/dryrun"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/prompt"
@@ -307,6 +308,9 @@ func (x *apiStream) Simulate(ctx context.Context, eventType, user, target, text 
 	p, ok := x.a.platforms.Platform(platform.Mock)
 	if !ok {
 		return "", errors.New("simulate: no mock platform is connected")
+	}
+	if inner, ok := dryrun.AsInner(p); ok {
+		p = inner
 	}
 	mp, ok := p.(*mock.Platform)
 	if !ok {

@@ -10,10 +10,12 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	twitchaction "github.com/ripmav/streamcrew/internal/action/twitch"
 	"github.com/ripmav/streamcrew/internal/connector"
+	"github.com/ripmav/streamcrew/internal/connector/mock"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/event"
@@ -32,15 +34,30 @@ type EventRegistrar interface {
 	RegisterEvents(c *event.Catalog) error
 }
 
+// AsInner returns the inner platform of the wrapper; ok is false if the
+// platform was not wrapped by this package (roadmap 6.6).
+func AsInner(p connector.Platform) (connector.Platform, bool) {
+	w, ok := p.(interface {
+		innerPlatform() connector.Platform
+	})
+	if !ok {
+		return nil, false
+	}
+	return w.innerPlatform(), true
+}
+
 // Platform wraps a connector.Platform in dry run: every read is
 // forwarded, and every write — chat, moderation — is recorded and returns
 // success. The optional capabilities of the inner platform (runnable,
-// event registrar, identities, chatters) are kept.
+// event registrar, identities, chatters, mock simulation) are kept.
 type Platform struct {
 	inner connector.Platform
 	run   supervisor.Runnable
 	reg   EventRegistrar
 	log   *slog.Logger
+	// on switches the writes on and off at runtime; nil means always on
+	// (roadmap 6.6).
+	on *atomic.Bool
 }
 
 // NewPlatform wraps p for dry run.
@@ -54,6 +71,18 @@ func NewPlatform(p connector.Platform, log *slog.Logger) Platform {
 	}
 	return w
 }
+
+// NewSwitchablePlatform wraps p for dry run, switched by on (roadmap 6.6):
+// with on set, the writes are recorded; with it unset, they go to the inner
+// platform. The reads always go to the inner platform.
+func NewSwitchablePlatform(p connector.Platform, log *slog.Logger, on *atomic.Bool) Platform {
+	w := NewPlatform(p, log)
+	w.on = on
+	return w
+}
+
+// switched reports whether the dry run is on.
+func (w Platform) switched() bool { return w.on == nil || w.on.Load() }
 
 // Name implements connector.Platform.
 func (w Platform) Name() platform.Name { return w.inner.Name() }
@@ -69,11 +98,22 @@ func (w Platform) Channel(ctx context.Context) (connector.ChannelInfo, error) {
 	return w.inner.Channel(ctx)
 }
 
+// innerPlatform returns the wrapped platform (roadmap 6.6).
+func (w Platform) innerPlatform() connector.Platform { return w.inner }
+
 // Chat implements connector.Platform.
-func (w Platform) Chat() connector.Chat { return chat{log: w.log} }
+func (w Platform) Chat() connector.Chat {
+	if !w.switched() {
+		return w.inner.Chat()
+	}
+	return chat{log: w.log}
+}
 
 // Moderation implements connector.Platform.
 func (w Platform) Moderation() connector.Moderation {
+	if !w.switched() {
+		return w.inner.Moderation()
+	}
 	return moderation{log: w.log}
 }
 
@@ -110,6 +150,30 @@ func (w Platform) Chatters(ctx context.Context) ([]user.Identity, error) {
 		return nil, errors.New("dryrun: the inner platform has no chatters")
 	}
 	return c.Chatters(ctx)
+}
+
+// UserPlatformData implements connector.PlatformData of the inner
+// platform, so the dry-run wrapper keeps the platform data capability for
+// the user service (roadmap 6.6).
+func (w Platform) UserPlatformData(ctx context.Context, platformUserID string) (user.PlatformData, error) {
+	d, ok := w.inner.(connector.PlatformData)
+	if !ok {
+		return user.PlatformData{}, connector.ErrUnknownUser
+	}
+	return d.UserPlatformData(ctx, platformUserID)
+}
+
+// Say implements mock.Say of the inner platform, so the dry-run wrapper
+// stays a mock platform for the API (roadmap 6.3) and the platform set
+// (roadmap 6.6).
+func (w Platform) Say(ctx context.Context, login, text string) (mock.Sent, error) {
+	m, ok := w.inner.(interface {
+		Say(ctx context.Context, login, text string) (mock.Sent, error)
+	})
+	if !ok {
+		return mock.Sent{}, errors.New("dryrun: the inner platform cannot simulate")
+	}
+	return m.Say(ctx, login, text)
 }
 
 // chat records the writes of the chat and returns success.
@@ -266,4 +330,117 @@ func (o Ops) SetReward(ctx context.Context, title string, enabled bool) error {
 func (o Ops) DeleteReward(ctx context.Context, title string) error {
 	o.log.DebugContext(ctx, "dry run: delete reward", "title", title)
 	return nil
+}
+
+// SwitchOps switches between the real twitch operations and their dry-run
+// recording at runtime (roadmap 6.6): with on set, the operations are
+// recorded; with it unset, they run on the streamer channel.
+type SwitchOps struct {
+	realOps, dry twitchaction.Ops
+	on           *atomic.Bool
+}
+
+// NewSwitchOps returns the switchable implementation of the twitch
+// operations.
+func NewSwitchOps(realOps, dry twitchaction.Ops, on *atomic.Bool) SwitchOps {
+	return SwitchOps{realOps: realOps, dry: dry, on: on}
+}
+
+// switched reports whether the dry run is on.
+func (o SwitchOps) switched() bool { return o.on == nil || o.on.Load() }
+
+// Clip implements twitchaction.Ops.
+func (o SwitchOps) Clip(ctx context.Context) (string, error) {
+	if o.switched() {
+		return o.dry.Clip(ctx)
+	}
+	return o.realOps.Clip(ctx)
+}
+
+// Marker implements twitchaction.Ops.
+func (o SwitchOps) Marker(ctx context.Context, description string) (string, error) {
+	if o.switched() {
+		return o.dry.Marker(ctx, description)
+	}
+	return o.realOps.Marker(ctx, description)
+}
+
+// StartAd implements twitchaction.Ops.
+func (o SwitchOps) StartAd(ctx context.Context, lengthSeconds int) error {
+	if o.switched() {
+		return o.dry.StartAd(ctx, lengthSeconds)
+	}
+	return o.realOps.StartAd(ctx, lengthSeconds)
+}
+
+// Raid implements twitchaction.Ops.
+func (o SwitchOps) Raid(ctx context.Context, toLogin string) error {
+	if o.switched() {
+		return o.dry.Raid(ctx, toLogin)
+	}
+	return o.realOps.Raid(ctx, toLogin)
+}
+
+// Shoutout implements twitchaction.Ops.
+func (o SwitchOps) Shoutout(ctx context.Context, toLogin string) error {
+	if o.switched() {
+		return o.dry.Shoutout(ctx, toLogin)
+	}
+	return o.realOps.Shoutout(ctx, toLogin)
+}
+
+// CreatePoll implements twitchaction.Ops.
+func (o SwitchOps) CreatePoll(ctx context.Context, in twitchaction.PollInput) (string, error) {
+	if o.switched() {
+		return o.dry.CreatePoll(ctx, in)
+	}
+	return o.realOps.CreatePoll(ctx, in)
+}
+
+// PollStatus implements twitchaction.Ops.
+func (o SwitchOps) PollStatus(ctx context.Context, pollID string) (twitchaction.PollStatus, error) {
+	if o.switched() {
+		return o.dry.PollStatus(ctx, pollID)
+	}
+	return o.realOps.PollStatus(ctx, pollID)
+}
+
+// CreatePrediction implements twitchaction.Ops.
+func (o SwitchOps) CreatePrediction(ctx context.Context, in twitchaction.PredictionInput) (string, error) {
+	if o.switched() {
+		return o.dry.CreatePrediction(ctx, in)
+	}
+	return o.realOps.CreatePrediction(ctx, in)
+}
+
+// PredictionStatus implements twitchaction.Ops.
+func (o SwitchOps) PredictionStatus(ctx context.Context, pollID string) (twitchaction.PredictionStatus, error) {
+	if o.switched() {
+		return o.dry.PredictionStatus(ctx, pollID)
+	}
+	return o.realOps.PredictionStatus(ctx, pollID)
+}
+
+// CreateReward implements twitchaction.Ops.
+func (o SwitchOps) CreateReward(ctx context.Context, title string, cost int) (string, error) {
+	if o.switched() {
+		return o.dry.CreateReward(ctx, title, cost)
+	}
+	return o.realOps.CreateReward(ctx, title, cost)
+}
+
+// SetReward implements twitchaction.Ops.
+func (o SwitchOps) SetReward(ctx context.Context, title string, enabled bool) error {
+	if o.switched() {
+		return o.dry.SetReward(ctx, title, enabled)
+	}
+	return o.realOps.SetReward(ctx, title, enabled)
+}
+
+// DeleteReward implements twitchaction.Ops.
+func (o SwitchOps) DeleteReward(ctx context.Context, title string) error {
+	if o.switched() {
+		return o.dry.DeleteReward(ctx, title)
+	}
+	return o.realOps.DeleteReward(ctx, title)
 }

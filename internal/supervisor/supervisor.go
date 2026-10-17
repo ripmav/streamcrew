@@ -114,7 +114,13 @@ func WithStatusFunc(f func(Status)) Option {
 
 // WithShutdownTimeout limits the time the whole shutdown may take.
 func WithShutdownTimeout(d time.Duration) Option {
-	return func(s *Supervisor) { s.shutdownTimeout = d }
+	return func(s *Supervisor) { s.shutdownDuration = d }
+}
+
+// WithShutdownTimeoutFunc names the function that supplies the shutdown
+// timeout at shutdown time, so it can change at runtime (roadmap 6.6).
+func WithShutdownTimeoutFunc(f func() time.Duration) Option {
+	return func(s *Supervisor) { s.shutdownFunc = f }
 }
 
 // RunOption configures a single runnable.
@@ -142,9 +148,12 @@ type entry struct {
 // Supervisor runs runnables; see the package documentation. The zero value is
 // not usable; create one with New.
 type Supervisor struct {
-	logger          *slog.Logger
-	status          func(Status)
-	shutdownTimeout time.Duration
+	logger           *slog.Logger
+	status           func(Status)
+	shutdownDuration time.Duration
+	// shutdownFunc supplies the timeout at shutdown time; it wins over
+	// shutdownDuration (roadmap 6.6).
+	shutdownFunc func() time.Duration
 
 	mu      sync.Mutex
 	entries []*entry
@@ -157,7 +166,7 @@ func New(logger *slog.Logger, opts ...Option) *Supervisor {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	s := &Supervisor{logger: logger, status: func(Status) {}, shutdownTimeout: DefaultShutdownTimeout}
+	s := &Supervisor{logger: logger, status: func(Status) {}, shutdownDuration: DefaultShutdownTimeout}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -223,9 +232,18 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	return errors.Join(runErr, s.shutdown(ctx, children))
 }
 
+// shutdownTimeout returns the time the whole shutdown may take.
+func (s *Supervisor) shutdownTimeout() time.Duration {
+	if s.shutdownFunc != nil {
+		return s.shutdownFunc()
+	}
+	return s.shutdownDuration
+}
+
 // shutdown stops the children in reverse order within the shutdown timeout.
 func (s *Supervisor) shutdown(ctx context.Context, children []*child) error {
-	deadline := time.NewTimer(s.shutdownTimeout)
+	timeout := s.shutdownTimeout()
+	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 
 	for i, c := range slices.Backward(children) {
@@ -241,8 +259,8 @@ func (s *Supervisor) shutdown(ctx context.Context, children []*child) error {
 			rest.cancel()
 		}
 		name := c.entry.name
-		s.logger.ErrorContext(ctx, "shutdown timeout exceeded", "runnable", name, "timeout", s.shutdownTimeout)
-		return fmt.Errorf("%w after %s: %q did not stop", ErrShutdownTimeout, s.shutdownTimeout, name)
+		s.logger.ErrorContext(ctx, "shutdown timeout exceeded", "runnable", name, "timeout", timeout)
+		return fmt.Errorf("%w after %s: %q did not stop", ErrShutdownTimeout, timeout, name)
 	}
 	s.logger.InfoContext(ctx, "all runnables stopped")
 	return nil
