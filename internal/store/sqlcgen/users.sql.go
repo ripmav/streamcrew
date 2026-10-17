@@ -291,6 +291,48 @@ func (q *Queries) ListIdentities(ctx context.Context, userID string) ([]UserIden
 	return items, nil
 }
 
+const listUserIDs = `-- name: ListUserIDs :many
+SELECT u.id
+FROM users u
+WHERE EXISTS (
+    SELECT 1 FROM user_identities i
+    WHERE i.user_id = u.id AND lower(i.login) LIKE lower(?) || '%'
+)
+ORDER BY u.id
+LIMIT ?
+`
+
+type ListUserIDsParams struct {
+	LOWER string
+	Limit int64
+}
+
+// ListUserIDs lists the IDs of the users that have an identity whose login
+// starts with the prefix (case-insensitive, empty prefix is all users),
+// ordered by ID, limited (roadmap 6.2.1, API).
+func (q *Queries) ListUserIDs(ctx context.Context, arg ListUserIDsParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listUserIDs, arg.LOWER, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsersRegular = `-- name: ListUsersRegular :many
 SELECT u.id AS id, u.regular AS regular, s.watch_minutes AS watch_minutes
 FROM users u

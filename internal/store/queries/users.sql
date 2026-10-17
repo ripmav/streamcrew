@@ -1,6 +1,19 @@
 -- name: GetUser :one
 SELECT * FROM users WHERE id = ?;
 
+-- ListUserIDs lists the IDs of the users that have an identity whose login
+-- starts with the prefix (case-insensitive, empty prefix is all users),
+-- ordered by ID, limited (roadmap 6.2.1, API).
+-- name: ListUserIDs :many
+SELECT u.id
+FROM users u
+WHERE EXISTS (
+    SELECT 1 FROM user_identities i
+    WHERE i.user_id = u.id AND lower(i.login) LIKE lower(?) || '%'
+)
+ORDER BY u.id
+LIMIT ?;
+
 -- name: ListUsersRegular :many
 SELECT u.id AS id, u.regular AS regular, s.watch_minutes AS watch_minutes
 FROM users u

@@ -479,6 +479,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Platforms: apiPlatforms{a: a},
 		Counters:  apiCounters{a: a},
 		Settings:  a.settings,
+		Users:     apiUsers{a: a},
 		Shutdown:  a.Shutdown,
 	})
 	a.http.SetAPI(a.api.Handler())

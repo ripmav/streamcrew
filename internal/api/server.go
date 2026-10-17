@@ -63,6 +63,8 @@ type Config struct {
 	Counters Counters
 	// Settings manages the profile settings sections; nil to skip the service.
 	Settings Settings
+	// Users manages the profile users; nil to skip the service.
+	Users Users
 	// Shutdown stops the core; nil if the API must not stop it.
 	Shutdown func()
 }
@@ -88,7 +90,10 @@ func (s *Server) Handler() http.Handler {
 	if st := s.cfg.Settings; st != nil {
 		mux.Handle(streamcrewv1alpha1connect.NewSettingsServiceHandler(&settingsService{s: st}))
 	}
-	// The remaining services (Auth, Stream, Chat, Command, User, Backup, Agent)
+	if u := s.cfg.Users; u != nil {
+		mux.Handle(streamcrewv1alpha1connect.NewUserServiceHandler(&userService{u: u}))
+	}
+	// The remaining services (Auth, Stream, Chat, Command, Backup, Agent)
 	// are added as their application surface is wired (roadmap 6.2.1).
 	return mux
 }
