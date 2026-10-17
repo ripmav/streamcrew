@@ -45,8 +45,8 @@ type Platforms interface {
 	Status(ctx context.Context) []PlatformState
 }
 
-// Config configures a Server.
-type Config struct {
+// ServerConfig configures a Server.
+type ServerConfig struct {
 	// Version is the core version.
 	Version string
 	// Mode is the operating mode: "desktop", "daemon" or "server".
@@ -69,6 +69,9 @@ type Config struct {
 	Chat Chat
 	// Backups creates, lists and restores profile backups; nil to skip.
 	Backups Backup
+	// Config manages the configuration of the core; nil to skip the
+	// service (roadmap 6.6.2).
+	Config Config
 	// Auth manages the platform logins; nil to skip the service.
 	Auth Auth
 	// Commands manages the profile commands; nil to skip the service.
@@ -85,11 +88,11 @@ type Config struct {
 // Server is the API: it exposes the services of the core as ConnectRPC
 // handlers.
 type Server struct {
-	cfg Config
+	cfg ServerConfig
 }
 
 // New returns the API.
-func New(cfg Config) *Server {
+func New(cfg ServerConfig) *Server {
 	return &Server{cfg: cfg}
 }
 
@@ -111,6 +114,9 @@ func (s *Server) Handler() http.Handler {
 	}
 	if b := s.cfg.Backups; b != nil {
 		mux.Handle(streamcrewv1alpha1connect.NewBackupServiceHandler(&backupService{b: b}))
+	}
+	if c := s.cfg.Config; c != nil {
+		mux.Handle(streamcrewv1alpha1connect.NewConfigServiceHandler(&configService{c: c}))
 	}
 	if au := s.cfg.Auth; au != nil {
 		mux.Handle(streamcrewv1alpha1connect.NewAuthServiceHandler(&authService{a: au}))

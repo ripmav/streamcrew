@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -76,6 +77,38 @@ func NewFileResolver(defaultPath string) *FileResolver {
 	return &FileResolver{defaultPath: defaultPath}
 }
 
+// Load prepares the resolver for the file at path like the CLI does, so
+// that the watcher knows the allowed keys and which flags the file decides
+// (Code-ADR-0019, point 5). Without a file at path, the resolver is ready
+// for Update to create it.
+func (r *FileResolver) Load(path string) error {
+	r.watch = path
+	if r.allowed == nil {
+		r.allowed = maps.Clone(defaultKeys)
+	}
+	if r.fromFile == nil {
+		r.fromFile = make(map[string]bool, len(r.allowed))
+	}
+	for key := range r.allowed {
+		r.fromFile[flagOf(key)] = true
+	}
+	data, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		r.err = fmt.Errorf("read config file: %w", err)
+		return r.err
+	}
+	values, err := parseFile(path, data, r.allowed)
+	if err != nil {
+		r.err = err
+		return err
+	}
+	r.path, r.values, r.data = path, values, data
+	return nil
+}
+
 // Path returns the configuration file that was read, or "" if none was.
 func (r *FileResolver) Path() string {
 	return r.path
@@ -84,6 +117,18 @@ func (r *FileResolver) Path() string {
 // Err returns the error from reading or checking the configuration file.
 func (r *FileResolver) Err() error {
 	return r.err
+}
+
+// FromFile reports whether the file decides the value of the flag, because
+// neither the command line nor the environment sets it (Code-ADR-0005).
+func (r *FileResolver) FromFile(flag string) bool {
+	return r.fromFile[flag]
+}
+
+// WatchPath returns the file the Watcher compares: the named file, else
+// the default file, also if it does not exist yet.
+func (r *FileResolver) WatchPath() string {
+	return r.watch
 }
 
 // Validate implements kong.Resolver. The keys are checked when the file is
@@ -176,9 +221,54 @@ func explicitConfigFile(kctx *kong.Context) string {
 	return ""
 }
 
+// defaultKeys are the keys allowed in the configuration file: the global
+// flags of Config in their file form except log-level and --config. The
+// flags of Config are static, so they are collected once.
+//
+//nolint:gochecknoglobals // static table derived from the flags of Config
+var defaultKeys = func() map[string]bool {
+	keys := fileKeys(nil)
+	for name := range keys {
+		keys[fileKey(name)] = true
+	}
+	return keys
+}()
+
+// flagLeaf returns the flag names of the fields of t, expanding embedded
+// structs with their prefix. A struct field with a prefix (like Log
+// `prefix:"log-"`, carried with `embed:""` for kong) is a group of flags
+// with that prefix.
+func flagLeaf(t reflect.Type, prefix string) map[string]bool {
+	out := map[string]bool{}
+	for _, f := range reflect.VisibleFields(t) {
+		if f.Anonymous || (f.Type.Kind() == reflect.Struct && f.Tag.Get("prefix") != "") {
+			for name := range flagLeaf(f.Type, f.Tag.Get("prefix")) {
+				out[name] = true
+			}
+			continue
+		}
+		// With a name tag the flag is the prefix plus the name; without,
+		// kong lowercases the field name.
+		name := prefix + f.Tag.Get("name")
+		if name == prefix {
+			name = prefix + strings.ToLower(f.Name)
+		}
+		if name != "help" && name != configFlag {
+			out[name] = true
+		}
+	}
+	return out
+}
+
 // fileKeys returns the keys allowed in the configuration file: the global
 // flags except --help and --config.
 func fileKeys(root *kong.Node) map[string]bool {
+	if root == nil {
+		// Without the kong model the flags of Config are collected
+		// directly; this keeps the file schema of the resolver and of
+		// the CLI in one place.
+		return flagLeaf(reflect.TypeFor[Config](), "")
+	}
 	keys := make(map[string]bool, len(root.Flags))
 	for _, flag := range root.Flags {
 		if flag.Name == "help" || flag.Name == configFlag {
@@ -189,6 +279,12 @@ func fileKeys(root *kong.Node) map[string]bool {
 	return keys
 }
 
-func fileKey(flagName string) string {
+// FileKey converts a flag name to the configuration file key
+// (--log-level is log_level).
+func FileKey(flagName string) string {
 	return strings.ReplaceAll(flagName, "-", "_")
+}
+
+func fileKey(flagName string) string {
+	return FileKey(flagName)
 }

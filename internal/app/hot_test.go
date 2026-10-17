@@ -63,8 +63,15 @@ func hotCore(t *testing.T, pub *outPub) (*app.App, string) {
 	return hotCoreWithConsole(t, pub, &bytes.Buffer{})
 }
 
-func hotCoreWithConsole(t *testing.T, pub *outPub, console *bytes.Buffer) (*app.App, string) {
-	t.Helper()
+func hotCoreWithConsole(t *testing.T, pub *outPub, _ *bytes.Buffer) (*app.App, string) {
+	return hotCoreArgs(t, pub, config.ModeDaemon)
+}
+
+func hotCoreArgs(t *testing.T, pub *outPub, mode config.Mode, _ ...string) (*app.App, string) {
+	return hotCoreArgsConsole(t, pub, mode, &bytes.Buffer{})
+}
+
+func hotCoreArgsConsole(t *testing.T, pub *outPub, mode config.Mode, console *bytes.Buffer, args ...string) (*app.App, string) {
 	cfg := testConfig(t)
 	require.NoError(t, cfg.Resolve())
 	require.NoError(t, os.MkdirAll(cfg.DataDir, 0o700))
@@ -81,11 +88,19 @@ func hotCoreWithConsole(t *testing.T, pub *outPub, console *bytes.Buffer) (*app.
 		kong.Exit(func(int) { t.Fatal("kong exited") }))
 	parser, err := kong.New(&cli, opts...)
 	require.NoError(t, err)
-	_, err = parser.Parse([]string{"run"})
+	args = append([]string{"run"}, args...)
+	if mode != config.ModeDaemon {
+		args = append(args, "--mode", string(mode))
+	}
+	if mode == config.ModeServer {
+		args = append(args, "--listen", "127.0.0.1:0")
+	}
+	_, err = parser.Parse(args)
 	require.NoError(t, err)
 	require.NoError(t, file.Err())
 	require.NoError(t, cli.Resolve())
 	cfg = cli.Config
+	t.Logf("parsed mode=%s listen=%s dataDir=%s", cfg.Mode, cfg.Listen, cfg.DataDir)
 
 	a, err := app.New(t.Context(), cfg,
 		app.WithConsole(console), app.WithKeyring(nil),

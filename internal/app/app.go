@@ -150,6 +150,10 @@ type App struct {
 	api      *api.Server
 	ready    *readiness
 	rights   *config.Live
+	// file is the resolver of the configuration file; watcher applies
+	// its changes at runtime (roadmap 6.6), nil without a file.
+	file    *config.FileResolver
+	watcher *config.Watcher
 	// startedAt is when the core started; it is reported by the API's Status
 	// (roadmap 6.2.1). shutdownCancel stops the core on request, e.g. the
 	// API's Shutdown RPC; it is the cancel of the run context.
@@ -522,7 +526,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	// services, mounted on the HTTP server as a catch-all. It reads the
 	// platforms live, so it is set before they are filled; the handlers
 	// see the current state at request time.
-	a.api = api.New(api.Config{
+	a.api = api.New(api.ServerConfig{
 		Version:   a.version,
 		Mode:      string(a.cfg.Mode),
 		Profile:   a.profile.Name,
@@ -537,6 +541,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Auth:      newAPIAuth(a),
 		Commands:  apiCommands{a: a},
 		Stream:    newAPIStream(a),
+		Config:    apiConfig{a: a},
 		Tokens:    apitoken.Open(cfg.DataDir),
 		Shutdown:  a.Shutdown,
 	})
@@ -588,9 +593,10 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		err = errors.Join(err, a.addPlatform(ctx, o.platform))
 	}
 	err = errors.Join(err, a.sup.Add("engine", a.engine))
+	a.file = o.file
 	if o.file != nil {
-		err = errors.Join(err, a.sup.Add("config",
-			config.NewWatcher(o.file, cfg, a.rights, a.hotApplies(), component(logger, "config"))))
+		a.watcher = config.NewWatcher(o.file, cfg, a.rights, a.hotApplies(), component(logger, "config"))
+		err = errors.Join(err, a.sup.Add("config", a.watcher))
 	}
 	return a, err
 }
@@ -656,6 +662,16 @@ func (a *App) applyListen(addr, tlsCert, tlsKey string) error {
 		a.writeRuntimeFile()
 	}
 	return nil
+}
+
+// Mode returns the mode the core runs in.
+func (a *App) Mode() config.Mode {
+	return a.cfgView().Mode
+}
+
+// Watcher returns the watcher of the configuration file, nil without a file.
+func (a *App) Watcher() *config.Watcher {
+	return a.watcher
 }
 
 // cfgView returns a copy of the configuration the core runs with.

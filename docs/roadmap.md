@@ -755,9 +755,9 @@ hot-capablen Einstellungen an. Vom Flag oder der Umgebungsvariablen fixierte Ein
   - `shutdown-timeout`: wird beim Shutdown gelesen
   - `grant`, `revoke`, `file-root`, `outbound-allow`: bereits hot (Code-ADR-0019)
   - nicht hot (nur nach Restart, dokumentiert): `data-dir`, `profile`, `config`
-- [ ] `ConfigService` in der API (M):
+- [x] `ConfigService` in der API (M), erledigt 2026-10-18 (PR #282):
   - `Get`: die gültige Konfiguration als YAML-Dokument plus, welche Einstellungen hot, fix und restart sind
-  - `Update`: validiert und schreibt das neue Dokument, antwortet mit dem Angewendeten und dem Restart-Bedürftigen
+  - `Update`: validiert und schreibt das neue Dokument atomar, antwortet mit dem Angewendeten und dem Restart-Bedürftigen; der Watcher wendet die Hot-Änderungen an
   - Admin-Scope; nur im Server-Modus (in Daemon/Desktop-Modus meldet die API das und die TUI zeigt das Dokument read-only)
 - [ ] TUI-Einstellungen-Ansicht (Ansicht 8) (M):
   - zeigt das Dokument mit Annotationen (hot / Restart / fix)

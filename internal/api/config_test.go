@@ -1,0 +1,106 @@
+// SPDX-License-Identifier: MIT
+
+package api_test
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"connectrpc.com/connect"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
+	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
+	"github.com/ripmav/streamcrew/internal/api"
+)
+
+// fakeConfig is a fake of the api.Config port.
+type fakeConfig struct {
+	document string
+	hot      []string
+	fixed    []string
+	restart  []string
+	live     bool
+	getErr   error
+	update   func(ctx context.Context, document string) ([]string, []string, string, error)
+}
+
+func (f *fakeConfig) Get() (string, []string, []string, []string, bool, error) {
+	return f.document, f.hot, f.fixed, f.restart, f.live, f.getErr
+}
+
+func (f *fakeConfig) Update(ctx context.Context, document string) ([]string, []string, string, error) {
+	return f.update(ctx, document)
+}
+
+func configClient(t *testing.T, c *fakeConfig) streamcrewv1alpha1connect.ConfigServiceClient {
+	t.Helper()
+	h := api.New(api.ServerConfig{Config: c}).Handler()
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	return streamcrewv1alpha1connect.NewConfigServiceClient(http.DefaultClient, srv.URL)
+}
+
+// TestConfigGetReturnsTheDocument checks that Get returns the document
+// with the categories of the settings (roadmap 6.6.2).
+func TestConfigGetReturnsTheDocument(t *testing.T) {
+	t.Parallel()
+	c := &fakeConfig{
+		document: "log_level: debug\n",
+		hot:      []string{"dry-run"},
+		fixed:    []string{"listen"},
+		restart:  []string{"data_dir"},
+		live:     true,
+	}
+	resp, err := configClient(t, c).Get(t.Context(), connect.NewRequest(&v1alpha1.GetConfigRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, "log_level: debug\n", resp.Msg.GetDocument())
+	assert.Equal(t, []string{"dry-run"}, resp.Msg.GetHot())
+	assert.Equal(t, []string{"listen"}, resp.Msg.GetFixed())
+	assert.Equal(t, []string{"data_dir"}, resp.Msg.GetRestart())
+	assert.True(t, resp.Msg.GetLive())
+}
+
+// TestConfigUpdateStoresTheDocument checks that Update returns the stored
+// document with the changed settings (roadmap 6.6.2).
+func TestConfigUpdateStoresTheDocument(t *testing.T) {
+	t.Parallel()
+	c := &fakeConfig{live: true, update: func(_ context.Context, document string) ([]string, []string, string, error) {
+		return []string{"dry-run"}, []string{"data_dir"}, document, nil
+	}}
+	resp, err := configClient(t, c).Update(t.Context(), connect.NewRequest(&v1alpha1.UpdateConfigRequest{Document: "dry_run: true\n"}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"dry-run"}, resp.Msg.GetApplied())
+	assert.Equal(t, []string{"data_dir"}, resp.Msg.GetRestart())
+	assert.Equal(t, "dry_run: true\n", resp.Msg.GetDocument())
+}
+
+// TestConfigUpdateMapsErrors checks the error mapping: invalid document is
+// an invalid argument, a read-only core is a failed precondition, and an
+// internal error stays internal (roadmap 6.6.2).
+func TestConfigUpdateMapsErrors(t *testing.T) {
+	t.Parallel()
+
+	invalid := &fakeConfig{live: true, update: func(context.Context, string) ([]string, []string, string, error) {
+		return nil, nil, "", api.ErrConfigInvalid
+	}}
+	_, err := configClient(t, invalid).Update(t.Context(), connect.NewRequest(&v1alpha1.UpdateConfigRequest{Document: "nope"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+	readonly := &fakeConfig{live: false, update: func(context.Context, string) ([]string, []string, string, error) {
+		return nil, nil, "", api.ErrConfigReadOnly
+	}}
+	_, err = configClient(t, readonly).Update(t.Context(), connect.NewRequest(&v1alpha1.UpdateConfigRequest{Document: "log_level: debug\n"}))
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+
+	broken := &fakeConfig{live: true, update: func(context.Context, string) ([]string, []string, string, error) {
+		return nil, nil, "", errors.New("disk full")
+	}}
+	_, err = configClient(t, broken).Update(t.Context(), connect.NewRequest(&v1alpha1.UpdateConfigRequest{Document: "log_level: debug\n"}))
+	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+}
