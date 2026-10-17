@@ -12,6 +12,9 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// viewName is the name of the current view.
+func (m model) viewName() string { return views[m.view] }
+
 // View implements tea.Model.
 func (m model) View() tea.View {
 	t := newTheme(m.dark)
@@ -70,12 +73,25 @@ func (m model) statusVersion() string {
 
 // mainArea renders the active view.
 func (m model) mainArea(t *Theme) string {
+	w := max(m.width, 40)
 	switch m.viewName() {
 	case "dashboard":
 		return m.dashboard(t)
-	default:
-		return t.dim.Render("not available yet — " + m.viewName())
+	case "chat":
+		body := m.chat.render(t, w-2)
+		return body + "\n" + t.key.Render("> "+m.chat.input)
+	case "events":
+		return m.feed.render(t, "Events", w-2)
+	case "queue":
+		return m.queue.render(t, w-2)
+	case "commands":
+		return m.commands.render(t, w-2)
+	case "users":
+		return m.users.render(t, w-2)
+	case "logs":
+		return m.logs.render(t, "Logs", w-2)
 	}
+	return t.dim.Render(m.viewName())
 }
 
 // footer renders the key row.
@@ -138,6 +154,11 @@ func (t *Theme) helpView(width int) string {
 		keyLine(t, "tab", "next view"),
 		keyLine(t, "t", "toggle theme"),
 		keyLine(t, "?", "this help"),
+		keyLine(t, "enter", "send (chat) / run (commands)"),
+		keyLine(t, "d / c", "delete last / clear (chat)"),
+		keyLine(t, "p / x / r", "pause / cancel / retry (queue)"),
+		keyLine(t, "e / E", "enable / edit (commands)"),
+		keyLine(t, "/", "filter (commands, users)"),
 	}
 	body := strings.Join(lines, "\n")
 	w := max(width, 40)

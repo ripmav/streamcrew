@@ -4,12 +4,14 @@ package tui
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"connectrpc.com/connect"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
+	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
 )
 
 // pollInterval is how often the dashboard polls the core status.
@@ -44,10 +46,61 @@ type statusErr struct {
 // pollMsg is the tick that triggers the next status request.
 type pollMsg time.Time
 
+// streamMsg carries one event of the live stream.
+type streamMsg struct {
+	event *v1alpha1.Event
+}
+
+// clients bundles the API clients of the TUI.
+type clients struct {
+	system  streamcrewv1alpha1connect.SystemServiceClient
+	stream  streamcrewv1alpha1connect.StreamServiceClient
+	chat    streamcrewv1alpha1connect.ChatServiceClient
+	command streamcrewv1alpha1connect.CommandServiceClient
+	user    streamcrewv1alpha1connect.UserServiceClient
+}
+
+// newClients builds the clients for the core at base.
+func newClients(httpClient *http.Client, base, token string) *clients {
+	o := bearerOption(token)
+	return &clients{
+		system:  streamcrewv1alpha1connect.NewSystemServiceClient(httpClient, base, o...),
+		stream:  streamcrewv1alpha1connect.NewStreamServiceClient(httpClient, base, o...),
+		chat:    streamcrewv1alpha1connect.NewChatServiceClient(httpClient, base, o...),
+		command: streamcrewv1alpha1connect.NewCommandServiceClient(httpClient, base, o...),
+		user:    streamcrewv1alpha1connect.NewUserServiceClient(httpClient, base, o...),
+	}
+}
+
+// commandsLoadedMsg carries the result of a command list fetch.
+type commandsLoadedMsg struct {
+	list []*v1alpha1.CommandSummary
+	err  error
+}
+
+// usersLoadedMsg carries the result of a user list fetch.
+type usersLoadedMsg struct {
+	list []*v1alpha1.UserView
+	err  error
+}
+
+// queueLoadedMsg carries the result of a queue fetch.
+type queueLoadedMsg struct {
+	list []*v1alpha1.CommandInstanceView
+	err  error
+}
+
+// actionDoneMsg confirms a queue action (pause, cancel, retry).
+type actionDoneMsg struct {
+	err error
+}
+
 // model is the tea.Model of the TUI.
 type model struct {
 	server string
 	token  string
+	// ctx is canceled when the program quits, ending the stream.
+	ctx context.Context
 
 	width  int
 	height int
@@ -58,7 +111,16 @@ type model struct {
 
 	status *v1alpha1.StatusResponse
 	err    error
-	cmd    tea.Cmd
+
+	cl       *clients
+	streamCh chan streamMsg
+
+	chat     chatView
+	feed     feedView
+	logs     feedView
+	queue    queueView
+	commands commandsView
+	users    usersView
 }
 
 // views is the order of the views, as on the key row.
@@ -68,19 +130,40 @@ var views = []string{"dashboard", "chat", "events", "queue", "commands", "users"
 
 // newModel returns the initial model.
 func newModel(opts Options) model {
-	dark := opts.Theme != "light"
-	m := model{
-		server: server(opts.DataDir, opts.Server),
-		token:  opts.Token,
-		dark:   dark,
+	base := server(opts.DataDir, opts.Server)
+	httpClient, base := httpClientFor(base)
+	return model{
+		server:   base,
+		token:    opts.Token,
+		ctx:      context.Background(),
+		dark:     opts.Theme != "light",
+		cl:       newClients(httpClient, base, opts.Token),
+		streamCh: make(chan streamMsg, 64),
 	}
-	m.cmd = m.fetch()
-	return m
 }
 
 // Init implements tea.Model.
 func (m model) Init() tea.Cmd {
-	return m.cmd
+	return m.boot()
+}
+
+// boot starts the stream subscription and the first status poll.
+func (m model) boot() tea.Cmd {
+	return func() tea.Msg {
+		go m.subscribeLoop()
+		return m.fetchStatus()
+	}
+}
+
+// fetchStatus performs one status request and returns the message.
+func (m model) fetchStatus() tea.Msg {
+	ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
+	defer cancel()
+	resp, err := m.cl.system.Status(ctx, connect.NewRequest(&v1alpha1.StatusRequest{}))
+	if err != nil {
+		return statusErr{err: err}
+	}
+	return statusMsg{status: resp.Msg}
 }
 
 // Update implements tea.Model.
@@ -92,21 +175,152 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case pollMsg:
-		return m, m.fetch()
+		return m, m.fetchStatus
 
 	case statusMsg:
 		m.status = msg.status
 		m.err = nil
-		return m, tea.Every(pollInterval, func(t time.Time) tea.Msg { return pollMsg(t) })
+		return m, tea.Batch(m.poll(), m.nextStream())
 
 	case statusErr:
 		m.err = msg.err
 		return m, tea.Every(retryInterval, func(t time.Time) tea.Msg { return pollMsg(t) })
 
+	case streamMsg:
+		m.handleEvent(msg.event)
+		return m, m.nextStream()
+
+	case commandsLoadedMsg:
+		if msg.list != nil {
+			m.commands.list = msg.list
+		}
+		return m, nil
+
+	case usersLoadedMsg:
+		if msg.list != nil {
+			m.users.list = msg.list
+		}
+		return m, nil
+
+	case queueLoadedMsg:
+		if msg.list != nil {
+			m.queue.instances = msg.list
+			if m.queue.selected >= len(m.queue.instances) {
+				m.queue.selected = 0
+			}
+		}
+		return m, nil
+
+	case actionDoneMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.updateKey(msg.Key())
 	}
 	return m, nil
+}
+
+// poll schedules the next status request.
+func (m model) poll() tea.Cmd {
+	return tea.Every(pollInterval, func(t time.Time) tea.Msg { return pollMsg(t) })
+}
+
+// nextStream waits for the next stream event.
+func (m model) nextStream() tea.Cmd {
+	return func() tea.Msg {
+		s := <-m.streamCh
+		return s
+	}
+}
+
+// subscribeLoop forwards the live stream into the model until the context
+// ends or the stream breaks.
+func (m model) subscribeLoop() {
+	stream, err := m.cl.stream.Subscribe(m.ctx, connect.NewRequest(&v1alpha1.SubscribeRequest{}))
+	if err != nil {
+		return
+	}
+	defer stream.Close()
+	for {
+		if !stream.Receive() {
+			return
+		}
+		select {
+		case m.streamCh <- streamMsg{event: stream.Msg()}:
+		default: // the UI is too slow; drop the event
+		}
+	}
+}
+
+// handleEvent routes one stream event into the view buffers.
+func (m *model) handleEvent(e *v1alpha1.Event) {
+	switch e.GetType() {
+	case "chat.message":
+		if e.GetChat() != nil {
+			m.chat.appendChat(e.GetChat(), e.GetPlatform())
+		}
+	case "log":
+		if l := e.GetLog(); l != nil {
+			m.logs.append(l.GetLevel(), "["+l.GetComponent()+"] "+l.GetMessage())
+		}
+	case "feed":
+		if f := e.GetFeed(); f != nil {
+			text := f.GetLogin()
+			if f.GetText() != "" {
+				text += ": " + f.GetText()
+			}
+			m.feed.append(f.GetType(), text)
+		}
+	case "command.instance":
+		if c := e.GetCommand(); c != nil {
+			m.feed.append("command", c.GetCommandName()+" → "+c.GetState())
+			m.queue.instances = append(m.queue.instances, cToView(c))
+			if len(m.queue.instances) > maxLines {
+				m.queue.instances = m.queue.instances[len(m.queue.instances)-maxLines:]
+			}
+		}
+	case "platform.status":
+		if p := e.GetPlatformStatus(); p != nil {
+			state := "offline"
+			if p.GetConnected() {
+				state = "online"
+			}
+			m.feed.append("platform", p.GetPlatform()+" "+state)
+		}
+	case "prompt":
+		if p := e.GetPrompt(); p != nil {
+			m.feed.append("prompt", p.GetText())
+		}
+	}
+}
+
+// refreshQueue returns the command that refetches the command instances.
+func (m model) refreshQueue() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
+		defer cancel()
+		resp, err := m.cl.command.ListInstances(ctx, connect.NewRequest(&v1alpha1.ListInstancesRequest{}))
+		var list []*v1alpha1.CommandInstanceView
+		if err == nil {
+			list = resp.Msg.GetInstances()
+		}
+		return queueLoadedMsg{list: list, err: err}
+	}
+}
+
+// cToView maps the stream's CommandInstance to the queue view type.
+func cToView(c *v1alpha1.CommandInstance) *v1alpha1.CommandInstanceView {
+	return &v1alpha1.CommandInstanceView{
+		InstanceId:  c.GetInstanceId(),
+		CommandName: c.GetCommandName(),
+		State:       c.GetState(),
+		Source:      c.GetSource(),
+		Channel:     c.GetChannel(),
+		Error:       c.GetError(),
+	}
 }
 
 // updateKey handles a key press.
@@ -129,28 +343,74 @@ func (m model) updateKey(key tea.Key) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyTab:
 		m.view = (m.view + 1) % len(views)
-		return m, nil
+		return m, m.onViewEnter()
 	case '1', '2', '3', '4', '5', '6', '7':
 		if len(key.Text) == 1 {
+			next := m.view
 			m.view = int(key.Code - '1')
+			if next != m.view {
+				return m, m.onViewEnter()
+			}
 		}
 		return m, nil
+	}
+	return m.updateViewKey(key)
+}
+
+// onViewEnter fetches the data of the newly active view.
+func (m model) onViewEnter() tea.Cmd {
+	switch views[m.view] {
+	case "queue":
+		return m.refreshQueue()
+	case "commands":
+		return m.fetchCommands()
+	case "users":
+		return m.fetchUsers()
+	}
+	return nil
+}
+
+// updateViewKey passes the key to the active view.
+func (m model) updateViewKey(key tea.Key) (tea.Model, tea.Cmd) {
+	switch views[m.view] {
+	case "chat":
+		return m.updateChatKey(key)
+	case "queue":
+		return m.updateQueueKey(key)
+	case "commands":
+		return m.updateCommandsKey(key)
+	case "users":
+		return m.updateUsersKey(key)
 	}
 	return m, nil
 }
 
-// fetch returns the command that requests the status of the core.
-func (m model) fetch() tea.Cmd {
+// fetchCommands returns the command that loads the command list.
+func (m model) fetchCommands() tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 		defer cancel()
-		resp, err := systemClient(m.server, m.token).Status(ctx, connect.NewRequest(&v1alpha1.StatusRequest{}))
-		if err != nil {
-			return statusErr{err: err}
+		resp, err := m.cl.command.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{}))
+		var list []*v1alpha1.CommandSummary
+		if err == nil {
+			list = resp.Msg.GetCommands()
 		}
-		return statusMsg{status: resp.Msg}
+		return commandsLoadedMsg{list: list, err: err}
 	}
 }
 
-// viewName is the name of the current view.
-func (m model) viewName() string { return views[m.view] }
+// fetchUsers returns the command that loads the user list.
+func (m model) fetchUsers() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
+		defer cancel()
+		resp, err := m.cl.user.List(ctx, connect.NewRequest(&v1alpha1.ListUsersRequest{
+			Limit: 100,
+		}))
+		var list []*v1alpha1.UserView
+		if err == nil {
+			list = resp.Msg.GetUsers()
+		}
+		return usersLoadedMsg{list: list, err: err}
+	}
+}

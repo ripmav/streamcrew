@@ -11,8 +11,6 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
-
-	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
 )
 
 // defaultServer is the local core the TUI connects to when no --server is
@@ -47,9 +45,9 @@ func baseFromAddress(addr string) string {
 	return "http://" + addr
 }
 
-// clients returns the HTTP client and the base URL for the core at base: a
-// unix socket gets a unix dialer, everything else the default client.
-func clients(base string) (*http.Client, string) {
+// httpClientFor returns the HTTP client and the base URL for the core at
+// base: a unix socket gets a unix dialer, everything else the default client.
+func httpClientFor(base string) (*http.Client, string) {
 	if after, ok := strings.CutPrefix(base, "unix:"); ok {
 		return &http.Client{Transport: &http.Transport{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -87,12 +85,6 @@ func (b *bearer) WrapStreamingClient(next connect.StreamingClientFunc) connect.S
 
 func (b *bearer) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return next
-}
-
-// systemClient returns the SystemService client of the core at base.
-func systemClient(base, token string) streamcrewv1alpha1connect.SystemServiceClient {
-	client, base := clients(base)
-	return streamcrewv1alpha1connect.NewSystemServiceClient(client, base, bearerOption(token)...)
 }
 
 // runtimePath is the runtime file in the data directory.

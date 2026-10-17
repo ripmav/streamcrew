@@ -119,7 +119,7 @@ func TestModelFetchStatus(t *testing.T) {
 	base := startCore(t)
 	m := newModel(Options{Server: base})
 
-	fetched := m.fetch()()
+	fetched := m.fetchStatus()
 	require.IsType(t, statusMsg{}, fetched)
 	next, cmd := m.Update(fetched)
 	m = next.(model)
@@ -136,7 +136,7 @@ func TestModelConnectionError(t *testing.T) {
 	t.Parallel()
 	m := newModel(Options{Server: "http://127.0.0.1:1"})
 
-	fetched := m.fetch()()
+	fetched := m.fetchStatus()
 	require.IsType(t, statusErr{}, fetched)
 	next, cmd := m.Update(fetched)
 	m = next.(model)
@@ -190,10 +190,10 @@ func TestViewRendering(t *testing.T) {
 // TestClientsBuildsAUnixClient returns the unix dialer for unix sockets.
 func TestClientsBuildsAUnixClient(t *testing.T) {
 	t.Parallel()
-	client, base := clients("unix:/tmp/does-not-matter.sock")
+	client, base := httpClientFor("unix:/tmp/does-not-matter.sock")
 	require.NotNil(t, client)
 	assert.Equal(t, "http://core", base)
-	client, base = clients("http://127.0.0.1:8740")
+	client, base = httpClientFor("http://127.0.0.1:8740")
 	require.NotNil(t, client)
 	assert.Equal(t, "http://127.0.0.1:8740", base)
 }
