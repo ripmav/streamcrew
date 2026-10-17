@@ -162,11 +162,29 @@ func WithLogger(l *slog.Logger) Option {
 	}
 }
 
+// WithUnknownCommandGate sets the gate for the log entry of an unknown
+// chat command, a message that starts like a trigger but matches no
+// enabled command: it is logged only while gate returns true. The app
+// opens the gate in the debug log level and in dry run; without the
+// option, unknown commands are not logged.
+func WithUnknownCommandGate(gate func() bool) Option {
+	return func(s *Service) error {
+		if gate == nil {
+			return fmt.Errorf("%w: nil gate", ErrInvalidOption)
+		}
+		s.unknownCommandGate = gate
+		return nil
+	}
+}
+
 // Service is the event service. It is safe for concurrent use; it hands
 // over one thing at a time, in the order of the calls.
 type Service struct {
 	ports  Ports
 	logger *slog.Logger
+	// unknownCommandGate is open while an unknown chat command is
+	// logged; nil never logs one (WithUnknownCommandGate).
+	unknownCommandGate func() bool
 
 	// mu orders everything the service takes and guards the fields below.
 	mu      sync.Mutex

@@ -89,6 +89,17 @@ func TestRecognize(t *testing.T) {
 		assert.Equal(t, tt.args, r.Args, tt.message)
 	}
 
+	t.Run("unknown command attempt", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, x.Recognize("!hugg").Attempt, "a near miss of a prefix trigger")
+		assert.True(t, x.Recognize("!HUGx").Attempt, "regardless of case")
+		assert.True(t, x.Recognize("?halloo").Attempt, "a literal trigger's own spelling")
+		assert.False(t, x.Recognize("hello chat").Attempt, "a plain message")
+		assert.False(t, x.Recognize("what is this").Attempt, "a wildcard never makes an attempt")
+		assert.False(t, x.Recognize("!a").Attempt, "a match is no attempt")
+		only := command.NewTriggerIndex([]command.Command{disabled, event})
+		assert.False(t, only.Recognize("!hug").Attempt, "a disabled command is not unknown")
+	})
 	t.Run("B65 ambiguous", func(t *testing.T) {
 		t.Parallel()
 		r := x.Recognize("!HALLO")

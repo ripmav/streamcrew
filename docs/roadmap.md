@@ -1212,6 +1212,7 @@ Eigene Datei seit 2026-10-09: [backlog.md](backlog.md).
 
 | Datum | Änderung |
 |---|---|
+| 2026-10-18 | Unbekannte Chat-Commands werden geloggt (Entscheidung des Projektinhabers): Eine Nachricht, die mit einem Präfix-Trigger beginnt, aber kein aktives Command auslöst („!hugg“ bei Trigger „hug“), erhält einen Info-Eintrag — nur wenn das Debug-Log-Level oder der Dry-Run aktiv ist, sonst bleibt der Chat-Log ruhig ([`commands.md`](spec/commands.md), B70). Der Command-Domain meldet den Eindruck über `command.Recognition.Attempt`, der Event-Service loggt hinter einem Gate, das die App auf `log-level ≤ debug` oder `dry-run` öffnet. Tests: Domain (`TestRecognize`), Event-Service (`TestUnknownCommandLog`). |
 | 2026-09-27 | Erstfassung auf Basis von `starting.md` und der Untersuchung von Mix It Up v1.8.200 |
 | 2026-09-27 | Entscheidungen eingearbeitet: Clean-Room-Neuimplementierung (ADR-0001), MIT (ADR-0002), Streaming-PC primär und Server sekundär (ADR-0003), Start nur mit Twitch (ADR-0004). ADR-Backlog umnummeriert (Entstehungsreihenfolge), Gate O ergänzt, lokale Audioausgabe auf P1, Go/No-Go für YouTube und Kick nach M2. |
 | 2026-09-27 | Tote ADR-Verweise in ADR-0001 bis ADR-0003 korrigiert. Verweis-Konvention in `adr/README.md` festgehalten, Backlog-Nummern als vorläufig gekennzeichnet, Linkprüfung für die CI ergänzt. |

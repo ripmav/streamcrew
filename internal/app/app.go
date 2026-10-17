@@ -453,7 +453,16 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Moderation:    a.moderation,
 		Settings:      a.eventsSettings,
 		ChannelPoints: a.channelPointsSettings,
-	}, eventservice.WithLogger(component(logger, "events")))
+	},
+		eventservice.WithLogger(component(logger, "events")),
+		eventservice.WithUnknownCommandGate(func() bool {
+			// unknown commands are log noise: only in the debug log
+			// level or in dry run (the gate stays a function so a hot
+			// change of either can flip it without a restart)
+			l, err := config.ParseLevel(a.cfg.Log.Level)
+			return a.cfg.DryRun || err == nil && l <= slog.LevelDebug
+		}),
+	)
 	if err != nil {
 		return a, err
 	}

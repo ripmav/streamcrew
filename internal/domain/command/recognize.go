@@ -40,6 +40,10 @@ type Recognition struct {
 	// Ambiguous are the commands whose triggers matched equally well, for
 	// RecognitionAmbiguous, in the order of the index.
 	Ambiguous []Command
+	// Attempt is true for RecognitionNone when the message starts like a
+	// prefixed trigger, e.g. "!hugg" with the trigger "!hug": it looks
+	// like a command that no enabled command matches.
+	Attempt bool
 }
 
 // TriggerIndex finds the chat command a chat message triggers (B16) among
@@ -134,7 +138,23 @@ func (x *TriggerIndex) Recognize(message string) Recognition {
 	if r, ok := pick(msg, wild, frontLongest); ok {
 		return r
 	}
-	return Recognition{Outcome: RecognitionNone}
+	return Recognition{Outcome: RecognitionNone, Attempt: x.isCommandAttempt(msg)}
+}
+
+// isCommandAttempt reports whether msg starts like a prefixed trigger,
+// exactly or regardless of case (Recognize). It only matters for a
+// RecognitionNone: a message that starts like a trigger and matches one
+// is triggered or ambiguous, not none.
+func (x *TriggerIndex) isCommandAttempt(msg string) bool {
+	for _, e := range x.prefixed {
+		if _, ok := strings.CutPrefix(msg, e.typed); ok {
+			return true
+		}
+		if _, ok := cutPrefixFold(msg, e.typed); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // pick returns the recognition of the best of ms by better; ok is false if
