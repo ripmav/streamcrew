@@ -10,6 +10,14 @@ modules:
 lint:
   use:
     - STANDARD
+  except:
+    # The contract is one package (streamcrew.v1alpha1) for every service
+    # (ADR-0010), so the strict per-method names would collide ("ListRequest"
+    # in several services). We use descriptive, package-unique request and
+    # response names instead (e.g. ListCommandsRequest, ListUsersRequest),
+    # and the server stream item is a meaningful type name (Event).
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
 breaking:
   use:
     - FILE

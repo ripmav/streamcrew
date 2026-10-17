@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: MIT
+
+// SettingsService (Plan §6.14): reading and writing the profile
+// settings sections. The runtime settings live in the profile database and
+// are changeable through the API (Plan §6.21); each section is carried as
+// its document (JSON) plus its name.
+syntax = "proto3";
+
+package streamcrew.v1alpha1;
+
+option go_package = "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1;streamcrewv1alpha1";
+
+// SettingsService manages the settings sections of a profile.
+service SettingsService {
+  // ListSections lists the names of the settings sections.
+  rpc ListSections(ListSectionsRequest) returns (ListSectionsResponse);
+  // Get returns one settings section as its document.
+  rpc Get(GetSettingsRequest) returns (GetSettingsResponse);
+  // Update replaces a settings section with its new document.
+  rpc Update(UpdateSettingsRequest) returns (UpdateSettingsResponse);
+}
+
+// ListSectionsRequest is the request of ListSections.
+message ListSectionsRequest {}
+
+// Section is one settings section.
+message Section {
+  // name is the section name, e.g. "general", "chat", "moderation".
+  string name = 1;
+  // description is a short human-readable description.
+  string description = 2;
+}
+
+// ListSectionsResponse is the response of ListSections.
+message ListSectionsResponse {
+  repeated Section sections = 1;
+}
+
+// GetSettingsRequest is the request of Get.
+message GetSettingsRequest {
+  // name is the section name.
+  string name = 1;
+}
+
+// GetSettingsResponse is the response of Get.
+message GetSettingsResponse {
+  // name is the section name.
+  string name = 1;
+  // document is the section as a JSON document.
+  string document = 2;
+}
+
+// UpdateSettingsRequest is the request of Update.
+message UpdateSettingsRequest {
+  // name is the section name.
+  string name = 1;
+  // document is the new section as a JSON document.
+  string document = 2;
+}
+
+// UpdateSettingsResponse is the response of Update.
+message UpdateSettingsResponse {
+  // name is the section name.
+  string name = 1;
+  // document is the stored section as a JSON document.
+  string document = 2;
+}

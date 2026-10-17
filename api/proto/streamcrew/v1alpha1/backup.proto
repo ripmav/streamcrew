@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: MIT
+
+// BackupService (Plan §6.14): creating, listing and restoring backups of a
+// profile. A backup captures the profile database and its manifest
+// (ADR-0012).
+syntax = "proto3";
+
+package streamcrew.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1;streamcrewv1alpha1";
+
+// BackupService manages the backups of a profile.
+service BackupService {
+  // Create creates a new backup and returns it.
+  rpc Create(CreateBackupRequest) returns (CreateBackupResponse);
+  // List lists the backups of the profile.
+  rpc List(ListBackupsRequest) returns (ListBackupsResponse);
+  // Restore restores a backup, replacing the current profile data.
+  rpc Restore(RestoreBackupRequest) returns (RestoreBackupResponse);
+}
+
+// BackupView is one backup of the profile.
+message BackupView {
+  // id is the backup ID.
+  string id = 1;
+  // created_at is when the backup was created.
+  google.protobuf.Timestamp created_at = 2;
+  // schema_version is the profile schema version of the backup.
+  uint32 schema_version = 3;
+  // size is the backup size in bytes.
+  uint64 size = 4;
+  // label is an optional user label; empty if none.
+  string label = 5;
+}
+
+// CreateBackupRequest is the request of Create.
+message CreateBackupRequest {
+  // label is an optional user label for the backup.
+  string label = 1;
+}
+
+// CreateBackupResponse is the response of Create.
+message CreateBackupResponse {
+  BackupView backup = 1;
+}
+
+// ListBackupsRequest is the request of List.
+message ListBackupsRequest {}
+
+// ListBackupsResponse is the response of List.
+message ListBackupsResponse {
+  // backups are the backups, newest first.
+  repeated BackupView backups = 1;
+}
+
+// RestoreBackupRequest is the request of Restore.
+message RestoreBackupRequest {
+  // id is the backup ID to restore.
+  string id = 1;
+}
+
+// RestoreBackupResponse is the response of Restore.
+message RestoreBackupResponse {
+  // schema_version is the schema version after the restore.
+  uint32 schema_version = 1;
+}
