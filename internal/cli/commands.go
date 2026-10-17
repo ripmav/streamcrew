@@ -40,6 +40,7 @@ type Root struct {
 	Command    commandCmd `cmd:"" help:"Check files of commands as code."`
 	Auth       authCmd    `cmd:"" help:"Log in, check, and remove the platform accounts of a profile."`
 	User       userCmd    `cmd:"" help:"Manage the users of a profile. Changes need a stopped core."`
+	Token      tokenCmd   `cmd:"" help:"Create, list, and revoke the API access tokens of the data directory."`
 }
 
 // Env is bound to the Run methods of the commands, together with the context
