@@ -7,6 +7,7 @@ package httpserver
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -36,6 +37,10 @@ type Config struct {
 	// CorsAllow lists the origins allowed to call the server cross-origin
 	// (CORS); an empty list refuses every cross-origin request.
 	CorsAllow []string
+	// TLSCert and TLSKey are the PEM files of the server certificate and
+	// key; both set switches the server to TLS, none stays plain HTTP.
+	TLSCert string
+	TLSKey  string
 	// ShutdownTimeout limits the graceful shutdown of open connections;
 	// connections still open afterwards are closed. It must stay below the
 	// supervisor's shutdown timeout, because net/http waits up to 5 s for
@@ -114,8 +119,18 @@ func (s *Server) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	serveErr := make(chan error, 1)
-	wg.Go(func() { serveErr <- srv.Serve(ln) })
-	s.logger.InfoContext(ctx, "http server listening", "addr", ln.Addr().String())
+	wg.Go(func() {
+		if s.cfg.TLSCert != "" {
+			if _, err := tls.LoadX509KeyPair(s.cfg.TLSCert, s.cfg.TLSKey); err != nil {
+				serveErr <- supervisor.Permanent(fmt.Errorf("load tls key pair: %w", err))
+				return
+			}
+			serveErr <- srv.ServeTLS(ln, s.cfg.TLSCert, s.cfg.TLSKey)
+			return
+		}
+		serveErr <- srv.Serve(ln)
+	})
+	s.logger.InfoContext(ctx, "http server listening", "addr", ln.Addr().String(), "tls", s.cfg.TLSCert != "")
 
 	select {
 	case err := <-serveErr:

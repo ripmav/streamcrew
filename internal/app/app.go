@@ -476,6 +476,8 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Addr:            cfg.Listen,
 		Dev:             cfg.Dev,
 		CorsAllow:       cfg.CorsAllow,
+		TLSCert:         cfg.TLSCert,
+		TLSKey:          cfg.TLSKey,
 		ShutdownTimeout: httpShutdownTimeout(cfg.ShutdownTimeout),
 	}, component(logger, "http"), a.ready.Ready)
 	scheduler := backup.NewScheduler(a.store, backups,
