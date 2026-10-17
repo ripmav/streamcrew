@@ -508,6 +508,12 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	})
 	a.http.SetAPI(a.api.Handler())
 
+	if cfg.Mode == config.ModeDesktop {
+		if err := a.ensureDesktopToken(); err != nil {
+			return a, fmt.Errorf("desktop token: %w", err)
+		}
+	}
+
 	err = errors.Join(
 		a.sup.Add("auth", a.auth),
 		a.sup.Add("backup", scheduler),
@@ -735,6 +741,12 @@ func (a *App) Run(ctx context.Context) (err error) {
 
 	supErr := make(chan error, 1)
 	go func() { supErr <- a.sup.Run(runCtx) }()
+
+	// The runtime file (ADR-0005): the desktop app and diagnostic tools
+	// read the address, the PID and the version from the data directory;
+	// it is removed when the core stops.
+	go a.writeRuntimeFile()
+	defer a.removeRuntimeFile()
 
 	// "app.started" goes through the event service (events.md, B12), when
 	// the core is ready for the first time: the engine takes instances and

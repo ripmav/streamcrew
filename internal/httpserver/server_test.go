@@ -190,6 +190,65 @@ func TestRunRejectsABrokenKeyPair(t *testing.T) {
 	assert.True(t, supervisor.IsPermanent(err))
 }
 
+// TestRunServesOnAUnixSocket covers the desktop default (ADR-0005): the
+// server listens on a Unix socket, replaces a stale socket file and answers
+// the health endpoint.
+func TestRunServesOnAUnixSocket(t *testing.T) {
+	t.Parallel()
+	sock := filepath.Join(t.TempDir(), "core.sock")
+	var lc net.ListenConfig
+	stale, err := lc.Listen(t.Context(), "unix", sock)
+	require.NoError(t, err)
+	require.NoError(t, stale.Close())
+
+	srv := httpserver.New(httpserver.Config{
+		Addr:            "unix:" + sock,
+		ShutdownTimeout: 5 * time.Second,
+	}, nil, nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	errc := make(chan error, 1)
+	go func() { errc <- srv.Run(ctx) }()
+
+	select {
+	case <-srv.Listening():
+	case err := <-errc:
+		t.Fatalf("Run returned early: %v", err)
+	}
+	client := &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, "unix", sock)
+		},
+	}}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://core/healthz", nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "ok\n", string(body))
+
+	cancel()
+	require.NoError(t, <-errc)
+}
+
+// TestRunRejectsAFileAtTheUnixSocketPath covers that a regular file at the
+// socket path stops the server instead of being deleted.
+func TestRunRejectsAFileAtTheUnixSocketPath(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "core.sock")
+	require.NoError(t, os.WriteFile(path, []byte("not a socket"), 0o600))
+	srv := httpserver.New(httpserver.Config{
+		Addr:            "unix:" + path,
+		ShutdownTimeout: time.Second,
+	}, nil, nil)
+	err := srv.Run(t.Context())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "exists and is not a socket")
+}
+
 // selfSignedCert writes a self-signed certificate for 127.0.0.1 to the test
 // directory and returns the file paths.
 func selfSignedCert(t *testing.T) (string, string) {
