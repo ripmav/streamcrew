@@ -22,7 +22,7 @@ Die Regeln setzen [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-orig
 
 ## Aufbau und Ablauf
 
-- **Datei:** eine Datei pro Fachgebiet, `docs/spec/<bereich>.md` in Kleinbuchstaben mit Bindestrichen, Vorlage: [`TEMPLATE.md`](TEMPLATE.md).
+- **Datei:** eine Datei pro Fachgebiet, `docs/spec/<bereich>.md` in Kleinbuchstaben mit Bindestrichen, Vorlage: [`SPEC-TEMPLATE.md`](SPEC-TEMPLATE.md).
 - **Verhaltensregeln** tragen stabile IDs (`B1`, `B2` …), Quellen ebenfalls (`Q1`, `Q2` …). Tests verweisen auf die Verhaltens-IDs, z. B. im Testnamen oder als Kommentar. So lässt sich jede Regel bis zum Test verfolgen.
 - **Status:**
   - `Entwurf`: in Arbeit

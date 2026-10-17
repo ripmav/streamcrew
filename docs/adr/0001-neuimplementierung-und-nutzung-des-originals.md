@@ -60,7 +60,7 @@
 
 **Folgearbeiten:**
 
-- [x] [`docs/spec/README.md`](../spec/README.md) mit diesen Regeln und die Vorlage [`docs/spec/TEMPLATE.md`](../spec/TEMPLATE.md) angelegt (2026-09-28)
+- [x] [`docs/spec/README.md`](../spec/README.md) mit diesen Regeln und die Vorlage [`docs/spec/SPEC-TEMPLATE.md`](../spec/SPEC-TEMPLATE.md) angelegt (2026-09-28)
 - [ ] Rechtliche Einschätzung einholen, spätestens vor Gate O
 - [ ] Optional: schriftliche Erlaubnis bei Blazing Cacti anfragen
 - [ ] Herkunfts-Review vor der Veröffentlichung (Gate O)
