@@ -243,6 +243,28 @@ func (c apiCommands) Update(ctx context.Context, idStr, document, format string)
 	return c.summary(cmd, groups), warnings, nil
 }
 
+// SetEnabled switches the active switch of a command.
+func (c apiCommands) SetEnabled(ctx context.Context, idStr string, enabled bool) (api.CommandSummary, error) {
+	cmdID, err := id.Parse(idStr)
+	if err != nil {
+		return api.CommandSummary{}, err
+	}
+	cmd, err := c.a.commands.Command(ctx, cmdID)
+	if err != nil {
+		return api.CommandSummary{}, err
+	}
+	cmd.Enabled = enabled
+	saved, err := c.a.commands.Save(ctx, cmd)
+	if err != nil {
+		return api.CommandSummary{}, fmt.Errorf("enable command: %w", err)
+	}
+	groups, err := c.groupNames(ctx)
+	if err != nil {
+		return api.CommandSummary{}, err
+	}
+	return c.summary(saved.Command, groups), nil
+}
+
 func (c apiCommands) Delete(ctx context.Context, idStr string) error {
 	cmdID, err := id.Parse(idStr)
 	if err != nil {

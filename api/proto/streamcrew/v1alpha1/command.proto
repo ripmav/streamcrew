@@ -28,6 +28,8 @@ service CommandService {
   rpc Update(UpdateCommandRequest) returns (UpdateCommandResponse);
   // Delete removes a command.
   rpc Delete(DeleteCommandRequest) returns (DeleteCommandResponse);
+  // SetEnabled switches the active switch of a command.
+  rpc SetEnabled(SetEnabledCommandRequest) returns (SetEnabledCommandResponse);
   // Run starts a command manually.
   rpc Run(RunCommandRequest) returns (RunCommandResponse);
   // ListInstances lists the command queue and recent instances.
@@ -157,6 +159,20 @@ message DeleteCommandRequest {
 
 // DeleteCommandResponse is the response of Delete.
 message DeleteCommandResponse {}
+
+// SetEnabledCommandRequest is the request of SetEnabled.
+message SetEnabledCommandRequest {
+  // id is the command ID.
+  string id = 1;
+  // enabled is the new state of the active switch.
+  bool enabled = 2;
+}
+
+// SetEnabledCommandResponse is the response of SetEnabled.
+message SetEnabledCommandResponse {
+  // command is the updated command.
+  CommandSummary command = 1;
+}
 
 // RunCommandRequest is the request of Run.
 message RunCommandRequest {

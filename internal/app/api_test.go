@@ -538,6 +538,30 @@ func TestAPIServesTheStreamService(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond, "the catch-up of the chat message")
 }
 
+// TestAPIServesSetEnabled covers the SetEnabled RPC of the CommandService
+// (roadmap 6.3): the active switch flips, and an unknown ID is an error.
+func TestAPIServesSetEnabled(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	a, _, _ := apiCore(t, cfg, settings.DefaultChat())
+	ctx := t.Context()
+
+	base := "http://" + a.HTTPServer().Addr().String()
+	client := streamcrewv1alpha1connect.NewCommandServiceClient(http.DefaultClient, base)
+
+	l0, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{}))
+	require.NoError(t, err)
+	require.NotEmpty(t, l0.Msg.Commands)
+	id, enabled := l0.Msg.Commands[0].Id, l0.Msg.Commands[0].Enabled
+
+	resp, err := client.SetEnabled(ctx, connect.NewRequest(&v1alpha1.SetEnabledCommandRequest{Id: id, Enabled: !enabled}))
+	require.NoError(t, err)
+	assert.Equal(t, !enabled, resp.Msg.Command.Enabled)
+
+	_, err = client.SetEnabled(ctx, connect.NewRequest(&v1alpha1.SetEnabledCommandRequest{Id: "no-such-id"}))
+	require.Error(t, err)
+}
+
 // TestAPIServesSimulate covers the Simulate RPC of the StreamService
 // (roadmap 6.3): a chat message of a user and a platform-neutral event go
 // through the mock platform like the mock console does.

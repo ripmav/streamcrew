@@ -19,6 +19,12 @@ import (
 )
 
 type commandCmd struct {
+	List     commandListCmd     `cmd:"" help:"List the commands of a running core through the API."`
+	Show     commandShowCmd     `cmd:"" help:"Show one command of a running core through the API."`
+	Run      commandRunCmd      `cmd:"" help:"Run a command of a running core manually through the API."`
+	Delete   commandDeleteCmd   `cmd:"" help:"Delete a command of a running core through the API."`
+	Enable   commandEnableCmd   `cmd:"" help:"Activate a command of a running core through the API."`
+	Disable  commandDisableCmd  `cmd:"" help:"Deactivate a command of a running core through the API."`
 	Validate commandValidateCmd `cmd:"" help:"Check files of commands as code against the profile without changing it. Works while the core runs."`
 	Import   commandImportCmd   `cmd:"" help:"Import files of commands as code into the profile: all documents or, with errors, none. Needs a stopped core."`
 	Export   commandExportCmd   `cmd:"" help:"Export commands with their groups and cooldown groups as files of commands as code. Works while the core runs."`

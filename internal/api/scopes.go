@@ -63,6 +63,7 @@ var scopeForMethod = map[string]apitoken.Scope{
 	"CommandService/Create":         apitoken.Admin,
 	"CommandService/Update":         apitoken.Admin,
 	"CommandService/Delete":         apitoken.Admin,
+	"CommandService/SetEnabled":     apitoken.Admin,
 	"CommandService/Run":            apitoken.Control,
 	"CommandService/ListInstances":  apitoken.Read,
 	"CommandService/PauseQueue":     apitoken.Control,

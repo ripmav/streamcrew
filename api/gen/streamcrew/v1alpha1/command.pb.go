@@ -793,6 +793,107 @@ func (*DeleteCommandResponse) Descriptor() ([]byte, []int) {
 	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{11}
 }
 
+// SetEnabledCommandRequest is the request of SetEnabled.
+type SetEnabledCommandRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id is the command ID.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// enabled is the new state of the active switch.
+	Enabled       bool `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetEnabledCommandRequest) Reset() {
+	*x = SetEnabledCommandRequest{}
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetEnabledCommandRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetEnabledCommandRequest) ProtoMessage() {}
+
+func (x *SetEnabledCommandRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetEnabledCommandRequest.ProtoReflect.Descriptor instead.
+func (*SetEnabledCommandRequest) Descriptor() ([]byte, []int) {
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *SetEnabledCommandRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SetEnabledCommandRequest) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+// SetEnabledCommandResponse is the response of SetEnabled.
+type SetEnabledCommandResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// command is the updated command.
+	Command       *CommandSummary `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetEnabledCommandResponse) Reset() {
+	*x = SetEnabledCommandResponse{}
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetEnabledCommandResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetEnabledCommandResponse) ProtoMessage() {}
+
+func (x *SetEnabledCommandResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetEnabledCommandResponse.ProtoReflect.Descriptor instead.
+func (*SetEnabledCommandResponse) Descriptor() ([]byte, []int) {
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *SetEnabledCommandResponse) GetCommand() *CommandSummary {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
 // RunCommandRequest is the request of Run.
 type RunCommandRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -808,7 +909,7 @@ type RunCommandRequest struct {
 
 func (x *RunCommandRequest) Reset() {
 	*x = RunCommandRequest{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[12]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -820,7 +921,7 @@ func (x *RunCommandRequest) String() string {
 func (*RunCommandRequest) ProtoMessage() {}
 
 func (x *RunCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[12]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -833,7 +934,7 @@ func (x *RunCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunCommandRequest.ProtoReflect.Descriptor instead.
 func (*RunCommandRequest) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{12}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *RunCommandRequest) GetId() string {
@@ -873,7 +974,7 @@ type RunCommandResponse struct {
 
 func (x *RunCommandResponse) Reset() {
 	*x = RunCommandResponse{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[13]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -885,7 +986,7 @@ func (x *RunCommandResponse) String() string {
 func (*RunCommandResponse) ProtoMessage() {}
 
 func (x *RunCommandResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[13]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -898,7 +999,7 @@ func (x *RunCommandResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunCommandResponse.ProtoReflect.Descriptor instead.
 func (*RunCommandResponse) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{13}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RunCommandResponse) GetInstanceId() string {
@@ -937,7 +1038,7 @@ type ListInstancesRequest struct {
 
 func (x *ListInstancesRequest) Reset() {
 	*x = ListInstancesRequest{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[14]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -949,7 +1050,7 @@ func (x *ListInstancesRequest) String() string {
 func (*ListInstancesRequest) ProtoMessage() {}
 
 func (x *ListInstancesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[14]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -962,7 +1063,7 @@ func (x *ListInstancesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInstancesRequest.ProtoReflect.Descriptor instead.
 func (*ListInstancesRequest) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{14}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListInstancesRequest) GetCommandId() string {
@@ -999,7 +1100,7 @@ type ListInstancesResponse struct {
 
 func (x *ListInstancesResponse) Reset() {
 	*x = ListInstancesResponse{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[15]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1011,7 +1112,7 @@ func (x *ListInstancesResponse) String() string {
 func (*ListInstancesResponse) ProtoMessage() {}
 
 func (x *ListInstancesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[15]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1024,7 +1125,7 @@ func (x *ListInstancesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInstancesResponse.ProtoReflect.Descriptor instead.
 func (*ListInstancesResponse) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{15}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ListInstancesResponse) GetPaused() bool {
@@ -1052,7 +1153,7 @@ type PauseQueueRequest struct {
 
 func (x *PauseQueueRequest) Reset() {
 	*x = PauseQueueRequest{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[16]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1064,7 +1165,7 @@ func (x *PauseQueueRequest) String() string {
 func (*PauseQueueRequest) ProtoMessage() {}
 
 func (x *PauseQueueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[16]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1077,7 +1178,7 @@ func (x *PauseQueueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseQueueRequest.ProtoReflect.Descriptor instead.
 func (*PauseQueueRequest) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{16}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *PauseQueueRequest) GetPause() bool {
@@ -1098,7 +1199,7 @@ type PauseQueueResponse struct {
 
 func (x *PauseQueueResponse) Reset() {
 	*x = PauseQueueResponse{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[17]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1110,7 +1211,7 @@ func (x *PauseQueueResponse) String() string {
 func (*PauseQueueResponse) ProtoMessage() {}
 
 func (x *PauseQueueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[17]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1123,7 +1224,7 @@ func (x *PauseQueueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseQueueResponse.ProtoReflect.Descriptor instead.
 func (*PauseQueueResponse) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{17}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *PauseQueueResponse) GetPaused() bool {
@@ -1143,7 +1244,7 @@ type CancelInstanceRequest struct {
 
 func (x *CancelInstanceRequest) Reset() {
 	*x = CancelInstanceRequest{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[18]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1155,7 +1256,7 @@ func (x *CancelInstanceRequest) String() string {
 func (*CancelInstanceRequest) ProtoMessage() {}
 
 func (x *CancelInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[18]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1168,7 +1269,7 @@ func (x *CancelInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelInstanceRequest.ProtoReflect.Descriptor instead.
 func (*CancelInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{18}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CancelInstanceRequest) GetInstanceId() string {
@@ -1187,7 +1288,7 @@ type CancelInstanceResponse struct {
 
 func (x *CancelInstanceResponse) Reset() {
 	*x = CancelInstanceResponse{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[19]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1199,7 +1300,7 @@ func (x *CancelInstanceResponse) String() string {
 func (*CancelInstanceResponse) ProtoMessage() {}
 
 func (x *CancelInstanceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[19]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1212,7 +1313,7 @@ func (x *CancelInstanceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelInstanceResponse.ProtoReflect.Descriptor instead.
 func (*CancelInstanceResponse) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{19}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{21}
 }
 
 // RetryInstanceRequest is the request of RetryInstance.
@@ -1225,7 +1326,7 @@ type RetryInstanceRequest struct {
 
 func (x *RetryInstanceRequest) Reset() {
 	*x = RetryInstanceRequest{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[20]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1237,7 +1338,7 @@ func (x *RetryInstanceRequest) String() string {
 func (*RetryInstanceRequest) ProtoMessage() {}
 
 func (x *RetryInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[20]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1250,7 +1351,7 @@ func (x *RetryInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetryInstanceRequest.ProtoReflect.Descriptor instead.
 func (*RetryInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{20}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *RetryInstanceRequest) GetInstanceId() string {
@@ -1271,7 +1372,7 @@ type RetryInstanceResponse struct {
 
 func (x *RetryInstanceResponse) Reset() {
 	*x = RetryInstanceResponse{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[21]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1283,7 +1384,7 @@ func (x *RetryInstanceResponse) String() string {
 func (*RetryInstanceResponse) ProtoMessage() {}
 
 func (x *RetryInstanceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[21]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1296,7 +1397,7 @@ func (x *RetryInstanceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetryInstanceResponse.ProtoReflect.Descriptor instead.
 func (*RetryInstanceResponse) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{21}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *RetryInstanceResponse) GetInstanceId() string {
@@ -1327,7 +1428,7 @@ type ActionTypeInfo struct {
 
 func (x *ActionTypeInfo) Reset() {
 	*x = ActionTypeInfo{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[22]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1339,7 +1440,7 @@ func (x *ActionTypeInfo) String() string {
 func (*ActionTypeInfo) ProtoMessage() {}
 
 func (x *ActionTypeInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[22]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1352,7 +1453,7 @@ func (x *ActionTypeInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActionTypeInfo.ProtoReflect.Descriptor instead.
 func (*ActionTypeInfo) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{22}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ActionTypeInfo) GetType() string {
@@ -1406,7 +1507,7 @@ type TypeCatalogRequest struct {
 
 func (x *TypeCatalogRequest) Reset() {
 	*x = TypeCatalogRequest{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[23]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1418,7 +1519,7 @@ func (x *TypeCatalogRequest) String() string {
 func (*TypeCatalogRequest) ProtoMessage() {}
 
 func (x *TypeCatalogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[23]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1431,7 +1532,7 @@ func (x *TypeCatalogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TypeCatalogRequest.ProtoReflect.Descriptor instead.
 func (*TypeCatalogRequest) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{23}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{25}
 }
 
 // TypeCatalogResponse is the response of TypeCatalog.
@@ -1447,7 +1548,7 @@ type TypeCatalogResponse struct {
 
 func (x *TypeCatalogResponse) Reset() {
 	*x = TypeCatalogResponse{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[24]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1459,7 +1560,7 @@ func (x *TypeCatalogResponse) String() string {
 func (*TypeCatalogResponse) ProtoMessage() {}
 
 func (x *TypeCatalogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[24]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1472,7 +1573,7 @@ func (x *TypeCatalogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TypeCatalogResponse.ProtoReflect.Descriptor instead.
 func (*TypeCatalogResponse) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{24}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *TypeCatalogResponse) GetActions() []*ActionTypeInfo {
@@ -1502,7 +1603,7 @@ type ImportCommandsRequest struct {
 
 func (x *ImportCommandsRequest) Reset() {
 	*x = ImportCommandsRequest{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[25]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1514,7 +1615,7 @@ func (x *ImportCommandsRequest) String() string {
 func (*ImportCommandsRequest) ProtoMessage() {}
 
 func (x *ImportCommandsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[25]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1527,7 +1628,7 @@ func (x *ImportCommandsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportCommandsRequest.ProtoReflect.Descriptor instead.
 func (*ImportCommandsRequest) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{25}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ImportCommandsRequest) GetDocument() string {
@@ -1561,7 +1662,7 @@ type ImportedCommand struct {
 
 func (x *ImportedCommand) Reset() {
 	*x = ImportedCommand{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[26]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1573,7 +1674,7 @@ func (x *ImportedCommand) String() string {
 func (*ImportedCommand) ProtoMessage() {}
 
 func (x *ImportedCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[26]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1586,7 +1687,7 @@ func (x *ImportedCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportedCommand.ProtoReflect.Descriptor instead.
 func (*ImportedCommand) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{26}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ImportedCommand) GetName() string {
@@ -1628,7 +1729,7 @@ type ImportCommandsResponse struct {
 
 func (x *ImportCommandsResponse) Reset() {
 	*x = ImportCommandsResponse{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[27]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1640,7 +1741,7 @@ func (x *ImportCommandsResponse) String() string {
 func (*ImportCommandsResponse) ProtoMessage() {}
 
 func (x *ImportCommandsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[27]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1653,7 +1754,7 @@ func (x *ImportCommandsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportCommandsResponse.ProtoReflect.Descriptor instead.
 func (*ImportCommandsResponse) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{27}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ImportCommandsResponse) GetResults() []*ImportedCommand {
@@ -1676,7 +1777,7 @@ type ExportCommandsRequest struct {
 
 func (x *ExportCommandsRequest) Reset() {
 	*x = ExportCommandsRequest{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[28]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1688,7 +1789,7 @@ func (x *ExportCommandsRequest) String() string {
 func (*ExportCommandsRequest) ProtoMessage() {}
 
 func (x *ExportCommandsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[28]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1701,7 +1802,7 @@ func (x *ExportCommandsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportCommandsRequest.ProtoReflect.Descriptor instead.
 func (*ExportCommandsRequest) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{28}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ExportCommandsRequest) GetIds() []string {
@@ -1731,7 +1832,7 @@ type ExportCommandsResponse struct {
 
 func (x *ExportCommandsResponse) Reset() {
 	*x = ExportCommandsResponse{}
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[29]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1743,7 +1844,7 @@ func (x *ExportCommandsResponse) String() string {
 func (*ExportCommandsResponse) ProtoMessage() {}
 
 func (x *ExportCommandsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[29]
+	mi := &file_streamcrew_v1alpha1_command_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1756,7 +1857,7 @@ func (x *ExportCommandsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportCommandsResponse.ProtoReflect.Descriptor instead.
 func (*ExportCommandsResponse) Descriptor() ([]byte, []int) {
-	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{29}
+	return file_streamcrew_v1alpha1_command_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ExportCommandsResponse) GetDocument() string {
@@ -1832,7 +1933,12 @@ const file_streamcrew_v1alpha1_command_proto_rawDesc = "" +
 	"\bwarnings\x18\x02 \x03(\tR\bwarnings\"&\n" +
 	"\x14DeleteCommandRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x17\n" +
-	"\x15DeleteCommandResponse\"Q\n" +
+	"\x15DeleteCommandResponse\"D\n" +
+	"\x18SetEnabledCommandRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
+	"\aenabled\x18\x02 \x01(\bR\aenabled\"Z\n" +
+	"\x19SetEnabledCommandResponse\x12=\n" +
+	"\acommand\x18\x01 \x01(\v2#.streamcrew.v1alpha1.CommandSummaryR\acommand\"Q\n" +
 	"\x11RunCommandRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04args\x18\x02 \x03(\tR\x04args\x12\x18\n" +
@@ -1890,14 +1996,16 @@ const file_streamcrew_v1alpha1_command_proto_rawDesc = "" +
 	"\x06format\x18\x02 \x01(\tR\x06format\"L\n" +
 	"\x16ExportCommandsResponse\x12\x1a\n" +
 	"\bdocument\x18\x01 \x01(\tR\bdocument\x12\x16\n" +
-	"\x06format\x18\x02 \x01(\tR\x06format2\x82\n" +
+	"\x06format\x18\x02 \x01(\tR\x06format2\xef\n" +
 	"\n" +
 	"\x0eCommandService\x12[\n" +
 	"\x04List\x12(.streamcrew.v1alpha1.ListCommandsRequest\x1a).streamcrew.v1alpha1.ListCommandsResponse\x12V\n" +
 	"\x03Get\x12&.streamcrew.v1alpha1.GetCommandRequest\x1a'.streamcrew.v1alpha1.GetCommandResponse\x12_\n" +
 	"\x06Create\x12).streamcrew.v1alpha1.CreateCommandRequest\x1a*.streamcrew.v1alpha1.CreateCommandResponse\x12_\n" +
 	"\x06Update\x12).streamcrew.v1alpha1.UpdateCommandRequest\x1a*.streamcrew.v1alpha1.UpdateCommandResponse\x12_\n" +
-	"\x06Delete\x12).streamcrew.v1alpha1.DeleteCommandRequest\x1a*.streamcrew.v1alpha1.DeleteCommandResponse\x12V\n" +
+	"\x06Delete\x12).streamcrew.v1alpha1.DeleteCommandRequest\x1a*.streamcrew.v1alpha1.DeleteCommandResponse\x12k\n" +
+	"\n" +
+	"SetEnabled\x12-.streamcrew.v1alpha1.SetEnabledCommandRequest\x1a..streamcrew.v1alpha1.SetEnabledCommandResponse\x12V\n" +
 	"\x03Run\x12&.streamcrew.v1alpha1.RunCommandRequest\x1a'.streamcrew.v1alpha1.RunCommandResponse\x12f\n" +
 	"\rListInstances\x12).streamcrew.v1alpha1.ListInstancesRequest\x1a*.streamcrew.v1alpha1.ListInstancesResponse\x12]\n" +
 	"\n" +
@@ -1920,83 +2028,88 @@ func file_streamcrew_v1alpha1_command_proto_rawDescGZIP() []byte {
 	return file_streamcrew_v1alpha1_command_proto_rawDescData
 }
 
-var file_streamcrew_v1alpha1_command_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_streamcrew_v1alpha1_command_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_streamcrew_v1alpha1_command_proto_goTypes = []any{
-	(*CommandSummary)(nil),         // 0: streamcrew.v1alpha1.CommandSummary
-	(*CommandInstanceView)(nil),    // 1: streamcrew.v1alpha1.CommandInstanceView
-	(*ListCommandsRequest)(nil),    // 2: streamcrew.v1alpha1.ListCommandsRequest
-	(*ListCommandsResponse)(nil),   // 3: streamcrew.v1alpha1.ListCommandsResponse
-	(*GetCommandRequest)(nil),      // 4: streamcrew.v1alpha1.GetCommandRequest
-	(*GetCommandResponse)(nil),     // 5: streamcrew.v1alpha1.GetCommandResponse
-	(*CreateCommandRequest)(nil),   // 6: streamcrew.v1alpha1.CreateCommandRequest
-	(*CreateCommandResponse)(nil),  // 7: streamcrew.v1alpha1.CreateCommandResponse
-	(*UpdateCommandRequest)(nil),   // 8: streamcrew.v1alpha1.UpdateCommandRequest
-	(*UpdateCommandResponse)(nil),  // 9: streamcrew.v1alpha1.UpdateCommandResponse
-	(*DeleteCommandRequest)(nil),   // 10: streamcrew.v1alpha1.DeleteCommandRequest
-	(*DeleteCommandResponse)(nil),  // 11: streamcrew.v1alpha1.DeleteCommandResponse
-	(*RunCommandRequest)(nil),      // 12: streamcrew.v1alpha1.RunCommandRequest
-	(*RunCommandResponse)(nil),     // 13: streamcrew.v1alpha1.RunCommandResponse
-	(*ListInstancesRequest)(nil),   // 14: streamcrew.v1alpha1.ListInstancesRequest
-	(*ListInstancesResponse)(nil),  // 15: streamcrew.v1alpha1.ListInstancesResponse
-	(*PauseQueueRequest)(nil),      // 16: streamcrew.v1alpha1.PauseQueueRequest
-	(*PauseQueueResponse)(nil),     // 17: streamcrew.v1alpha1.PauseQueueResponse
-	(*CancelInstanceRequest)(nil),  // 18: streamcrew.v1alpha1.CancelInstanceRequest
-	(*CancelInstanceResponse)(nil), // 19: streamcrew.v1alpha1.CancelInstanceResponse
-	(*RetryInstanceRequest)(nil),   // 20: streamcrew.v1alpha1.RetryInstanceRequest
-	(*RetryInstanceResponse)(nil),  // 21: streamcrew.v1alpha1.RetryInstanceResponse
-	(*ActionTypeInfo)(nil),         // 22: streamcrew.v1alpha1.ActionTypeInfo
-	(*TypeCatalogRequest)(nil),     // 23: streamcrew.v1alpha1.TypeCatalogRequest
-	(*TypeCatalogResponse)(nil),    // 24: streamcrew.v1alpha1.TypeCatalogResponse
-	(*ImportCommandsRequest)(nil),  // 25: streamcrew.v1alpha1.ImportCommandsRequest
-	(*ImportedCommand)(nil),        // 26: streamcrew.v1alpha1.ImportedCommand
-	(*ImportCommandsResponse)(nil), // 27: streamcrew.v1alpha1.ImportCommandsResponse
-	(*ExportCommandsRequest)(nil),  // 28: streamcrew.v1alpha1.ExportCommandsRequest
-	(*ExportCommandsResponse)(nil), // 29: streamcrew.v1alpha1.ExportCommandsResponse
-	(*timestamppb.Timestamp)(nil),  // 30: google.protobuf.Timestamp
+	(*CommandSummary)(nil),            // 0: streamcrew.v1alpha1.CommandSummary
+	(*CommandInstanceView)(nil),       // 1: streamcrew.v1alpha1.CommandInstanceView
+	(*ListCommandsRequest)(nil),       // 2: streamcrew.v1alpha1.ListCommandsRequest
+	(*ListCommandsResponse)(nil),      // 3: streamcrew.v1alpha1.ListCommandsResponse
+	(*GetCommandRequest)(nil),         // 4: streamcrew.v1alpha1.GetCommandRequest
+	(*GetCommandResponse)(nil),        // 5: streamcrew.v1alpha1.GetCommandResponse
+	(*CreateCommandRequest)(nil),      // 6: streamcrew.v1alpha1.CreateCommandRequest
+	(*CreateCommandResponse)(nil),     // 7: streamcrew.v1alpha1.CreateCommandResponse
+	(*UpdateCommandRequest)(nil),      // 8: streamcrew.v1alpha1.UpdateCommandRequest
+	(*UpdateCommandResponse)(nil),     // 9: streamcrew.v1alpha1.UpdateCommandResponse
+	(*DeleteCommandRequest)(nil),      // 10: streamcrew.v1alpha1.DeleteCommandRequest
+	(*DeleteCommandResponse)(nil),     // 11: streamcrew.v1alpha1.DeleteCommandResponse
+	(*SetEnabledCommandRequest)(nil),  // 12: streamcrew.v1alpha1.SetEnabledCommandRequest
+	(*SetEnabledCommandResponse)(nil), // 13: streamcrew.v1alpha1.SetEnabledCommandResponse
+	(*RunCommandRequest)(nil),         // 14: streamcrew.v1alpha1.RunCommandRequest
+	(*RunCommandResponse)(nil),        // 15: streamcrew.v1alpha1.RunCommandResponse
+	(*ListInstancesRequest)(nil),      // 16: streamcrew.v1alpha1.ListInstancesRequest
+	(*ListInstancesResponse)(nil),     // 17: streamcrew.v1alpha1.ListInstancesResponse
+	(*PauseQueueRequest)(nil),         // 18: streamcrew.v1alpha1.PauseQueueRequest
+	(*PauseQueueResponse)(nil),        // 19: streamcrew.v1alpha1.PauseQueueResponse
+	(*CancelInstanceRequest)(nil),     // 20: streamcrew.v1alpha1.CancelInstanceRequest
+	(*CancelInstanceResponse)(nil),    // 21: streamcrew.v1alpha1.CancelInstanceResponse
+	(*RetryInstanceRequest)(nil),      // 22: streamcrew.v1alpha1.RetryInstanceRequest
+	(*RetryInstanceResponse)(nil),     // 23: streamcrew.v1alpha1.RetryInstanceResponse
+	(*ActionTypeInfo)(nil),            // 24: streamcrew.v1alpha1.ActionTypeInfo
+	(*TypeCatalogRequest)(nil),        // 25: streamcrew.v1alpha1.TypeCatalogRequest
+	(*TypeCatalogResponse)(nil),       // 26: streamcrew.v1alpha1.TypeCatalogResponse
+	(*ImportCommandsRequest)(nil),     // 27: streamcrew.v1alpha1.ImportCommandsRequest
+	(*ImportedCommand)(nil),           // 28: streamcrew.v1alpha1.ImportedCommand
+	(*ImportCommandsResponse)(nil),    // 29: streamcrew.v1alpha1.ImportCommandsResponse
+	(*ExportCommandsRequest)(nil),     // 30: streamcrew.v1alpha1.ExportCommandsRequest
+	(*ExportCommandsResponse)(nil),    // 31: streamcrew.v1alpha1.ExportCommandsResponse
+	(*timestamppb.Timestamp)(nil),     // 32: google.protobuf.Timestamp
 }
 var file_streamcrew_v1alpha1_command_proto_depIdxs = []int32{
-	30, // 0: streamcrew.v1alpha1.CommandSummary.updated_at:type_name -> google.protobuf.Timestamp
-	30, // 1: streamcrew.v1alpha1.CommandInstanceView.started_at:type_name -> google.protobuf.Timestamp
-	30, // 2: streamcrew.v1alpha1.CommandInstanceView.ended_at:type_name -> google.protobuf.Timestamp
+	32, // 0: streamcrew.v1alpha1.CommandSummary.updated_at:type_name -> google.protobuf.Timestamp
+	32, // 1: streamcrew.v1alpha1.CommandInstanceView.started_at:type_name -> google.protobuf.Timestamp
+	32, // 2: streamcrew.v1alpha1.CommandInstanceView.ended_at:type_name -> google.protobuf.Timestamp
 	0,  // 3: streamcrew.v1alpha1.ListCommandsResponse.commands:type_name -> streamcrew.v1alpha1.CommandSummary
 	0,  // 4: streamcrew.v1alpha1.GetCommandResponse.summary:type_name -> streamcrew.v1alpha1.CommandSummary
 	0,  // 5: streamcrew.v1alpha1.CreateCommandResponse.command:type_name -> streamcrew.v1alpha1.CommandSummary
 	0,  // 6: streamcrew.v1alpha1.UpdateCommandResponse.command:type_name -> streamcrew.v1alpha1.CommandSummary
-	1,  // 7: streamcrew.v1alpha1.ListInstancesResponse.instances:type_name -> streamcrew.v1alpha1.CommandInstanceView
-	22, // 8: streamcrew.v1alpha1.TypeCatalogResponse.actions:type_name -> streamcrew.v1alpha1.ActionTypeInfo
-	22, // 9: streamcrew.v1alpha1.TypeCatalogResponse.requirements:type_name -> streamcrew.v1alpha1.ActionTypeInfo
-	26, // 10: streamcrew.v1alpha1.ImportCommandsResponse.results:type_name -> streamcrew.v1alpha1.ImportedCommand
-	2,  // 11: streamcrew.v1alpha1.CommandService.List:input_type -> streamcrew.v1alpha1.ListCommandsRequest
-	4,  // 12: streamcrew.v1alpha1.CommandService.Get:input_type -> streamcrew.v1alpha1.GetCommandRequest
-	6,  // 13: streamcrew.v1alpha1.CommandService.Create:input_type -> streamcrew.v1alpha1.CreateCommandRequest
-	8,  // 14: streamcrew.v1alpha1.CommandService.Update:input_type -> streamcrew.v1alpha1.UpdateCommandRequest
-	10, // 15: streamcrew.v1alpha1.CommandService.Delete:input_type -> streamcrew.v1alpha1.DeleteCommandRequest
-	12, // 16: streamcrew.v1alpha1.CommandService.Run:input_type -> streamcrew.v1alpha1.RunCommandRequest
-	14, // 17: streamcrew.v1alpha1.CommandService.ListInstances:input_type -> streamcrew.v1alpha1.ListInstancesRequest
-	16, // 18: streamcrew.v1alpha1.CommandService.PauseQueue:input_type -> streamcrew.v1alpha1.PauseQueueRequest
-	18, // 19: streamcrew.v1alpha1.CommandService.CancelInstance:input_type -> streamcrew.v1alpha1.CancelInstanceRequest
-	20, // 20: streamcrew.v1alpha1.CommandService.RetryInstance:input_type -> streamcrew.v1alpha1.RetryInstanceRequest
-	23, // 21: streamcrew.v1alpha1.CommandService.TypeCatalog:input_type -> streamcrew.v1alpha1.TypeCatalogRequest
-	25, // 22: streamcrew.v1alpha1.CommandService.Import:input_type -> streamcrew.v1alpha1.ImportCommandsRequest
-	28, // 23: streamcrew.v1alpha1.CommandService.Export:input_type -> streamcrew.v1alpha1.ExportCommandsRequest
-	3,  // 24: streamcrew.v1alpha1.CommandService.List:output_type -> streamcrew.v1alpha1.ListCommandsResponse
-	5,  // 25: streamcrew.v1alpha1.CommandService.Get:output_type -> streamcrew.v1alpha1.GetCommandResponse
-	7,  // 26: streamcrew.v1alpha1.CommandService.Create:output_type -> streamcrew.v1alpha1.CreateCommandResponse
-	9,  // 27: streamcrew.v1alpha1.CommandService.Update:output_type -> streamcrew.v1alpha1.UpdateCommandResponse
-	11, // 28: streamcrew.v1alpha1.CommandService.Delete:output_type -> streamcrew.v1alpha1.DeleteCommandResponse
-	13, // 29: streamcrew.v1alpha1.CommandService.Run:output_type -> streamcrew.v1alpha1.RunCommandResponse
-	15, // 30: streamcrew.v1alpha1.CommandService.ListInstances:output_type -> streamcrew.v1alpha1.ListInstancesResponse
-	17, // 31: streamcrew.v1alpha1.CommandService.PauseQueue:output_type -> streamcrew.v1alpha1.PauseQueueResponse
-	19, // 32: streamcrew.v1alpha1.CommandService.CancelInstance:output_type -> streamcrew.v1alpha1.CancelInstanceResponse
-	21, // 33: streamcrew.v1alpha1.CommandService.RetryInstance:output_type -> streamcrew.v1alpha1.RetryInstanceResponse
-	24, // 34: streamcrew.v1alpha1.CommandService.TypeCatalog:output_type -> streamcrew.v1alpha1.TypeCatalogResponse
-	27, // 35: streamcrew.v1alpha1.CommandService.Import:output_type -> streamcrew.v1alpha1.ImportCommandsResponse
-	29, // 36: streamcrew.v1alpha1.CommandService.Export:output_type -> streamcrew.v1alpha1.ExportCommandsResponse
-	24, // [24:37] is the sub-list for method output_type
-	11, // [11:24] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	0,  // 7: streamcrew.v1alpha1.SetEnabledCommandResponse.command:type_name -> streamcrew.v1alpha1.CommandSummary
+	1,  // 8: streamcrew.v1alpha1.ListInstancesResponse.instances:type_name -> streamcrew.v1alpha1.CommandInstanceView
+	24, // 9: streamcrew.v1alpha1.TypeCatalogResponse.actions:type_name -> streamcrew.v1alpha1.ActionTypeInfo
+	24, // 10: streamcrew.v1alpha1.TypeCatalogResponse.requirements:type_name -> streamcrew.v1alpha1.ActionTypeInfo
+	28, // 11: streamcrew.v1alpha1.ImportCommandsResponse.results:type_name -> streamcrew.v1alpha1.ImportedCommand
+	2,  // 12: streamcrew.v1alpha1.CommandService.List:input_type -> streamcrew.v1alpha1.ListCommandsRequest
+	4,  // 13: streamcrew.v1alpha1.CommandService.Get:input_type -> streamcrew.v1alpha1.GetCommandRequest
+	6,  // 14: streamcrew.v1alpha1.CommandService.Create:input_type -> streamcrew.v1alpha1.CreateCommandRequest
+	8,  // 15: streamcrew.v1alpha1.CommandService.Update:input_type -> streamcrew.v1alpha1.UpdateCommandRequest
+	10, // 16: streamcrew.v1alpha1.CommandService.Delete:input_type -> streamcrew.v1alpha1.DeleteCommandRequest
+	12, // 17: streamcrew.v1alpha1.CommandService.SetEnabled:input_type -> streamcrew.v1alpha1.SetEnabledCommandRequest
+	14, // 18: streamcrew.v1alpha1.CommandService.Run:input_type -> streamcrew.v1alpha1.RunCommandRequest
+	16, // 19: streamcrew.v1alpha1.CommandService.ListInstances:input_type -> streamcrew.v1alpha1.ListInstancesRequest
+	18, // 20: streamcrew.v1alpha1.CommandService.PauseQueue:input_type -> streamcrew.v1alpha1.PauseQueueRequest
+	20, // 21: streamcrew.v1alpha1.CommandService.CancelInstance:input_type -> streamcrew.v1alpha1.CancelInstanceRequest
+	22, // 22: streamcrew.v1alpha1.CommandService.RetryInstance:input_type -> streamcrew.v1alpha1.RetryInstanceRequest
+	25, // 23: streamcrew.v1alpha1.CommandService.TypeCatalog:input_type -> streamcrew.v1alpha1.TypeCatalogRequest
+	27, // 24: streamcrew.v1alpha1.CommandService.Import:input_type -> streamcrew.v1alpha1.ImportCommandsRequest
+	30, // 25: streamcrew.v1alpha1.CommandService.Export:input_type -> streamcrew.v1alpha1.ExportCommandsRequest
+	3,  // 26: streamcrew.v1alpha1.CommandService.List:output_type -> streamcrew.v1alpha1.ListCommandsResponse
+	5,  // 27: streamcrew.v1alpha1.CommandService.Get:output_type -> streamcrew.v1alpha1.GetCommandResponse
+	7,  // 28: streamcrew.v1alpha1.CommandService.Create:output_type -> streamcrew.v1alpha1.CreateCommandResponse
+	9,  // 29: streamcrew.v1alpha1.CommandService.Update:output_type -> streamcrew.v1alpha1.UpdateCommandResponse
+	11, // 30: streamcrew.v1alpha1.CommandService.Delete:output_type -> streamcrew.v1alpha1.DeleteCommandResponse
+	13, // 31: streamcrew.v1alpha1.CommandService.SetEnabled:output_type -> streamcrew.v1alpha1.SetEnabledCommandResponse
+	15, // 32: streamcrew.v1alpha1.CommandService.Run:output_type -> streamcrew.v1alpha1.RunCommandResponse
+	17, // 33: streamcrew.v1alpha1.CommandService.ListInstances:output_type -> streamcrew.v1alpha1.ListInstancesResponse
+	19, // 34: streamcrew.v1alpha1.CommandService.PauseQueue:output_type -> streamcrew.v1alpha1.PauseQueueResponse
+	21, // 35: streamcrew.v1alpha1.CommandService.CancelInstance:output_type -> streamcrew.v1alpha1.CancelInstanceResponse
+	23, // 36: streamcrew.v1alpha1.CommandService.RetryInstance:output_type -> streamcrew.v1alpha1.RetryInstanceResponse
+	26, // 37: streamcrew.v1alpha1.CommandService.TypeCatalog:output_type -> streamcrew.v1alpha1.TypeCatalogResponse
+	29, // 38: streamcrew.v1alpha1.CommandService.Import:output_type -> streamcrew.v1alpha1.ImportCommandsResponse
+	31, // 39: streamcrew.v1alpha1.CommandService.Export:output_type -> streamcrew.v1alpha1.ExportCommandsResponse
+	26, // [26:40] is the sub-list for method output_type
+	12, // [12:26] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_streamcrew_v1alpha1_command_proto_init() }
@@ -2011,7 +2124,7 @@ func file_streamcrew_v1alpha1_command_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_streamcrew_v1alpha1_command_proto_rawDesc), len(file_streamcrew_v1alpha1_command_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   30,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
