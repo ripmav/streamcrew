@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: MIT
+#
+# systemd unit for the streamcrew core in daemon mode (ADR-0003, ADR-0025).
+#
+# Install:
+#   sudo useradd --system --home /var/lib/streamcrew streamcrew
+#   sudo cp streamcrew.service streamcrew.env /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now streamcrew
+#
+# The token and the secret key are read from streamcrew.env (root-only),
+# never from the command line (ADR-0005).
+
+[Unit]
+Description=streamcrew core (Twitch chat bot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=streamcrew
+Group=streamcrew
+EnvironmentFile=/etc/systemd/system/streamcrew.env
+ExecStart=/usr/local/bin/streamcrew serve
+Restart=on-failure
+RestartSec=5
+# the core binds only the loopback interface by default; keep it that way
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/streamcrew
+
+[Install]
+WantedBy=multi-user.target

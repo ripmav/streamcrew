@@ -223,6 +223,29 @@ jobs:
       - name: Docker smoke test
         run: scripts/docker-smoke.sh
 
+  module-archive:
+    name: Module source archive check
+    # ADR-0025: the module source archive must stay resolvable and
+    # compilable. The check builds the archive of the current tree and
+    # compiles the check program against it with GOPROXY=file://...
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Build the archive and verify it
+        run: |
+          go run ./scripts/modulezip -version v0.0.0-00010101000000-000000000000 -out /tmp/streamcrew-src.zip
+          scripts/modulecheck.sh /tmp/streamcrew-src.zip
+
   test-native:
     name: Tests on ${{ matrix.os }}
     # Weekly and on demand only: macOS runners count ten times, Windows

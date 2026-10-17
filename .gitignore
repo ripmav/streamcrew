@@ -17,3 +17,5 @@
 
 # local, uncommitted phase summaries (written for the project owner, not tracked)
 docs/phase-*-summary.md
+modulezip
+scripts/modulecheck/go.sum

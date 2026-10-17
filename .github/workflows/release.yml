@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: MIT
+#
+# Release pipeline of the streamcrew core (ADR-0025). It runs on tags
+# v*.*.* and produces one release with: the binaries of all target
+# platforms, the module source archive in the Go module proxy layout,
+# the container image as a tar, checksums for all artifacts, and a
+# CycloneDX SBOM for the binary and for the image.
+#
+# The module archive is verified before it is attached: scripts/modulecheck.sh
+# builds the check program against it with GOPROXY=file://... (ADR-0025,
+# point 3).
+
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Module source archive
+        run: |
+          mkdir -p dist
+          go run ./scripts/modulezip \
+            -version "${GORELEASER_VERSION:-$(git describe --tags --exact-match)}" \
+            -out "dist/streamcrew-$(git describe --tags --exact-match)-src.zip"
+
+      - name: Verify the module archive
+        run: scripts/modulecheck.sh "dist/streamcrew-$(git describe --tags --exact-match)-src.zip"
+
+      - name: goreleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Container image (multi-platform tar)
+        run: |
+          tag=$(git describe --tags --exact-match)
+          docker buildx create --name release-builder --use 2>/dev/null || docker buildx use release-builder
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -t "ghcr.io/ripmav/streamcrew:${tag}" \
+            --output "type=docker,dest=dist/streamcrew-image-${tag}.tar" \
+            .
+          ls -lh dist/streamcrew-image-${tag}.tar
+
+      - name: Image SBOM (CycloneDX)
+        run: |
+          tag=$(git describe --tags --exact-match)
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | BINARY_FORMAT=bash sh
+          syft pkg "dist/streamcrew-image-${tag}.tar" -o cyclonedx-json="dist/streamcrew-image-${tag}.sbom.json"
+
+      - name: Upload image artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(git describe --tags --exact-match)
+          gh release upload "${tag}" \
+            "dist/streamcrew-image-${tag}.tar" \
+            "dist/streamcrew-image-${tag}.sbom.json" --clobber

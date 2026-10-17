@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: MIT
+#
+# goreleaser configuration of the streamcrew core release (ADR-0025).
+#
+# The release.yml workflow runs "goreleaser release" on tags v*.*.*: the
+# binaries for all target platforms, the checksums, the CycloneDX SBOM, the
+# systemd unit examples and the module source archive (built by the
+# workflow before goreleaser runs and included via extra_files). The
+# container image is built and uploaded by the workflow, because
+# goreleaser cannot produce a portable multi-platform image tar here.
+version: 2
+
+project_name: streamcrew
+
+builds:
+  - id: streamcrew
+    main: ./cmd/streamcrew
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
+archives:
+  - format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+sbom:
+  generate: true
+  formats:
+    - cyclonedx
+
+extra_files:
+  - packaging/systemd/streamcrew.service
+  - packaging/systemd/streamcrew.env.example
+  - dist/streamcrew-{{ .Version }}-src.zip
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+
+release:
+  github:
+    owner: ripmav
+    name: streamcrew
+  mode: replace
