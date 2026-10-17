@@ -1,0 +1,77 @@
+// SPDX-License-Identifier: MIT
+
+// SystemService (Plan §6.14): status, version, profiles and lifecycle of
+// the core. It is the first service of the v1alpha1 contract and doubles as
+// the version handshake (ADR-0010).
+syntax = "proto3";
+
+package streamcrew.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1;streamcrewv1alpha1";
+
+// SystemService exposes the status, identity and lifecycle of the core.
+service SystemService {
+  // Status reports version, mode, active profile and the connected
+  // platforms. It is the version handshake of the desktop mode.
+  rpc Status(StatusRequest) returns (StatusResponse);
+  // ListProfiles lists the profiles of the core and names the active one.
+  rpc ListProfiles(ListProfilesRequest) returns (ListProfilesResponse);
+  // Shutdown stops the core.
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+}
+
+// StatusRequest is the request of Status.
+message StatusRequest {}
+
+// PlatformStatus is the state of one connected platform.
+message PlatformStatus {
+  // platform is the platform name, e.g. "twitch" or "mock".
+  string platform = 1;
+  // connected is true while the platform is connected.
+  bool connected = 2;
+  // login is the home channel login; empty if not connected.
+  string login = 3;
+  // live is true while the platform is streaming.
+  bool live = 4;
+}
+
+// StatusResponse is the response of Status.
+message StatusResponse {
+  // version is the core version, e.g. "0.5.0".
+  string version = 1;
+  // mode is the operating mode: "desktop" or "server" (ADR-0003).
+  string mode = 2;
+  // profile is the name of the active profile.
+  string profile = 3;
+  // platforms are the connected platforms and their state.
+  repeated PlatformStatus platforms = 4;
+  // started_at is when the core started.
+  google.protobuf.Timestamp started_at = 5;
+}
+
+// ListProfilesRequest is the request of ListProfiles.
+message ListProfilesRequest {}
+
+// Profile is one profile of the core.
+message Profile {
+  // name is the unique name of the profile.
+  string name = 1;
+  // path is the directory of the profile database.
+  string path = 2;
+}
+
+// ListProfilesResponse is the response of ListProfiles.
+message ListProfilesResponse {
+  // profiles are the profiles of the core.
+  repeated Profile profiles = 1;
+  // active is the name of the active profile.
+  string active = 2;
+}
+
+// ShutdownRequest is the request of Shutdown.
+message ShutdownRequest {}
+
+// ShutdownResponse is the response of Shutdown.
+message ShutdownResponse {}

@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: MIT
+#
+# buf module and checks for the API contract (ADR-0010, Code-ADR-0016).
+# The protobuf files in api/proto are the single source of the contract;
+# buf lints them, checks breaking changes and drives code generation
+# (buf.gen.yaml). Generated Go code is checked in under api/gen.
+version: v2
+modules:
+  - path: api/proto
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE

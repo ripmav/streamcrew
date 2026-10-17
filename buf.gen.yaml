@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: MIT
+#
+# Code generation for the API contract (ADR-0010, Code-ADR-0016):
+# Go messages and services plus the ConnectRPC handlers. Run with
+# `go generate ./api/...`; the output is checked in under api/gen
+# (Code-ADR-0008 convention, mirrored for buf). The plugins are
+# installed by the go:generate lines in api/gen/generate.go.
+version: v2
+plugins:
+  - local: protoc-gen-go
+    out: api/gen
+    opt:
+      - paths=source_relative
+  - local: protoc-gen-connect-go
+    out: api/gen
+    opt:
+      - paths=source_relative
