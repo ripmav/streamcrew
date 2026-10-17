@@ -41,6 +41,7 @@ type Root struct {
 	ConfigCmd  configCmd     `cmd:"" name:"config" help:"Show the configuration."`
 	Doctor     doctorCmd     `cmd:"" help:"Check the environment of the core."`
 	Diag       diagCmd       `cmd:"" help:"Collect diagnostics for bug reports."`
+	Counter    counterCmd    `cmd:"" help:"Read and write the counters of a running core through the API."`
 	Schema     schemaCmd     `cmd:"" help:"Export the JSON Schema of commands as code."`
 	Command    commandCmd    `cmd:"" help:"Check files of commands as code."`
 	Auth       authCmd       `cmd:"" help:"Log in, check, and remove the platform accounts of a profile."`
