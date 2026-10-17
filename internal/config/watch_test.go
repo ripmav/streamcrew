@@ -41,16 +41,18 @@ func (l *logs) String() string {
 
 // watched is a core configuration with a running watcher.
 type watched struct {
-	t    *testing.T
-	path string
-	live *config.Live
-	logs *logs
+	t       *testing.T
+	path    string
+	live    *config.Live
+	logs    *logs
+	applies *config.ApplyFuncs
 }
 
 // watch parses the configuration like the streamcrew command does, then,
 // inside the bubble of synctest.Test, runs a watcher of the file until the
-// test ends.
-func watch(t *testing.T, dataDir string, args []string, run func(w *watched)) {
+// test ends. applies receives the hot applies; nil keeps the rights-only
+// behavior.
+func watch(t *testing.T, dataDir string, args []string, applies *config.ApplyFuncs, run func(w *watched)) {
 	t.Helper()
 	cfg, file := parse(t, config.Defaults{DataDir: dataDir}, args...)
 	require.NoError(t, file.Err())
@@ -58,8 +60,8 @@ func watch(t *testing.T, dataDir string, args []string, run func(w *watched)) {
 	r, err := cfg.Rights()
 	require.NoError(t, err)
 	synctest.Test(t, func(t *testing.T) {
-		w := &watched{t: t, path: filepath.Join(dataDir, "config.yaml"), live: config.NewLive(r), logs: &logs{}}
-		watcher := config.NewWatcher(file, cfg, w.live, slog.New(slog.NewTextHandler(w.logs, nil)))
+		w := &watched{t: t, path: filepath.Join(dataDir, "config.yaml"), live: config.NewLive(r), logs: &logs{}, applies: applies}
+		watcher := config.NewWatcher(file, cfg, w.live, w.applies, slog.New(slog.NewTextHandler(w.logs, nil)))
 		ctx, cancel := context.WithCancel(t.Context())
 		var wg sync.WaitGroup
 		wg.Go(func() { assert.NoError(t, watcher.Run(ctx)) })
@@ -96,7 +98,7 @@ func TestWatcherReloads(t *testing.T) {
 	clearEnv(t)
 	dataDir, obs := t.TempDir(), t.TempDir()
 	writeFile(t, filepath.Join(dataDir, "config.yaml"), "mode: server\n")
-	watch(t, dataDir, nil, func(w *watched) {
+	watch(t, dataDir, nil, nil, func(w *watched) {
 		assert.False(t, w.has(capability.HostFS))
 		w.tick()
 		assert.NotContains(t, w.logs.String(), "reloaded", "an unchanged file changes nothing")
@@ -123,7 +125,7 @@ func TestWatcherKeepsOnErrors(t *testing.T) {
 	clearEnv(t)
 	dataDir := t.TempDir()
 	writeFile(t, filepath.Join(dataDir, "config.yaml"), "grant: [host:input]\n")
-	watch(t, dataDir, nil, func(w *watched) {
+	watch(t, dataDir, nil, nil, func(w *watched) {
 		require.True(t, w.has(capability.HostInput))
 		for _, content := range []string{
 			"grant: [host:root]\n",
@@ -163,14 +165,14 @@ func TestWatcherKeepsOnErrors(t *testing.T) {
 }
 
 // TestWatcherFixedSettings covers Code-ADR-0019, point 5: settings set by
-// flag or environment variable stay fixed; other changed settings need a
-// restart, which the log says.
+// flag or environment variable stay fixed; other changed settings that are
+// not hot need a restart, which the log says.
 func TestWatcherFixedSettings(t *testing.T) {
 	clearEnv(t)
 	dataDir := t.TempDir()
 	writeFile(t, filepath.Join(dataDir, "config.yaml"), "log_level: info\n")
 	t.Setenv("STREAMCREW_REVOKE", "script")
-	watch(t, dataDir, []string{"--outbound-allow", "nas"}, func(w *watched) {
+	watch(t, dataDir, []string{"--outbound-allow", "nas"}, nil, func(w *watched) {
 		assert.Contains(t, w.logs.String(), "setting=revoke")
 		assert.Contains(t, w.logs.String(), "setting=outbound_allow")
 		assert.NotContains(t, w.logs.String(), "setting=grant")
@@ -179,7 +181,10 @@ func TestWatcherFixedSettings(t *testing.T) {
 		assert.True(t, w.has(capability.HostInput), "grant comes from the file")
 		assert.False(t, w.has(capability.Script), "revoke is fixed by the environment")
 		assert.True(t, w.live.Outbound().HasHost("nas"), "outbound_allow is fixed by the flag")
-		assert.Contains(t, w.logs.String(), `configuration changes apply after a restart" settings="listen, log_level"`)
+		// log_level and listen are hot and applied without a restart
+		// (roadmap 6.6); the file contains no setting that needs one, so
+		// the log says nothing.
+		assert.NotContains(t, w.logs.String(), "apply after a restart")
 	})
 }
 
@@ -188,7 +193,7 @@ func TestWatcherFixedSettings(t *testing.T) {
 func TestWatcherNewFile(t *testing.T) {
 	clearEnv(t)
 	dataDir := t.TempDir()
-	watch(t, dataDir, nil, func(w *watched) {
+	watch(t, dataDir, nil, nil, func(w *watched) {
 		w.tick()
 		assert.Empty(t, w.logs.String(), "no file is no problem")
 		w.write("grant: [host:input]\n")
