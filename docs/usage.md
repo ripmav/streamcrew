@@ -133,6 +133,53 @@ docker run -d --name streamcrew -v streamcrew-data:/data \
 Der Smoke-Test `scripts/docker-smoke.sh` prüft Image-Build,
 Non-Root-Betrieb, `/healthz`, `/readyz` und sauberes Beenden.
 
+## On-the-fly-Konfiguration (Server-Modus)
+
+Alle Starteinstellungen, die ein laufender Prozess anwenden kann, lassen
+sich im Server-Modus ohne Neustart ändern — über die TUI. Die TUI
+(`streamcrew tui`) zeigt in der Ansicht **Einstellungen** (Taste `8`)
+das aktuelle Dokument der Konfigurationsdatei. Jede Einstellung trägt
+eine Markierung:
+
+| Markierung | Bedeutung |
+|---|---|
+| ⚡ | **hot**: gilt sofort, ohne Neustart (Watcher, ~1 s) |
+| ⟳ | **Restart**: gilt erst nach Neustart |
+| ✋ | **fixiert**: per Flag (`--…`) oder Umgebungsvariablen
+  (`STREAMCREW_…`) gesetzt — der Wert aus der Datei wird nicht
+  angewendet |
+
+**Ändern:** `e` öffnet das Dokument im Editor (`$EDITOR`/`$VISUAL`);
+nach dem Speichern wird es validiert und atomar geschrieben, der Core
+wendet die hot-Einstellungen an (die Ergebniszeile zeigt, was angewandt
+wurde und was einen Restart braucht). `r` lädt neu. Im Daemon- und
+Desktop-Modus ist die Ansicht read-only.
+
+**Hot:** `grant`, `revoke`, `file-root`, `outbound-allow`,
+`log-level`, `log-component-level`, `log-format`, `log-file`,
+`log-max-size`, `log-max-files`, `dry-run`, `dev`, `cors-allow`,
+`listen` (Rebind), `tls-cert`, `tls-key`, `mode`, `shutdown-timeout`.
+
+**Restart:** `data-dir`, `profile`, `config` (offene Dateien und
+Datenbanken des laufenden Prozesses).
+
+**Beispiele:**
+
+```yaml
+# Log-Ebene zur Fehlersuche anheben, ohne Neustart:
+log_level: debug
+
+# dry run, um Änderungen zu prüfen, bevor sie real laufen:
+dry_run: true
+
+# Zertifikate tauschen, ohne die laufenden Streams zu unterbrechen:
+tls_cert: /etc/streamcrew/tls/cert.pem
+tls_key: /etc/streamcrew/tls/key.pem
+```
+
+Ein ungültiges Dokument (unbekannter Key, ungültiger Wert) wird
+abgelehnt, ohne die laufende Konfiguration zu verändern.
+
 ## Sicherheitshinweise
 
 1. **Loopback ist der Standard.** Der Daemon-Modus lauscht nur auf

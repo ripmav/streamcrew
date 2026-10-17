@@ -763,7 +763,7 @@ hot-capablen Einstellungen an. Vom Flag oder der Umgebungsvariablen fixierte Ein
   - zeigt das Dokument mit Annotationen (⚡ hot / ⟳ Restart / ✋ fix) und dem live-Status
   - `e`: im `$EDITOR` bearbeiten, anwenden über die API, `r`: neu laden
   - zeigt das Anwenden-Ergebnis; in Nicht-Server-Modi read-only
-- [ ] Dokumentation (S): Abschnitt „On-the-fly-Konfiguration“ in `docs/usage.md`
+- [x] Dokumentation (S), erledigt 2026-10-18: Abschnitt „On-the-fly-Konfiguration (Server-Modus)“ in `docs/usage.md`
 
 **Exit-Kriterien (M2 Headless-MVP):**
 
@@ -1242,7 +1242,10 @@ Eigene Datei seit 2026-10-09: [backlog.md](backlog.md).
 
 | Datum | Änderung |
 |---|---|
+| 2026-10-18 | Phase 6.5 (3/4: TUI-Ansicht Einstellungen) code-seitig abgeschlossen: die TUI zeigt als achte Ansicht „Einstellungen“ (Taste 8, Tab-Reihe) das Dokument der `ConfigService` mit einer Annotation je Einstellung — ⚡ hot (gelten ohne Neustart), ⟳ restart, ✋ fixiert (per Flag/Env) — und dem live-Status (live im Server-Modus, read-only im Daemon-/Desktop-Modus). `e` öffnet das Dokument im Editor aus der Umgebung ($EDITOR/$VISUAL) und wendet es über `UpdateConfig` an (Ergebniszeile: angewandt + restart), `r` lädt neu. Der TUI spricht weiterhin ausschließlich die API. Tests: 4 neue Tests gegen einen In-Prozess-Core (Server- und Daemon-Modus). |
+| 2026-10-18 | Phase 6.5 (2/4: ConfigService) code-seitig abgeschlossen: neue `ConfigService` (Get/Update, Scope admin) über `api/proto/streamcrew/v1alpha1/config.proto`; `internal/config` bekommt einen File-Resolver (`Load`/`FromFile`, Key-Vereinbarung aus den kong-Flags + Datei-Schlüssel via `toKebab`), `FileView` (Dokument + hot/fix/restart-Listen) und `Watcher.Update` (Validierung vor dem Schreiben, atomares Schreiben, Antwort mit Angewendetem und Restart-Bedürftigem). In Daemon- und Desktop-Modus ist die Konfiguration read-only (die API meldet das). Der Watcher von Code-ADR-0019 bleibt der Apply-Pfad: `Update` schreibt die Datei, der Watcher wendet sie an. Tests: 7 neue (Handler, Scopes, Read-only-Modus, Datei-Runde, Update-Verhalten) plus 2 E2E-Tests (Update über die API wirkt live, Daemon-Modus read-only). |
 | 2026-10-18 | Neuer Punkt [6.5 On-the-fly-Konfiguration (Server-Modus)](#65-on-the-fly-konfiguration-server-modus): alle Starteinstellungen lassen sich im Server-Modus zur Laufzeit über die TUI ändern — die TUI schreibt die Konfigurationsdatei, der Core wendet die hot-capablen Einstellungen ohne Neustart an (Watcher von Code-ADR-0019 auf log-Einstellungen, dry-run, dev, CORS, listen/TLS, mode und shutdown-timeout erweitert). `data-dir`, `profile` und `config` brauchen einen Restart; vom Flag/Env fixierte Einstellungen bleiben fix. Neue `ConfigService` (Get/Update, Admin, nur Server-Modus) und TUI-Ansicht 8 (Einstellungen). |
+
 | 2026-10-18 | Unbekannte Chat-Commands werden geloggt (Entscheidung des Projektinhabers): Eine Nachricht, die mit einem Präfix-Trigger beginnt, aber kein aktives Command auslöst („!hugg“ bei Trigger „hug“), erhält einen Info-Eintrag — nur wenn das Debug-Log-Level oder der Dry-Run aktiv ist, sonst bleibt der Chat-Log ruhig ([`commands.md`](spec/commands.md), B70). Der Command-Domain meldet den Eindruck über `command.Recognition.Attempt`, der Event-Service loggt hinter einem Gate, das die App auf `log-level ≤ debug` oder `dry-run` öffnet. Tests: Domain (`TestRecognize`), Event-Service (`TestUnknownCommandLog`). |
 | 2026-09-27 | Erstfassung auf Basis von `starting.md` und der Untersuchung von Mix It Up v1.8.200 |
 | 2026-09-27 | Entscheidungen eingearbeitet: Clean-Room-Neuimplementierung (ADR-0001), MIT (ADR-0002), Streaming-PC primär und Server sekundär (ADR-0003), Start nur mit Twitch (ADR-0004). ADR-Backlog umnummeriert (Entstehungsreihenfolge), Gate O ergänzt, lokale Audioausgabe auf P1, Go/No-Go für YouTube und Kick nach M2. |
