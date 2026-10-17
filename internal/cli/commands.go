@@ -27,6 +27,11 @@ import (
 type Root struct {
 	config.Config
 
+	// Server and APIToken connect the API commands to a running core
+	// (roadmap 6.3); the environment variables work without the flags.
+	Server   string `help:"The address of the core the API commands talk to, e.g. http://127.0.0.1:8740." env:"STREAMCREW_SERVER" placeholder:"URL"`
+	APIToken string `name:"token" help:"The API token of the core." env:"STREAMCREW_TOKEN" placeholder:"TOKEN"`
+
 	Serve      serveCmd   `cmd:"" help:"Run the core until SIGINT or SIGTERM."`
 	Mock       mockCmd    `cmd:"" help:"Run the core with the mock platform against a copy of the profile; the console simulates chat, events and the stream."`
 	ProfileCmd profileCmd `cmd:"" name:"profile" help:"Manage profiles. Changes need a stopped core."`
@@ -40,6 +45,8 @@ type Root struct {
 	Auth       authCmd    `cmd:"" help:"Log in, check, and remove the platform accounts of a profile."`
 	User       userCmd    `cmd:"" help:"Manage the users of a profile. Changes need a stopped core."`
 	Token      tokenCmd   `cmd:"" help:"Create, list, and revoke the API access tokens of the data directory."`
+	Chat       chatCmd    `cmd:"" help:"Send chat messages of a running core through the API."`
+	Event      eventCmd   `cmd:"" name:"event" help:"Simulate events of a running core through the API."`
 }
 
 // Env is bound to the Run methods of the commands, together with the context
@@ -56,6 +63,10 @@ type Env struct {
 	// SecretKey is the value of STREAMCREW_SECRET_KEY (ADR-0012); empty if
 	// unset.
 	SecretKey string
+	// Server and APIToken come from the global --server and --token flags
+	// (roadmap 6.3); empty is the local core without a token.
+	Server   string
+	APIToken string
 }
 
 // resolve completes and checks the configuration for commands that need it.

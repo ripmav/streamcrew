@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -13,7 +14,9 @@ import (
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 	"github.com/ripmav/streamcrew/internal/api"
+	"github.com/ripmav/streamcrew/internal/connector/mock"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
+	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/prompt"
@@ -295,6 +298,29 @@ func subscriptionTier(plan string) int32 {
 	default:
 		return 0
 	}
+}
+
+// Simulate publishes a simulated event of the mock platform (roadmap
+// 6.3): a chat message of the user, or a platform-neutral event like the
+// mock console simulates.
+func (x *apiStream) Simulate(ctx context.Context, eventType, user, target, text string) (string, error) {
+	p, ok := x.a.platforms.Platform(platform.Mock)
+	if !ok {
+		return "", errors.New("simulate: no mock platform is connected")
+	}
+	mp, ok := p.(*mock.Platform)
+	if !ok {
+		return "", errors.New("simulate: the mock platform is unavailable")
+	}
+	if event.Type(eventType) == eventtype.ChatMessage {
+		if user == "" {
+			return "", errors.New("simulate: a chat message needs a user")
+		}
+		sent, err := mp.Say(ctx, user, text)
+		return sent.ID, err
+	}
+	sent, err := mp.Simulate(ctx, mock.Event{Type: event.Type(eventType), User: user, Target: target})
+	return sent.ID, err
 }
 
 // matchesFilter reports whether the event passes the filter.

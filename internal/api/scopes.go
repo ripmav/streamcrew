@@ -75,6 +75,7 @@ var scopeForMethod = map[string]apitoken.Scope{
 	// StreamService.
 	"StreamService/Subscribe":    apitoken.Read,
 	"StreamService/AnswerPrompt": apitoken.Control,
+	"StreamService/Simulate":     apitoken.Control,
 }
 
 // requiredScope reports the scope the path requires. The paths are of the

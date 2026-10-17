@@ -898,6 +898,129 @@ func (*AnswerPromptResponse) Descriptor() ([]byte, []int) {
 	return file_streamcrew_v1alpha1_stream_proto_rawDescGZIP(), []int{9}
 }
 
+// SimulateEventRequest is the request of Simulate.
+type SimulateEventRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// event_type is the type of the catalog, e.g. "channel.follow". The
+	// special type "chat.message" simulates a chat message of the user with
+	// the text.
+	EventType string `protobuf:"bytes,1,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
+	// user is the login of the mock platform that causes the event; empty for
+	// none.
+	User string `protobuf:"bytes,2,opt,name=user,proto3" json:"user,omitempty"`
+	// target is the login of the mock platform the event is about; empty for
+	// none.
+	Target string `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
+	// text is the message text for the type "chat.message".
+	Text          string `protobuf:"bytes,4,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SimulateEventRequest) Reset() {
+	*x = SimulateEventRequest{}
+	mi := &file_streamcrew_v1alpha1_stream_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SimulateEventRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SimulateEventRequest) ProtoMessage() {}
+
+func (x *SimulateEventRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_streamcrew_v1alpha1_stream_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SimulateEventRequest.ProtoReflect.Descriptor instead.
+func (*SimulateEventRequest) Descriptor() ([]byte, []int) {
+	return file_streamcrew_v1alpha1_stream_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *SimulateEventRequest) GetEventType() string {
+	if x != nil {
+		return x.EventType
+	}
+	return ""
+}
+
+func (x *SimulateEventRequest) GetUser() string {
+	if x != nil {
+		return x.User
+	}
+	return ""
+}
+
+func (x *SimulateEventRequest) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *SimulateEventRequest) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+// SimulateEventResponse is the response of Simulate.
+type SimulateEventResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// event_id is the platform ID of the simulated event.
+	EventId       string `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SimulateEventResponse) Reset() {
+	*x = SimulateEventResponse{}
+	mi := &file_streamcrew_v1alpha1_stream_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SimulateEventResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SimulateEventResponse) ProtoMessage() {}
+
+func (x *SimulateEventResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_streamcrew_v1alpha1_stream_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SimulateEventResponse.ProtoReflect.Descriptor instead.
+func (*SimulateEventResponse) Descriptor() ([]byte, []int) {
+	return file_streamcrew_v1alpha1_stream_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *SimulateEventResponse) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
 var File_streamcrew_v1alpha1_stream_proto protoreflect.FileDescriptor
 
 const file_streamcrew_v1alpha1_stream_proto_rawDesc = "" +
@@ -966,10 +1089,19 @@ const file_streamcrew_v1alpha1_stream_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\x12\x1c\n" +
 	"\tconfirmed\x18\x03 \x01(\bR\tconfirmed\"\x16\n" +
-	"\x14AnswerPromptResponse2\xc6\x01\n" +
+	"\x14AnswerPromptResponse\"u\n" +
+	"\x14SimulateEventRequest\x12\x1d\n" +
+	"\n" +
+	"event_type\x18\x01 \x01(\tR\teventType\x12\x12\n" +
+	"\x04user\x18\x02 \x01(\tR\x04user\x12\x16\n" +
+	"\x06target\x18\x03 \x01(\tR\x06target\x12\x12\n" +
+	"\x04text\x18\x04 \x01(\tR\x04text\"2\n" +
+	"\x15SimulateEventResponse\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId2\xa9\x02\n" +
 	"\rStreamService\x12P\n" +
 	"\tSubscribe\x12%.streamcrew.v1alpha1.SubscribeRequest\x1a\x1a.streamcrew.v1alpha1.Event0\x01\x12c\n" +
-	"\fAnswerPrompt\x12(.streamcrew.v1alpha1.AnswerPromptRequest\x1a).streamcrew.v1alpha1.AnswerPromptResponseBMZKgithub.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1;streamcrewv1alpha1b\x06proto3"
+	"\fAnswerPrompt\x12(.streamcrew.v1alpha1.AnswerPromptRequest\x1a).streamcrew.v1alpha1.AnswerPromptResponse\x12a\n" +
+	"\bSimulate\x12).streamcrew.v1alpha1.SimulateEventRequest\x1a*.streamcrew.v1alpha1.SimulateEventResponseBMZKgithub.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1;streamcrewv1alpha1b\x06proto3"
 
 var (
 	file_streamcrew_v1alpha1_stream_proto_rawDescOnce sync.Once
@@ -983,7 +1115,7 @@ func file_streamcrew_v1alpha1_stream_proto_rawDescGZIP() []byte {
 	return file_streamcrew_v1alpha1_stream_proto_rawDescData
 }
 
-var file_streamcrew_v1alpha1_stream_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_streamcrew_v1alpha1_stream_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_streamcrew_v1alpha1_stream_proto_goTypes = []any{
 	(*EventFilter)(nil),           // 0: streamcrew.v1alpha1.EventFilter
 	(*SubscribeRequest)(nil),      // 1: streamcrew.v1alpha1.SubscribeRequest
@@ -995,24 +1127,28 @@ var file_streamcrew_v1alpha1_stream_proto_goTypes = []any{
 	(*Event)(nil),                 // 7: streamcrew.v1alpha1.Event
 	(*AnswerPromptRequest)(nil),   // 8: streamcrew.v1alpha1.AnswerPromptRequest
 	(*AnswerPromptResponse)(nil),  // 9: streamcrew.v1alpha1.AnswerPromptResponse
-	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
-	(*PlatformStatus)(nil),        // 11: streamcrew.v1alpha1.PlatformStatus
+	(*SimulateEventRequest)(nil),  // 10: streamcrew.v1alpha1.SimulateEventRequest
+	(*SimulateEventResponse)(nil), // 11: streamcrew.v1alpha1.SimulateEventResponse
+	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
+	(*PlatformStatus)(nil),        // 13: streamcrew.v1alpha1.PlatformStatus
 }
 var file_streamcrew_v1alpha1_stream_proto_depIdxs = []int32{
 	0,  // 0: streamcrew.v1alpha1.SubscribeRequest.filter:type_name -> streamcrew.v1alpha1.EventFilter
-	10, // 1: streamcrew.v1alpha1.Event.occurred_at:type_name -> google.protobuf.Timestamp
+	12, // 1: streamcrew.v1alpha1.Event.occurred_at:type_name -> google.protobuf.Timestamp
 	2,  // 2: streamcrew.v1alpha1.Event.chat:type_name -> streamcrew.v1alpha1.ChatMessage
 	3,  // 3: streamcrew.v1alpha1.Event.feed:type_name -> streamcrew.v1alpha1.FeedItem
 	4,  // 4: streamcrew.v1alpha1.Event.command:type_name -> streamcrew.v1alpha1.CommandInstance
-	11, // 5: streamcrew.v1alpha1.Event.platform_status:type_name -> streamcrew.v1alpha1.PlatformStatus
+	13, // 5: streamcrew.v1alpha1.Event.platform_status:type_name -> streamcrew.v1alpha1.PlatformStatus
 	5,  // 6: streamcrew.v1alpha1.Event.log:type_name -> streamcrew.v1alpha1.LogEntry
 	6,  // 7: streamcrew.v1alpha1.Event.prompt:type_name -> streamcrew.v1alpha1.Prompt
 	1,  // 8: streamcrew.v1alpha1.StreamService.Subscribe:input_type -> streamcrew.v1alpha1.SubscribeRequest
 	8,  // 9: streamcrew.v1alpha1.StreamService.AnswerPrompt:input_type -> streamcrew.v1alpha1.AnswerPromptRequest
-	7,  // 10: streamcrew.v1alpha1.StreamService.Subscribe:output_type -> streamcrew.v1alpha1.Event
-	9,  // 11: streamcrew.v1alpha1.StreamService.AnswerPrompt:output_type -> streamcrew.v1alpha1.AnswerPromptResponse
-	10, // [10:12] is the sub-list for method output_type
-	8,  // [8:10] is the sub-list for method input_type
+	10, // 10: streamcrew.v1alpha1.StreamService.Simulate:input_type -> streamcrew.v1alpha1.SimulateEventRequest
+	7,  // 11: streamcrew.v1alpha1.StreamService.Subscribe:output_type -> streamcrew.v1alpha1.Event
+	9,  // 12: streamcrew.v1alpha1.StreamService.AnswerPrompt:output_type -> streamcrew.v1alpha1.AnswerPromptResponse
+	11, // 13: streamcrew.v1alpha1.StreamService.Simulate:output_type -> streamcrew.v1alpha1.SimulateEventResponse
+	11, // [11:14] is the sub-list for method output_type
+	8,  // [8:11] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
 	8,  // [8:8] is the sub-list for extension extendee
 	0,  // [0:8] is the sub-list for field type_name
@@ -1038,7 +1174,7 @@ func file_streamcrew_v1alpha1_stream_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_streamcrew_v1alpha1_stream_proto_rawDesc), len(file_streamcrew_v1alpha1_stream_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

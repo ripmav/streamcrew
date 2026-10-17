@@ -45,6 +45,8 @@ const (
 	// StreamServiceAnswerPromptProcedure is the fully-qualified name of the StreamService's
 	// AnswerPrompt RPC.
 	StreamServiceAnswerPromptProcedure = "/streamcrew.v1alpha1.StreamService/AnswerPrompt"
+	// StreamServiceSimulateProcedure is the fully-qualified name of the StreamService's Simulate RPC.
+	StreamServiceSimulateProcedure = "/streamcrew.v1alpha1.StreamService/Simulate"
 )
 
 // StreamServiceClient is a client for the streamcrew.v1alpha1.StreamService service.
@@ -53,6 +55,9 @@ type StreamServiceClient interface {
 	Subscribe(context.Context, *connect.Request[v1alpha1.SubscribeRequest]) (*connect.ServerStreamForClient[v1alpha1.Event], error)
 	// AnswerPrompt answers a prompt delivered through the stream.
 	AnswerPrompt(context.Context, *connect.Request[v1alpha1.AnswerPromptRequest]) (*connect.Response[v1alpha1.AnswerPromptResponse], error)
+	// Simulate publishes a platform-neutral event of the mock platform to the
+	// core, like the mock console does; for mock and dev work.
+	Simulate(context.Context, *connect.Request[v1alpha1.SimulateEventRequest]) (*connect.Response[v1alpha1.SimulateEventResponse], error)
 }
 
 // NewStreamServiceClient constructs a client for the streamcrew.v1alpha1.StreamService service. By
@@ -78,6 +83,12 @@ func NewStreamServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(streamServiceMethods.ByName("AnswerPrompt")),
 			connect.WithClientOptions(opts...),
 		),
+		simulate: connect.NewClient[v1alpha1.SimulateEventRequest, v1alpha1.SimulateEventResponse](
+			httpClient,
+			baseURL+StreamServiceSimulateProcedure,
+			connect.WithSchema(streamServiceMethods.ByName("Simulate")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -85,6 +96,7 @@ func NewStreamServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 type streamServiceClient struct {
 	subscribe    *connect.Client[v1alpha1.SubscribeRequest, v1alpha1.Event]
 	answerPrompt *connect.Client[v1alpha1.AnswerPromptRequest, v1alpha1.AnswerPromptResponse]
+	simulate     *connect.Client[v1alpha1.SimulateEventRequest, v1alpha1.SimulateEventResponse]
 }
 
 // Subscribe calls streamcrew.v1alpha1.StreamService.Subscribe.
@@ -97,12 +109,20 @@ func (c *streamServiceClient) AnswerPrompt(ctx context.Context, req *connect.Req
 	return c.answerPrompt.CallUnary(ctx, req)
 }
 
+// Simulate calls streamcrew.v1alpha1.StreamService.Simulate.
+func (c *streamServiceClient) Simulate(ctx context.Context, req *connect.Request[v1alpha1.SimulateEventRequest]) (*connect.Response[v1alpha1.SimulateEventResponse], error) {
+	return c.simulate.CallUnary(ctx, req)
+}
+
 // StreamServiceHandler is an implementation of the streamcrew.v1alpha1.StreamService service.
 type StreamServiceHandler interface {
 	// Subscribe streams events to the client until the client cancels.
 	Subscribe(context.Context, *connect.Request[v1alpha1.SubscribeRequest], *connect.ServerStream[v1alpha1.Event]) error
 	// AnswerPrompt answers a prompt delivered through the stream.
 	AnswerPrompt(context.Context, *connect.Request[v1alpha1.AnswerPromptRequest]) (*connect.Response[v1alpha1.AnswerPromptResponse], error)
+	// Simulate publishes a platform-neutral event of the mock platform to the
+	// core, like the mock console does; for mock and dev work.
+	Simulate(context.Context, *connect.Request[v1alpha1.SimulateEventRequest]) (*connect.Response[v1alpha1.SimulateEventResponse], error)
 }
 
 // NewStreamServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -124,12 +144,20 @@ func NewStreamServiceHandler(svc StreamServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(streamServiceMethods.ByName("AnswerPrompt")),
 		connect.WithHandlerOptions(opts...),
 	)
+	streamServiceSimulateHandler := connect.NewUnaryHandler(
+		StreamServiceSimulateProcedure,
+		svc.Simulate,
+		connect.WithSchema(streamServiceMethods.ByName("Simulate")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/streamcrew.v1alpha1.StreamService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case StreamServiceSubscribeProcedure:
 			streamServiceSubscribeHandler.ServeHTTP(w, r)
 		case StreamServiceAnswerPromptProcedure:
 			streamServiceAnswerPromptHandler.ServeHTTP(w, r)
+		case StreamServiceSimulateProcedure:
+			streamServiceSimulateHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -145,4 +173,8 @@ func (UnimplementedStreamServiceHandler) Subscribe(context.Context, *connect.Req
 
 func (UnimplementedStreamServiceHandler) AnswerPrompt(context.Context, *connect.Request[v1alpha1.AnswerPromptRequest]) (*connect.Response[v1alpha1.AnswerPromptResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.StreamService.AnswerPrompt is not implemented"))
+}
+
+func (UnimplementedStreamServiceHandler) Simulate(context.Context, *connect.Request[v1alpha1.SimulateEventRequest]) (*connect.Response[v1alpha1.SimulateEventResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.StreamService.Simulate is not implemented"))
 }
