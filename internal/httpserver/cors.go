@@ -36,13 +36,3 @@ func CrossOriginProtection(allow func(origin string) bool, next http.Handler) ht
 		next.ServeHTTP(w, r)
 	})
 }
-
-// originIn returns the allow function of a CORS allowlist; an empty list
-// refuses every cross-origin request.
-func originIn(list []string) func(string) bool {
-	set := make(map[string]bool, len(list))
-	for _, o := range list {
-		set[o] = true
-	}
-	return func(origin string) bool { return set[origin] }
-}

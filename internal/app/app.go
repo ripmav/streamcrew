@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ripmav/streamcrew/internal/action"
@@ -48,8 +49,10 @@ import (
 	chatsvc "github.com/ripmav/streamcrew/internal/chat"
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/connector"
+	"github.com/ripmav/streamcrew/internal/connector/mock"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
+	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/dryrun"
 	"github.com/ripmav/streamcrew/internal/emote"
 	"github.com/ripmav/streamcrew/internal/engine"
@@ -125,10 +128,13 @@ func WithSecretKey(base64Key string) Option {
 
 // App is the wired core.
 type App struct {
-	cfg      config.Config
-	version  string
-	logger   *slog.Logger
-	closeLog io.Closer
+	cfg     config.Config
+	version string
+	logger  *slog.Logger
+	// dynLog changes the log levels and output at runtime (roadmap 6.6);
+	// console is the console writer the log always goes to.
+	dynLog   *logging.Dynamic
+	console  io.Writer
 	lock     *lockfile.Lock
 	profile  profile.Profile
 	profiles *profile.Manager
@@ -154,6 +160,16 @@ type App struct {
 	runCtx         context.Context
 	shutdownOnce   sync.Once
 	shutdownCancel context.CancelFunc
+	// dryRun switches the dry run of the platforms at runtime (roadmap
+	// 6.6); the watcher of the configuration file sets it.
+	dryRun atomic.Bool
+	// shutdownTimeout is the shutdown timeout; the watcher of the
+	// configuration file changes it, the runnables read it at shutdown
+	// time (roadmap 6.6).
+	shutdownTimeout atomic.Int64
+	// runtimeMu guards cfg: the configuration the core runs with, changed
+	// by the hot applies of the watcher (roadmap 6.6).
+	runtimeMu sync.RWMutex
 
 	// The wiring of the command engine (roadmap 3.6): the platforms of the
 	// profile and their lookup of users, the state of the stream, the
@@ -197,11 +213,17 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create data directory: %w", err)
 	}
-	logger, closeLog, err := newLogger(cfg, o.console)
+	logger, dynLog, err := newLogger(cfg, o.console)
 	if err != nil {
 		return nil, err
 	}
-	a = &App{cfg: cfg, version: buildinfo.Read().Version, logger: logger, closeLog: closeLog, ready: newReadiness(), startedAt: time.Now()}
+	a = &App{
+		cfg: cfg, version: buildinfo.Read().Version, logger: logger,
+		dynLog: dynLog, console: o.console,
+		ready: newReadiness(), startedAt: time.Now(),
+	}
+	a.dryRun.Store(cfg.DryRun)
+	a.shutdownTimeout.Store(int64(cfg.ShutdownTimeout))
 	defer func() {
 		if err != nil {
 			err = errors.Join(err, a.close())
@@ -428,7 +450,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		engine.WithLogger(component(logger, "engine")),
 		engine.WithPublisher(a.bus),
 		engine.WithConfig(a.engineConfig),
-		engine.WithShutdownTimeout(cfg.ShutdownTimeout),
+		engine.WithShutdownTimeoutFunc(a.shutdownTimeoutDuration),
 		engine.WithRequirements(requirements),
 		engine.WithUsers(a.userSvc),
 	)
@@ -470,7 +492,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	}
 	a.sup = supervisor.New(component(logger, "supervisor"),
 		supervisor.WithStatusFunc(a.onStatus),
-		supervisor.WithShutdownTimeout(cfg.ShutdownTimeout),
+		supervisor.WithShutdownTimeoutFunc(a.shutdownTimeoutDuration),
 	)
 	a.http = httpserver.New(httpserver.Config{
 		Addr:            cfg.Listen,
@@ -480,6 +502,9 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		TLSKey:          cfg.TLSKey,
 		ShutdownTimeout: httpShutdownTimeout(cfg.ShutdownTimeout),
 	}, component(logger, "http"), a.ready.Ready)
+	a.http.SetShutdownTimeoutFunc(func() time.Duration {
+		return httpShutdownTimeout(a.shutdownTimeoutDuration())
+	})
 	scheduler := backup.NewScheduler(a.store, backups,
 		backup.Request{ProfileID: a.profile.ID, ProfileName: a.profile.Name, AppVersion: a.version},
 		a.backupSchedule, component(logger, "backup"))
@@ -556,9 +581,79 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	err = errors.Join(err, a.sup.Add("engine", a.engine))
 	if o.file != nil {
 		err = errors.Join(err, a.sup.Add("config",
-			config.NewWatcher(o.file, cfg, a.rights, component(logger, "config"))))
+			config.NewWatcher(o.file, cfg, a.rights, a.hotApplies(), component(logger, "config"))))
 	}
 	return a, err
+}
+
+// shutdownTimeoutDuration returns the current shutdown timeout; the
+// runnables read it at shutdown time, so the watcher can change it at
+// runtime (roadmap 6.6).
+func (a *App) shutdownTimeoutDuration() time.Duration {
+	return time.Duration(a.shutdownTimeout.Load())
+}
+
+// hotApplies are the hooks of the watcher that apply the hot settings of
+// the configuration file at runtime (roadmap 6.6).
+func (a *App) hotApplies() *config.ApplyFuncs {
+	return &config.ApplyFuncs{
+		Log: a.applyLog,
+		DryRun: func(on bool) {
+			a.dryRun.Store(on)
+		},
+		Dev:       a.HTTPServer().SetDev,
+		CorsAllow: a.HTTPServer().SetCorsAllow,
+		Listen:    a.applyListen,
+		ShutdownTimeout: func(d time.Duration) {
+			a.shutdownTimeout.Store(int64(d))
+		},
+	}
+}
+
+// applyLog applies the log settings of the configuration file to the
+// logger tree (roadmap 6.6).
+func (a *App) applyLog(lc config.LogConfig) error {
+	a.runtimeMu.Lock()
+	a.cfg.Log = lc
+	a.runtimeMu.Unlock()
+	lcfg, err := logConfig(a.cfgView(), a.console)
+	if err != nil {
+		return err
+	}
+	return a.dynLog.Update(lcfg)
+}
+
+// applyListen moves the HTTP server to the new address with the TLS
+// certificate (roadmap 6.6); on error the previous binding stays active.
+func (a *App) applyListen(addr, tlsCert, tlsKey string) error {
+	a.runtimeMu.Lock()
+	old := a.cfg
+	a.cfg.Listen, a.cfg.TLSCert, a.cfg.TLSKey = addr, tlsCert, tlsKey
+	a.runtimeMu.Unlock()
+	if err := a.HTTPServer().Rebind(context.Background(), httpserver.Config{
+		Addr:            a.cfg.Listen,
+		Dev:             a.cfg.Dev,
+		CorsAllow:       a.cfg.CorsAllow,
+		TLSCert:         tlsCert,
+		TLSKey:          tlsKey,
+		ShutdownTimeout: httpShutdownTimeout(a.shutdownTimeoutDuration()),
+	}); err != nil {
+		a.runtimeMu.Lock()
+		a.cfg = old
+		a.runtimeMu.Unlock()
+		return err
+	}
+	if a.cfg.Mode != config.ModeDesktop {
+		a.writeRuntimeFile()
+	}
+	return nil
+}
+
+// cfgView returns a copy of the configuration the core runs with.
+func (a *App) cfgView() config.Config {
+	a.runtimeMu.RLock()
+	defer a.runtimeMu.RUnlock()
+	return a.cfg
 }
 
 // actionTypes returns the registry of the action types with their ports,
@@ -656,9 +751,9 @@ func (a *App) addPlatform(ctx context.Context, build func(ctx context.Context, b
 	if err != nil {
 		return fmt.Errorf("build platform: %w", err)
 	}
-	if a.cfg.DryRun {
-		p = dryrun.NewPlatform(p, component(a.logger, "dryrun"))
-	}
+	// The platform is always wrapped in the switchable dry-run wrapper
+	// (roadmap 6.6); the dry run itself is switched at runtime.
+	p = dryrun.NewSwitchablePlatform(p, component(a.logger, "dryrun"), &a.dryRun)
 	r, ok := any(p).(supervisor.Runnable)
 	if !ok {
 		return fmt.Errorf("platform %s: not a runnable", p.Name())
@@ -672,6 +767,28 @@ func (a *App) addPlatform(ctx context.Context, build func(ctx context.Context, b
 		return err
 	}
 	return a.sup.Add(string(p.Name()), r)
+}
+
+// MockPlatform returns the mock platform the core runs, or nil without
+// one; the tests and the API use it.
+func (a *App) MockPlatform() *mock.Platform {
+	p, ok := a.platforms.Platform(platform.Mock)
+	if !ok {
+		return nil
+	}
+	if inner, ok := dryrun.AsInner(p); ok {
+		p = inner
+	}
+	mp, ok := p.(*mock.Platform)
+	if !ok {
+		return nil
+	}
+	return mp
+}
+
+// ShutdownTimeout returns the current shutdown timeout (roadmap 6.6).
+func (a *App) ShutdownTimeout() time.Duration {
+	return a.shutdownTimeoutDuration()
 }
 
 // Logger returns the root logger of the core.
@@ -832,9 +949,9 @@ func (a *App) close() error {
 		errs = append(errs, a.lock.Release())
 		a.lock = nil
 	}
-	if a.closeLog != nil {
-		errs = append(errs, a.closeLog.Close())
-		a.closeLog = nil
+	if a.dynLog != nil {
+		errs = append(errs, a.dynLog.Close())
+		a.dynLog = nil
 	}
 	return errors.Join(errs...)
 }
@@ -939,15 +1056,29 @@ func httpShutdownTimeout(total time.Duration) time.Duration {
 	return min(total/2, 5*time.Second)
 }
 
-func newLogger(cfg config.Config, console io.Writer) (*slog.Logger, io.Closer, error) {
+func newLogger(cfg config.Config, console io.Writer) (*slog.Logger, *logging.Dynamic, error) {
+	lc, err := logConfig(cfg, console)
+	if err != nil {
+		return nil, nil, err
+	}
+	logger, dyn, err := logging.NewDynamic(lc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("set up logging: %w", err)
+	}
+	return logger, dyn, nil
+}
+
+// logConfig translates the log settings of the configuration to the
+// logging.Config, resolving the log file in the data directory.
+func logConfig(cfg config.Config, console io.Writer) (logging.Config, error) {
 	level, err := config.ParseLevel(cfg.Log.Level)
 	if err != nil {
-		return nil, nil, fmt.Errorf("log level: %w", err)
+		return logging.Config{}, fmt.Errorf("log level: %w", err)
 	}
 	levels := make(map[string]slog.Level, len(cfg.Log.ComponentLevel))
 	for name, l := range cfg.Log.ComponentLevel {
 		if levels[name], err = config.ParseLevel(l); err != nil {
-			return nil, nil, fmt.Errorf("log level of %s: %w", name, err)
+			return logging.Config{}, fmt.Errorf("log level of %s: %w", name, err)
 		}
 	}
 	lc := logging.Config{
@@ -961,11 +1092,7 @@ func newLogger(cfg config.Config, console io.Writer) (*slog.Logger, io.Closer, e
 	if cfg.Log.File {
 		lc.File = filepath.Join(cfg.LogDir(), logFileName)
 	}
-	logger, closer, err := logging.New(lc)
-	if err != nil {
-		return nil, nil, fmt.Errorf("set up logging: %w", err)
-	}
-	return logger, closer, nil
+	return lc, nil
 }
 
 func component(logger *slog.Logger, name string) *slog.Logger {
