@@ -14,6 +14,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,7 +32,8 @@ const (
 // Config configures a Server.
 type Config struct {
 	// Addr is the listen address, e.g. "127.0.0.1:8740". Port 0 selects a
-	// free port.
+	// free port. The "unix:" prefix, e.g. "unix:/path/core.sock", listens
+	// on a Unix socket (the desktop default).
 	Addr string
 	// Dev serves pprof under /debug/pprof/. Only for loopback addresses.
 	Dev bool
@@ -99,8 +102,7 @@ func (s *Server) Addr() net.Addr {
 // down gracefully. A listen error is permanent, because retrying the same
 // address rarely helps and the user has to choose another one.
 func (s *Server) Run(ctx context.Context) error {
-	var lc net.ListenConfig
-	ln, err := lc.Listen(ctx, "tcp", s.cfg.Addr)
+	ln, err := s.listen(ctx)
 	if err != nil {
 		return supervisor.Permanent(fmt.Errorf("listen on %s: %w", s.cfg.Addr, err))
 	}
@@ -154,6 +156,29 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.logger.InfoContext(ctx, "http server stopped")
 	return nil
+}
+
+// listen opens the listener of the configured address: TCP, or a Unix
+// socket when the address starts with "unix:". A stale socket file from a
+// crashed core is removed before listening; any other existing file is an
+// error.
+func (s *Server) listen(ctx context.Context) (net.Listener, error) {
+	var lc net.ListenConfig
+	if !strings.HasPrefix(s.cfg.Addr, "unix:") {
+		return lc.Listen(ctx, "tcp", s.cfg.Addr)
+	}
+	path := strings.TrimPrefix(s.cfg.Addr, "unix:")
+	if st, err := os.Lstat(path); err == nil {
+		if st.Mode()&os.ModeSocket == 0 {
+			return nil, fmt.Errorf("%s exists and is not a socket", path)
+		}
+		if err := os.Remove(path); err != nil {
+			return nil, fmt.Errorf("remove stale socket: %w", err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	return lc.Listen(ctx, "unix", path)
 }
 
 func (s *Server) setAddr(addr net.Addr) {

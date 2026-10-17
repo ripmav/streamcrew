@@ -251,7 +251,13 @@ func TestResolve(t *testing.T) {
 		wantErr    []string
 	}{
 		{name: "daemon default listen", modify: func(*config.Config) {}, wantListen: "127.0.0.1:8740"},
-		{name: "desktop default listen", modify: func(c *config.Config) { c.Mode = config.ModeDesktop }, wantListen: "127.0.0.1:8740"},
+		{name: "desktop default listen", modify: func(c *config.Config) { c.Mode = config.ModeDesktop }, wantListen: "unix:/data/core.sock"},
+		{name: "unix listen passes", modify: func(c *config.Config) { c.Listen = "unix:/data/x.sock" }, wantListen: "unix:/data/x.sock"},
+		{
+			name:       "dev on unix socket",
+			modify:     func(c *config.Config) { c.Dev = true; c.Mode = config.ModeDesktop },
+			wantListen: "unix:/data/core.sock",
+		},
 		{name: "server default listen", modify: func(c *config.Config) { c.Mode = config.ModeServer }, wantListen: ":8740"},
 		{name: "free port", modify: func(c *config.Config) { c.Listen = "127.0.0.1:0" }, wantListen: "127.0.0.1:0"},
 		{name: "dev on loopback", modify: func(c *config.Config) { c.Dev = true; c.Listen = "localhost:1" }, wantListen: "localhost:1"},

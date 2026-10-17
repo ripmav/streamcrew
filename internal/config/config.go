@@ -15,6 +15,7 @@ import (
 	"net"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -71,14 +72,43 @@ type LogConfig struct {
 	MaxFiles       int               `default:"5" placeholder:"N" help:"Number of rotated log files to keep. Default: ${default}."`
 }
 
+// SocketPath is the Unix socket of the desktop core.
+func SocketPath(dataDir string) string { return filepath.Join(dataDir, "core.sock") }
+
+// RuntimePath is the runtime file of the core (address, PID, version).
+func RuntimePath(dataDir string) string { return filepath.Join(dataDir, RuntimeFileName) }
+
+// DesktopTokenPath is the desktop token file of the core (ADR-0005).
+func DesktopTokenPath(dataDir string) string { return filepath.Join(dataDir, DesktopTokenFileName) }
+
+// Names of the files the core writes into the data directory.
+const (
+	// RuntimeFileName is the file with the address, PID and version of the
+	// running core.
+	RuntimeFileName = "runtime.json"
+	// DesktopTokenFileName is the file with the desktop API token
+	// (ADR-0005).
+	DesktopTokenFileName = "desktop-token"
+)
+
+// RuntimePath is the runtime file in the data directory.
+func (c Config) RuntimePath() string { return RuntimePath(c.DataDir) }
+
+// DesktopTokenPath is the desktop token file in the data directory.
+func (c Config) DesktopTokenPath() string { return DesktopTokenPath(c.DataDir) }
+
 // DefaultListen returns the listen address used when --listen is not set:
-// loopback only, except in server mode.
-func DefaultListen(m Mode) string {
-	host := "127.0.0.1"
-	if m == ModeServer {
-		host = ""
+// the Unix socket in the data directory in desktop mode, loopback only in
+// daemon mode and any interface in server mode.
+func DefaultListen(m Mode, dataDir string) string {
+	switch m {
+	case ModeDesktop:
+		return "unix:" + SocketPath(dataDir)
+	case ModeServer:
+		return net.JoinHostPort("", strconv.Itoa(DefaultPort))
+	default:
+		return net.JoinHostPort("127.0.0.1", strconv.Itoa(DefaultPort))
 	}
-	return net.JoinHostPort(host, strconv.Itoa(DefaultPort))
 }
 
 // LogDir returns the directory of the log files.
@@ -90,7 +120,7 @@ func (c *Config) LogDir() string {
 // configuration. The returned error lists every problem found.
 func (c *Config) Resolve() error {
 	if c.Listen == "" {
-		c.Listen = DefaultListen(c.Mode)
+		c.Listen = DefaultListen(c.Mode, c.DataDir)
 	}
 
 	var errs []error
@@ -102,11 +132,15 @@ func (c *Config) Resolve() error {
 	if c.DataDir == "" {
 		errs = append(errs, errors.New("--data-dir: no default data directory available, set --data-dir or STREAMCREW_DATA_DIR"))
 	}
-	host, err := splitListen(c.Listen)
-	if err != nil {
-		errs = append(errs, fmt.Errorf("--listen: %w", err))
-	} else if c.Dev && !isLoopback(host) {
-		errs = append(errs, fmt.Errorf("--dev: pprof is only served on a loopback address, not on %q", c.Listen))
+	if !strings.HasPrefix(c.Listen, "unix:") {
+		// A Unix socket is local: pprof and the loopback rules apply
+		// without further checks.
+		host, err := splitListen(c.Listen)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("--listen: %w", err))
+		} else if c.Dev && !isLoopback(host) {
+			errs = append(errs, fmt.Errorf("--dev: pprof is only served on a loopback address, not on %q", c.Listen))
+		}
 	}
 	if (c.TLSCert == "") != (c.TLSKey == "") {
 		errs = append(errs, errors.New("--tls-cert and --tls-key must be set together"))
