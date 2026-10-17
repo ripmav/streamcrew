@@ -32,21 +32,22 @@ type Root struct {
 	Server   string `help:"The address of the core the API commands talk to, e.g. http://127.0.0.1:8740." env:"STREAMCREW_SERVER" placeholder:"URL"`
 	APIToken string `name:"token" help:"The API token of the core." env:"STREAMCREW_TOKEN" placeholder:"TOKEN"`
 
-	Serve      serveCmd   `cmd:"" help:"Run the core until SIGINT or SIGTERM."`
-	Mock       mockCmd    `cmd:"" help:"Run the core with the mock platform against a copy of the profile; the console simulates chat, events and the stream."`
-	ProfileCmd profileCmd `cmd:"" name:"profile" help:"Manage profiles. Changes need a stopped core."`
-	Backup     backupCmd  `cmd:"" help:"Create, list and restore profile backups."`
-	Vault      vaultCmd   `cmd:"" name:"secret" help:"Manage the key that encrypts tokens at rest."`
-	Version    versionCmd `cmd:"" help:"Print version information."`
-	ConfigCmd  configCmd  `cmd:"" name:"config" help:"Show the configuration."`
-	Doctor     doctorCmd  `cmd:"" help:"Check the environment of the core."`
-	Schema     schemaCmd  `cmd:"" help:"Export the JSON Schema of commands as code."`
-	Command    commandCmd `cmd:"" help:"Check files of commands as code."`
-	Auth       authCmd    `cmd:"" help:"Log in, check, and remove the platform accounts of a profile."`
-	User       userCmd    `cmd:"" help:"Manage the users of a profile. Changes need a stopped core."`
-	Token      tokenCmd   `cmd:"" help:"Create, list, and revoke the API access tokens of the data directory."`
-	Chat       chatCmd    `cmd:"" help:"Send chat messages of a running core through the API."`
-	Event      eventCmd   `cmd:"" name:"event" help:"Simulate events of a running core through the API."`
+	Serve      serveCmd      `cmd:"" help:"Run the core until SIGINT or SIGTERM."`
+	Mock       mockCmd       `cmd:"" help:"Run the core with the mock platform against a copy of the profile; the console simulates chat, events and the stream."`
+	ProfileCmd profileCmd    `cmd:"" name:"profile" help:"Manage profiles. Changes need a stopped core."`
+	Backup     backupCmd     `cmd:"" help:"Create, list and restore profile backups."`
+	Vault      vaultCmd      `cmd:"" name:"secret" help:"Manage the key that encrypts tokens at rest."`
+	Version    versionCmd    `cmd:"" help:"Print version information."`
+	ConfigCmd  configCmd     `cmd:"" name:"config" help:"Show the configuration."`
+	Doctor     doctorCmd     `cmd:"" help:"Check the environment of the core."`
+	Schema     schemaCmd     `cmd:"" help:"Export the JSON Schema of commands as code."`
+	Command    commandCmd    `cmd:"" help:"Check files of commands as code."`
+	Auth       authCmd       `cmd:"" help:"Log in, check, and remove the platform accounts of a profile."`
+	User       userCmd       `cmd:"" help:"Manage the users of a profile. Changes need a stopped core."`
+	Token      tokenCmd      `cmd:"" help:"Create, list, and revoke the API access tokens of the data directory."`
+	Chat       chatCmd       `cmd:"" help:"Send chat messages of a running core through the API."`
+	Event      eventCmd      `cmd:"" name:"event" help:"Simulate events of a running core through the API."`
+	Completion completionCmd `cmd:"" help:"Print the shell completion script."`
 }
 
 // Env is bound to the Run methods of the commands, together with the context
