@@ -3,7 +3,9 @@
 package tui
 
 import (
+	"slices"
 	"strconv"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 
@@ -185,4 +187,75 @@ func (u usersView) render(t *Theme, width int) string {
 	}
 	help := t.dim.Render("/ filter · r re-sort by stats")
 	return t.border.Width(width).Render(t.title.Render("Users") + "\n" + body + "\n" + help)
+}
+
+// settingsView is the state of the settings view (roadmap 6.6.3): the
+// configuration document with an annotation per setting — hot (applied
+// without a restart), restart (applied after a restart) and fixed (set by
+// a flag or environment variable, not changeable from the file).
+type settingsView struct {
+	loaded   bool
+	err      error
+	document string
+	hot      []string
+	fixed    []string
+	restart  []string
+	live     bool
+	result   string
+	editing  bool
+}
+
+// annotation returns the mark for a configuration file key: hot, restart
+// or fixed.
+func (s settingsView) annotation(key string) string {
+	flag := strings.ReplaceAll(key, "_", "-")
+	for _, f := range s.fixed {
+		if f == key || f == flag {
+			return "✋"
+		}
+	}
+	if slices.Contains(s.hot, flag) {
+		return "⚡"
+	}
+	return "⟳"
+}
+
+// render draws the configuration document for a width.
+func (s settingsView) render(t *Theme, width int) string {
+	var lines []string
+	switch {
+	case !s.loaded:
+		lines = append(lines, "loading …")
+	case s.err != nil:
+		lines = append(lines, t.err.Render(s.err.Error()))
+	default:
+		state := "read-only (daemon or desktop mode)"
+		if s.live {
+			state = "live"
+		}
+		lines = append(lines, t.dim.Render("live: "+state))
+		if s.editing {
+			lines = append(lines, t.dim.Render("editing in $EDITOR …"))
+		}
+		for raw := range strings.SplitSeq(strings.TrimRight(s.document, "\n"), "\n") {
+			key, _, ok := strings.Cut(raw, ":")
+			mark := "  "
+			if ok {
+				mark = s.annotation(strings.TrimSpace(key)) + " "
+			}
+			lines = append(lines, mark+raw)
+		}
+		if s.result != "" {
+			lines = append(lines, t.ok.Render(s.result))
+		}
+	}
+	body := ""
+	if len(lines) > 0 {
+		body = lipgloss.JoinVertical(lipgloss.Left, lines...)
+	}
+	help := t.dim.Render("e edit in $EDITOR · r reload")
+	if !s.live {
+		help = t.dim.Render("read-only · r reload")
+	}
+	return t.border.Width(width).Render(t.title.Render("Settings") + "\n" + body + "\n" + help)
 }

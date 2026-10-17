@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -26,41 +27,77 @@ import (
 // startMockCore starts an in-process core with the mock platform and
 // returns its base URL.
 func startMockCore(t *testing.T) string {
+	return startMockCoreWithConfigFile(t, "", config.ModeDaemon)
+}
+
+// startMockCoreServer starts an in-process core in the server mode with a
+// configuration file and returns its base URL (roadmap 6.6.3).
+func startMockCoreServer(t *testing.T) string {
 	t.Helper()
-	ctx := t.Context()
+	dir := t.TempDir()
+	path := dir + "/config.yaml"
+	require.NoError(t, os.WriteFile(path, []byte("log_level: info\n"), 0o600))
+	return startMockCoreWithConfigFile(t, path, config.ModeServer)
+}
+
+func startMockCoreWithConfigFile(t *testing.T, cfgFile string, mode config.Mode) string {
+	t.Helper()
 	dir := t.TempDir()
 	cfg := config.Config{
 		DataDir:         dir,
-		Mode:            config.ModeDaemon,
+		Mode:            mode,
 		Listen:          "127.0.0.1:0",
 		ShutdownTimeout: 5 * time.Second,
 		Log:             config.LogConfig{Level: "info", Format: "text", MaxSize: 1, MaxFiles: 1},
 	}
-	require.NoError(t, cfg.Resolve())
-	mgr := profile.NewManager(dir)
-	_, err := mgr.Create(ctx, "Demo", "demo")
+	var opts []app.Option
+	opts = append(opts, app.WithConsole(io.Discard), app.WithKeyring(nil))
+	if f := cfgFile; f != "" {
+		fr := config.NewFileResolver(f)
+		require.NoError(t, fr.Load(f))
+		opts = append(opts, app.WithConfigFile(fr))
+	}
+	a, err := startCoreOpts(t, cfg, opts...)
 	require.NoError(t, err)
-	cfg.Profile = "demo"
+	return "http://" + mustServerAddr(t, a)
+}
 
+// startCore starts the core with the platform and waits for it to be
+// ready.
+func startCoreOpts(t *testing.T, cfg config.Config, opts ...app.Option) (*app.App, error) {
+	t.Helper()
+	ctx := t.Context()
+	if cfg.Profile == "" {
+		mgr := profile.NewManager(cfg.DataDir)
+		_, err := mgr.Create(ctx, "Demo", "demo")
+		require.NoError(t, err)
+		cfg.Profile = "demo"
+	}
 	var mp *mock.Platform
-	a, err := app.New(ctx, cfg,
-		app.WithConsole(io.Discard), app.WithKeyring(nil),
-		app.WithPlatform(func(_ context.Context, b app.PlatformBuilder) (connector.Platform, error) {
-			mp, err = mock.New(b.Receiver, mock.WithPublisher(b.Publisher))
-			return mp, err
-		}),
-	)
-	require.NoError(t, err)
+	var mpErr error
+	opts = append(opts, app.WithPlatform(func(_ context.Context, b app.PlatformBuilder) (connector.Platform, error) {
+		var err error
+		mp, err = mock.New(b.Receiver, mock.WithPublisher(b.Publisher))
+		mpErr = err
+		return mp, err
+	}))
+	a, err := app.New(ctx, cfg, opts...)
+	if err != nil {
+		return nil, err
+	}
+	if mpErr != nil {
+		return nil, mpErr
+	}
 	runCtx, cancel := context.WithCancel(ctx)
 	errc := make(chan error, 1)
 	go func() { errc <- a.Run(runCtx) }()
 	require.Eventually(t, a.Ready, 10*time.Second, 10*time.Millisecond, "the core to be ready")
-	require.Eventually(t, func() bool { return mp.Status().Connected() }, 5*time.Second, 10*time.Millisecond, "the mock platform to connect")
+	require.Eventually(t, func() bool { return mp != nil && mp.Status().Connected() }, 5*time.Second, 10*time.Millisecond, "the mock platform to connect")
 	t.Cleanup(func() {
 		cancel()
 		require.NoError(t, <-errc)
 	})
-	return "http://" + mustServerAddr(t, a)
+	return a, nil
 }
 
 // mockConsoleExampleCommands are the example commands as code for the views.
@@ -238,7 +275,7 @@ func TestCommandsViewFetchesFiltersAndEdits(t *testing.T) {
 	m.commands.filter = ""
 	m.applyCommandFilter()
 	id := m.commands.list[0].GetId()
-	done := m.editCommand(id)()
+	done := m.editCommand(id, editorFromEnv())()
 	require.IsType(t, actionDoneMsg{}, done)
 	assert.NoError(t, done.(actionDoneMsg).err)
 
@@ -285,17 +322,4 @@ func TestUsersViewRendersTheList(t *testing.T) {
 		return false
 	}, 5*time.Second, 100*time.Millisecond, "the simulated user to be listed")
 	assert.Contains(t, m.users.render(newTheme(true), 90), "alice")
-}
-
-// mustServerAddr waits for the core's http server to listen and returns
-// its address: the core is ready while the first listener is still coming
-// up, so the address can lag readiness by a moment.
-func mustServerAddr(t *testing.T, a *app.App) string {
-	t.Helper()
-	require.Eventually(t, func() bool {
-		_, ok := a.HTTPServer().Addr()
-		return ok
-	}, 10*time.Second, 10*time.Millisecond, "the http server to listen")
-	addr, _ := a.HTTPServer().Addr()
-	return addr.String()
 }

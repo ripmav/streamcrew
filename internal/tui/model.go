@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -58,6 +59,7 @@ type clients struct {
 	chat    streamcrewv1alpha1connect.ChatServiceClient
 	command streamcrewv1alpha1connect.CommandServiceClient
 	user    streamcrewv1alpha1connect.UserServiceClient
+	config  streamcrewv1alpha1connect.ConfigServiceClient
 }
 
 // newClients builds the clients for the core at base.
@@ -69,6 +71,7 @@ func newClients(httpClient *http.Client, base, token string) *clients {
 		chat:    streamcrewv1alpha1connect.NewChatServiceClient(httpClient, base, o...),
 		command: streamcrewv1alpha1connect.NewCommandServiceClient(httpClient, base, o...),
 		user:    streamcrewv1alpha1connect.NewUserServiceClient(httpClient, base, o...),
+		config:  streamcrewv1alpha1connect.NewConfigServiceClient(httpClient, base, o...),
 	}
 }
 
@@ -121,12 +124,13 @@ type model struct {
 	queue    queueView
 	commands commandsView
 	users    usersView
+	settings settingsView
 }
 
 // views is the order of the views, as on the key row.
 //
 //nolint:gochecknoglobals // static table of views
-var views = []string{"dashboard", "chat", "events", "queue", "commands", "users", "logs"}
+var views = []string{"dashboard", "chat", "events", "queue", "commands", "users", "logs", "settings"}
 
 // newModel returns the initial model.
 func newModel(opts Options) model {
@@ -207,6 +211,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.queue.instances = msg.list
 			if m.queue.selected >= len(m.queue.instances) {
 				m.queue.selected = 0
+			}
+		}
+		return m, nil
+
+	case configLoadedMsg:
+		m.settings.loaded = true
+		m.settings.err = msg.err
+		if msg.resp != nil {
+			m.settings.document = msg.resp.GetDocument()
+			m.settings.hot = msg.resp.GetHot()
+			m.settings.fixed = msg.resp.GetFixed()
+			m.settings.restart = msg.resp.GetRestart()
+			m.settings.live = msg.resp.GetLive()
+		}
+		return m, nil
+
+	case configUpdatedMsg:
+		m.settings.err = msg.err
+		if msg.err == nil {
+			m.settings.document = msg.document
+			m.settings.result = "applied: " + strings.Join(msg.applied, ", ")
+			if len(msg.restart) > 0 {
+				m.settings.result += " · restart: " + strings.Join(msg.restart, ", ")
 			}
 		}
 		return m, nil
@@ -344,7 +371,7 @@ func (m model) updateKey(key tea.Key) (tea.Model, tea.Cmd) {
 	case tea.KeyTab:
 		m.view = (m.view + 1) % len(views)
 		return m, m.onViewEnter()
-	case '1', '2', '3', '4', '5', '6', '7':
+	case '1', '2', '3', '4', '5', '6', '7', '8':
 		if len(key.Text) == 1 {
 			next := m.view
 			m.view = int(key.Code - '1')
@@ -366,6 +393,8 @@ func (m model) onViewEnter() tea.Cmd {
 		return m.fetchCommands()
 	case "users":
 		return m.fetchUsers()
+	case "settings":
+		return m.fetchConfig()
 	}
 	return nil
 }
@@ -381,8 +410,37 @@ func (m model) updateViewKey(key tea.Key) (tea.Model, tea.Cmd) {
 		return m.updateCommandsKey(key)
 	case "users":
 		return m.updateUsersKey(key)
+	case "settings":
+		return m.updateSettingsKey(key)
 	}
 	return m, nil
+}
+
+// configLoadedMsg carries the result of a configuration fetch.
+type configLoadedMsg struct {
+	resp *v1alpha1.GetConfigResponse
+	err  error
+}
+
+// configUpdatedMsg carries the result of a configuration update.
+type configUpdatedMsg struct {
+	applied  []string
+	restart  []string
+	document string
+	err      error
+}
+
+// fetchConfig returns the command that loads the configuration document.
+func (m model) fetchConfig() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
+		defer cancel()
+		resp, err := m.cl.config.Get(ctx, connect.NewRequest(&v1alpha1.GetConfigRequest{}))
+		if err != nil {
+			return configLoadedMsg{err: err}
+		}
+		return configLoadedMsg{resp: resp.Msg}
+	}
 }
 
 // fetchCommands returns the command that loads the command list.
