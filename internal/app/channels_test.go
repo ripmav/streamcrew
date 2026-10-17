@@ -164,6 +164,10 @@ func TestChannelScopeRunsOnlyInItsChannel(t *testing.T) {
 	errc := make(chan error, 1)
 	go func() { errc <- a.Run(runCtx) }()
 	require.Eventually(t, a.Ready, 10*time.Second, 10*time.Millisecond)
+	// Ready can be true while the mock platform still rejects chat
+	// messages ("account not connected"); wait for the connection.
+	require.Eventually(t, func() bool { return mp.Status().Connected() },
+		5*time.Second, 10*time.Millisecond, "the mock platform to connect")
 
 	// The message of the home channel runs the command without a scope.
 	sent, err := mp.Say(ctx, "alice", "!hello")
@@ -283,6 +287,10 @@ func TestChatCommandRunsInTheChannelOfTheMessage(t *testing.T) {
 	errc := make(chan error, 1)
 	go func() { errc <- a.Run(runCtx) }()
 	require.Eventually(t, a.Ready, 10*time.Second, 10*time.Millisecond)
+	// Ready can be true while the mock platform still rejects chat
+	// messages ("account not connected"); wait for the connection.
+	require.Eventually(t, func() bool { return mp.Status().Connected() },
+		5*time.Second, 10*time.Millisecond, "the mock platform to connect")
 
 	// The message of the additional channel runs the command in that
 	// channel: the reply lands in the channel of the message.

@@ -91,6 +91,8 @@ func run(ctx context.Context, args []string, p process) int {
 		DefaultsErr: defaultsErr,
 		File:        file,
 		SecretKey:   p.secretKey,
+		Server:      root.Server,
+		APIToken:    root.APIToken,
 	}
 	kctx.BindTo(ctx, (*context.Context)(nil))
 	return cli.ExitCode(kctx.Run(env), p.stderr)

@@ -127,6 +127,10 @@ func TestChatCommandRunsOnMockPlatform(t *testing.T) {
 	errc := make(chan error, 1)
 	go func() { errc <- a.Run(runCtx) }()
 	require.Eventually(t, a.Ready, 10*time.Second, 10*time.Millisecond)
+	// Ready can be true while the mock platform still rejects chat
+	// messages ("account not connected"); wait for the connection.
+	require.Eventually(t, func() bool { return mp.Status().Connected() },
+		5*time.Second, 10*time.Millisecond, "the mock platform to connect")
 
 	// The event command for "app.started" runs when the engine takes
 	// instances, and its chat action reaches the platform.

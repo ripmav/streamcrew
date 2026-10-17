@@ -30,6 +30,9 @@ type Stream interface {
 	// AnswerPrompt answers the prompt with the ID; it errors if it is not
 	// pending.
 	AnswerPrompt(ctx context.Context, id, value string, confirmed bool) error
+	// Simulate publishes a platform-neutral event of the mock platform to
+	// the core; it returns the platform ID of the event.
+	Simulate(ctx context.Context, eventType, user, target, text string) (string, error)
 }
 
 // streamService implements the StreamService handler.
@@ -70,6 +73,19 @@ func (s *streamService) AnswerPrompt(ctx context.Context, req *connect.Request[v
 		return nil, apiError(err)
 	}
 	return connect.NewResponse(&v1alpha1.AnswerPromptResponse{}), nil
+}
+
+// Simulate publishes a simulated event of the mock platform (roadmap
+// 6.3).
+func (s *streamService) Simulate(ctx context.Context, req *connect.Request[v1alpha1.SimulateEventRequest]) (*connect.Response[v1alpha1.SimulateEventResponse], error) {
+	if req.Msg.EventType == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("event_type is required"))
+	}
+	id, err := s.s.Simulate(ctx, req.Msg.EventType, req.Msg.User, req.Msg.Target, req.Msg.Text)
+	if err != nil {
+		return nil, apiError(err)
+	}
+	return connect.NewResponse(&v1alpha1.SimulateEventResponse{EventId: id}), nil
 }
 
 // filterFrom converts the protocol filter.

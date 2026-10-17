@@ -19,6 +19,9 @@ service StreamService {
   rpc Subscribe(SubscribeRequest) returns (stream Event);
   // AnswerPrompt answers a prompt delivered through the stream.
   rpc AnswerPrompt(AnswerPromptRequest) returns (AnswerPromptResponse);
+  // Simulate publishes a platform-neutral event of the mock platform to the
+  // core, like the mock console does; for mock and dev work.
+  rpc Simulate(SimulateEventRequest) returns (SimulateEventResponse);
 }
 
 // EventFilter limits which events are delivered; empty lists mean "all".
@@ -162,3 +165,25 @@ message AnswerPromptRequest {
 
 // AnswerPromptResponse is the response of AnswerPrompt.
 message AnswerPromptResponse {}
+
+// SimulateEventRequest is the request of Simulate.
+message SimulateEventRequest {
+  // event_type is the type of the catalog, e.g. "channel.follow". The
+  // special type "chat.message" simulates a chat message of the user with
+  // the text.
+  string event_type = 1;
+  // user is the login of the mock platform that causes the event; empty for
+  // none.
+  string user = 2;
+  // target is the login of the mock platform the event is about; empty for
+  // none.
+  string target = 3;
+  // text is the message text for the type "chat.message".
+  string text = 4;
+}
+
+// SimulateEventResponse is the response of Simulate.
+message SimulateEventResponse {
+  // event_id is the platform ID of the simulated event.
+  string event_id = 1;
+}

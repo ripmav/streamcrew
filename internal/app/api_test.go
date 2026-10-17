@@ -538,6 +538,62 @@ func TestAPIServesTheStreamService(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond, "the catch-up of the chat message")
 }
 
+// TestAPIServesSimulate covers the Simulate RPC of the StreamService
+// (roadmap 6.3): a chat message of a user and a platform-neutral event go
+// through the mock platform like the mock console does.
+func TestAPIServesSimulate(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	a, _, _ := apiCore(t, cfg, settings.DefaultChat())
+	ctx := t.Context()
+
+	base := "http://" + a.HTTPServer().Addr().String()
+	client := streamcrewv1alpha1connect.NewStreamServiceClient(http.DefaultClient, base)
+	chat := streamcrewv1alpha1connect.NewChatServiceClient(http.DefaultClient, base)
+	follows := a.Bus().Subscribe(ctx, event.WithPrefixes("channel."))
+
+	// A chat message of a user appears in the chat history.
+	resp, err := client.Simulate(ctx, connect.NewRequest(&v1alpha1.SimulateEventRequest{
+		EventType: "chat.message",
+		User:      "alice",
+		Text:      "hello from the API",
+	}))
+	require.NoError(t, err)
+	assert.NotEmpty(t, resp.Msg.EventId)
+	require.Eventually(t, func() bool {
+		h, err := chat.History(ctx, connect.NewRequest(&v1alpha1.HistoryChatRequest{}))
+		return err == nil && len(h.Msg.Messages) > 0 && h.Msg.Messages[0].Login == "alice" && h.Msg.Messages[0].Text == "hello from the API"
+	}, 5*time.Second, 10*time.Millisecond, "the simulated chat message in the history")
+
+	// A platform-neutral event fires on the bus.
+	_, err = client.Simulate(ctx, connect.NewRequest(&v1alpha1.SimulateEventRequest{
+		EventType: "channel.follow",
+		User:      "dave",
+	}))
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		select {
+		case e := <-follows.C():
+			return e.Type == "channel.follow"
+		default:
+			return false
+		}
+	}, 5*time.Second, 10*time.Millisecond, "the simulated follow on the bus")
+
+	// A chat message without a user is refused.
+	_, err = client.Simulate(ctx, connect.NewRequest(&v1alpha1.SimulateEventRequest{
+		EventType: "chat.message",
+		Text:      "no user",
+	}))
+	require.Error(t, err)
+
+	// A type the mock platform does not simulate is refused.
+	_, err = client.Simulate(ctx, connect.NewRequest(&v1alpha1.SimulateEventRequest{
+		EventType: "twitch.channel.follow",
+	}))
+	require.Error(t, err)
+}
+
 // withAuth returns the client option that sends the bearer token of value
 // with every unary call.
 func withAuth(value string) connect.Option {
