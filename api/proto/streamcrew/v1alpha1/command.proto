@@ -91,8 +91,8 @@ message CommandInstanceView {
 message ListCommandsRequest {
   // kind filters by command kind; empty is every kind.
   string kind = 1;
-  // enabled filters by the active switch; null is every state.
-  bool enabled = 2;
+  // enabled filters by the active switch; unset is every state.
+  optional bool enabled = 2;
   // prefix filters by a case-insensitive name prefix; empty is all.
   string prefix = 3;
 }
