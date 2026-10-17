@@ -21,6 +21,7 @@ Das Repository ist privat. Nur der Projektinhaber schaltet es öffentlich.
 | [`docs/adr/`](docs/adr/README.md) | Architekturentscheidungen |
 | [`docs/adr/code/`](docs/adr/code/README.md) | Entscheidungen zum Code |
 | [`docs/spec/`](docs/spec/README.md) | Verhaltensspezifikationen mit Quellennachweis |
+| [`docs/usage.md`](docs/usage.md) | Bedienungsanleitung: Schnellstart, Betriebsarten, Sicherheit |
 
 ## Bedienung
 
