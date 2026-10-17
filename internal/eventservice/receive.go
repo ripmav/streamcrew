@@ -200,6 +200,12 @@ func (s *Service) recognizeLocked(ctx context.Context, text string, chat engine.
 		s.logger.InfoContext(ctx, "chat message matches the triggers of several commands regardless of case; none runs",
 			"commands", names)
 	case command.RecognitionNone:
+		// An unknown command, a message that starts like a prefixed
+		// trigger, is logged while the gate is open, e.g. in the debug
+		// log level or in dry run; plain chat text is never logged.
+		if r.Attempt && s.unknownCommandGate != nil && s.unknownCommandGate() {
+			s.logger.InfoContext(ctx, "unknown chat command", "message", text)
+		}
 	}
 	return nil
 }

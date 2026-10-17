@@ -680,6 +680,48 @@ func TestInvalidSettings(t *testing.T) {
 	assert.Equal(t, stream.StateLive, f.store.mockSession().State, "nothing changed")
 }
 
+// TestUnknownCommandLog covers the log entry of an unknown chat command:
+// it is logged only while the gate is open (the debug log level or dry
+// run at the app), and never for plain chat text.
+func TestUnknownCommandLog(t *testing.T) {
+	t.Parallel()
+	open := true
+	f := newFixture(t, chat("hug", "hug"))
+	f.logs = &records{}
+	f.gate = func() bool { return open }
+	f.service = f.restart(t)
+	ctx := t.Context()
+	ada := account(platform.Mock, "ada")
+
+	require.NoError(t, f.service.Message(ctx, message(ada, "m1", "hello chat")))
+	assert.False(t, f.logs.find("unknown chat command"), "plain chat text is not logged")
+
+	require.NoError(t, f.service.Message(ctx, message(ada, "m2", "!hugg")))
+	assert.True(t, f.logs.find("unknown chat command"), "an unknown command is logged while the gate is open")
+
+	open = false
+	f.service = f.restart(t)
+	require.NoError(t, f.service.Message(ctx, message(ada, "m3", "!hugg")))
+	assert.Equal(t, 1, func() int {
+		f.logs.mu.Lock()
+		defer f.logs.mu.Unlock()
+		n := 0
+		for _, m := range f.logs.msgs {
+			if m == "unknown chat command" {
+				n++
+			}
+		}
+		return n
+	}(), "a closed gate logs no unknown command")
+
+	// without the option, no unknown command is logged
+	f2 := newFixture(t, chat("hug", "hug"))
+	f2.logs = &records{}
+	f2.service = f2.restart(t)
+	require.NoError(t, f2.service.Message(ctx, message(ada, "m4", "!hugg")))
+	assert.False(t, f2.logs.find("unknown chat command"))
+}
+
 // TestAmbiguousAndMissing covers B16 of commands.md and a deleted entrance
 // command: an ambiguous message runs no chat command, a missing entrance
 // command is skipped.

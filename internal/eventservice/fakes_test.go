@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -471,6 +472,10 @@ type fixture struct {
 	mod      *fakeModeration
 	cmds     commands
 	service  *eventservice.Service
+	// logs captures the service log when set; gate opens the log of
+	// unknown chat commands when set (WithUnknownCommandGate).
+	logs *records
+	gate func() bool
 }
 
 func newFixture(t *testing.T, cmds ...command.Command) *fixture {
@@ -504,12 +509,43 @@ func newFixture(t *testing.T, cmds ...command.Command) *fixture {
 // the core.
 func (f *fixture) restart(t *testing.T) *eventservice.Service {
 	t.Helper()
+	var opts []eventservice.Option
+	if f.logs != nil {
+		opts = append(opts, eventservice.WithLogger(slog.New(f.logs)))
+	}
+	if f.gate != nil {
+		opts = append(opts, eventservice.WithUnknownCommandGate(f.gate))
+	}
 	svc, err := eventservice.New(t.Context(), eventservice.Ports{
 		Store: f.store, Commands: f.cmds, Engine: f.engine, Publisher: f.pub,
 		Chat: f.chat, Moderation: f.mod, Settings: f.settings.get, ChannelPoints: f.points.get,
-	})
+	}, opts...)
 	require.NoError(t, err)
 	return svc
+}
+
+// records collects the log messages of the service (WithLogger).
+type records struct {
+	mu   sync.Mutex
+	msgs []string
+}
+
+func (*records) Enabled(context.Context, slog.Level) bool { return true }
+
+func (r *records) Handle(_ context.Context, rec slog.Record) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.msgs = append(r.msgs, rec.Message)
+	return nil
+}
+
+func (r *records) WithAttrs([]slog.Attr) slog.Handler { return r }
+func (r *records) WithGroup(string) slog.Handler      { return r }
+
+func (r *records) find(msg string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Contains(r.msgs, msg)
 }
 
 // run runs svc until the returned function stops it.
