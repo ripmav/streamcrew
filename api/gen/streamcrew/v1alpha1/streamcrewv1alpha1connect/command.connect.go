@@ -54,6 +54,9 @@ const (
 	CommandServiceUpdateProcedure = "/streamcrew.v1alpha1.CommandService/Update"
 	// CommandServiceDeleteProcedure is the fully-qualified name of the CommandService's Delete RPC.
 	CommandServiceDeleteProcedure = "/streamcrew.v1alpha1.CommandService/Delete"
+	// CommandServiceSetEnabledProcedure is the fully-qualified name of the CommandService's SetEnabled
+	// RPC.
+	CommandServiceSetEnabledProcedure = "/streamcrew.v1alpha1.CommandService/SetEnabled"
 	// CommandServiceRunProcedure is the fully-qualified name of the CommandService's Run RPC.
 	CommandServiceRunProcedure = "/streamcrew.v1alpha1.CommandService/Run"
 	// CommandServiceListInstancesProcedure is the fully-qualified name of the CommandService's
@@ -89,6 +92,8 @@ type CommandServiceClient interface {
 	Update(context.Context, *connect.Request[v1alpha1.UpdateCommandRequest]) (*connect.Response[v1alpha1.UpdateCommandResponse], error)
 	// Delete removes a command.
 	Delete(context.Context, *connect.Request[v1alpha1.DeleteCommandRequest]) (*connect.Response[v1alpha1.DeleteCommandResponse], error)
+	// SetEnabled switches the active switch of a command.
+	SetEnabled(context.Context, *connect.Request[v1alpha1.SetEnabledCommandRequest]) (*connect.Response[v1alpha1.SetEnabledCommandResponse], error)
 	// Run starts a command manually.
 	Run(context.Context, *connect.Request[v1alpha1.RunCommandRequest]) (*connect.Response[v1alpha1.RunCommandResponse], error)
 	// ListInstances lists the command queue and recent instances.
@@ -149,6 +154,12 @@ func NewCommandServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(commandServiceMethods.ByName("Delete")),
 			connect.WithClientOptions(opts...),
 		),
+		setEnabled: connect.NewClient[v1alpha1.SetEnabledCommandRequest, v1alpha1.SetEnabledCommandResponse](
+			httpClient,
+			baseURL+CommandServiceSetEnabledProcedure,
+			connect.WithSchema(commandServiceMethods.ByName("SetEnabled")),
+			connect.WithClientOptions(opts...),
+		),
 		run: connect.NewClient[v1alpha1.RunCommandRequest, v1alpha1.RunCommandResponse](
 			httpClient,
 			baseURL+CommandServiceRunProcedure,
@@ -207,6 +218,7 @@ type commandServiceClient struct {
 	create         *connect.Client[v1alpha1.CreateCommandRequest, v1alpha1.CreateCommandResponse]
 	update         *connect.Client[v1alpha1.UpdateCommandRequest, v1alpha1.UpdateCommandResponse]
 	delete         *connect.Client[v1alpha1.DeleteCommandRequest, v1alpha1.DeleteCommandResponse]
+	setEnabled     *connect.Client[v1alpha1.SetEnabledCommandRequest, v1alpha1.SetEnabledCommandResponse]
 	run            *connect.Client[v1alpha1.RunCommandRequest, v1alpha1.RunCommandResponse]
 	listInstances  *connect.Client[v1alpha1.ListInstancesRequest, v1alpha1.ListInstancesResponse]
 	pauseQueue     *connect.Client[v1alpha1.PauseQueueRequest, v1alpha1.PauseQueueResponse]
@@ -240,6 +252,11 @@ func (c *commandServiceClient) Update(ctx context.Context, req *connect.Request[
 // Delete calls streamcrew.v1alpha1.CommandService.Delete.
 func (c *commandServiceClient) Delete(ctx context.Context, req *connect.Request[v1alpha1.DeleteCommandRequest]) (*connect.Response[v1alpha1.DeleteCommandResponse], error) {
 	return c.delete.CallUnary(ctx, req)
+}
+
+// SetEnabled calls streamcrew.v1alpha1.CommandService.SetEnabled.
+func (c *commandServiceClient) SetEnabled(ctx context.Context, req *connect.Request[v1alpha1.SetEnabledCommandRequest]) (*connect.Response[v1alpha1.SetEnabledCommandResponse], error) {
+	return c.setEnabled.CallUnary(ctx, req)
 }
 
 // Run calls streamcrew.v1alpha1.CommandService.Run.
@@ -294,6 +311,8 @@ type CommandServiceHandler interface {
 	Update(context.Context, *connect.Request[v1alpha1.UpdateCommandRequest]) (*connect.Response[v1alpha1.UpdateCommandResponse], error)
 	// Delete removes a command.
 	Delete(context.Context, *connect.Request[v1alpha1.DeleteCommandRequest]) (*connect.Response[v1alpha1.DeleteCommandResponse], error)
+	// SetEnabled switches the active switch of a command.
+	SetEnabled(context.Context, *connect.Request[v1alpha1.SetEnabledCommandRequest]) (*connect.Response[v1alpha1.SetEnabledCommandResponse], error)
 	// Run starts a command manually.
 	Run(context.Context, *connect.Request[v1alpha1.RunCommandRequest]) (*connect.Response[v1alpha1.RunCommandResponse], error)
 	// ListInstances lists the command queue and recent instances.
@@ -348,6 +367,12 @@ func NewCommandServiceHandler(svc CommandServiceHandler, opts ...connect.Handler
 		CommandServiceDeleteProcedure,
 		svc.Delete,
 		connect.WithSchema(commandServiceMethods.ByName("Delete")),
+		connect.WithHandlerOptions(opts...),
+	)
+	commandServiceSetEnabledHandler := connect.NewUnaryHandler(
+		CommandServiceSetEnabledProcedure,
+		svc.SetEnabled,
+		connect.WithSchema(commandServiceMethods.ByName("SetEnabled")),
 		connect.WithHandlerOptions(opts...),
 	)
 	commandServiceRunHandler := connect.NewUnaryHandler(
@@ -410,6 +435,8 @@ func NewCommandServiceHandler(svc CommandServiceHandler, opts ...connect.Handler
 			commandServiceUpdateHandler.ServeHTTP(w, r)
 		case CommandServiceDeleteProcedure:
 			commandServiceDeleteHandler.ServeHTTP(w, r)
+		case CommandServiceSetEnabledProcedure:
+			commandServiceSetEnabledHandler.ServeHTTP(w, r)
 		case CommandServiceRunProcedure:
 			commandServiceRunHandler.ServeHTTP(w, r)
 		case CommandServiceListInstancesProcedure:
@@ -453,6 +480,10 @@ func (UnimplementedCommandServiceHandler) Update(context.Context, *connect.Reque
 
 func (UnimplementedCommandServiceHandler) Delete(context.Context, *connect.Request[v1alpha1.DeleteCommandRequest]) (*connect.Response[v1alpha1.DeleteCommandResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.Delete is not implemented"))
+}
+
+func (UnimplementedCommandServiceHandler) SetEnabled(context.Context, *connect.Request[v1alpha1.SetEnabledCommandRequest]) (*connect.Response[v1alpha1.SetEnabledCommandResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.SetEnabled is not implemented"))
 }
 
 func (UnimplementedCommandServiceHandler) Run(context.Context, *connect.Request[v1alpha1.RunCommandRequest]) (*connect.Response[v1alpha1.RunCommandResponse], error) {

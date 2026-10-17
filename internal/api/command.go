@@ -94,6 +94,8 @@ type Commands interface {
 	Update(ctx context.Context, id, document, format string) (CommandSummary, []string, error)
 	// Delete removes a command.
 	Delete(ctx context.Context, id string) error
+	// SetEnabled switches the active switch of a command.
+	SetEnabled(ctx context.Context, id string, enabled bool) (CommandSummary, error)
 	// Run starts a command manually and reports the result.
 	Run(ctx context.Context, id string, args []string, channel string) (instanceID, result, reason string, err error)
 	// ListInstances lists the instances (newest first) and the queue pause.
@@ -200,6 +202,18 @@ func (s *commandService) Update(ctx context.Context, req *connect.Request[v1alph
 		return nil, apiError(err)
 	}
 	return connect.NewResponse(&v1alpha1.UpdateCommandResponse{Command: s.summary(summary), Warnings: warnings}), nil
+}
+
+// SetEnabled switches the active switch of a command.
+func (s *commandService) SetEnabled(ctx context.Context, req *connect.Request[v1alpha1.SetEnabledCommandRequest]) (*connect.Response[v1alpha1.SetEnabledCommandResponse], error) {
+	if req.Msg.Id == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
+	}
+	cmd, err := s.c.SetEnabled(ctx, req.Msg.Id, req.Msg.Enabled)
+	if err != nil {
+		return nil, apiError(err)
+	}
+	return connect.NewResponse(&v1alpha1.SetEnabledCommandResponse{Command: s.summary(cmd)}), nil
 }
 
 func (s *commandService) Delete(ctx context.Context, req *connect.Request[v1alpha1.DeleteCommandRequest]) (*connect.Response[v1alpha1.DeleteCommandResponse], error) {

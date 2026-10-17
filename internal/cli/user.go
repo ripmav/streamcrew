@@ -15,6 +15,9 @@ import (
 // userCmd manages the users of the profile (roadmap 5.2.4,
 // users-and-roles.md, B40).
 type userCmd struct {
+	List  userListCmd  `cmd:"" help:"List the users of a running core through the API."`
+	Show  userShowCmd  `cmd:"" help:"Show one user of a running core through the API."`
+	Set   userSetCmd   `cmd:"" help:"Change the role, title, strikes and exclusion of a user of a running core through the API."`
 	Merge userMergeCmd `cmd:"" help:"Merge two users: link all of the second user's platform accounts to the first user, add the second user's statistics to the first, and delete the second user. Needs a stopped core."`
 }
 

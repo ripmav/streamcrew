@@ -5,6 +5,7 @@ package cli
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -31,6 +32,18 @@ func (e *Env) connectOptions() []connect.ClientOption {
 	}
 	b := &bearer{token: e.APIToken}
 	return []connect.ClientOption{connect.WithInterceptors(b)}
+}
+
+// join joins the strings with the separator.
+func join(list []string, sep string) string {
+	var out strings.Builder
+	for i, s := range list {
+		if i > 0 {
+			out.WriteString(sep)
+		}
+		out.WriteString(s)
+	}
+	return out.String()
 }
 
 // streamClient returns the StreamService client of the core.
