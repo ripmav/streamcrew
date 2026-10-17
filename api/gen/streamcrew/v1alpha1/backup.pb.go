@@ -39,8 +39,9 @@ type BackupView struct {
 	SchemaVersion uint32 `protobuf:"varint,3,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
 	// size is the backup size in bytes.
 	Size uint64 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
-	// label is an optional user label; empty if none.
-	Label         string `protobuf:"bytes,5,opt,name=label,proto3" json:"label,omitempty"`
+	// kind is "scheduled", "manual", "pre-migration", "pre-restore" or
+	// "pre-delete".
+	Kind          string `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -103,18 +104,16 @@ func (x *BackupView) GetSize() uint64 {
 	return 0
 }
 
-func (x *BackupView) GetLabel() string {
+func (x *BackupView) GetKind() string {
 	if x != nil {
-		return x.Label
+		return x.Kind
 	}
 	return ""
 }
 
 // CreateBackupRequest is the request of Create.
 type CreateBackupRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// label is an optional user label for the backup.
-	Label         string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -147,13 +146,6 @@ func (x *CreateBackupRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use CreateBackupRequest.ProtoReflect.Descriptor instead.
 func (*CreateBackupRequest) Descriptor() ([]byte, []int) {
 	return file_streamcrew_v1alpha1_backup_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *CreateBackupRequest) GetLabel() string {
-	if x != nil {
-		return x.Label
-	}
-	return ""
 }
 
 // CreateBackupResponse is the response of Create.
@@ -380,17 +372,16 @@ var File_streamcrew_v1alpha1_backup_proto protoreflect.FileDescriptor
 
 const file_streamcrew_v1alpha1_backup_proto_rawDesc = "" +
 	"\n" +
-	" streamcrew/v1alpha1/backup.proto\x12\x13streamcrew.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa8\x01\n" +
+	" streamcrew/v1alpha1/backup.proto\x12\x13streamcrew.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa6\x01\n" +
 	"\n" +
 	"BackupView\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x129\n" +
 	"\n" +
 	"created_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12%\n" +
 	"\x0eschema_version\x18\x03 \x01(\rR\rschemaVersion\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\x04R\x04size\x12\x14\n" +
-	"\x05label\x18\x05 \x01(\tR\x05label\"+\n" +
-	"\x13CreateBackupRequest\x12\x14\n" +
-	"\x05label\x18\x01 \x01(\tR\x05label\"O\n" +
+	"\x04size\x18\x04 \x01(\x04R\x04size\x12\x12\n" +
+	"\x04kind\x18\x05 \x01(\tR\x04kind\"\x15\n" +
+	"\x13CreateBackupRequest\"O\n" +
 	"\x14CreateBackupResponse\x127\n" +
 	"\x06backup\x18\x01 \x01(\v2\x1f.streamcrew.v1alpha1.BackupViewR\x06backup\"\x14\n" +
 	"\x12ListBackupsRequest\"P\n" +

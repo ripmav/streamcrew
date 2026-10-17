@@ -31,15 +31,13 @@ message BackupView {
   uint32 schema_version = 3;
   // size is the backup size in bytes.
   uint64 size = 4;
-  // label is an optional user label; empty if none.
-  string label = 5;
+  // kind is "scheduled", "manual", "pre-migration", "pre-restore" or
+  // "pre-delete".
+  string kind = 5;
 }
 
 // CreateBackupRequest is the request of Create.
-message CreateBackupRequest {
-  // label is an optional user label for the backup.
-  string label = 1;
-}
+message CreateBackupRequest {}
 
 // CreateBackupResponse is the response of Create.
 message CreateBackupResponse {
