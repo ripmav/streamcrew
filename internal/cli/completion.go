@@ -35,6 +35,7 @@ var commandTree = map[string][]string{
 	"auth":       {"login", "status", "logout"},
 	"user":       {"merge"},
 	"token":      {"create", "list", "revoke"},
+	"tui":        {},
 	"chat":       {"send"},
 	"event":      {"simulate"},
 	"completion": {"bash", "zsh", "fish"},
