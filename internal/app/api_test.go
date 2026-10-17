@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -15,9 +16,14 @@ import (
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
 	"github.com/ripmav/streamcrew/internal/app"
+	"github.com/ripmav/streamcrew/internal/config"
+	"github.com/ripmav/streamcrew/internal/connector"
+	"github.com/ripmav/streamcrew/internal/connector/mock"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
+	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/profile"
+	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/store"
 )
 
@@ -221,4 +227,95 @@ func TestAPIServesTheUserService(t *testing.T) {
 	gb, err := client.Get(ctx, connect.NewRequest(&v1alpha1.GetUserRequest{PlatformLogin: "mock/bob"}))
 	require.NoError(t, err)
 	assert.Equal(t, aliceID, gb.Msg.User.Id, "the merged login now resolves to the keep user")
+}
+
+// TestAPIServesTheChatService exercises the ChatService through the real
+// ConnectRPC client (roadmap 6.2.1): history, send, delete and clear.
+func TestAPIServesTheChatService(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	a, mp, coll := apiCore(t, cfg, settings.DefaultChat())
+	ctx := t.Context()
+
+	base := "http://" + a.HTTPServer().Addr().String()
+	client := streamcrewv1alpha1connect.NewChatServiceClient(http.DefaultClient, base)
+
+	// A message with a known platform ID lands in the history.
+	_, err := mp.SayWithID(ctx, "alice", "hi there", "msg-1")
+	require.NoError(t, err)
+
+	h, err := client.History(ctx, connect.NewRequest(&v1alpha1.HistoryChatRequest{}))
+	require.NoError(t, err)
+	var seen bool
+	for _, m := range h.Msg.Messages {
+		if m.MessageId == "msg-1" && m.Text == "hi there" {
+			seen = true
+		}
+	}
+	assert.True(t, seen, "the message is in the history")
+
+	// Send goes through the chat service to the platform.
+	_, err = client.Send(ctx, connect.NewRequest(&v1alpha1.SendChatRequest{Text: "hello from api"}))
+	require.NoError(t, err)
+	coll.waitFor(t, "the sent message on the platform", func(e event.Envelope) bool { return mockSent(e, "hello from api") })
+
+	// Delete removes a message by its platform ID.
+	_, err = client.Delete(ctx, connect.NewRequest(&v1alpha1.DeleteChatRequest{MessageId: "msg-1", Platform: "mock"}))
+	require.NoError(t, err)
+	coll.waitFor(t, "the delete on the platform", func(e event.Envelope) bool {
+		if e.Type != mock.TypeOutput {
+			return false
+		}
+		o, ok := event.Payload[mock.Output](e)
+		return ok && o.Op == mock.OpDelete && o.MessageID == "msg-1"
+	})
+
+	// Clear empties the channel on the platform.
+	_, err = client.Clear(ctx, connect.NewRequest(&v1alpha1.ClearChatRequest{Platform: "mock"}))
+	require.NoError(t, err)
+	coll.waitFor(t, "the clear on the platform", func(e event.Envelope) bool {
+		if e.Type != mock.TypeOutput {
+			return false
+		}
+		o, ok := event.Payload[mock.Output](e)
+		return ok && o.Op == mock.OpClearChat
+	})
+}
+
+// apiCore starts the core with the mock platform and returns the app, the
+// platform and a collector for the command instances and the mock outputs.
+func apiCore(t *testing.T, cfg config.Config, ch settings.Chat) (*app.App, *mock.Platform, *eventCollector) {
+	t.Helper()
+	ctx := t.Context()
+	newProfileWithSettings(t, cfg, func(svc *settings.Service) {
+		require.NoError(t, settings.Save(ctx, svc, ch))
+	})
+	var mp *mock.Platform
+	a, err := app.New(ctx, cfg,
+		app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil),
+		app.WithPlatform(func(_ context.Context, b app.PlatformBuilder) (connector.Platform, error) {
+			var err error
+			mp, err = mock.New(b.Receiver, mock.WithLogger(b.Logger), mock.WithPublisher(b.Publisher))
+			return mp, err
+		}),
+	)
+	require.NoError(t, err)
+
+	coll := &eventCollector{}
+	sub := a.Bus().Subscribe(ctx, event.WithPrefixes("command.instance.", "mock."), event.WithBuffer(256))
+	go func() {
+		for e := range sub.C() {
+			coll.add(e)
+		}
+	}()
+	runCtx, cancel := context.WithCancel(ctx)
+	errc := make(chan error, 1)
+	go func() { errc <- a.Run(runCtx) }()
+	require.Eventually(t, a.Ready, 10*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return mp.Status().Connected() }, 5*time.Second, 10*time.Millisecond, "the mock platform to connect")
+	t.Cleanup(func() {
+		cancel()
+		require.NoError(t, <-errc)
+	})
+	return a, mp, coll
 }
