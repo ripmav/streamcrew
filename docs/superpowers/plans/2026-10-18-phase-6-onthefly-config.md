@@ -1,6 +1,6 @@
 # Plan: 6.6 On-the-fly-Konfiguration (Server-Modus)
 
-Roadmap: [6.6](../../roadmap.md#66-on-the-fly-konfiguration-server-modus). Ziel: Alle Starteinstellungen
+Roadmap: [6.6](../../roadmap.md#65-on-the-fly-konfiguration-server-modus). Ziel: Alle Starteinstellungen
 (Flags, `STREAMCREW_*`-Env, `config.yaml`) lassen sich im **Server-Modus zur Laufzeit über die TUI** ändern.
 Die TUI schreibt die Konfigurationsdatei; der Core nimmt die Änderung ohne Neustart in ≤ 1 s wahr (Watcher)
 und wendet alle hot-capablen Einstellungen an.
