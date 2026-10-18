@@ -95,7 +95,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 3: Engine, Templates, Actions, Mock | abgeschlossen 2026-10-07, M1 erreicht (PR #143, CI grün); vertagt: die Schwelle der Sammelgeschenke (3.4, P1) |
 | Phase 4: Twitch | 4.1 (Authentifizierung), 4.2 (Helix-Client), 4.3 (EventSub), 4.4 (Funktionen) und 4.5 (Tests) abgeschlossen; das Exit-Kriterium des manuellen 4-h-Test-Streams (4.5) ist noch offen |
 | Phase 5: Core-Services | abgeschlossen: 5.1, 5.2.1–5.2.6, 5.3, 5.4, 5.5 und 5.6 (P0 und P1) |
-| Phase 6: API, CLI, TUI | in Arbeit: 6.1–6.4 abgeschlossen; 6.5 code-seitig abgeschlossen (Stack offen); offen: 6.6 Log-Stream und 6.7 Release-Tag |
+| Phase 6: API, CLI, TUI | in Arbeit: 6.1–6.4 abgeschlossen; 6.5 und 6.6 code-seitig abgeschlossen (Stack offen); offen: 6.7 Release-Tag |
 | Phase 7: Overlays und Medien | offen |
 | Phase 8: Economy, Community, Spiele | offen |
 | Phase 9: Integrationen, Scripting, Agent | offen |
@@ -761,7 +761,7 @@ Produzent. Die TUI und die API sind dabei **read-only** zum Log-Stream: Sie kön
 ab welchem Level angezeigt wird — das eigentliche Log-Level des Cores bleibt bei der On-the-fly-
 Konfiguration (6.5) bzw. der Konfigurationsdatei.
 
-- [ ] Core publiziert Log-Ereignisse (M):
+- [x] Core publiziert Log-Ereignisse (M), erledigt 2026-10-18 (PR #289):
   - slog-Handler im dynamischen Logger-Baum (`internal/logging`): jedes Record, das die Level-Store
     durchlässt, wird zusätzlich zum Terminal/Datei-Ausgang als `log`-Ereignis auf dem Bus publiziert
   - neue Typen-Konstante `log` mit der Nutzlast `level`, `component`, `message` (entspricht `LogEntry`);
@@ -771,15 +771,15 @@ Konfiguration (6.5) bzw. der Konfigurationsdatei.
     (6.5) begrenzt das Volumen von vornherein
   - [`events.md`](spec/events.md): der `log`-Typ wird wie die Authentifizierungsereignisse dokumentiert
     (außerhalb des Trigger-Katalogs `All()`)
-- [ ] TUI: Log-Level-Auswahl in der Logs-Ansicht (S):
+- [x] TUI: Log-Level-Auswahl in der Logs-Ansicht (S), erledigt 2026-10-18 (PR #290):
   - Taste `l` schaltet durch: debug → info → warn → error → debug (Default `debug` = alle);
     die Kopfzeile zeigt den aktiven Filter
   - rein clientseitiger Sicht-Filter — der Core wird nicht angefasst (read-only)
-- [ ] API: Level-Filter im Abo (S):
+- [x] API: Level-Filter im Abo (S), erledigt 2026-10-18 (PR #291):
   - `EventFilter.min_level` („debug“/„info“/„warn“/„error“, leer = alle): der Server liefert `log`-
     Ereignisse ab dem gewählten Level, andere Ereignistypen gehen unverändert durch
   - read-only: es gibt keinen RPC, der das Log-Level des Cores ändert (das ist 6.5)
-- [ ] Dokumentation (S): `docs/usage.md` (Logs-Ansicht mit der Taste `l`, `min_level` im Abo) ([Plan](superpowers/plans/2026-10-18-phase-6-log-stream.md))
+- [x] Dokumentation (S), erledigt 2026-10-18: Abschnitt „Logs im Stream (read-only)“ in `docs/usage.md`
 
 ### 6.7 Release MVP
 
@@ -1271,6 +1271,9 @@ Eigene Datei seit 2026-10-09: [backlog.md](backlog.md).
 
 | Datum | Änderung |
 |---|---|
+| 2026-10-18 | Phase 6.6 (1/4: Log-Stream im Core) code-seitig abgeschlossen: der dynamische Logger bekommt einen Sink (`Dynamic.SetSink`), der jedes Record der Level-Store neben dem Terminal-/Datei-Ausgang erhält (auch die Komponente-Derivationen, mit ihrer Derivation — der Sink sieht das `component`-Attribut); die App hängt den Sink an den Bus, jedes Record wird zum `log.line`-Event (`level` lower-case, `component`, `message` — die Werte des `LogEntry`), der Stream wandelt es um. Neuer eventtype `log.line` (Anwendungs-Ereignis wie die Auth-Events, nicht in `All()`; Namensregel: `log` allein wäre ungültig). Spec `events.md` dokumentiert die Log-Ereignisse. Read-only: das Core-Log-Level bleibt bei der On-the-fly-Konfiguration (6.5). Tests: Sink-Ebene (Level-Filter, Update, Komponente-Logger) und E2E (Warn-Zeile des Watchers → Bus-Event). |
+| 2026-10-18 | Phase 6.6 (2/4: TUI-Ansicht Logs mit Level-Filter) code-seitig abgeschlossen: die Logs-Ansicht (Taste 7) zeigt die `log.line`-Events des Streams; die Taste `l` schaltet den Anzeigefilter durch debug → info → warn → error → debug (Default debug = alles), die Kopfzeile zeigt den aktiven Filter („Logs ≥ info“). Events unter dem Filter werden beim Eintreffen verworfen, bereits gezeigte Zeilen bleiben. Rein clientseitig (read-only). Tests: Filter + Zyklus. |
+| 2026-10-18 | Phase 6.6 (3/4: API-Level-Filter) code-seitig abgeschlossen: `EventFilter.min_level` im `Subscribe` („debug“/„info“/„warn“/„error“, leer = alle) filtert serverseitig nur die Log-Events, andere Typen gehen ungefiltert durch; ungültiger Wert bricht den Stream vor der ersten Zustellung mit `invalid_argument` ab. Read-only (kein RPC ändert das Core-Log-Level). Tests: Filter + ungültiger Wert + andere Typen ungefiltert. |
 | 2026-10-18 | Phase 6.5 (3/4: TUI-Ansicht Einstellungen) code-seitig abgeschlossen: die TUI zeigt als achte Ansicht „Einstellungen“ (Taste 8, Tab-Reihe) das Dokument der `ConfigService` mit einer Annotation je Einstellung — ⚡ hot (gelten ohne Neustart), ⟳ restart, ✋ fixiert (per Flag/Env) — und dem live-Status (live im Server-Modus, read-only im Daemon-/Desktop-Modus). `e` öffnet das Dokument im Editor aus der Umgebung ($EDITOR/$VISUAL) und wendet es über `UpdateConfig` an (Ergebniszeile: angewandt + restart), `r` lädt neu. Der TUI spricht weiterhin ausschließlich die API. Tests: 4 neue Tests gegen einen In-Prozess-Core (Server- und Daemon-Modus). |
 | 2026-10-18 | Phase 6.5 (2/4: ConfigService) code-seitig abgeschlossen: neue `ConfigService` (Get/Update, Scope admin) über `api/proto/streamcrew/v1alpha1/config.proto`; `internal/config` bekommt einen File-Resolver (`Load`/`FromFile`, Key-Vereinbarung aus den kong-Flags + Datei-Schlüssel via `toKebab`), `FileView` (Dokument + hot/fix/restart-Listen) und `Watcher.Update` (Validierung vor dem Schreiben, atomares Schreiben, Antwort mit Angewendetem und Restart-Bedürftigem). In Daemon- und Desktop-Modus ist die Konfiguration read-only (die API meldet das). Der Watcher von Code-ADR-0019 bleibt der Apply-Pfad: `Update` schreibt die Datei, der Watcher wendet sie an. Tests: 7 neue (Handler, Scopes, Read-only-Modus, Datei-Runde, Update-Verhalten) plus 2 E2E-Tests (Update über die API wirkt live, Daemon-Modus read-only). |
 | 2026-10-18 | Neu sortiert: Der MVP-Release rückt ans Ende von Phase 6 (6.5 → 6.7); On-the-fly-Konfiguration wird 6.5 (zuvor 6.6, alle Referenzen umnummeriert). Neuer Punkt [6.6 Log-Stream (read-only)](#66-log-stream-read-only): der Core publiziert jedes Log-Record, das den Level-Filter passiert, als `log`-Ereignis auf dem Bus; TUI (Taste `l`) und API (`EventFilter.min_level`) filtern client- bzw. serverseitig ab welchem Level angezeigt wird — read-only, das Log-Level bleibt bei der On-the-fly-Konfiguration (6.5). |

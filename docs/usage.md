@@ -180,6 +180,38 @@ tls_key: /etc/streamcrew/tls/key.pem
 Ein ungültiges Dokument (unbekannter Key, ungültiger Wert) wird
 abgelehnt, ohne die laufende Konfiguration zu verändern.
 
+## Logs im Stream (read-only)
+
+Die Log-Zeilen des Cores sind Teil des Live-Streams: Jede Zeile, die den
+Level-Filter der Logging-Konfiguration durchlässt, erscheint als
+`log.line`-Ereignis neben dem Terminal- und Datei-Ausgang.
+
+**TUI:** Die Ansicht **Logs** (Taste `7`) zeigt die Log-Zeilen des
+Streams. Die Taste `l` schaltet den Anzeigefilter durch
+`debug → info → warn → error → debug` (Default `debug` = alles); die
+Kopfzeile zeigt den aktiven Filter (z. B. „Logs ≥ warn“). Der Filter ist
+rein clientseitig — er ändert nichts am Core, dessen Log-Level bleibt bei
+der On-the-fly-Konfiguration.
+
+**API:** Das Abo (`StreamService.Subscribe`) nimmt den selben Filter
+serverseitig als `min_level` im `EventFilter` an: „debug“, „info“,
+„warn“ oder „error“ (leer = alle). Gefiltert werden nur die Log-Events;
+alle anderen Ereignistypen gehen ungefiltert durch. Auch hier gilt:
+read-only, es gibt keinen RPC, der das Log-Level des Cores ändert.
+
+```go
+// Beispiel: nur Warnungen und Fehler abonnieren
+stream, err := streamClient.Subscribe(ctx, connect.NewRequest(
+	&v1alpha1.SubscribeRequest{
+		Filter: &v1alpha1.EventFilter{MinLevel: "warn"},
+	}))
+```
+
+Hinweis: Der Stream ist kein Logfile-Ersatz — er trägt nur die Events
+seit dem Abo (optional mit `since` für den Puffer), und bei Überlast
+wirft der Bus ab (`event.lag`). Die vollständige Historie liegt in der
+Logdatei (`log-file`).
+
 ## Sicherheitshinweise
 
 1. **Loopback ist der Standard.** Der Daemon-Modus lauscht nur auf
