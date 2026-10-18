@@ -58,7 +58,7 @@ func (p *outPub) sentText(text string) bool {
 }
 
 // hotCore starts a daemon-mode core with a mock platform (whose outputs go
-// to pub) and a configuration file the watcher watches (roadmap 6.6).
+// to pub) and a configuration file the watcher watches (roadmap 6.5).
 func hotCore(t *testing.T, pub *outPub) (*app.App, string) {
 	return hotCoreWithConsole(t, pub, &bytes.Buffer{})
 }
@@ -141,7 +141,7 @@ func rewriteFile(t *testing.T, path, content string) {
 }
 
 // TestHotApplyDryRun verifies the dry run of the platforms switches at
-// runtime through the configuration file (roadmap 6.6): with it on, the
+// runtime through the configuration file (roadmap 6.5): with it on, the
 // chat write is recorded instead of delivered to the platform.
 func TestHotApplyDryRun(t *testing.T) {
 	pub := &outPub{}
@@ -170,7 +170,7 @@ func TestHotApplyDryRun(t *testing.T) {
 }
 
 // TestHotApplyShutdownTimeout verifies the shutdown timeout changes at
-// runtime (roadmap 6.6).
+// runtime (roadmap 6.5).
 func TestHotApplyShutdownTimeout(t *testing.T) {
 	a, path := hotCore(t, &outPub{})
 	assert.Equal(t, 15*time.Second, a.ShutdownTimeout())
@@ -180,7 +180,7 @@ func TestHotApplyShutdownTimeout(t *testing.T) {
 }
 
 // TestHotApplyListenRebinds verifies the listen address moves at runtime
-// (roadmap 6.6): the new address serves, the old one stops.
+// (roadmap 6.5): the new address serves, the old one stops.
 func TestHotApplyListenRebinds(t *testing.T) {
 	a, path := hotCore(t, &outPub{})
 	old := a.HTTPServer().Addr().String()

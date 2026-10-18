@@ -2,7 +2,7 @@
 
 // Package httpserver runs the HTTP server of the core. It serves the health
 // endpoints /healthz and /readyz, pprof in developer mode and, from roadmap
-// phase 6, the API. From roadmap 6.6 the listen address, the TLS
+// phase 6, the API. From roadmap 6.5 the listen address, the TLS
 // certificate, the developer mode, the CORS allowlist and the shutdown
 // timeout can change at runtime (Rebind, SetDev, SetCorsAllow).
 package httpserver
@@ -70,7 +70,7 @@ type Server struct {
 	handler http.Handler
 	ready   func() bool
 	// timeout supplies the shutdown timeout at shutdown time, so it can
-	// change at runtime (roadmap 6.6).
+	// change at runtime (roadmap 6.5).
 	timeout func() time.Duration
 
 	corsAllow atomic.Value // holds []string
@@ -109,16 +109,16 @@ func New(cfg Config, logger *slog.Logger, ready func() bool) *Server {
 }
 
 // SetShutdownTimeoutFunc names the function that supplies the shutdown
-// timeout at shutdown time (roadmap 6.6).
+// timeout at shutdown time (roadmap 6.5).
 func (s *Server) SetShutdownTimeoutFunc(f func() time.Duration) {
 	s.timeout = f
 }
 
-// SetDev switches the pprof routes under /debug/pprof/ (roadmap 6.6);
+// SetDev switches the pprof routes under /debug/pprof/ (roadmap 6.5);
 // without developer mode they answer 404.
 func (s *Server) SetDev(dev bool) { s.dev.Store(dev) }
 
-// SetCorsAllow replaces the CORS allowlist (roadmap 6.6); an empty list
+// SetCorsAllow replaces the CORS allowlist (roadmap 6.5); an empty list
 // refuses every cross-origin request.
 func (s *Server) SetCorsAllow(allow []string) { s.corsAllow.Store(allow) }
 
@@ -145,7 +145,7 @@ func (s *Server) Addr() (addr net.Addr, ok bool) {
 	return s.addr, s.addr != nil
 }
 
-// Rebind moves the server to cfg (roadmap 6.6): it opens a new listener,
+// Rebind moves the server to cfg (roadmap 6.5): it opens a new listener,
 // serves on it and shuts the old one down gracefully. On any error before
 // the new listener serves, the old binding stays active.
 func (s *Server) Rebind(ctx context.Context, cfg Config) error {
@@ -361,7 +361,7 @@ func (s *Server) buildMux(ready func() bool) *http.ServeMux {
 		writeText(w, http.StatusServiceUnavailable, "not ready")
 	})
 	// The pprof routes are always mounted and dispatch on the developer
-	// mode, so it can change at runtime (roadmap 6.6).
+	// mode, so it can change at runtime (roadmap 6.5).
 	mux.HandleFunc("GET /debug/pprof/", s.serveDev(pprof.Index))
 	mux.HandleFunc("GET /debug/pprof/cmdline", s.serveDev(pprof.Cmdline))
 	mux.HandleFunc("GET /debug/pprof/profile", s.serveDev(pprof.Profile))

@@ -4,7 +4,7 @@
 // all components from the startup configuration, registers the long-running
 // ones with the supervisor and runs them until the context ends.
 //
-// Start-up order (plan §6.6): lock the data directory, resolve and open the
+// Start-up order (plan §6.5): lock the data directory, resolve and open the
 // profile (with a backup before migrations), load the settings and the
 // vault key, then run the supervised components.
 //
@@ -131,7 +131,7 @@ type App struct {
 	cfg     config.Config
 	version string
 	logger  *slog.Logger
-	// dynLog changes the log levels and output at runtime (roadmap 6.6);
+	// dynLog changes the log levels and output at runtime (roadmap 6.5);
 	// console is the console writer the log always goes to.
 	dynLog   *logging.Dynamic
 	console  io.Writer
@@ -161,14 +161,14 @@ type App struct {
 	shutdownOnce   sync.Once
 	shutdownCancel context.CancelFunc
 	// dryRun switches the dry run of the platforms at runtime (roadmap
-	// 6.6); the watcher of the configuration file sets it.
+	// 6.5); the watcher of the configuration file sets it.
 	dryRun atomic.Bool
 	// shutdownTimeout is the shutdown timeout; the watcher of the
 	// configuration file changes it, the runnables read it at shutdown
-	// time (roadmap 6.6).
+	// time (roadmap 6.5).
 	shutdownTimeout atomic.Int64
 	// runtimeMu guards cfg: the configuration the core runs with, changed
-	// by the hot applies of the watcher (roadmap 6.6).
+	// by the hot applies of the watcher (roadmap 6.5).
 	runtimeMu sync.RWMutex
 
 	// The wiring of the command engine (roadmap 3.6): the platforms of the
@@ -597,13 +597,13 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 
 // shutdownTimeoutDuration returns the current shutdown timeout; the
 // runnables read it at shutdown time, so the watcher can change it at
-// runtime (roadmap 6.6).
+// runtime (roadmap 6.5).
 func (a *App) shutdownTimeoutDuration() time.Duration {
 	return time.Duration(a.shutdownTimeout.Load())
 }
 
 // hotApplies are the hooks of the watcher that apply the hot settings of
-// the configuration file at runtime (roadmap 6.6).
+// the configuration file at runtime (roadmap 6.5).
 func (a *App) hotApplies() *config.ApplyFuncs {
 	return &config.ApplyFuncs{
 		Log: a.applyLog,
@@ -620,7 +620,7 @@ func (a *App) hotApplies() *config.ApplyFuncs {
 }
 
 // applyLog applies the log settings of the configuration file to the
-// logger tree (roadmap 6.6).
+// logger tree (roadmap 6.5).
 func (a *App) applyLog(lc config.LogConfig) error {
 	a.runtimeMu.Lock()
 	a.cfg.Log = lc
@@ -633,7 +633,7 @@ func (a *App) applyLog(lc config.LogConfig) error {
 }
 
 // applyListen moves the HTTP server to the new address with the TLS
-// certificate (roadmap 6.6); on error the previous binding stays active.
+// certificate (roadmap 6.5); on error the previous binding stays active.
 func (a *App) applyListen(addr, tlsCert, tlsKey string) error {
 	a.runtimeMu.Lock()
 	old := a.cfg
@@ -761,7 +761,7 @@ func (a *App) addPlatform(ctx context.Context, build func(ctx context.Context, b
 		return fmt.Errorf("build platform: %w", err)
 	}
 	// The platform is always wrapped in the switchable dry-run wrapper
-	// (roadmap 6.6); the dry run itself is switched at runtime.
+	// (roadmap 6.5); the dry run itself is switched at runtime.
 	p = dryrun.NewSwitchablePlatform(p, component(a.logger, "dryrun"), &a.dryRun)
 	r, ok := any(p).(supervisor.Runnable)
 	if !ok {
@@ -795,7 +795,7 @@ func (a *App) MockPlatform() *mock.Platform {
 	return mp
 }
 
-// ShutdownTimeout returns the current shutdown timeout (roadmap 6.6).
+// ShutdownTimeout returns the current shutdown timeout (roadmap 6.5).
 func (a *App) ShutdownTimeout() time.Duration {
 	return a.shutdownTimeoutDuration()
 }

@@ -66,7 +66,7 @@ func (m fakeMod) Unmod(_ context.Context, _ connector.Channel, _ user.Identity) 
 }
 
 // TestSwitchablePlatform verifies the platform wrapper switches between
-// dry-run recording and the inner platform at runtime (roadmap 6.6).
+// dry-run recording and the inner platform at runtime (roadmap 6.5).
 func TestSwitchablePlatform(t *testing.T) {
 	inner := &fakeInner{}
 	on := &atomic.Bool{}
@@ -103,7 +103,7 @@ type fakeRealOps struct{ Ops }
 func (fakeRealOps) Clip(context.Context) (string, error) { return "real", nil }
 
 // TestSwitchOps verifies the operations wrapper switches at runtime
-// (roadmap 6.6).
+// (roadmap 6.5).
 func TestSwitchOps(t *testing.T) {
 	on := &atomic.Bool{}
 	on.Store(true)

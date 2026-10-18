@@ -50,7 +50,7 @@ func startServer(t *testing.T, cfg httpserver.Config) *httpserver.Server {
 }
 
 // TestRebindMovesToANewPort verifies the server moves to a new address and
-// the old binding is shut down (roadmap 6.6).
+// the old binding is shut down (roadmap 6.5).
 func TestRebindMovesToANewPort(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t, httpserver.Config{Addr: "127.0.0.1:0"})
@@ -71,7 +71,7 @@ func TestRebindMovesToANewPort(t *testing.T) {
 }
 
 // TestRebindKeepsTheOldBindingOnError verifies a failed rebind leaves the
-// old binding active (roadmap 6.6).
+// old binding active (roadmap 6.5).
 func TestRebindKeepsTheOldBindingOnError(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t, httpserver.Config{Addr: "127.0.0.1:0"})
@@ -88,7 +88,7 @@ func TestRebindKeepsTheOldBindingOnError(t *testing.T) {
 }
 
 // TestRebindKeepsTheOldBindingOnABrokenKeyPair verifies a rebind with a
-// broken TLS key pair leaves the old binding active (roadmap 6.6).
+// broken TLS key pair leaves the old binding active (roadmap 6.5).
 func TestRebindKeepsTheOldBindingOnABrokenKeyPair(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t, httpserver.Config{Addr: "127.0.0.1:0"})
@@ -105,7 +105,7 @@ func TestRebindKeepsTheOldBindingOnABrokenKeyPair(t *testing.T) {
 }
 
 // TestSetDevTogglesThePprofRoutes verifies the developer mode can be
-// switched at runtime (roadmap 6.6).
+// switched at runtime (roadmap 6.5).
 func TestSetDevTogglesThePprofRoutes(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t, httpserver.Config{Addr: "127.0.0.1:0"})
@@ -125,7 +125,7 @@ func TestSetDevTogglesThePprofRoutes(t *testing.T) {
 }
 
 // TestSetCorsAllowSwapsTheAllowlist verifies the CORS allowlist can be
-// changed at runtime (roadmap 6.6).
+// changed at runtime (roadmap 6.5).
 func TestSetCorsAllowSwapsTheAllowlist(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t, httpserver.Config{Addr: "127.0.0.1:0"})
@@ -151,7 +151,7 @@ func TestSetCorsAllowSwapsTheAllowlist(t *testing.T) {
 }
 
 // TestRebindServesTLS switches a plain server to TLS with a rebind
-// (roadmap 6.6): after the rebind the new address speaks TLS.
+// (roadmap 6.5): after the rebind the new address speaks TLS.
 func TestRebindServesTLS(t *testing.T) {
 	t.Parallel()
 	certFile, keyFile := selfSignedCert(t)

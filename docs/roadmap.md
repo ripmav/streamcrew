@@ -735,7 +735,7 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
   - Betriebsmodi: Streaming-PC als Standard, Server-Anwendung mit Reverse Proxy, TLS und Token (ADR-0003)
   - Sicherheitshinweise
 
-### 6.6 On-the-fly-Konfiguration (Server-Modus)
+### 6.5 On-the-fly-Konfiguration (Server-Modus)
 
 Alle Starteinstellungen (Flags, Umgebungsvariablen, Konfigurationsdatei) lassen sich im Server-Modus zur
 Laufzeit über die TUI ändern. Die TUI schreibt die Konfigurationsdatei; der Core nimmt die Änderung ohne
@@ -1242,7 +1242,7 @@ Eigene Datei seit 2026-10-09: [backlog.md](backlog.md).
 
 | Datum | Änderung |
 |---|---|
-| 2026-10-18 | Neuer Punkt [6.6 On-the-fly-Konfiguration (Server-Modus)](#66-on-the-fly-konfiguration-server-modus): alle Starteinstellungen lassen sich im Server-Modus zur Laufzeit über die TUI ändern — die TUI schreibt die Konfigurationsdatei, der Core wendet die hot-capablen Einstellungen ohne Neustart an (Watcher von Code-ADR-0019 auf log-Einstellungen, dry-run, dev, CORS, listen/TLS, mode und shutdown-timeout erweitert). `data-dir`, `profile` und `config` brauchen einen Restart; vom Flag/Env fixierte Einstellungen bleiben fix. Neue `ConfigService` (Get/Update, Admin, nur Server-Modus) und TUI-Ansicht 8 (Einstellungen). |
+| 2026-10-18 | Neuer Punkt [6.5 On-the-fly-Konfiguration (Server-Modus)](#65-on-the-fly-konfiguration-server-modus): alle Starteinstellungen lassen sich im Server-Modus zur Laufzeit über die TUI ändern — die TUI schreibt die Konfigurationsdatei, der Core wendet die hot-capablen Einstellungen ohne Neustart an (Watcher von Code-ADR-0019 auf log-Einstellungen, dry-run, dev, CORS, listen/TLS, mode und shutdown-timeout erweitert). `data-dir`, `profile` und `config` brauchen einen Restart; vom Flag/Env fixierte Einstellungen bleiben fix. Neue `ConfigService` (Get/Update, Admin, nur Server-Modus) und TUI-Ansicht 8 (Einstellungen). |
 | 2026-10-18 | Unbekannte Chat-Commands werden geloggt (Entscheidung des Projektinhabers): Eine Nachricht, die mit einem Präfix-Trigger beginnt, aber kein aktives Command auslöst („!hugg“ bei Trigger „hug“), erhält einen Info-Eintrag — nur wenn das Debug-Log-Level oder der Dry-Run aktiv ist, sonst bleibt der Chat-Log ruhig ([`commands.md`](spec/commands.md), B70). Der Command-Domain meldet den Eindruck über `command.Recognition.Attempt`, der Event-Service loggt hinter einem Gate, das die App auf `log-level ≤ debug` oder `dry-run` öffnet. Tests: Domain (`TestRecognize`), Event-Service (`TestUnknownCommandLog`). |
 | 2026-09-27 | Erstfassung auf Basis von `starting.md` und der Untersuchung von Mix It Up v1.8.200 |
 | 2026-09-27 | Entscheidungen eingearbeitet: Clean-Room-Neuimplementierung (ADR-0001), MIT (ADR-0002), Streaming-PC primär und Server sekundär (ADR-0003), Start nur mit Twitch (ADR-0004). ADR-Backlog umnummeriert (Entstehungsreihenfolge), Gate O ergänzt, lokale Audioausgabe auf P1, Go/No-Go für YouTube und Kick nach M2. |

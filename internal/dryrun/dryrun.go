@@ -35,7 +35,7 @@ type EventRegistrar interface {
 }
 
 // AsInner returns the inner platform of the wrapper; ok is false if the
-// platform was not wrapped by this package (roadmap 6.6).
+// platform was not wrapped by this package (roadmap 6.5).
 func AsInner(p connector.Platform) (connector.Platform, bool) {
 	w, ok := p.(interface {
 		innerPlatform() connector.Platform
@@ -56,7 +56,7 @@ type Platform struct {
 	reg   EventRegistrar
 	log   *slog.Logger
 	// on switches the writes on and off at runtime; nil means always on
-	// (roadmap 6.6).
+	// (roadmap 6.5).
 	on *atomic.Bool
 }
 
@@ -72,7 +72,7 @@ func NewPlatform(p connector.Platform, log *slog.Logger) Platform {
 	return w
 }
 
-// NewSwitchablePlatform wraps p for dry run, switched by on (roadmap 6.6):
+// NewSwitchablePlatform wraps p for dry run, switched by on (roadmap 6.5):
 // with on set, the writes are recorded; with it unset, they go to the inner
 // platform. The reads always go to the inner platform.
 func NewSwitchablePlatform(p connector.Platform, log *slog.Logger, on *atomic.Bool) Platform {
@@ -98,7 +98,7 @@ func (w Platform) Channel(ctx context.Context) (connector.ChannelInfo, error) {
 	return w.inner.Channel(ctx)
 }
 
-// innerPlatform returns the wrapped platform (roadmap 6.6).
+// innerPlatform returns the wrapped platform (roadmap 6.5).
 func (w Platform) innerPlatform() connector.Platform { return w.inner }
 
 // Chat implements connector.Platform.
@@ -154,7 +154,7 @@ func (w Platform) Chatters(ctx context.Context) ([]user.Identity, error) {
 
 // UserPlatformData implements connector.PlatformData of the inner
 // platform, so the dry-run wrapper keeps the platform data capability for
-// the user service (roadmap 6.6).
+// the user service (roadmap 6.5).
 func (w Platform) UserPlatformData(ctx context.Context, platformUserID string) (user.PlatformData, error) {
 	d, ok := w.inner.(connector.PlatformData)
 	if !ok {
@@ -165,7 +165,7 @@ func (w Platform) UserPlatformData(ctx context.Context, platformUserID string) (
 
 // Say implements mock.Say of the inner platform, so the dry-run wrapper
 // stays a mock platform for the API (roadmap 6.3) and the platform set
-// (roadmap 6.6).
+// (roadmap 6.5).
 func (w Platform) Say(ctx context.Context, login, text string) (mock.Sent, error) {
 	m, ok := w.inner.(interface {
 		Say(ctx context.Context, login, text string) (mock.Sent, error)
@@ -333,7 +333,7 @@ func (o Ops) DeleteReward(ctx context.Context, title string) error {
 }
 
 // SwitchOps switches between the real twitch operations and their dry-run
-// recording at runtime (roadmap 6.6): with on set, the operations are
+// recording at runtime (roadmap 6.5): with on set, the operations are
 // recorded; with it unset, they run on the streamer channel.
 type SwitchOps struct {
 	realOps, dry twitchaction.Ops

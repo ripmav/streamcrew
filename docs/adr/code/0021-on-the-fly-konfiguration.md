@@ -1,7 +1,7 @@
 # ADR-0021 (Code): On-the-fly-Konfiguration
 
 - **Status:** Akzeptiert
-- **Phase:** 6.6
+- **Phase:** 6.5
 - **Betrifft:** `internal/config`, `internal/logging`, `internal/httpserver`,
   `internal/dryrun`, `internal/supervisor`, `internal/engine`, `internal/app`
 - **Bezug:** Code-ADR-0005 (Konfiguration), Code-ADR-0019 (Host-Rechte,
@@ -17,7 +17,7 @@ Bind-Adresse zu verschieben. Code-ADR-0019, Punkt 5, hat dafür den Watcher
 etabliert: Er vergleicht die Konfigurationsdatei im Sekundentakt und wendet
 Änderungen der Host-Rechte ohne Neustart an.
 
-Phase 6.6 (On-the-fly-Konfiguration) macht alle Starteinstellungen, die ein
+Phase 6.5 (On-the-fly-Konfiguration) macht alle Starteinstellungen, die ein
 laufender Prozess anwenden kann, hot: Der TUI (einziger Pfad, Server-Modus)
 schreibt die Konfigurationsdatei über die `ConfigService`, der Watcher wendet
 die Änderung an.

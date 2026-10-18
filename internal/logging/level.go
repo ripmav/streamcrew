@@ -11,7 +11,7 @@ import (
 
 // LevelStore holds the log level and the per-component levels of a
 // Dynamic logger; changing them applies to every logger built from it
-// without rebuilding (roadmap 6.6).
+// without rebuilding (roadmap 6.5).
 type LevelStore struct {
 	mu     sync.RWMutex
 	level  slog.Level
@@ -58,7 +58,7 @@ func (s *LevelStore) Min() slog.Level {
 // component is taken from the ComponentKey attribute passed to WithAttrs,
 // that is from Logger.With; attributes inside a group do not count. The
 // level is read from the shared store per record, so level changes apply
-// to every derived logger (roadmap 6.6).
+// to every derived logger (roadmap 6.5).
 type levelHandler struct {
 	next      slog.Handler
 	store     *LevelStore

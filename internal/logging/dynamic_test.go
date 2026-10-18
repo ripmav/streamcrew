@@ -17,7 +17,7 @@ func consoleCfg(t *testing.T, b *bytes.Buffer) Config {
 }
 
 // TestDynamicLevelChangeApplies verifies a level change reaches every
-// derived component logger without rebuilding them (roadmap 6.6).
+// derived component logger without rebuilding them (roadmap 6.5).
 func TestDynamicLevelChangeApplies(t *testing.T) {
 	var buf bytes.Buffer
 	logger, dyn, err := NewDynamic(consoleCfg(t, &buf))
@@ -61,7 +61,7 @@ func TestDynamicLevelChangeApplies(t *testing.T) {
 }
 
 // TestDynamicOutputChangeApplies verifies a console format change switches
-// the output of the whole logger tree (roadmap 6.6).
+// the output of the whole logger tree (roadmap 6.5).
 func TestDynamicOutputChangeApplies(t *testing.T) {
 	var buf bytes.Buffer
 	logger, dyn, err := NewDynamic(consoleCfg(t, &buf))
@@ -91,7 +91,7 @@ func TestDynamicOutputChangeApplies(t *testing.T) {
 }
 
 // TestDynamicFileSwitch verifies a rotation change rebuilds the log file
-// and the new file is written (roadmap 6.6).
+// and the new file is written (roadmap 6.5).
 func TestDynamicFileSwitch(t *testing.T) {
 	file := t.TempDir() + "/app.log"
 	var buf bytes.Buffer

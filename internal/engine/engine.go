@@ -174,7 +174,7 @@ func WithShutdownTimeout(d time.Duration) Option {
 }
 
 // WithShutdownTimeoutFunc names the function that supplies the shutdown
-// timeout at shutdown time, so it can change at runtime (roadmap 6.6); it
+// timeout at shutdown time, so it can change at runtime (roadmap 6.5); it
 // wins over WithShutdownTimeout.
 func WithShutdownTimeoutFunc(f func() time.Duration) Option {
 	return func(e *Engine) error {
@@ -218,7 +218,7 @@ type Engine struct {
 	config           func(context.Context) (Config, error)
 	shutdownDuration time.Duration
 	// shutdownFunc supplies the timeout at shutdown time; it wins over
-	// shutdownDuration (roadmap 6.6).
+	// shutdownDuration (roadmap 6.5).
 	shutdownFunc func() time.Duration
 
 	// wg has the goroutines of the instances.

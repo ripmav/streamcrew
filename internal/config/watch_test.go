@@ -182,7 +182,7 @@ func TestWatcherFixedSettings(t *testing.T) {
 		assert.False(t, w.has(capability.Script), "revoke is fixed by the environment")
 		assert.True(t, w.live.Outbound().HasHost("nas"), "outbound_allow is fixed by the flag")
 		// log_level and listen are hot and applied without a restart
-		// (roadmap 6.6); the file contains no setting that needs one, so
+		// (roadmap 6.5); the file contains no setting that needs one, so
 		// the log says nothing.
 		assert.NotContains(t, w.logs.String(), "apply after a restart")
 	})

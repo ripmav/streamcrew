@@ -118,7 +118,7 @@ func WithShutdownTimeout(d time.Duration) Option {
 }
 
 // WithShutdownTimeoutFunc names the function that supplies the shutdown
-// timeout at shutdown time, so it can change at runtime (roadmap 6.6).
+// timeout at shutdown time, so it can change at runtime (roadmap 6.5).
 func WithShutdownTimeoutFunc(f func() time.Duration) Option {
 	return func(s *Supervisor) { s.shutdownFunc = f }
 }
@@ -152,7 +152,7 @@ type Supervisor struct {
 	status           func(Status)
 	shutdownDuration time.Duration
 	// shutdownFunc supplies the timeout at shutdown time; it wins over
-	// shutdownDuration (roadmap 6.6).
+	// shutdownDuration (roadmap 6.5).
 	shutdownFunc func() time.Duration
 
 	mu      sync.Mutex

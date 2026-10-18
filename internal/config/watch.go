@@ -24,7 +24,7 @@ import (
 const ReloadInterval = time.Second
 
 // Hot returns the settings whose changes in the configuration file apply
-// without a restart (roadmap 6.6): the rights of Code-ADR-0019 plus the
+// without a restart (roadmap 6.5): the rights of Code-ADR-0019 plus the
 // log settings, the dry run, the developer mode, the CORS allowlist, the
 // listen address with its TLS certificate, the mode and the shutdown
 // timeout.
@@ -39,7 +39,7 @@ func Hot() []string {
 }
 
 // RestartOnly returns the settings that apply only after a restart
-// (roadmap 6.6): the data directory and the profile open files and
+// (roadmap 6.5): the data directory and the profile open files and
 // databases the running process cannot move, and the configuration file
 // path itself.
 func RestartOnly() []string {
@@ -47,7 +47,7 @@ func RestartOnly() []string {
 }
 
 // ApplyFuncs are the hooks the Watcher calls for the hot settings it finds
-// in the configuration file (roadmap 6.6). Every hook is optional; a nil
+// in the configuration file (roadmap 6.5). Every hook is optional; a nil
 // hook leaves the setting unapplied. The hooks run in the order of the
 // settings in Hot.
 type ApplyFuncs struct {
@@ -67,7 +67,7 @@ type ApplyFuncs struct {
 }
 
 // Watcher reloads the settings from the configuration file without a
-// restart (Code-ADR-0019, point 5, extended by roadmap 6.6). It compares
+// restart (Code-ADR-0019, point 5, extended by roadmap 6.5). It compares
 // the content of the file every ReloadInterval and takes the hot settings
 // only together and only from a valid file; otherwise the settings stay as
 // they are. Settings set by flag or environment variable stay fixed.

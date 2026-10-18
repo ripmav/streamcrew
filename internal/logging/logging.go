@@ -10,7 +10,7 @@
 //	logger.With(logging.ComponentKey, "supervisor")
 //
 // Dynamic builds a logger whose levels and output can change while it
-// runs (roadmap 6.6, on-the-fly configuration):
+// runs (roadmap 6.5, on-the-fly configuration):
 //
 //	logger, dyn, _ := logging.NewDynamic(cfg)
 //	dyn.Update(newCfg)
@@ -84,7 +84,7 @@ type Dynamic struct {
 }
 
 // NewDynamic builds the logger described by cfg with a Dynamic handle for
-// changing levels and output at runtime (roadmap 6.6). The returned logger
+// changing levels and output at runtime (roadmap 6.5). The returned logger
 // and every logger derived from it see the changes.
 func NewDynamic(cfg Config) (*slog.Logger, *Dynamic, error) {
 	base, closer, err := buildBase(cfg)

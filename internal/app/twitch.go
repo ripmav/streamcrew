@@ -26,7 +26,7 @@ type twitchStreamAuth struct {
 
 // twitchOps returns the twitch operations for the action registry: the
 // Helix implementation switched with the dry-run recording at runtime
-// (roadmap 6.6).
+// (roadmap 6.5).
 func (a *App) twitchOps() twitchaction.Ops {
 	return dryrun.NewSwitchOps(twitchOps{app: a}, dryrun.NewOps(component(a.logger, "dryrun")), &a.dryRun)
 }

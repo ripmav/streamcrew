@@ -16,7 +16,7 @@ import (
 )
 
 // applyRec records the calls of the hot applies of the Watcher (roadmap
-// 6.6).
+// 6.5).
 type applyRec struct {
 	logCalls  []config.LogConfig
 	dryRun    atomic.Bool
@@ -68,7 +68,7 @@ var errListen = errors.New("rebind failed")
 
 // TestWatcherAppliesHotSettings verifies the watcher calls the hot applies
 // for the settings that changed in the file, and not for the ones that did
-// not change (roadmap 6.6).
+// not change (roadmap 6.5).
 func TestWatcherAppliesHotSettings(t *testing.T) {
 	clearEnv(t)
 	dataDir := t.TempDir()
@@ -97,7 +97,7 @@ func TestWatcherAppliesHotSettings(t *testing.T) {
 }
 
 // TestWatcherAppliesFixedOnlyWhenFromFile verifies the watcher does not
-// apply a hot setting that is fixed by flag or environment (roadmap 6.6).
+// apply a hot setting that is fixed by flag or environment (roadmap 6.5).
 func TestWatcherAppliesFixedOnlyWhenFromFile(t *testing.T) {
 	clearEnv(t)
 	dataDir := t.TempDir()
@@ -112,7 +112,7 @@ func TestWatcherAppliesFixedOnlyWhenFromFile(t *testing.T) {
 }
 
 // TestWatcherKeepsOnApplyError verifies a failing apply keeps the previous
-// state and logs the problem (roadmap 6.6).
+// state and logs the problem (roadmap 6.5).
 func TestWatcherKeepsOnApplyError(t *testing.T) {
 	clearEnv(t)
 	dataDir := t.TempDir()
@@ -127,7 +127,7 @@ func TestWatcherKeepsOnApplyError(t *testing.T) {
 }
 
 // TestWatcherRestartOnlySettings verifies the settings that need a restart
-// are reported, not applied (roadmap 6.6).
+// are reported, not applied (roadmap 6.5).
 func TestWatcherRestartOnlySettings(t *testing.T) {
 	clearEnv(t)
 	dataDir := t.TempDir()
