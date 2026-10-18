@@ -185,8 +185,24 @@ func convertEvent(e event.Envelope) *v1alpha1.Event {
 		return instanceEvent(e, base)
 	case isFeedEvent(e.Type):
 		return feedEvent(e, base)
+	case e.Type == eventtype.Log:
+		return logEvent(e, base)
 	}
 	return nil
+}
+
+// logEvent converts a "log" event to its protocol form (roadmap 6.6).
+func logEvent(e event.Envelope, base *v1alpha1.Event) *v1alpha1.Event {
+	p, ok := event.Payload[LogPayload](e)
+	if !ok {
+		return nil
+	}
+	base.Payload = &v1alpha1.Event_Log{Log: &v1alpha1.LogEntry{
+		Level:     p.Level,
+		Component: p.Component,
+		Message:   p.Message,
+	}}
+	return base
 }
 
 func isFeedEvent(t event.Type) bool {

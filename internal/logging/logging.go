@@ -77,6 +77,7 @@ type Dynamic struct {
 
 	mu       sync.Mutex
 	base     *slog.Handler // the current output; swapped by Update
+	sink     *slog.Handler // an extra handler beside the output; set by SetSink
 	store    *LevelStore
 	maxSize  int64
 	maxFiles int
@@ -129,6 +130,27 @@ func (d *Dynamic) Update(cfg Config) error {
 		return fmt.Errorf("close old log file: %w", err)
 	}
 	return nil
+}
+
+// SetSink adds a handler that receives every record the level filter
+// passes, beside the console and file output (roadmap 6.5: the hot log
+// settings apply to the sink as well). The sink survives Update; it must
+// not block and must not log through the same tree (its records would loop
+// through it).
+func (d *Dynamic) SetSink(h slog.Handler) {
+	d.mu.Lock()
+	d.sink = &h
+	d.mu.Unlock()
+}
+
+// sinkHandler returns the current sink handler, or nil without one.
+func (d *Dynamic) sinkHandler() slog.Handler {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.sink == nil {
+		return nil
+	}
+	return *d.sink
 }
 
 // Close closes the current log file. It is the closer of the log: call it
@@ -188,7 +210,7 @@ func (s *baseSlot) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (s *baseSlot) Handle(ctx context.Context, r slog.Record) error {
-	return s.out().Handle(ctx, r)
+	return s.d.deliver(ctx, s.out(), nil, nil, r)
 }
 
 func (s *baseSlot) WithAttrs(attrs []slog.Attr) slog.Handler {
@@ -203,6 +225,25 @@ func (s *baseSlot) out() slog.Handler {
 	s.d.mu.Lock()
 	defer s.d.mu.Unlock()
 	return *s.d.base
+}
+
+// deliver writes r to out and to the sink, if any (roadmap 6.6). The sink
+// gets the same derivation as out, so it sees the component attribute like
+// the output does; every record of the tree reaches the sink.
+func (d *Dynamic) deliver(ctx context.Context, out slog.Handler, attrs []slog.Attr, groups []string, r slog.Record) error {
+	err := out.Handle(ctx, r)
+	if h := d.sinkHandler(); h != nil {
+		for _, g := range groups {
+			h = h.WithGroup(g)
+		}
+		if len(attrs) > 0 {
+			h = h.WithAttrs(attrs)
+		}
+		// The sink's error is dropped: the output already handled the
+		// record, and reporting the sink would loop through it.
+		_ = h.Handle(ctx, r)
+	}
+	return err
 }
 
 // baseSlotOut returns the current output of the Dynamic logger.
@@ -236,7 +277,7 @@ func (s *derivedSlot) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (s *derivedSlot) Handle(ctx context.Context, r slog.Record) error {
-	return s.out().Handle(ctx, r)
+	return s.d.deliver(ctx, s.out(), s.attrs, s.groups, r)
 }
 
 func (s *derivedSlot) WithAttrs(attrs []slog.Attr) slog.Handler {

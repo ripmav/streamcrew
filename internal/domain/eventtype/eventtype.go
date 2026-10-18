@@ -48,6 +48,10 @@ type Descriptor struct {
 const (
 	AppStarted  event.Type = "app.started"
 	AppStopping event.Type = "app.stopping"
+	// Log is the application event of a log line (roadmap 6.6): the app
+	// publishes the records its level filter passes; like the
+	// authentication events it is not in All() and triggers no command.
+	Log event.Type = "log.line"
 )
 
 // Authentication, app events for the frontends (roadmap 4.1, ADR-0014): the
