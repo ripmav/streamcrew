@@ -47,7 +47,7 @@ func updateFile(t *testing.T, initial string) (string, *config.FileResolver) {
 }
 
 // TestWatcherUpdateStoresTheDocument checks that Update validates the
-// document and stores it, reporting the changed settings (roadmap 6.6.2).
+// document and stores it, reporting the changed settings (roadmap 6.5.2).
 func TestWatcherUpdateStoresTheDocument(t *testing.T) {
 	t.Parallel()
 	path, f := updateFile(t, "log_level: debug\n")
@@ -75,7 +75,7 @@ func TestWatcherUpdateStoresTheDocument(t *testing.T) {
 }
 
 // TestWatcherUpdateRejectsAnInvalidDocument checks that an invalid
-// document is not stored (roadmap 6.6.2).
+// document is not stored (roadmap 6.5.2).
 func TestWatcherUpdateRejectsAnInvalidDocument(t *testing.T) {
 	t.Parallel()
 	path, f := updateFile(t, "log_level: debug\n")
@@ -93,7 +93,7 @@ func TestWatcherUpdateRejectsAnInvalidDocument(t *testing.T) {
 }
 
 // TestWatcherUpdateReportsRestartSettings checks that the settings that
-// apply only after a restart are reported (roadmap 6.6.2).
+// apply only after a restart are reported (roadmap 6.5.2).
 func TestWatcherUpdateReportsRestartSettings(t *testing.T) {
 	t.Parallel()
 	_, f := updateFile(t, "log_level: debug\n")
@@ -105,7 +105,7 @@ func TestWatcherUpdateReportsRestartSettings(t *testing.T) {
 }
 
 // TestWatcherUpdateCreatesAMissingFile checks that Update creates the
-// file when it does not exist (roadmap 6.6.2).
+// file when it does not exist (roadmap 6.5.2).
 func TestWatcherUpdateCreatesAMissingFile(t *testing.T) {
 	t.Parallel()
 	path, f := updateFile(t, "")

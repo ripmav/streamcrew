@@ -12,7 +12,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/config"
 )
 
-// apiConfig adapts the core to the api.Config port (roadmap 6.6.2).
+// apiConfig adapts the core to the api.Config port (roadmap 6.5.2).
 type apiConfig struct{ a *App }
 
 // Get returns the current configuration document and the categories of

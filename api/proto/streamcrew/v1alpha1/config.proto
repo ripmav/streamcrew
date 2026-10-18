@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 
-// ConfigService (roadmap 6.6.2): the live configuration of the core. The
+// ConfigService (roadmap 6.5.2): the live configuration of the core. The
 // document is the configuration file (YAML) in its valid form; Get returns
 // it with the categories of the settings, Update replaces it. The change
-// applies at runtime where hot (roadmap 6.6.1) and after a restart where
+// applies at runtime where hot (roadmap 6.5.1) and after a restart where
 // not. Live only in server mode; the other modes are read-only.
 syntax = "proto3";
 

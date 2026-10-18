@@ -13,13 +13,13 @@ import (
 
 // ErrConfigReadOnly reports that the live configuration is not available:
 // the core runs without a configuration file or in a mode that does not
-// apply file changes (roadmap 6.6.2).
+// apply file changes (roadmap 6.5.2).
 var ErrConfigReadOnly = errors.New("the live configuration is not available in this mode")
 
 // ErrConfigInvalid reports that a document is not a valid configuration.
 var ErrConfigInvalid = errors.New("invalid configuration document")
 
-// Config manages the configuration of the core (roadmap 6.6.2).
+// Config manages the configuration of the core (roadmap 6.5.2).
 type Config interface {
 	// Get returns the current configuration document and the categories
 	// of its settings; live is false when Update is not possible.

@@ -151,7 +151,7 @@ type App struct {
 	ready    *readiness
 	rights   *config.Live
 	// file is the resolver of the configuration file; watcher applies
-	// its changes at runtime (roadmap 6.6), nil without a file.
+	// its changes at runtime (roadmap 6.5), nil without a file.
 	file    *config.FileResolver
 	watcher *config.Watcher
 	// startedAt is when the core started; it is reported by the API's Status

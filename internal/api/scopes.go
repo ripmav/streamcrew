@@ -52,7 +52,7 @@ var scopeForMethod = map[string]apitoken.Scope{
 	"BackupService/Restore": apitoken.Admin,
 
 	// ConfigService. The document shows the server settings, so even
-	// Get needs admin (roadmap 6.6.2).
+	// Get needs admin (roadmap 6.5.2).
 	"ConfigService/Get":    apitoken.Admin,
 	"ConfigService/Update": apitoken.Admin,
 

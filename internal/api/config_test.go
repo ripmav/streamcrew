@@ -47,7 +47,7 @@ func configClient(t *testing.T, c *fakeConfig) streamcrewv1alpha1connect.ConfigS
 }
 
 // TestConfigGetReturnsTheDocument checks that Get returns the document
-// with the categories of the settings (roadmap 6.6.2).
+// with the categories of the settings (roadmap 6.5.2).
 func TestConfigGetReturnsTheDocument(t *testing.T) {
 	t.Parallel()
 	c := &fakeConfig{
@@ -67,7 +67,7 @@ func TestConfigGetReturnsTheDocument(t *testing.T) {
 }
 
 // TestConfigUpdateStoresTheDocument checks that Update returns the stored
-// document with the changed settings (roadmap 6.6.2).
+// document with the changed settings (roadmap 6.5.2).
 func TestConfigUpdateStoresTheDocument(t *testing.T) {
 	t.Parallel()
 	c := &fakeConfig{live: true, update: func(_ context.Context, document string) ([]string, []string, string, error) {
@@ -82,7 +82,7 @@ func TestConfigUpdateStoresTheDocument(t *testing.T) {
 
 // TestConfigUpdateMapsErrors checks the error mapping: invalid document is
 // an invalid argument, a read-only core is a failed precondition, and an
-// internal error stays internal (roadmap 6.6.2).
+// internal error stays internal (roadmap 6.5.2).
 func TestConfigUpdateMapsErrors(t *testing.T) {
 	t.Parallel()
 

@@ -70,7 +70,7 @@ type ServerConfig struct {
 	// Backups creates, lists and restores profile backups; nil to skip.
 	Backups Backup
 	// Config manages the configuration of the core; nil to skip the
-	// service (roadmap 6.6.2).
+	// service (roadmap 6.5.2).
 	Config Config
 	// Auth manages the platform logins; nil to skip the service.
 	Auth Auth

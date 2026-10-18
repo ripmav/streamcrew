@@ -36,7 +36,7 @@ func configClient(t *testing.T, a *app.App) streamcrewv1alpha1connect.ConfigServ
 
 // TestConfigServiceUpdatesTheLiveDocument runs the core in the server mode
 // and changes the dry run through the ConfigService; the platforms pick up
-// the change without a restart (roadmap 6.6.2).
+// the change without a restart (roadmap 6.5.2).
 func TestConfigServiceUpdatesTheLiveDocument(t *testing.T) {
 	t.Parallel()
 	pub := &outPub{}
@@ -77,7 +77,7 @@ func TestConfigServiceUpdatesTheLiveDocument(t *testing.T) {
 }
 
 // TestConfigServiceReadOnlyInDaemonMode checks that the daemon mode serves
-// the document as read-only (roadmap 6.6.2).
+// the document as read-only (roadmap 6.5.2).
 func TestConfigServiceReadOnlyInDaemonMode(t *testing.T) {
 	t.Parallel()
 	a, _ := hotCore(t, &outPub{})

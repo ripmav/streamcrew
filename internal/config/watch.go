@@ -251,7 +251,7 @@ func (w *Watcher) applyError(ctx context.Context, setting string, err error) {
 
 // Update validates data against the configuration the core runs with
 // and stores it in the file when it differs from the content last seen
-// (roadmap 6.6.2). It returns the hot settings that change at runtime
+// (roadmap 6.5.2). It returns the hot settings that change at runtime
 // and the settings that apply after a restart, and the stored document.
 // The Watcher applies the change on its next comparison.
 func (w *Watcher) Update(ctx context.Context, data []byte) (applied, restart []string, stored []byte, err error) {
