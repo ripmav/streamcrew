@@ -53,7 +53,7 @@ func startCore(t *testing.T) string {
 		cancel()
 		require.NoError(t, <-errc)
 	})
-	return "http://" + a.HTTPServer().Addr().String()
+	return "http://" + mustServerAddr(t, a)
 }
 
 // TestCounterKong covers the kong structure of the counter commands.
@@ -138,4 +138,17 @@ func TestCounterCommands(t *testing.T) {
 	// An unknown counter is an error.
 	out.Reset()
 	require.Error(t, counterGetCmd{Name: "nope"}.Run(ctx, env))
+}
+
+// mustServerAddr waits for the core's http server to listen and returns
+// its address: the core is ready while the first listener is still coming
+// up, so the address can lag readiness by a moment.
+func mustServerAddr(t *testing.T, a *app.App) string {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		_, ok := a.HTTPServer().Addr()
+		return ok
+	}, 10*time.Second, 10*time.Millisecond, "the http server to listen")
+	addr, _ := a.HTTPServer().Addr()
+	return addr.String()
 }

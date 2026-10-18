@@ -29,7 +29,7 @@ type RuntimeInfo struct {
 // runtime file with the address, the PID and the version of the core.
 func (a *App) writeRuntimeFile() {
 	<-a.HTTPServer().Listening()
-	addr := a.HTTPServer().Addr()
+	addr, _ := a.HTTPServer().Addr()
 	if addr == nil {
 		return
 	}

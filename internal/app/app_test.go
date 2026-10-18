@@ -70,7 +70,7 @@ func TestRunStartsReportsReadyAndStops(t *testing.T) {
 	case err := <-errc:
 		t.Fatalf("Run returned early: %v", err)
 	}
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	assert.Equal(t, http.StatusOK, status(t, base+"/healthz"))
 	require.Eventually(t, a.Ready, 5*time.Second, 10*time.Millisecond)
 	assert.Equal(t, http.StatusOK, status(t, base+"/readyz"))
@@ -352,4 +352,17 @@ func TestPreMigrationBackup(t *testing.T) {
 	assert.Equal(t, backup.KindPreMigration, list[0].Manifest.Kind)
 	assert.Equal(t, "Main", list[0].Manifest.ProfileName)
 	assert.Equal(t, "v1.2.3", list[0].Manifest.AppVersion)
+}
+
+// mustServerAddr waits for the core's http server to listen and returns
+// its address: the core is ready while the first listener is still coming
+// up, so the address can lag readiness by a moment.
+func mustServerAddr(t *testing.T, a *app.App) string {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		_, ok := a.HTTPServer().Addr()
+		return ok
+	}, 10*time.Second, 10*time.Millisecond, "the http server to listen")
+	addr, _ := a.HTTPServer().Addr()
+	return addr.String()
 }
