@@ -5,6 +5,8 @@ package api
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -15,10 +17,45 @@ import (
 type EventFilter struct {
 	// Kinds are event type prefixes; empty matches everything.
 	Kinds []string
+	// MinLevel is the lowest level of the log events that are delivered:
+	// "debug", "info", "warn" or "error"; empty delivers all log events.
+	// It is a read-side filter (roadmap 6.6.3): the core's log level is
+	// unchanged, and no other event type is touched.
+	MinLevel string
 	// Platforms are platform names; empty matches everything.
 	Platforms []string
 	// Channels are channel logins; empty matches everything.
 	Channels []string
+}
+
+// ErrMinLevel names an invalid min_level of the stream filter.
+var ErrMinLevel = errors.New("min_level is not debug, info, warn or error")
+
+// minLevel parses the filter's min_level into a comparison level; empty
+// accepts every log event.
+func (f EventFilter) minLevel() (slog.Level, error) {
+	switch strings.ToLower(f.MinLevel) {
+	case "", "debug":
+		return slog.LevelDebug, nil
+	case "info":
+		return slog.LevelInfo, nil
+	case "warn":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	}
+	return 0, ErrMinLevel
+}
+
+// MinLevelOr parses the filter's min_level like MinLevel but returns def
+// instead of an error for an unknown value; the stream path is already
+// validated by the handler.
+func (f EventFilter) MinLevelOr(def slog.Level) slog.Level {
+	l, err := f.minLevel()
+	if err != nil {
+		return def
+	}
+	return l
 }
 
 // Stream is the port the StreamService handler needs (roadmap 6.2.1).
@@ -42,13 +79,17 @@ type streamService struct {
 
 // Subscribe streams events to the client until the client cancels.
 func (s *streamService) Subscribe(ctx context.Context, req *connect.Request[v1alpha1.SubscribeRequest], stream *connect.ServerStream[v1alpha1.Event]) error {
+	f := filterFrom(req.Msg.GetFilter())
+	if _, err := f.minLevel(); err != nil {
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	// A no-op send flushes the response headers, so the client's Subscribe
 	// call returns before the first event arrives (over HTTP/1.1 the headers
 	// are only sent with the first write).
 	if err := stream.Send(nil); err != nil {
 		return err
 	}
-	events := s.s.Stream(ctx, filterFrom(req.Msg.GetFilter()), req.Msg.GetSince())
+	events := s.s.Stream(ctx, f, req.Msg.GetSince())
 	for {
 		select {
 		case <-ctx.Done():
@@ -93,5 +134,5 @@ func filterFrom(f *v1alpha1.EventFilter) EventFilter {
 	if f == nil {
 		return EventFilter{}
 	}
-	return EventFilter{Kinds: f.GetKinds(), Platforms: f.GetPlatforms(), Channels: f.GetChannels()}
+	return EventFilter{Kinds: f.GetKinds(), MinLevel: f.GetMinLevel(), Platforms: f.GetPlatforms(), Channels: f.GetChannels()}
 }

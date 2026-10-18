@@ -29,10 +29,15 @@ message EventFilter {
   // kinds are event type prefixes, e.g. "chat", "feed", "command",
   // "platform", "log", "prompt"; empty matches everything.
   repeated string kinds = 1;
+  // min_level is the lowest level of the log events (log.line) that are
+  // delivered: "debug", "info", "warn" or "error"; empty delivers all log
+  // events and does not touch any other event type. It is a read-side
+  // filter: the core's log level is unchanged.
+  string min_level = 2;
   // platforms are platform names; empty matches everything.
-  repeated string platforms = 2;
+  repeated string platforms = 3;
   // channels are channel logins; empty matches everything.
-  repeated string channels = 3;
+  repeated string channels = 4;
 }
 
 // SubscribeRequest is the request of Subscribe.
