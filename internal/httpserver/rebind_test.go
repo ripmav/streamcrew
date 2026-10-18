@@ -54,11 +54,11 @@ func startServer(t *testing.T, cfg httpserver.Config) *httpserver.Server {
 func TestRebindMovesToANewPort(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t, httpserver.Config{Addr: "127.0.0.1:0"})
-	oldAddr := srv.Addr().String()
+	oldAddr := serverAddr(t, srv)
 
 	err := srv.Rebind(t.Context(), httpserver.Config{Addr: "127.0.0.1:0"})
 	require.NoError(t, err)
-	newAddr := srv.Addr().String()
+	newAddr := serverAddr(t, srv)
 	assert.NotEqual(t, oldAddr, newAddr)
 
 	code, err := getURL(t, "http://"+newAddr+"/healthz")
@@ -75,7 +75,7 @@ func TestRebindMovesToANewPort(t *testing.T) {
 func TestRebindKeepsTheOldBindingOnError(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t, httpserver.Config{Addr: "127.0.0.1:0"})
-	addr := srv.Addr().String()
+	addr := serverAddr(t, srv)
 
 	// Rebinding to the address already in use fails: the old binding must
 	// still serve.
@@ -92,7 +92,7 @@ func TestRebindKeepsTheOldBindingOnError(t *testing.T) {
 func TestRebindKeepsTheOldBindingOnABrokenKeyPair(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t, httpserver.Config{Addr: "127.0.0.1:0"})
-	addr := srv.Addr().String()
+	addr := serverAddr(t, srv)
 
 	err := srv.Rebind(t.Context(), httpserver.Config{
 		Addr: "127.0.0.1:0", TLSCert: "no-such-cert", TLSKey: "no-such-key",
@@ -111,7 +111,7 @@ func TestSetDevTogglesThePprofRoutes(t *testing.T) {
 	srv := startServer(t, httpserver.Config{Addr: "127.0.0.1:0"})
 
 	get := func() int {
-		code, err := getURL(t, "http://"+srv.Addr().String()+"/debug/pprof/")
+		code, err := getURL(t, "http://"+serverAddr(t, srv)+"/debug/pprof/")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -129,7 +129,7 @@ func TestSetDevTogglesThePprofRoutes(t *testing.T) {
 func TestSetCorsAllowSwapsTheAllowlist(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t, httpserver.Config{Addr: "127.0.0.1:0"})
-	addr := "http://" + srv.Addr().String() + "/healthz"
+	addr := "http://" + serverAddr(t, srv) + "/healthz"
 
 	cross := func(origin string) int {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, addr, nil)
@@ -156,12 +156,12 @@ func TestRebindServesTLS(t *testing.T) {
 	t.Parallel()
 	certFile, keyFile := selfSignedCert(t)
 	srv := startServer(t, httpserver.Config{Addr: "127.0.0.1:0"})
-	oldAddr := srv.Addr().String()
+	oldAddr := serverAddr(t, srv)
 
 	require.NoError(t, srv.Rebind(t.Context(), httpserver.Config{
 		Addr: "127.0.0.1:0", TLSCert: certFile, TLSKey: keyFile,
 	}))
-	newAddr := srv.Addr().String()
+	newAddr := serverAddr(t, srv)
 
 	// The TLS client gets the health endpoint.
 	// The certificate is the self-signed one of the test.
@@ -185,3 +185,12 @@ func TestRebindServesTLS(t *testing.T) {
 
 var _ = net.Conn(nil)
 var _ = time.Second
+
+// serverAddr returns the address of the running test server; startServer
+// waits until it listens, so ok must be true.
+func serverAddr(t *testing.T, srv *httpserver.Server) string {
+	t.Helper()
+	addr, ok := srv.Addr()
+	require.True(t, ok, "the server to listen")
+	return addr.String()
+}

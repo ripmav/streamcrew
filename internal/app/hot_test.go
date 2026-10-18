@@ -147,7 +147,7 @@ func TestHotApplyDryRun(t *testing.T) {
 	pub := &outPub{}
 	a, path := hotCore(t, pub)
 	// Dry run off: the core's chat message goes to the platform.
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	chat := chatClient(t, base)
 	_, err := chat.Send(t.Context(), connect.NewRequest(&v1alpha1.SendChatRequest{Text: "hello"}))
 	require.NoError(t, err)
@@ -183,13 +183,14 @@ func TestHotApplyShutdownTimeout(t *testing.T) {
 // (roadmap 6.5): the new address serves, the old one stops.
 func TestHotApplyListenRebinds(t *testing.T) {
 	a, path := hotCore(t, &outPub{})
-	old := a.HTTPServer().Addr().String()
+	old := mustServerAddr(t, a)
 
 	// The rebind moves the server to a fixed port the test picks.
 	port := freePort(t)
 	rewriteFile(t, path, "log_level: debug\nlisten: 127.0.0.1:"+port+"\n")
 	require.Eventually(t, func() bool {
-		return a.HTTPServer().Addr() != nil && a.HTTPServer().Addr().String() == "127.0.0.1:"+port
+		addr, ok := a.HTTPServer().Addr()
+		return ok && addr.String() == "127.0.0.1:"+port
 	}, 5*time.Second, 10*time.Millisecond, "the server moved to the new address")
 	_ = old
 }
