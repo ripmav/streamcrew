@@ -543,7 +543,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Backups:   apiBackup{a: a},
 		Auth:      newAPIAuth(a),
 		Commands:  apiCommands{a: a},
-		Stream:    newAPIStream(a),
+		Stream:    newAPIStream(a, cfg.Stream),
 		Config:    apiConfig{a: a},
 		Tokens:    apitoken.Open(cfg.DataDir),
 		Shutdown:  a.Shutdown,

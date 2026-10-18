@@ -123,6 +123,8 @@ func (serveCmd) Run(ctx context.Context, e *Env) error {
 		LogMaxFiles:       cfg.Log.MaxFiles,
 		LogComponentLevel: cfg.Log.ComponentLevel,
 		ShutdownTimeout:   cfg.ShutdownTimeout,
+		StreamBuffer:      cfg.Stream.Buffer,
+		StreamCatchUp:     cfg.Stream.CatchUp,
 		SecretKey:         e.SecretKey,
 		LogWriter:         e.Stderr,
 		ConfigFile:        e.File.Path(),

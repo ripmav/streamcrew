@@ -15,6 +15,7 @@ import (
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 	"github.com/ripmav/streamcrew/internal/api"
+	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/connector/mock"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
@@ -24,40 +25,47 @@ import (
 	"github.com/ripmav/streamcrew/internal/prompt"
 )
 
-// streamBufferSize is how many events the hub keeps for the since catch-up.
-const streamBufferSize = 256
-
 // apiStream is the api.Stream port: it fans out the converted bus events to
-// the subscribers and answers prompts (roadmap 6.2.1).
+// the subscribers and answers prompts (roadmap 6.2.1). The stream sizes are
+// taken at the start of the core (roadmap 6.2.6) and never re-read from the
+// live configuration.
 type apiStream struct {
-	a    *App
-	once sync.Once
-	hub  *streamHub
+	a      *App
+	stream config.StreamConfig
+	once   sync.Once
+	hub    *streamHub
 }
 
 var _ api.Stream = (*apiStream)(nil)
 
-func newAPIStream(app *App) *apiStream {
-	return &apiStream{a: app}
+func newAPIStream(app *App, stream config.StreamConfig) *apiStream {
+	return &apiStream{a: app, stream: stream}
 }
 
 // streamHub subscribes to the bus once, converts the events, keeps the last
 // ones for the since catch-up and fans them out to the subscriber channels.
 type streamHub struct {
-	a    *App
-	mu   sync.Mutex
-	subs map[chan *v1alpha1.Event]struct{}
-	buf  []*v1alpha1.Event
+	a         *App
+	busBuffer int // bus subscription buffer (roadmap 6.2.6)
+	catchUp   int // since catch-up buffer (roadmap 6.2.6)
+	mu        sync.Mutex
+	subs      map[chan *v1alpha1.Event]struct{}
+	buf       []*v1alpha1.Event
 }
 
-func newStreamHub(app *App) *streamHub {
-	return &streamHub{a: app, subs: make(map[chan *v1alpha1.Event]struct{})}
+func newStreamHub(app *App, stream config.StreamConfig) *streamHub {
+	return &streamHub{
+		a:         app,
+		busBuffer: stream.Buffer,
+		catchUp:   stream.CatchUp,
+		subs:      make(map[chan *v1alpha1.Event]struct{}),
+	}
 }
 
 // run subscribes to the bus and fans out the converted events until the
 // context ends.
 func (h *streamHub) run(ctx context.Context) {
-	sub := h.a.Bus().Subscribe(ctx, event.WithBuffer(1024))
+	sub := h.a.Bus().Subscribe(ctx, event.WithBuffer(h.busBuffer))
 	for e := range sub.C() {
 		ev := convertEvent(e)
 		if ev == nil {
@@ -71,8 +79,8 @@ func (h *streamHub) run(ctx context.Context) {
 func (h *streamHub) publish(ev *v1alpha1.Event) {
 	h.mu.Lock()
 	h.buf = append(h.buf, ev)
-	if len(h.buf) > streamBufferSize {
-		h.buf = h.buf[len(h.buf)-streamBufferSize:]
+	if len(h.buf) > h.catchUp {
+		h.buf = h.buf[len(h.buf)-h.catchUp:]
 	}
 	subs := make([]chan *v1alpha1.Event, 0, len(h.subs))
 	for ch := range h.subs {
@@ -107,7 +115,7 @@ func (h *streamHub) unsubscribe(ch chan *v1alpha1.Event) {
 // hub returns the hub, starting it once with the core's run context.
 func (x *apiStream) ensureHub() *streamHub {
 	x.once.Do(func() {
-		h := newStreamHub(x.a)
+		h := newStreamHub(x.a, x.stream)
 		x.hub = h
 		go h.run(x.a.runCtx)
 	})

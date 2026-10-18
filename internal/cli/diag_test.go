@@ -39,6 +39,7 @@ func TestDiagBundle(t *testing.T) {
 		DataDir:         dir,
 		Mode:            config.ModeDaemon,
 		ShutdownTimeout: time.Second,
+		Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},
 		Log:             config.LogConfig{Level: "info", Format: "text", MaxSize: 1},
 	}
 	require.NoError(t, cfg.Resolve())
