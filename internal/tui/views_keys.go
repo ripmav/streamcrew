@@ -361,7 +361,7 @@ func (m model) applyUserFilter() {
 }
 
 // updateSettingsKey handles the keys of the settings view: edit the
-// document in $EDITOR and reload it (roadmap 6.6.3).
+// document in $EDITOR and reload it (roadmap 6.5.3).
 func (m model) updateSettingsKey(key tea.Key) (tea.Model, tea.Cmd) {
 	switch key.Code {
 	case 'e':

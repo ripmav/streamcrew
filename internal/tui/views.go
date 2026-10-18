@@ -189,7 +189,7 @@ func (u usersView) render(t *Theme, width int) string {
 	return t.border.Width(width).Render(t.title.Render("Users") + "\n" + body + "\n" + help)
 }
 
-// settingsView is the state of the settings view (roadmap 6.6.3): the
+// settingsView is the state of the settings view (roadmap 6.5.3): the
 // configuration document with an annotation per setting — hot (applied
 // without a restart), restart (applied after a restart) and fixed (set by
 // a flag or environment variable, not changeable from the file).

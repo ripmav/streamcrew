@@ -31,7 +31,7 @@ func startMockCore(t *testing.T) string {
 }
 
 // startMockCoreServer starts an in-process core in the server mode with a
-// configuration file and returns its base URL (roadmap 6.6.3).
+// configuration file and returns its base URL (roadmap 6.5.3).
 func startMockCoreServer(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

@@ -18,7 +18,7 @@ import (
 
 // TestSettingsViewShowsTheDocument checks that the settings view shows the
 // document with the annotation per setting and the live status
-// (roadmap 6.6.3).
+// (roadmap 6.5.3).
 func TestSettingsViewShowsTheDocument(t *testing.T) {
 	t.Parallel()
 	base := startMockCoreServer(t)
@@ -47,7 +47,7 @@ func TestSettingsViewShowsTheDocument(t *testing.T) {
 }
 
 // TestSettingsViewReadOnlyInDaemonMode checks that the daemon mode shows
-// the document as read-only (roadmap 6.6.3).
+// the document as read-only (roadmap 6.5.3).
 func TestSettingsViewReadOnlyInDaemonMode(t *testing.T) {
 	t.Parallel()
 	base := startMockCore(t)
@@ -71,7 +71,7 @@ func TestSettingsViewReadOnlyInDaemonMode(t *testing.T) {
 }
 
 // TestSettingsKeyReloads checks that r reloads the document and e is
-// refused in the read-only state (roadmap 6.6.3).
+// refused in the read-only state (roadmap 6.5.3).
 func TestSettingsKeyReloads(t *testing.T) {
 	base := startMockCoreServer(t)
 	m := newModel(Options{Server: base})
@@ -98,7 +98,7 @@ func TestSettingsKeyReloads(t *testing.T) {
 	require.NotNil(t, cmd)
 }
 
-// TestSettingsAnnotation maps the settings to their marks (roadmap 6.6.3).
+// TestSettingsAnnotation maps the settings to their marks (roadmap 6.5.3).
 func TestSettingsAnnotation(t *testing.T) {
 	t.Parallel()
 	s := settingsView{
