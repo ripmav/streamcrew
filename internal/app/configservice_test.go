@@ -30,7 +30,7 @@ func hotCoreServer(t *testing.T, pub *outPub) (*app.App, string) {
 // configClient returns the ConfigService client of the core.
 func configClient(t *testing.T, a *app.App) streamcrewv1alpha1connect.ConfigServiceClient {
 	t.Helper()
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	return streamcrewv1alpha1connect.NewConfigServiceClient(http.DefaultClient, base)
 }
 
@@ -41,7 +41,7 @@ func TestConfigServiceUpdatesTheLiveDocument(t *testing.T) {
 	t.Parallel()
 	pub := &outPub{}
 	a, path := hotCoreServer(t, pub)
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	cfg := configClient(t, a)
 	chat := chatClient(t, base)
 
