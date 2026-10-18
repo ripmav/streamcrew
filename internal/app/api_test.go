@@ -48,7 +48,7 @@ func TestAPIServesTheCounterAndSettings(t *testing.T) {
 		t.Fatalf("Run returned early: %v", err)
 	}
 
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	counterClient := streamcrewv1alpha1connect.NewCounterServiceClient(http.DefaultClient, base)
 	settingsClient := streamcrewv1alpha1connect.NewSettingsServiceClient(http.DefaultClient, base)
 	name := "apiTestCounter"
@@ -133,7 +133,7 @@ func TestAPIServesTheCore(t *testing.T) {
 	case err := <-errc:
 		t.Fatalf("Run returned early: %v", err)
 	}
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	client := streamcrewv1alpha1connect.NewSystemServiceClient(http.DefaultClient, base)
 
 	st, err := client.Status(t.Context(), connect.NewRequest(&v1alpha1.StatusRequest{}))
@@ -182,7 +182,7 @@ func TestAPIServesTheUserService(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, st.AddStats(ctx, []user.StatsDelta{{UserID: alice.ID, Messages: 5}, {UserID: bob.ID, Messages: 2}}))
 
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	client := streamcrewv1alpha1connect.NewUserServiceClient(http.DefaultClient, base)
 
 	l, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListUsersRequest{}))
@@ -239,7 +239,7 @@ func TestAPIServesTheChatService(t *testing.T) {
 	a, mp, coll := apiCore(t, cfg, settings.DefaultChat())
 	ctx := t.Context()
 
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	client := streamcrewv1alpha1connect.NewChatServiceClient(http.DefaultClient, base)
 
 	// A message with a known platform ID lands in the history.
@@ -341,7 +341,7 @@ func TestAPIServesTheBackupService(t *testing.T) {
 		t.Fatalf("Run returned early: %v", err)
 	}
 
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	client := streamcrewv1alpha1connect.NewBackupServiceClient(http.DefaultClient, base)
 
 	// Create a manual backup.
@@ -388,7 +388,7 @@ func TestAPIServesTheAuthService(t *testing.T) {
 		t.Fatalf("Run returned early: %v", err)
 	}
 
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	client := streamcrewv1alpha1connect.NewAuthServiceClient(http.DefaultClient, base)
 
 	// ListAccounts succeeds (the fresh profile has no logged-in account).
@@ -414,7 +414,7 @@ func TestAPIServesTheCommandService(t *testing.T) {
 	a, _, _ := apiCore(t, cfg, settings.DefaultChat())
 	ctx := t.Context()
 
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	client := streamcrewv1alpha1connect.NewCommandServiceClient(http.DefaultClient, base)
 
 	// The fresh profile comes with the preset commands.
@@ -495,7 +495,7 @@ func TestAPIServesTheStreamService(t *testing.T) {
 	a, mp, _ := apiCore(t, cfg, settings.DefaultChat())
 	ctx := t.Context()
 
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	client := streamcrewv1alpha1connect.NewStreamServiceClient(http.DefaultClient, base)
 
 	subCtx, cancel := context.WithCancel(ctx)
@@ -546,7 +546,7 @@ func TestAPIServesSetEnabled(t *testing.T) {
 	a, _, _ := apiCore(t, cfg, settings.DefaultChat())
 	ctx := t.Context()
 
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	client := streamcrewv1alpha1connect.NewCommandServiceClient(http.DefaultClient, base)
 
 	l0, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{}))
@@ -571,7 +571,7 @@ func TestAPIServesSimulate(t *testing.T) {
 	a, _, _ := apiCore(t, cfg, settings.DefaultChat())
 	ctx := t.Context()
 
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 	client := streamcrewv1alpha1connect.NewStreamServiceClient(http.DefaultClient, base)
 	chat := streamcrewv1alpha1connect.NewChatServiceClient(http.DefaultClient, base)
 	follows := a.Bus().Subscribe(ctx, event.WithPrefixes("channel."))
@@ -638,7 +638,7 @@ func TestAPITokensProtectTheAPI(t *testing.T) {
 	a, _, _ := apiCore(t, cfg, settings.DefaultChat())
 	ctx := t.Context()
 
-	base := "http://" + a.HTTPServer().Addr().String()
+	base := "http://" + mustServerAddr(t, a)
 
 	// Without tokens the API is open.
 	open := streamcrewv1alpha1connect.NewCounterServiceClient(http.DefaultClient, base)

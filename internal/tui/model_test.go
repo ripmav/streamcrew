@@ -49,7 +49,7 @@ func startCore(t *testing.T) string {
 		cancel()
 		require.NoError(t, <-errc)
 	})
-	return "http://" + a.HTTPServer().Addr().String()
+	return "http://" + mustServerAddr(t, a)
 }
 
 // sendKey sends a key press to the model and returns the result.

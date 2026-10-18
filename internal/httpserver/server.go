@@ -92,10 +92,16 @@ func (s *Server) Listening() <-chan struct{} {
 }
 
 // Addr returns the address the server listens on, or nil before it listens.
-func (s *Server) Addr() net.Addr {
+// Addr returns the address the server listens on. It blocks until the first
+// listener is up, so a caller that saw the server run (e.g. the core being
+// ready) never sees a nil address.
+// Addr reports the address the server listens on. ok is false while the
+// first listener is not up; callers that need the address (and would hang
+// on a failed listen) check it, e.g. the core after readiness.
+func (s *Server) Addr() (addr net.Addr, ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.addr
+	return s.addr, s.addr != nil
 }
 
 // Run implements supervisor.Runnable. It serves until ctx ends and then shuts

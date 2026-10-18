@@ -58,7 +58,7 @@ func startMockCore(t *testing.T) string {
 		cancel()
 		require.NoError(t, <-errc)
 	})
-	return "http://" + a.HTTPServer().Addr().String()
+	return "http://" + mustServerAddr(t, a)
 }
 
 // TestChatEventKong covers the kong structure of the chat and event

@@ -52,7 +52,7 @@ func TestRuntimeFileCoversStartAndStop(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	assert.Equal(t, a.HTTPServer().Addr().String(), info.Address)
+	assert.Equal(t, mustServerAddr(t, a), info.Address)
 	assert.Equal(t, os.Getpid(), info.PID)
 	assert.Equal(t, "daemon", info.Mode)
 	assert.NotEmpty(t, info.Version)

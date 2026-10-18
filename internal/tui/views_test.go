@@ -60,7 +60,7 @@ func startMockCore(t *testing.T) string {
 		cancel()
 		require.NoError(t, <-errc)
 	})
-	return "http://" + a.HTTPServer().Addr().String()
+	return "http://" + mustServerAddr(t, a)
 }
 
 // mockConsoleExampleCommands are the example commands as code for the views.
@@ -285,4 +285,17 @@ func TestUsersViewRendersTheList(t *testing.T) {
 		return false
 	}, 5*time.Second, 100*time.Millisecond, "the simulated user to be listed")
 	assert.Contains(t, m.users.render(newTheme(true), 90), "alice")
+}
+
+// mustServerAddr waits for the core's http server to listen and returns
+// its address: the core is ready while the first listener is still coming
+// up, so the address can lag readiness by a moment.
+func mustServerAddr(t *testing.T, a *app.App) string {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		_, ok := a.HTTPServer().Addr()
+		return ok
+	}, 10*time.Second, 10*time.Millisecond, "the http server to listen")
+	addr, _ := a.HTTPServer().Addr()
+	return addr.String()
 }

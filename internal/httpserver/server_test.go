@@ -81,7 +81,9 @@ func TestRunServesAndShutsDown(t *testing.T) {
 	case err := <-errc:
 		t.Fatalf("Run returned early: %v", err)
 	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+srv.Addr().String()+"/healthz", nil)
+	addr, ok := srv.Addr()
+	require.True(t, ok)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+addr.String()+"/healthz", nil)
 	require.NoError(t, err)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
@@ -107,7 +109,8 @@ func TestRunListenErrorIsPermanent(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, supervisor.IsPermanent(err))
 	assert.ErrorContains(t, err, "listen on")
-	assert.Nil(t, srv.Addr())
+	_, ok := srv.Addr()
+	assert.False(t, ok)
 }
 
 // TestRunClosesIdleNewConnections is a regression test: a connection on
@@ -121,9 +124,11 @@ func TestRunClosesIdleNewConnections(t *testing.T) {
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Run(ctx) }()
 	<-srv.Listening()
+	addr, ok := srv.Addr()
+	require.True(t, ok)
 
 	var d net.Dialer
-	conn, err := d.DialContext(t.Context(), "tcp", srv.Addr().String())
+	conn, err := d.DialContext(t.Context(), "tcp", addr.String())
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -153,10 +158,12 @@ func TestRunServesTLS(t *testing.T) {
 	case err := <-errc:
 		t.Fatalf("Run returned early: %v", err)
 	}
+	addr, ok := srv.Addr()
+	require.True(t, ok)
 	client := &http.Client{Transport: &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // self-signed test certificate
 	}}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://"+srv.Addr().String()+"/healthz", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://"+addr.String()+"/healthz", nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
@@ -274,4 +281,30 @@ func selfSignedCert(t *testing.T) (string, string) {
 	require.NoError(t, os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
 	require.NoError(t, os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600))
 	return certFile, keyFile
+}
+
+// TestAddrReportsOnceListening covers the contract that Addr reports the
+// address only once the server listens: the core is ready while the first
+// listener is still coming up, and callers read the address right after
+// readiness. While no listener is up it reports ok=false instead of
+// blocking, so a failed listen cannot hang the caller.
+func TestAddrReportsOnceListening(t *testing.T) {
+	t.Parallel()
+	srv := httpserver.New(httpserver.Config{Addr: "127.0.0.1:0", ShutdownTimeout: time.Second}, nil, nil)
+
+	_, ok := srv.Addr()
+	assert.False(t, ok)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	err := make(chan error, 1)
+	go func() { err <- srv.Run(ctx) }()
+	require.Eventually(t, func() bool { _, ok := srv.Addr(); return ok }, 5*time.Second, 10*time.Millisecond)
+	addr, _ := srv.Addr()
+	assert.NotNil(t, addr)
+	select {
+	case e := <-err:
+		t.Fatalf("Run returned early: %v", e)
+	case <-time.After(50 * time.Millisecond):
+	}
 }
