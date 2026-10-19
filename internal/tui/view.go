@@ -89,7 +89,7 @@ func (m model) mainArea(t *Theme) string {
 	case "users":
 		return m.users.render(t, w-2)
 	case "logs":
-		return m.logs.render(t, "Logs", w-2)
+		return m.logs.render(t, "Logs ≥ "+strings.ToLower(m.logMin.String()), w-2)
 	case "settings":
 		return m.settings.render(t, w-2)
 	}
@@ -163,6 +163,7 @@ func (t *Theme) helpView(width int) string {
 		keyLine(t, "e", "edit configuration (settings)"),
 		keyLine(t, "r", "reload (settings)"),
 		keyLine(t, "/", "filter (commands, users)"),
+		keyLine(t, "l", "log level filter (logs)"),
 	}
 	body := strings.Join(lines, "\n")
 	w := max(width, 40)

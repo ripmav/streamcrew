@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -127,6 +128,7 @@ type model struct {
 	chat     chatView
 	feed     feedView
 	logs     feedView
+	logMin   slog.Level // the lowest level the logs view shows (key l)
 	queue    queueView
 	commands commandsView
 	users    usersView
@@ -149,6 +151,7 @@ func newModel(opts Options) model {
 		dark:     opts.Theme != "light",
 		cl:       newClients(httpClient, base, opts.Token),
 		streamCh: make(chan streamMsg, 64),
+		logMin:   slog.LevelDebug, // "all": nothing is logged below debug
 	}
 }
 
@@ -298,7 +301,10 @@ func (m *model) handleEvent(e *v1alpha1.Event) {
 		}
 	case "log":
 		if l := e.GetLog(); l != nil {
-			m.logs.append(l.GetLevel(), "["+l.GetComponent()+"] "+l.GetMessage())
+			level, err := parseLevel(l.GetLevel())
+			if err == nil && level >= m.logMin {
+				m.logs.append(l.GetLevel(), "["+l.GetComponent()+"] "+l.GetMessage())
+			}
 		}
 	case "feed":
 		if f := e.GetFeed(); f != nil {
@@ -417,6 +423,8 @@ func (m model) updateViewKey(key tea.Key) (tea.Model, tea.Cmd) {
 		return m.updateCommandsKey(key)
 	case "users":
 		return m.updateUsersKey(key)
+	case "logs":
+		return m.updateLogsKey(key)
 	case "settings":
 		return m.updateSettingsKey(key)
 	}

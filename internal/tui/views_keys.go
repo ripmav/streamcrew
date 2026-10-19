@@ -4,8 +4,11 @@ package tui
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -415,4 +418,35 @@ func (m model) editConfig(editor string) tea.Cmd {
 			document: resp.GetDocument(),
 		}
 	}
+}
+
+// logLevels is the order the key l cycles through in the logs view.
+//
+//nolint:gochecknoglobals // static table of levels
+var logLevels = []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError}
+
+// updateLogsKey handles the keys of the logs view. The key l cycles the
+// display level; it is a pure view filter — the core's log level is
+// unchanged (roadmap 6.6.2, read-only).
+func (m model) updateLogsKey(key tea.Key) (tea.Model, tea.Cmd) {
+	if key.Code == 'l' {
+		i := slices.IndexFunc(logLevels, func(l slog.Level) bool { return l == m.logMin })
+		m.logMin = logLevels[(i+1)%len(logLevels)]
+	}
+	return m, nil
+}
+
+// parseLevel turns a "log.line" level string into a slog.Level.
+func parseLevel(s string) (slog.Level, error) {
+	switch strings.ToLower(s) {
+	case "debug":
+		return slog.LevelDebug, nil
+	case "info":
+		return slog.LevelInfo, nil
+	case "warn":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	}
+	return 0, fmt.Errorf("unknown log level %q", s)
 }
