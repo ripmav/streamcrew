@@ -104,6 +104,7 @@ mode: daemon
 log_level: info
 log_component_level:
   supervisor: debug
+# log_file: /var/log/streamcrew.log   # true (Default), false oder Pfad
 ```
 
 - Unbekannte Schlüssel in der Datei sind ein Fehler.
