@@ -10,7 +10,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"connectrpc.com/connect"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 )
@@ -28,7 +27,7 @@ func (m model) updateChatKey(key tea.Key) (tea.Model, tea.Cmd) {
 		return m, func() tea.Msg {
 			ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 			defer cancel()
-			_, err := m.cl.chat.Send(ctx, connect.NewRequest(&v1alpha1.SendChatRequest{Text: text}))
+			_, err := m.cl.chat.Send(ctx, &v1alpha1.SendChatRequest{Text: text})
 			return actionDoneMsg{err: err}
 		}
 	case tea.KeyBackspace:
@@ -40,13 +39,13 @@ func (m model) updateChatKey(key tea.Key) (tea.Model, tea.Cmd) {
 	case 'd':
 		// delete the last message of the platform
 		return m, m.request(func(ctx context.Context, c *clients) error {
-			_, err := c.chat.Delete(ctx, connect.NewRequest(&v1alpha1.DeleteChatRequest{}))
+			_, err := c.chat.Delete(ctx, &v1alpha1.DeleteChatRequest{})
 			return err
 		})
 	case 'c':
 		// clear the chat
 		return m, m.request(func(ctx context.Context, c *clients) error {
-			_, err := c.chat.Clear(ctx, connect.NewRequest(&v1alpha1.ClearChatRequest{}))
+			_, err := c.chat.Clear(ctx, &v1alpha1.ClearChatRequest{})
 			return err
 		})
 	}
@@ -104,24 +103,24 @@ func (m model) updateQueueKey(key tea.Key) (tea.Model, tea.Cmd) {
 	case 'p':
 		// pause or resume the whole queue
 		return m, m.request(func(ctx context.Context, c *clients) error {
-			_, err := c.command.PauseQueue(ctx, connect.NewRequest(&v1alpha1.PauseQueueRequest{}))
+			_, err := c.command.PauseQueue(ctx, &v1alpha1.PauseQueueRequest{})
 			return err
 		})
 	case 'x':
 		if i := m.selectedInstance(); i != nil {
 			return m, m.request(func(ctx context.Context, c *clients) error {
-				_, err := c.command.CancelInstance(ctx, connect.NewRequest(&v1alpha1.CancelInstanceRequest{
+				_, err := c.command.CancelInstance(ctx, &v1alpha1.CancelInstanceRequest{
 					InstanceId: i.GetInstanceId(),
-				}))
+				})
 				return err
 			})
 		}
 	case 'r':
 		if i := m.selectedInstance(); i != nil {
 			return m, m.request(func(ctx context.Context, c *clients) error {
-				_, err := c.command.RetryInstance(ctx, connect.NewRequest(&v1alpha1.RetryInstanceRequest{
+				_, err := c.command.RetryInstance(ctx, &v1alpha1.RetryInstanceRequest{
 					InstanceId: i.GetInstanceId(),
-				}))
+				})
 				return err
 			})
 		}
@@ -182,10 +181,10 @@ func (m model) updateCommandsKey(key tea.Key) (tea.Model, tea.Cmd) {
 		if c := m.selectedCommand(); c != nil {
 			enabled := !c.GetEnabled()
 			return m, m.request(func(ctx context.Context, c2 *clients) error {
-				_, err := c2.command.SetEnabled(ctx, connect.NewRequest(&v1alpha1.SetEnabledCommandRequest{
+				_, err := c2.command.SetEnabled(ctx, &v1alpha1.SetEnabledCommandRequest{
 					Id:      c.GetId(),
 					Enabled: enabled,
-				}))
+				})
 				return err
 			})
 		}
@@ -196,9 +195,9 @@ func (m model) updateCommandsKey(key tea.Key) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		if c := m.selectedCommand(); c != nil {
 			return m, m.request(func(ctx context.Context, c2 *clients) error {
-				_, err := c2.command.Run(ctx, connect.NewRequest(&v1alpha1.RunCommandRequest{
+				_, err := c2.command.Run(ctx, &v1alpha1.RunCommandRequest{
 					Id: c.GetId(),
-				}))
+				})
 				return err
 			})
 		}
@@ -253,7 +252,7 @@ func (m model) editCommand(id string, editor string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 		defer cancel()
-		resp, err := m.cl.command.Get(ctx, connect.NewRequest(&v1alpha1.GetCommandRequest{Id: id}))
+		resp, err := m.cl.command.Get(ctx, &v1alpha1.GetCommandRequest{Id: id})
 		if err != nil {
 			return actionDoneMsg{err: err}
 		}
@@ -262,7 +261,7 @@ func (m model) editCommand(id string, editor string) tea.Cmd {
 			return actionDoneMsg{err: err}
 		}
 		name := file.Name()
-		if _, err := file.WriteString(resp.Msg.GetDocument()); err != nil {
+		if _, err := file.WriteString(resp.GetDocument()); err != nil {
 			_ = file.Close()
 			return actionDoneMsg{err: err}
 		}
@@ -278,10 +277,10 @@ func (m model) editCommand(id string, editor string) tea.Cmd {
 		if err != nil {
 			return actionDoneMsg{err: err}
 		}
-		_, err = m.cl.command.Update(ctx, connect.NewRequest(&v1alpha1.UpdateCommandRequest{
+		_, err = m.cl.command.Update(ctx, &v1alpha1.UpdateCommandRequest{
 			Id:       id,
 			Document: string(data),
-		}))
+		})
 		return actionDoneMsg{err: err}
 	}
 }
@@ -406,14 +405,14 @@ func (m model) editConfig(editor string) tea.Cmd {
 		if err != nil {
 			return configUpdatedMsg{err: err}
 		}
-		resp, err := m.cl.config.Update(ctx, connect.NewRequest(&v1alpha1.UpdateConfigRequest{Document: string(data)}))
+		resp, err := m.cl.config.Update(ctx, &v1alpha1.UpdateConfigRequest{Document: string(data)})
 		if err != nil {
 			return configUpdatedMsg{err: err}
 		}
 		return configUpdatedMsg{
-			applied:  resp.Msg.GetApplied(),
-			restart:  resp.Msg.GetRestart(),
-			document: resp.Msg.GetDocument(),
+			applied:  resp.GetApplied(),
+			restart:  resp.GetRestart(),
+			document: resp.GetDocument(),
 		}
 	}
 }

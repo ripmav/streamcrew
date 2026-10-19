@@ -11,169 +11,173 @@
 package streamcrewv1alpha1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// SystemServiceName is the fully-qualified name of the SystemService service.
 	SystemServiceName = "streamcrew.v1alpha1.SystemService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// SystemServiceStatusProcedure is the fully-qualified name of the SystemService's Status RPC.
+	// SystemServiceStatusProcedure is the procedure name of the SystemService's Status RPC.
 	SystemServiceStatusProcedure = "/streamcrew.v1alpha1.SystemService/Status"
-	// SystemServiceListProfilesProcedure is the fully-qualified name of the SystemService's
-	// ListProfiles RPC.
+	// SystemServiceListProfilesProcedure is the procedure name of the SystemService's ListProfiles RPC.
 	SystemServiceListProfilesProcedure = "/streamcrew.v1alpha1.SystemService/ListProfiles"
-	// SystemServiceShutdownProcedure is the fully-qualified name of the SystemService's Shutdown RPC.
+	// SystemServiceShutdownProcedure is the procedure name of the SystemService's Shutdown RPC.
 	SystemServiceShutdownProcedure = "/streamcrew.v1alpha1.SystemService/Shutdown"
+)
+
+var (
+	systemServiceStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_system_proto.Services().ByName("SystemService").Methods().ByName("Status"),
+			Procedure:  SystemServiceStatusProcedure,
+		}
+	})
+	systemServiceListProfilesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_system_proto.Services().ByName("SystemService").Methods().ByName("ListProfiles"),
+			Procedure:  SystemServiceListProfilesProcedure,
+		}
+	})
+	systemServiceShutdownSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_system_proto.Services().ByName("SystemService").Methods().ByName("Shutdown"),
+			Procedure:  SystemServiceShutdownProcedure,
+		}
+	})
 )
 
 // SystemServiceClient is a client for the streamcrew.v1alpha1.SystemService service.
 type SystemServiceClient interface {
 	// Status reports version, mode, active profile and the connected
 	// platforms. It is the version handshake of the desktop mode.
-	Status(context.Context, *connect.Request[v1alpha1.StatusRequest]) (*connect.Response[v1alpha1.StatusResponse], error)
+	Status(context.Context, *v1alpha1.StatusRequest) (*v1alpha1.StatusResponse, error)
 	// ListProfiles lists the profiles of the core and names the active one.
-	ListProfiles(context.Context, *connect.Request[v1alpha1.ListProfilesRequest]) (*connect.Response[v1alpha1.ListProfilesResponse], error)
+	ListProfiles(context.Context, *v1alpha1.ListProfilesRequest) (*v1alpha1.ListProfilesResponse, error)
 	// Shutdown stops the core.
-	Shutdown(context.Context, *connect.Request[v1alpha1.ShutdownRequest]) (*connect.Response[v1alpha1.ShutdownResponse], error)
+	Shutdown(context.Context, *v1alpha1.ShutdownRequest) (*v1alpha1.ShutdownResponse, error)
 }
 
-// NewSystemServiceClient constructs a client for the streamcrew.v1alpha1.SystemService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SystemServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	systemServiceMethods := v1alpha1.File_streamcrew_v1alpha1_system_proto.Services().ByName("SystemService").Methods()
-	return &systemServiceClient{
-		status: connect.NewClient[v1alpha1.StatusRequest, v1alpha1.StatusResponse](
-			httpClient,
-			baseURL+SystemServiceStatusProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("Status")),
-			connect.WithClientOptions(opts...),
-		),
-		listProfiles: connect.NewClient[v1alpha1.ListProfilesRequest, v1alpha1.ListProfilesResponse](
-			httpClient,
-			baseURL+SystemServiceListProfilesProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("ListProfiles")),
-			connect.WithClientOptions(opts...),
-		),
-		shutdown: connect.NewClient[v1alpha1.ShutdownRequest, v1alpha1.ShutdownResponse](
-			httpClient,
-			baseURL+SystemServiceShutdownProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("Shutdown")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// systemServiceClient implements SystemServiceClient.
-type systemServiceClient struct {
-	status       *connect.Client[v1alpha1.StatusRequest, v1alpha1.StatusResponse]
-	listProfiles *connect.Client[v1alpha1.ListProfilesRequest, v1alpha1.ListProfilesResponse]
-	shutdown     *connect.Client[v1alpha1.ShutdownRequest, v1alpha1.ShutdownResponse]
-}
-
-// Status calls streamcrew.v1alpha1.SystemService.Status.
-func (c *systemServiceClient) Status(ctx context.Context, req *connect.Request[v1alpha1.StatusRequest]) (*connect.Response[v1alpha1.StatusResponse], error) {
-	return c.status.CallUnary(ctx, req)
-}
-
-// ListProfiles calls streamcrew.v1alpha1.SystemService.ListProfiles.
-func (c *systemServiceClient) ListProfiles(ctx context.Context, req *connect.Request[v1alpha1.ListProfilesRequest]) (*connect.Response[v1alpha1.ListProfilesResponse], error) {
-	return c.listProfiles.CallUnary(ctx, req)
-}
-
-// Shutdown calls streamcrew.v1alpha1.SystemService.Shutdown.
-func (c *systemServiceClient) Shutdown(ctx context.Context, req *connect.Request[v1alpha1.ShutdownRequest]) (*connect.Response[v1alpha1.ShutdownResponse], error) {
-	return c.shutdown.CallUnary(ctx, req)
+// NewSystemServiceClient constructs a client for the streamcrew.v1alpha1.SystemService service.
+// Multiple service clients may share a single connect.Client.
+func NewSystemServiceClient(client *connect.Client) SystemServiceClient {
+	return &systemServiceClient{client: client}
 }
 
 // SystemServiceHandler is an implementation of the streamcrew.v1alpha1.SystemService service.
 type SystemServiceHandler interface {
 	// Status reports version, mode, active profile and the connected
 	// platforms. It is the version handshake of the desktop mode.
-	Status(context.Context, *connect.Request[v1alpha1.StatusRequest]) (*connect.Response[v1alpha1.StatusResponse], error)
+	Status(context.Context, *v1alpha1.StatusRequest) (*v1alpha1.StatusResponse, error)
 	// ListProfiles lists the profiles of the core and names the active one.
-	ListProfiles(context.Context, *connect.Request[v1alpha1.ListProfilesRequest]) (*connect.Response[v1alpha1.ListProfilesResponse], error)
+	ListProfiles(context.Context, *v1alpha1.ListProfilesRequest) (*v1alpha1.ListProfilesResponse, error)
 	// Shutdown stops the core.
-	Shutdown(context.Context, *connect.Request[v1alpha1.ShutdownRequest]) (*connect.Response[v1alpha1.ShutdownResponse], error)
+	Shutdown(context.Context, *v1alpha1.ShutdownRequest) (*v1alpha1.ShutdownResponse, error)
 }
 
-// NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	systemServiceMethods := v1alpha1.File_streamcrew_v1alpha1_system_proto.Services().ByName("SystemService").Methods()
-	systemServiceStatusHandler := connect.NewUnaryHandler(
-		SystemServiceStatusProcedure,
-		svc.Status,
-		connect.WithSchema(systemServiceMethods.ByName("Status")),
-		connect.WithHandlerOptions(opts...),
+// RegisterSystemServiceHandler registers svc as the streamcrew.v1alpha1.SystemService
+// implementation on server.
+func RegisterSystemServiceHandler(server *connect.Server, svc SystemServiceHandler) {
+	adapter := systemServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: systemServiceStatusSpec(), Handler: adapter.status},
+		connect.Method{Spec: systemServiceListProfilesSpec(), Handler: adapter.listProfiles},
+		connect.Method{Spec: systemServiceShutdownSpec(), Handler: adapter.shutdown},
 	)
-	systemServiceListProfilesHandler := connect.NewUnaryHandler(
-		SystemServiceListProfilesProcedure,
-		svc.ListProfiles,
-		connect.WithSchema(systemServiceMethods.ByName("ListProfiles")),
-		connect.WithHandlerOptions(opts...),
-	)
-	systemServiceShutdownHandler := connect.NewUnaryHandler(
-		SystemServiceShutdownProcedure,
-		svc.Shutdown,
-		connect.WithSchema(systemServiceMethods.ByName("Shutdown")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/streamcrew.v1alpha1.SystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case SystemServiceStatusProcedure:
-			systemServiceStatusHandler.ServeHTTP(w, r)
-		case SystemServiceListProfilesProcedure:
-			systemServiceListProfilesHandler.ServeHTTP(w, r)
-		case SystemServiceShutdownProcedure:
-			systemServiceShutdownHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedSystemServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSystemServiceHandler struct{}
 
-func (UnimplementedSystemServiceHandler) Status(context.Context, *connect.Request[v1alpha1.StatusRequest]) (*connect.Response[v1alpha1.StatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.SystemService.Status is not implemented"))
+func (UnimplementedSystemServiceHandler) Status(context.Context, *v1alpha1.StatusRequest) (*v1alpha1.StatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.SystemService.Status is not implemented")
 }
 
-func (UnimplementedSystemServiceHandler) ListProfiles(context.Context, *connect.Request[v1alpha1.ListProfilesRequest]) (*connect.Response[v1alpha1.ListProfilesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.SystemService.ListProfiles is not implemented"))
+func (UnimplementedSystemServiceHandler) ListProfiles(context.Context, *v1alpha1.ListProfilesRequest) (*v1alpha1.ListProfilesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.SystemService.ListProfiles is not implemented")
 }
 
-func (UnimplementedSystemServiceHandler) Shutdown(context.Context, *connect.Request[v1alpha1.ShutdownRequest]) (*connect.Response[v1alpha1.ShutdownResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.SystemService.Shutdown is not implemented"))
+func (UnimplementedSystemServiceHandler) Shutdown(context.Context, *v1alpha1.ShutdownRequest) (*v1alpha1.ShutdownResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.SystemService.Shutdown is not implemented")
+}
+
+type systemServiceClient struct {
+	client *connect.Client
+}
+
+func (c *systemServiceClient) Status(ctx context.Context, req *v1alpha1.StatusRequest) (*v1alpha1.StatusResponse, error) {
+	var res v1alpha1.StatusResponse
+	if err := c.client.CallUnary(ctx, systemServiceStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *systemServiceClient) ListProfiles(ctx context.Context, req *v1alpha1.ListProfilesRequest) (*v1alpha1.ListProfilesResponse, error) {
+	var res v1alpha1.ListProfilesResponse
+	if err := c.client.CallUnary(ctx, systemServiceListProfilesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *systemServiceClient) Shutdown(ctx context.Context, req *v1alpha1.ShutdownRequest) (*v1alpha1.ShutdownResponse, error) {
+	var res v1alpha1.ShutdownResponse
+	if err := c.client.CallUnary(ctx, systemServiceShutdownSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type systemServiceHandler struct{ svc SystemServiceHandler }
+
+func (h systemServiceHandler) status(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.StatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Status(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h systemServiceHandler) listProfiles(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.ListProfilesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListProfiles(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h systemServiceHandler) shutdown(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.ShutdownRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Shutdown(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

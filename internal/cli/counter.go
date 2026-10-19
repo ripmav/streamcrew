@@ -5,10 +5,7 @@ package cli
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"text/tabwriter"
-
-	"connectrpc.com/connect"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
@@ -26,7 +23,7 @@ type counterCmd struct {
 
 // counterClient returns the CounterService client of the core.
 func (e *Env) counterClient() streamcrewv1alpha1connect.CounterServiceClient {
-	return streamcrewv1alpha1connect.NewCounterServiceClient(http.DefaultClient, e.server(), e.connectOptions()...)
+	return streamcrewv1alpha1connect.NewCounterServiceClient(e.connectClient())
 }
 
 type counterListCmd struct {
@@ -37,20 +34,20 @@ type counterListCmd struct {
 
 // Run lists the counters.
 func (c counterListCmd) Run(ctx context.Context, e *Env) error {
-	resp, err := e.counterClient().List(ctx, connect.NewRequest(&v1alpha1.ListCountersRequest{Prefix: c.Prefix}))
+	resp, err := e.counterClient().List(ctx, &v1alpha1.ListCountersRequest{Prefix: c.Prefix})
 	if err != nil {
 		return err
 	}
 	if c.Output == "json" {
-		return writeJSON(e.Stdout, resp.Msg.Counters)
+		return writeJSON(e.Stdout, resp.Counters)
 	}
-	if len(resp.Msg.Counters) == 0 {
+	if len(resp.Counters) == 0 {
 		fmt.Fprintln(e.Stdout, "no counters")
 		return nil
 	}
 	tw := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tVALUE\tSTEP\tRESET")
-	for _, c := range resp.Msg.Counters {
+	for _, c := range resp.Counters {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%t\n", c.Name, c.Value, c.Step, c.ResetOnStart)
 	}
 	return tw.Flush()
@@ -63,14 +60,14 @@ type counterGetCmd struct {
 
 // Run shows one counter.
 func (c counterGetCmd) Run(ctx context.Context, e *Env) error {
-	resp, err := e.counterClient().Get(ctx, connect.NewRequest(&v1alpha1.GetCounterRequest{Name: c.Name}))
+	resp, err := e.counterClient().Get(ctx, &v1alpha1.GetCounterRequest{Name: c.Name})
 	if err != nil {
 		return err
 	}
 	if c.Output == "json" {
-		return writeJSON(e.Stdout, resp.Msg.Counter)
+		return writeJSON(e.Stdout, resp.Counter)
 	}
-	_, err = fmt.Fprintf(e.Stdout, "%s: %s (step %s)\n", resp.Msg.Counter.Name, resp.Msg.Counter.Value, resp.Msg.Counter.Step)
+	_, err = fmt.Fprintf(e.Stdout, "%s: %s (step %s)\n", resp.Counter.Name, resp.Counter.Value, resp.Counter.Step)
 	return err
 }
 
@@ -82,14 +79,14 @@ type counterSetCmd struct {
 
 // Run sets the value of a counter.
 func (c counterSetCmd) Run(ctx context.Context, e *Env) error {
-	resp, err := e.counterClient().Set(ctx, connect.NewRequest(&v1alpha1.SetCounterRequest{Name: c.Name, Value: c.Value}))
+	resp, err := e.counterClient().Set(ctx, &v1alpha1.SetCounterRequest{Name: c.Name, Value: c.Value})
 	if err != nil {
 		return err
 	}
 	if c.Output == "json" {
-		return writeJSON(e.Stdout, resp.Msg.Counter)
+		return writeJSON(e.Stdout, resp.Counter)
 	}
-	_, err = fmt.Fprintf(e.Stdout, "%s: %s\n", resp.Msg.Counter.Name, resp.Msg.Counter.Value)
+	_, err = fmt.Fprintf(e.Stdout, "%s: %s\n", resp.Counter.Name, resp.Counter.Value)
 	return err
 }
 
@@ -101,14 +98,14 @@ type counterAddCmd struct {
 
 // Run adds an amount to a counter.
 func (c counterAddCmd) Run(ctx context.Context, e *Env) error {
-	resp, err := e.counterClient().Add(ctx, connect.NewRequest(&v1alpha1.AddCounterRequest{Name: c.Name, Amount: c.Amount}))
+	resp, err := e.counterClient().Add(ctx, &v1alpha1.AddCounterRequest{Name: c.Name, Amount: c.Amount})
 	if err != nil {
 		return err
 	}
 	if c.Output == "json" {
-		return writeJSON(e.Stdout, resp.Msg.Counter)
+		return writeJSON(e.Stdout, resp.Counter)
 	}
-	_, err = fmt.Fprintf(e.Stdout, "%s: %s\n", resp.Msg.Counter.Name, resp.Msg.Counter.Value)
+	_, err = fmt.Fprintf(e.Stdout, "%s: %s\n", resp.Counter.Name, resp.Counter.Value)
 	return err
 }
 
@@ -119,13 +116,13 @@ type counterResetCmd struct {
 
 // Run resets a counter to zero.
 func (c counterResetCmd) Run(ctx context.Context, e *Env) error {
-	resp, err := e.counterClient().Reset(ctx, connect.NewRequest(&v1alpha1.ResetCounterRequest{Name: c.Name}))
+	resp, err := e.counterClient().Reset(ctx, &v1alpha1.ResetCounterRequest{Name: c.Name})
 	if err != nil {
 		return err
 	}
 	if c.Output == "json" {
-		return writeJSON(e.Stdout, resp.Msg.Counter)
+		return writeJSON(e.Stdout, resp.Counter)
 	}
-	_, err = fmt.Fprintf(e.Stdout, "%s: %s\n", resp.Msg.Counter.Name, resp.Msg.Counter.Value)
+	_, err = fmt.Fprintf(e.Stdout, "%s: %s\n", resp.Counter.Name, resp.Counter.Value)
 	return err
 }

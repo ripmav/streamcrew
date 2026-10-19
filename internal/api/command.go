@@ -4,10 +4,9 @@ package api
 
 import (
 	"context"
-	"errors"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
@@ -152,8 +151,8 @@ func (s *commandService) instance(i CommandInstance) *v1alpha1.CommandInstanceVi
 	return v
 }
 
-func (s *commandService) List(ctx context.Context, req *connect.Request[v1alpha1.ListCommandsRequest]) (*connect.Response[v1alpha1.ListCommandsResponse], error) {
-	m := req.Msg
+func (s *commandService) List(ctx context.Context, req *v1alpha1.ListCommandsRequest) (*v1alpha1.ListCommandsResponse, error) {
+	m := req
 	list, err := s.c.List(ctx, m.Kind, m.Enabled, m.Prefix)
 	if err != nil {
 		return nil, apiError(err)
@@ -162,84 +161,84 @@ func (s *commandService) List(ctx context.Context, req *connect.Request[v1alpha1
 	for _, c := range list {
 		out.Commands = append(out.Commands, s.summary(c))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *commandService) Get(ctx context.Context, req *connect.Request[v1alpha1.GetCommandRequest]) (*connect.Response[v1alpha1.GetCommandResponse], error) {
-	if req.Msg.Id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
+func (s *commandService) Get(ctx context.Context, req *v1alpha1.GetCommandRequest) (*v1alpha1.GetCommandResponse, error) {
+	if req.Id == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "id is required")
 	}
-	sum, document, format, err := s.c.Get(ctx, req.Msg.Id)
+	sum, document, format, err := s.c.Get(ctx, req.Id)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.GetCommandResponse{
+	return &v1alpha1.GetCommandResponse{
 		Summary:  s.summary(sum),
 		Document: document,
 		Format:   format,
-	}), nil
+	}, nil
 }
 
-func (s *commandService) Create(ctx context.Context, req *connect.Request[v1alpha1.CreateCommandRequest]) (*connect.Response[v1alpha1.CreateCommandResponse], error) {
-	m := req.Msg
+func (s *commandService) Create(ctx context.Context, req *v1alpha1.CreateCommandRequest) (*v1alpha1.CreateCommandResponse, error) {
+	m := req
 	if m.Document == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("document is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "document is required")
 	}
 	summary, warnings, err := s.c.Create(ctx, m.Document, m.Format)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.CreateCommandResponse{Command: s.summary(summary), Warnings: warnings}), nil
+	return &v1alpha1.CreateCommandResponse{Command: s.summary(summary), Warnings: warnings}, nil
 }
 
-func (s *commandService) Update(ctx context.Context, req *connect.Request[v1alpha1.UpdateCommandRequest]) (*connect.Response[v1alpha1.UpdateCommandResponse], error) {
-	m := req.Msg
+func (s *commandService) Update(ctx context.Context, req *v1alpha1.UpdateCommandRequest) (*v1alpha1.UpdateCommandResponse, error) {
+	m := req
 	if m.Id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "id is required")
 	}
 	summary, warnings, err := s.c.Update(ctx, m.Id, m.Document, m.Format)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.UpdateCommandResponse{Command: s.summary(summary), Warnings: warnings}), nil
+	return &v1alpha1.UpdateCommandResponse{Command: s.summary(summary), Warnings: warnings}, nil
 }
 
 // SetEnabled switches the active switch of a command.
-func (s *commandService) SetEnabled(ctx context.Context, req *connect.Request[v1alpha1.SetEnabledCommandRequest]) (*connect.Response[v1alpha1.SetEnabledCommandResponse], error) {
-	if req.Msg.Id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
+func (s *commandService) SetEnabled(ctx context.Context, req *v1alpha1.SetEnabledCommandRequest) (*v1alpha1.SetEnabledCommandResponse, error) {
+	if req.Id == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "id is required")
 	}
-	cmd, err := s.c.SetEnabled(ctx, req.Msg.Id, req.Msg.Enabled)
+	cmd, err := s.c.SetEnabled(ctx, req.Id, req.Enabled)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.SetEnabledCommandResponse{Command: s.summary(cmd)}), nil
+	return &v1alpha1.SetEnabledCommandResponse{Command: s.summary(cmd)}, nil
 }
 
-func (s *commandService) Delete(ctx context.Context, req *connect.Request[v1alpha1.DeleteCommandRequest]) (*connect.Response[v1alpha1.DeleteCommandResponse], error) {
-	if req.Msg.Id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
+func (s *commandService) Delete(ctx context.Context, req *v1alpha1.DeleteCommandRequest) (*v1alpha1.DeleteCommandResponse, error) {
+	if req.Id == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "id is required")
 	}
-	if err := s.c.Delete(ctx, req.Msg.Id); err != nil {
+	if err := s.c.Delete(ctx, req.Id); err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.DeleteCommandResponse{}), nil
+	return &v1alpha1.DeleteCommandResponse{}, nil
 }
 
-func (s *commandService) Run(ctx context.Context, req *connect.Request[v1alpha1.RunCommandRequest]) (*connect.Response[v1alpha1.RunCommandResponse], error) {
-	m := req.Msg
+func (s *commandService) Run(ctx context.Context, req *v1alpha1.RunCommandRequest) (*v1alpha1.RunCommandResponse, error) {
+	m := req
 	if m.Id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "id is required")
 	}
 	instanceID, result, reason, err := s.c.Run(ctx, m.Id, m.Args, m.Channel)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.RunCommandResponse{InstanceId: instanceID, Result: result, Reason: reason}), nil
+	return &v1alpha1.RunCommandResponse{InstanceId: instanceID, Result: result, Reason: reason}, nil
 }
 
-func (s *commandService) ListInstances(ctx context.Context, req *connect.Request[v1alpha1.ListInstancesRequest]) (*connect.Response[v1alpha1.ListInstancesResponse], error) {
-	m := req.Msg
+func (s *commandService) ListInstances(ctx context.Context, req *v1alpha1.ListInstancesRequest) (*v1alpha1.ListInstancesResponse, error) {
+	m := req
 	paused, instances, err := s.c.ListInstances(ctx, m.CommandId, m.States, m.Limit)
 	if err != nil {
 		return nil, apiError(err)
@@ -248,39 +247,39 @@ func (s *commandService) ListInstances(ctx context.Context, req *connect.Request
 	for _, i := range instances {
 		out.Instances = append(out.Instances, s.instance(i))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *commandService) PauseQueue(ctx context.Context, req *connect.Request[v1alpha1.PauseQueueRequest]) (*connect.Response[v1alpha1.PauseQueueResponse], error) {
-	paused, err := s.c.PauseQueue(ctx, req.Msg.Pause)
+func (s *commandService) PauseQueue(ctx context.Context, req *v1alpha1.PauseQueueRequest) (*v1alpha1.PauseQueueResponse, error) {
+	paused, err := s.c.PauseQueue(ctx, req.Pause)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.PauseQueueResponse{Paused: paused}), nil
+	return &v1alpha1.PauseQueueResponse{Paused: paused}, nil
 }
 
-func (s *commandService) CancelInstance(ctx context.Context, req *connect.Request[v1alpha1.CancelInstanceRequest]) (*connect.Response[v1alpha1.CancelInstanceResponse], error) {
-	if req.Msg.InstanceId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("instance_id is required"))
+func (s *commandService) CancelInstance(ctx context.Context, req *v1alpha1.CancelInstanceRequest) (*v1alpha1.CancelInstanceResponse, error) {
+	if req.InstanceId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "instance_id is required")
 	}
-	if err := s.c.CancelInstance(ctx, req.Msg.InstanceId); err != nil {
+	if err := s.c.CancelInstance(ctx, req.InstanceId); err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.CancelInstanceResponse{}), nil
+	return &v1alpha1.CancelInstanceResponse{}, nil
 }
 
-func (s *commandService) RetryInstance(ctx context.Context, req *connect.Request[v1alpha1.RetryInstanceRequest]) (*connect.Response[v1alpha1.RetryInstanceResponse], error) {
-	if req.Msg.InstanceId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("instance_id is required"))
+func (s *commandService) RetryInstance(ctx context.Context, req *v1alpha1.RetryInstanceRequest) (*v1alpha1.RetryInstanceResponse, error) {
+	if req.InstanceId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "instance_id is required")
 	}
-	instanceID, err := s.c.RetryInstance(ctx, req.Msg.InstanceId)
+	instanceID, err := s.c.RetryInstance(ctx, req.InstanceId)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.RetryInstanceResponse{InstanceId: instanceID}), nil
+	return &v1alpha1.RetryInstanceResponse{InstanceId: instanceID}, nil
 }
 
-func (s *commandService) TypeCatalog(ctx context.Context, _ *connect.Request[v1alpha1.TypeCatalogRequest]) (*connect.Response[v1alpha1.TypeCatalogResponse], error) {
+func (s *commandService) TypeCatalog(ctx context.Context, _ *v1alpha1.TypeCatalogRequest) (*v1alpha1.TypeCatalogResponse, error) {
 	actions, requirements, err := s.c.TypeCatalog(ctx)
 	if err != nil {
 		return nil, apiError(err)
@@ -292,7 +291,7 @@ func (s *commandService) TypeCatalog(ctx context.Context, _ *connect.Request[v1a
 	for _, r := range requirements {
 		out.Requirements = append(out.Requirements, s.typeInfo(r))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 func (s *commandService) typeInfo(t ActionTypeInfo) *v1alpha1.ActionTypeInfo {
@@ -306,10 +305,10 @@ func (s *commandService) typeInfo(t ActionTypeInfo) *v1alpha1.ActionTypeInfo {
 	}
 }
 
-func (s *commandService) Import(ctx context.Context, req *connect.Request[v1alpha1.ImportCommandsRequest]) (*connect.Response[v1alpha1.ImportCommandsResponse], error) {
-	m := req.Msg
+func (s *commandService) Import(ctx context.Context, req *v1alpha1.ImportCommandsRequest) (*v1alpha1.ImportCommandsResponse, error) {
+	m := req
 	if m.Document == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("document is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "document is required")
 	}
 	results, err := s.c.Import(ctx, m.Document, m.Format)
 	if err != nil {
@@ -319,13 +318,13 @@ func (s *commandService) Import(ctx context.Context, req *connect.Request[v1alph
 	for _, r := range results {
 		out.Results = append(out.Results, &v1alpha1.ImportedCommand{Name: r.Name, Id: r.ID, Created: r.Created, Error: r.Error})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *commandService) Export(ctx context.Context, req *connect.Request[v1alpha1.ExportCommandsRequest]) (*connect.Response[v1alpha1.ExportCommandsResponse], error) {
-	document, format, err := s.c.Export(ctx, req.Msg.Ids, req.Msg.Format)
+func (s *commandService) Export(ctx context.Context, req *v1alpha1.ExportCommandsRequest) (*v1alpha1.ExportCommandsResponse, error) {
+	document, format, err := s.c.Export(ctx, req.Ids, req.Format)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.ExportCommandsResponse{Document: document, Format: format}), nil
+	return &v1alpha1.ExportCommandsResponse{Document: document, Format: format}, nil
 }

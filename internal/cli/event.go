@@ -6,8 +6,6 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
-
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 )
 
@@ -31,15 +29,15 @@ type eventSimulateCmd struct {
 
 // Run simulates the event on the core.
 func (c eventSimulateCmd) Run(ctx context.Context, e *Env) error {
-	resp, err := e.streamClient().Simulate(ctx, connect.NewRequest(&v1alpha1.SimulateEventRequest{
+	resp, err := e.streamClient().Simulate(ctx, &v1alpha1.SimulateEventRequest{
 		EventType: c.Type,
 		User:      c.User,
 		Target:    c.Target,
 		Text:      c.Text,
-	}))
+	})
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(e.Stdout, "simulated %s (event %s)\n", c.Type, resp.Msg.EventId)
+	fmt.Fprintf(e.Stdout, "simulated %s (event %s)\n", c.Type, resp.EventId)
 	return nil
 }
