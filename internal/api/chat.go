@@ -6,7 +6,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
@@ -44,35 +43,35 @@ type chatService struct {
 }
 
 // Send sends a chat message.
-func (cs *chatService) Send(ctx context.Context, req *connect.Request[v1alpha1.SendChatRequest]) (*connect.Response[v1alpha1.SendChatResponse], error) {
-	m := req.Msg
+func (cs *chatService) Send(ctx context.Context, req *v1alpha1.SendChatRequest) (*v1alpha1.SendChatResponse, error) {
+	m := req
 	if err := cs.c.Send(ctx, m.GetText(), m.GetChannel(), m.GetPlatform(), m.GetAsStreamer(), m.GetReplyMessageId()); err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.SendChatResponse{}), nil
+	return &v1alpha1.SendChatResponse{}, nil
 }
 
 // Delete deletes a chat message by its platform ID.
-func (cs *chatService) Delete(ctx context.Context, req *connect.Request[v1alpha1.DeleteChatRequest]) (*connect.Response[v1alpha1.DeleteChatResponse], error) {
-	m := req.Msg
+func (cs *chatService) Delete(ctx context.Context, req *v1alpha1.DeleteChatRequest) (*v1alpha1.DeleteChatResponse, error) {
+	m := req
 	if err := cs.c.Delete(ctx, m.GetMessageId(), m.GetChannel(), m.GetPlatform()); err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.DeleteChatResponse{}), nil
+	return &v1alpha1.DeleteChatResponse{}, nil
 }
 
 // Clear deletes all recent chat messages of a channel.
-func (cs *chatService) Clear(ctx context.Context, req *connect.Request[v1alpha1.ClearChatRequest]) (*connect.Response[v1alpha1.ClearChatResponse], error) {
-	m := req.Msg
+func (cs *chatService) Clear(ctx context.Context, req *v1alpha1.ClearChatRequest) (*v1alpha1.ClearChatResponse, error) {
+	m := req
 	if err := cs.c.Clear(ctx, m.GetChannel(), m.GetPlatform()); err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.ClearChatResponse{}), nil
+	return &v1alpha1.ClearChatResponse{}, nil
 }
 
 // History returns the recent chat messages of a channel.
-func (cs *chatService) History(ctx context.Context, req *connect.Request[v1alpha1.HistoryChatRequest]) (*connect.Response[v1alpha1.HistoryChatResponse], error) {
-	m := req.Msg
+func (cs *chatService) History(ctx context.Context, req *v1alpha1.HistoryChatRequest) (*v1alpha1.HistoryChatResponse, error) {
+	m := req
 	msgs, err := cs.c.History(ctx, m.GetChannel(), m.GetPlatform(), int(m.GetLimit()))
 	if err != nil {
 		return nil, apiError(err)
@@ -92,5 +91,5 @@ func (cs *chatService) History(ctx context.Context, req *connect.Request[v1alpha
 		}
 		resp.Messages = append(resp.Messages, v)
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
