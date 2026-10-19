@@ -9,7 +9,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
@@ -64,14 +65,19 @@ type clients struct {
 
 // newClients builds the clients for the core at base.
 func newClients(httpClient *http.Client, base, token string) *clients {
-	o := bearerOption(token)
+	interceptors := []connect.ClientInterceptor{}
+	if token != "" {
+		interceptors = append(interceptors, bearerInterceptor(token))
+	}
+	transport := connecthttp.NewTransport(httpClient, base, connecthttp.WithReadMaxBytes(0))
+	client := connect.NewClient(transport, interceptors...)
 	return &clients{
-		system:  streamcrewv1alpha1connect.NewSystemServiceClient(httpClient, base, o...),
-		stream:  streamcrewv1alpha1connect.NewStreamServiceClient(httpClient, base, o...),
-		chat:    streamcrewv1alpha1connect.NewChatServiceClient(httpClient, base, o...),
-		command: streamcrewv1alpha1connect.NewCommandServiceClient(httpClient, base, o...),
-		user:    streamcrewv1alpha1connect.NewUserServiceClient(httpClient, base, o...),
-		config:  streamcrewv1alpha1connect.NewConfigServiceClient(httpClient, base, o...),
+		system:  streamcrewv1alpha1connect.NewSystemServiceClient(client),
+		stream:  streamcrewv1alpha1connect.NewStreamServiceClient(client),
+		chat:    streamcrewv1alpha1connect.NewChatServiceClient(client),
+		command: streamcrewv1alpha1connect.NewCommandServiceClient(client),
+		user:    streamcrewv1alpha1connect.NewUserServiceClient(client),
+		config:  streamcrewv1alpha1connect.NewConfigServiceClient(client),
 	}
 }
 
@@ -163,11 +169,11 @@ func (m model) boot() tea.Cmd {
 func (m model) fetchStatus() tea.Msg {
 	ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 	defer cancel()
-	resp, err := m.cl.system.Status(ctx, connect.NewRequest(&v1alpha1.StatusRequest{}))
+	resp, err := m.cl.system.Status(ctx, &v1alpha1.StatusRequest{})
 	if err != nil {
 		return statusErr{err: err}
 	}
-	return statusMsg{status: resp.Msg}
+	return statusMsg{status: resp}
 }
 
 // Update implements tea.Model.
@@ -266,17 +272,18 @@ func (m model) nextStream() tea.Cmd {
 // subscribeLoop forwards the live stream into the model until the context
 // ends or the stream breaks.
 func (m model) subscribeLoop() {
-	stream, err := m.cl.stream.Subscribe(m.ctx, connect.NewRequest(&v1alpha1.SubscribeRequest{}))
+	stream, err := m.cl.stream.Subscribe(m.ctx, &v1alpha1.SubscribeRequest{})
 	if err != nil {
 		return
 	}
 	defer stream.Close()
 	for {
-		if !stream.Receive() {
+		event, err := stream.Receive()
+		if err != nil {
 			return
 		}
 		select {
-		case m.streamCh <- streamMsg{event: stream.Msg()}:
+		case m.streamCh <- streamMsg{event: event}:
 		default: // the UI is too slow; drop the event
 		}
 	}
@@ -329,10 +336,10 @@ func (m model) refreshQueue() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 		defer cancel()
-		resp, err := m.cl.command.ListInstances(ctx, connect.NewRequest(&v1alpha1.ListInstancesRequest{}))
+		resp, err := m.cl.command.ListInstances(ctx, &v1alpha1.ListInstancesRequest{})
 		var list []*v1alpha1.CommandInstanceView
 		if err == nil {
-			list = resp.Msg.GetInstances()
+			list = resp.GetInstances()
 		}
 		return queueLoadedMsg{list: list, err: err}
 	}
@@ -448,10 +455,10 @@ func (m model) fetchCommands() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 		defer cancel()
-		resp, err := m.cl.command.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{}))
+		resp, err := m.cl.command.List(ctx, &v1alpha1.ListCommandsRequest{})
 		var list []*v1alpha1.CommandSummary
 		if err == nil {
-			list = resp.Msg.GetCommands()
+			list = resp.GetCommands()
 		}
 		return commandsLoadedMsg{list: list, err: err}
 	}
@@ -462,12 +469,12 @@ func (m model) fetchUsers() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 		defer cancel()
-		resp, err := m.cl.user.List(ctx, connect.NewRequest(&v1alpha1.ListUsersRequest{
+		resp, err := m.cl.user.List(ctx, &v1alpha1.ListUsersRequest{
 			Limit: 100,
-		}))
+		})
 		var list []*v1alpha1.UserView
 		if err == nil {
-			list = resp.Msg.GetUsers()
+			list = resp.GetUsers()
 		}
 		return usersLoadedMsg{list: list, err: err}
 	}

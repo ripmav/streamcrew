@@ -13,140 +13,137 @@
 package streamcrewv1alpha1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ConfigServiceName is the fully-qualified name of the ConfigService service.
 	ConfigServiceName = "streamcrew.v1alpha1.ConfigService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ConfigServiceGetProcedure is the fully-qualified name of the ConfigService's Get RPC.
+	// ConfigServiceGetProcedure is the procedure name of the ConfigService's Get RPC.
 	ConfigServiceGetProcedure = "/streamcrew.v1alpha1.ConfigService/Get"
-	// ConfigServiceUpdateProcedure is the fully-qualified name of the ConfigService's Update RPC.
+	// ConfigServiceUpdateProcedure is the procedure name of the ConfigService's Update RPC.
 	ConfigServiceUpdateProcedure = "/streamcrew.v1alpha1.ConfigService/Update"
+)
+
+var (
+	configServiceGetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_config_proto.Services().ByName("ConfigService").Methods().ByName("Get"),
+			Procedure:  ConfigServiceGetProcedure,
+		}
+	})
+	configServiceUpdateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_config_proto.Services().ByName("ConfigService").Methods().ByName("Update"),
+			Procedure:  ConfigServiceUpdateProcedure,
+		}
+	})
 )
 
 // ConfigServiceClient is a client for the streamcrew.v1alpha1.ConfigService service.
 type ConfigServiceClient interface {
 	// Get returns the current configuration document and the categories
 	// of its settings.
-	Get(context.Context, *connect.Request[v1alpha1.GetConfigRequest]) (*connect.Response[v1alpha1.GetConfigResponse], error)
+	Get(context.Context, *v1alpha1.GetConfigRequest) (*v1alpha1.GetConfigResponse, error)
 	// Update replaces the configuration document; the valid document is
 	// validated before it is stored.
-	Update(context.Context, *connect.Request[v1alpha1.UpdateConfigRequest]) (*connect.Response[v1alpha1.UpdateConfigResponse], error)
+	Update(context.Context, *v1alpha1.UpdateConfigRequest) (*v1alpha1.UpdateConfigResponse, error)
 }
 
-// NewConfigServiceClient constructs a client for the streamcrew.v1alpha1.ConfigService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewConfigServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ConfigServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	configServiceMethods := v1alpha1.File_streamcrew_v1alpha1_config_proto.Services().ByName("ConfigService").Methods()
-	return &configServiceClient{
-		get: connect.NewClient[v1alpha1.GetConfigRequest, v1alpha1.GetConfigResponse](
-			httpClient,
-			baseURL+ConfigServiceGetProcedure,
-			connect.WithSchema(configServiceMethods.ByName("Get")),
-			connect.WithClientOptions(opts...),
-		),
-		update: connect.NewClient[v1alpha1.UpdateConfigRequest, v1alpha1.UpdateConfigResponse](
-			httpClient,
-			baseURL+ConfigServiceUpdateProcedure,
-			connect.WithSchema(configServiceMethods.ByName("Update")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// configServiceClient implements ConfigServiceClient.
-type configServiceClient struct {
-	get    *connect.Client[v1alpha1.GetConfigRequest, v1alpha1.GetConfigResponse]
-	update *connect.Client[v1alpha1.UpdateConfigRequest, v1alpha1.UpdateConfigResponse]
-}
-
-// Get calls streamcrew.v1alpha1.ConfigService.Get.
-func (c *configServiceClient) Get(ctx context.Context, req *connect.Request[v1alpha1.GetConfigRequest]) (*connect.Response[v1alpha1.GetConfigResponse], error) {
-	return c.get.CallUnary(ctx, req)
-}
-
-// Update calls streamcrew.v1alpha1.ConfigService.Update.
-func (c *configServiceClient) Update(ctx context.Context, req *connect.Request[v1alpha1.UpdateConfigRequest]) (*connect.Response[v1alpha1.UpdateConfigResponse], error) {
-	return c.update.CallUnary(ctx, req)
+// NewConfigServiceClient constructs a client for the streamcrew.v1alpha1.ConfigService service.
+// Multiple service clients may share a single connect.Client.
+func NewConfigServiceClient(client *connect.Client) ConfigServiceClient {
+	return &configServiceClient{client: client}
 }
 
 // ConfigServiceHandler is an implementation of the streamcrew.v1alpha1.ConfigService service.
 type ConfigServiceHandler interface {
 	// Get returns the current configuration document and the categories
 	// of its settings.
-	Get(context.Context, *connect.Request[v1alpha1.GetConfigRequest]) (*connect.Response[v1alpha1.GetConfigResponse], error)
+	Get(context.Context, *v1alpha1.GetConfigRequest) (*v1alpha1.GetConfigResponse, error)
 	// Update replaces the configuration document; the valid document is
 	// validated before it is stored.
-	Update(context.Context, *connect.Request[v1alpha1.UpdateConfigRequest]) (*connect.Response[v1alpha1.UpdateConfigResponse], error)
+	Update(context.Context, *v1alpha1.UpdateConfigRequest) (*v1alpha1.UpdateConfigResponse, error)
 }
 
-// NewConfigServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewConfigServiceHandler(svc ConfigServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	configServiceMethods := v1alpha1.File_streamcrew_v1alpha1_config_proto.Services().ByName("ConfigService").Methods()
-	configServiceGetHandler := connect.NewUnaryHandler(
-		ConfigServiceGetProcedure,
-		svc.Get,
-		connect.WithSchema(configServiceMethods.ByName("Get")),
-		connect.WithHandlerOptions(opts...),
+// RegisterConfigServiceHandler registers svc as the streamcrew.v1alpha1.ConfigService
+// implementation on server.
+func RegisterConfigServiceHandler(server *connect.Server, svc ConfigServiceHandler) {
+	adapter := configServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: configServiceGetSpec(), Handler: adapter.get},
+		connect.Method{Spec: configServiceUpdateSpec(), Handler: adapter.update},
 	)
-	configServiceUpdateHandler := connect.NewUnaryHandler(
-		ConfigServiceUpdateProcedure,
-		svc.Update,
-		connect.WithSchema(configServiceMethods.ByName("Update")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/streamcrew.v1alpha1.ConfigService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ConfigServiceGetProcedure:
-			configServiceGetHandler.ServeHTTP(w, r)
-		case ConfigServiceUpdateProcedure:
-			configServiceUpdateHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedConfigServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedConfigServiceHandler struct{}
 
-func (UnimplementedConfigServiceHandler) Get(context.Context, *connect.Request[v1alpha1.GetConfigRequest]) (*connect.Response[v1alpha1.GetConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.ConfigService.Get is not implemented"))
+func (UnimplementedConfigServiceHandler) Get(context.Context, *v1alpha1.GetConfigRequest) (*v1alpha1.GetConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.ConfigService.Get is not implemented")
 }
 
-func (UnimplementedConfigServiceHandler) Update(context.Context, *connect.Request[v1alpha1.UpdateConfigRequest]) (*connect.Response[v1alpha1.UpdateConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.ConfigService.Update is not implemented"))
+func (UnimplementedConfigServiceHandler) Update(context.Context, *v1alpha1.UpdateConfigRequest) (*v1alpha1.UpdateConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.ConfigService.Update is not implemented")
+}
+
+type configServiceClient struct {
+	client *connect.Client
+}
+
+func (c *configServiceClient) Get(ctx context.Context, req *v1alpha1.GetConfigRequest) (*v1alpha1.GetConfigResponse, error) {
+	var res v1alpha1.GetConfigResponse
+	if err := c.client.CallUnary(ctx, configServiceGetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *configServiceClient) Update(ctx context.Context, req *v1alpha1.UpdateConfigRequest) (*v1alpha1.UpdateConfigResponse, error) {
+	var res v1alpha1.UpdateConfigResponse
+	if err := c.client.CallUnary(ctx, configServiceUpdateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type configServiceHandler struct{ svc ConfigServiceHandler }
+
+func (h configServiceHandler) get(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.GetConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Get(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h configServiceHandler) update(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.UpdateConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Update(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

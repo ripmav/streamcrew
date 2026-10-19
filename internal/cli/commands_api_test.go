@@ -11,7 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -59,11 +60,11 @@ func TestCommandUserAPICommands(t *testing.T) {
 	ctx := t.Context()
 
 	// A command the commands work on.
-	cc := streamcrewv1alpha1connect.NewCommandServiceClient(http.DefaultClient, base)
-	_, err := cc.Import(ctx, connect.NewRequest(&v1alpha1.ImportCommandsRequest{
+	cc := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	_, err := cc.Import(ctx, &v1alpha1.ImportCommandsRequest{
 		Document: mockConsoleExampleCommands,
 		Format:   "yaml",
-	}))
+	})
 	require.NoError(t, err)
 
 	var out bytes.Buffer
@@ -126,10 +127,10 @@ func TestCommandUserAPICommands(t *testing.T) {
 }
 
 // simulateEvent sends a Simulate request through the stream client.
-func simulateEvent(ctx context.Context, e *Env, eventType, user, text string) (*connect.Response[v1alpha1.SimulateEventResponse], error) {
-	return e.streamClient().Simulate(ctx, connect.NewRequest(&v1alpha1.SimulateEventRequest{
+func simulateEvent(ctx context.Context, e *Env, eventType, user, text string) (*v1alpha1.SimulateEventResponse, error) {
+	return e.streamClient().Simulate(ctx, &v1alpha1.SimulateEventRequest{
 		EventType: eventType,
 		User:      user,
 		Text:      text,
-	}))
+	})
 }
