@@ -45,11 +45,22 @@ type Started struct {
 // Stopping is the payload of "app.stopping".
 type Stopping struct{}
 
+// LogPayload is the payload of the "log.line" event (roadmap 6.6): one log line
+// of the core. Level is "debug", "info", "warn" or "error"; Component is
+// the component that logged, empty if unknown; structured attributes stay
+// out of the stream (the protocol carries only these three values).
+type LogPayload struct {
+	Level     string `json:"level"`
+	Component string `json:"component"`
+	Message   string `json:"message"`
+}
+
 func newCatalog() (*event.Catalog, error) {
 	c := event.NewCatalog()
 	return c, errors.Join(
 		event.Register[Started](c, eventtype.AppStarted),
 		event.Register[Stopping](c, eventtype.AppStopping),
+		event.Register[LogPayload](c, eventtype.Log),
 		event.Register[supervisor.Status](c, TypeSupervisorStatus),
 		auth.RegisterEvents(c),
 		engine.RegisterEvents(c),

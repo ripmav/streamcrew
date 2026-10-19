@@ -283,6 +283,9 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	}
 	a.catalog = catalog
 	a.bus = event.NewBus(component(logger, "event"), event.WithCatalog(catalog))
+	// The log stream (roadmap 6.6): every record the level filter passes is
+	// published as a "log" event beside the console and file output.
+	a.dynLog.SetSink(logSinkHandler{a: a})
 	// The prompt mechanism (Plan §6.14): prompts are published to the bus,
 	// delivered through the live stream and answered with the API.
 	a.prompts = prompt.New(func(ctx context.Context, p prompt.Prompt) {

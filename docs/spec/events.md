@@ -76,6 +76,14 @@ Die Authentifizierungsereignisse (Roadmap 4.1, [ADR-0014](../adr/0014-oauth-und-
 | `auth.login_completed` | `login` (der Anzeigename des Kontos) |
 | `auth.login_failed` | `reason` (warum die Anmeldung fehlgeschlagen ist, in Worten, die ein Frontend zeigen kann) |
 
+### Nutzlast der Log-Ereignisse
+
+Die Log-Ereignisse (Roadmap 6.6) sind die Log-Zeilen des Cores im Stream: Der Core publiziert jedes Record, das den Level-Filter der Logging-Konfiguration durchlässt, als `log.line` neben dem Terminal- und Datei-Ausgang. Die Typen stehen nicht im Spec-Katalog `All()` und lösen keine Ereignis-Commands aus; der Level-Filter des Cores (On-the-fly-Konfiguration, Roadmap 6.5) begrenzt den Volumen von vornherein, und das Puffer des Bus wirft bei Überlast wie bei allen Ereignissen ab (`event.lag`).
+
+| Typ | Felder |
+|---|---|
+| `log.line` | `level` („debug“, „info“, „warn“ oder „error“), `component` (die Komponente, die geloggt hat; leer, wenn unbekannt), `message` (die Log-Nachricht; strukturierte Attribute jenseits der Komponente bleiben im Stream unberücksichtigt) |
+
 ### Katalog
 
 **Anwendung**
@@ -84,6 +92,7 @@ Die Authentifizierungsereignisse (Roadmap 4.1, [ADR-0014](../adr/0014-oauth-und-
 |---|---|---|
 | `app.started` | Der Core ist gestartet (einmal je Start). | Q8 (Application Launch) |
 | `app.stopping` | Der Core fährt herunter. | Q8 (Application Exit) |
+| `log.line` | Eine Log-Zeile des Cores, die den Level-Filter durchlässt. | Roadmap 6.6 |
 | `auth.action_required` | Eine Anmeldung braucht den Nutzer: die Frontends zeigen die URL, im Device Code Flow dazu den Code. | [ADR-0023](../adr/0023-twitch-login-authorization-code-flow.md) |
 | `auth.login_completed` | Der Nutzer hat eine Anmeldung abgeschlossen; das Konto ist gespeichert. | [ADR-0014](../adr/0014-oauth-und-app-credentials.md) |
 | `auth.login_failed` | Eine Anmeldung ist fehlgeschlagen, mit dem Grund in Worten. | [ADR-0014](../adr/0014-oauth-und-app-credentials.md) |
@@ -208,6 +217,7 @@ Keine.
 
 | Datum | Änderung |
 |---|---|
+| 2026-10-18 | Neue Log-Ereignisse (Roadmap 6.6): `log.line` trägt die Log-Zeilen des Cores in den Stream (Nutzlast `level`, `component`, `message`); wie die Authentifizierungsereignisse nicht im Trigger-Katalog `All()`. |
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
 | 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
 | 2026-09-29 | Katalog umgesetzt (`internal/domain/eventtype`). Festlegungen dabei: `chat.user.join` und `chat.user.entrance` gelten wie B3 einmal je Nutzer und Stream-Sitzung, `chat.user.new` und `chat.user.first_message` einmal je Nutzer überhaupt; plattformspezifische Typen haben die Häufigkeit ihrer neutralen Entsprechung. |
