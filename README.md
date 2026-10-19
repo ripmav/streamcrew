@@ -1,261 +1,442 @@
 # streamcrew
 
-`streamcrew` ist der Codename eines Bot- und Automatisierungsdienstes für Livestreams: Chat-Commands, Events, Overlays, Economy und Spiele. Es ist eine Clean-Room-Neuimplementierung des dokumentierten Verhaltens von Mix It Up in Go: Der Quellcode des Originals wird nicht gelesen, Grundlage sind Doku und beobachtetes Verhalten ([ADR-0001](docs/adr/0001-neuimplementierung-und-nutzung-des-originals.md)).
+[![CI](https://github.com/ripmav/streamcrew/actions/workflows/ci.yml/badge.svg)](https://github.com/ripmav/streamcrew/actions/workflows/ci.yml)
 
-- Der Core läuft headless, vor allem auf dem Streaming-PC und wahlweise als Server-Anwendung ([ADR-0003](docs/adr/0003-betriebsmodi.md)).
-- Frontends sprechen ausschließlich über die API mit ihm ([ADR-0010](docs/adr/0010-api-protokoll.md)): CLI/TUI, eine Desktop-App und eine Weboberfläche.
-- Zum Start wird nur Twitch unterstützt ([ADR-0004](docs/adr/0004-plattformumfang-zum-start.md)).
+streamcrew ist ein Bot- und Automatisierungsservice für Livestreams: Chat-Commands, Ereignis-Automatisierung, Overlays, Wirtschaft und Spiele. Es ist eine Clean-Room-Umsetzung des Verhaltens von *Mix It Up* in Go — es wurde kein Quellcode des Originals gelesen; Grundlage sind seine öffentliche Dokumentation und beobachtetes Verhalten ([ADR-0001](docs/adr/0001-neuimplementierung-und-nutzung-des-originals.md)).
 
 ## Status
 
-Die Phasen 1 (Fundament), 2 (Domäne und Persistenz) und 3 (Engine, Templates, Actions, Mock) sind abgeschlossen, Meilenstein M1 ist erreicht: Der Core führt Commands aus, und Commands aus YAML reagieren auf simulierte Chat-Nachrichten und Events. Die Template-Engine kennt Ausdrücke mit den Rechenfunktionen der Rechenbibliothek des Originals, und Datum, Uhrzeit, Monats- und Wochentagsnamen folgen der Locale des Profils mit eigenen Mustern für `en-US`, `en-GB`, `de-DE`, `de-AT` und `de-CH` (Standard: die Locale des Systems); die Zahlen bleiben kanonisch. Die Mock-Konsole `streamcrew mock` startet den Core in einem Prozess gegen eine Kopie des Profils — mit simulierten Chat-Nachrichten, Events und dem Stream; die Kopie wird am Ende verworfen. `streamcrew serve` startet mit dem aktiven Profil, meldet sich über `/healthz` und `/readyz` gesund und beendet sich sauber. Phase 4 (Twitch) ist mit 4.1 (Authentifizierung), 4.2 (Helix-Client) und 4.3 (EventSub) fortgeschritten: Die Twitch-Konten von Streamer und Bot werden vom Nutzer im Browser angemeldet (Authorization Code Flow mit Loopback-Redirect, der Device Code Flow ist der Fallback), ihre Tokens und die App-Credentials liegen verschlüsselt im Profil und werden vor Ablauf erneuert; `auth login`, `auth status` und `auth logout` sind die dazugehörigen Befehle ([ADR-0023](docs/adr/0023-twitch-login-authorization-code-flow.md)). Die Twitch-API-Anbindung läuft über einen resilienten HTTP-Client (Wiederholung, Circuit-Breaker, Rate-Limits, [Code-ADR-0014](docs/adr/code/0014-http-client.md)) und den Helix-Adapter `internal/helix` mit den Endpunkten für Users, Channels, Streams, Chat, Moderation, Follower, Abos, Kategorien und EventSub-Subscriptions (4.2). Das EventSub-WebSocket ist angeschlossen (4.3, [Code-ADR-0015](docs/adr/code/0015-websocket-bibliothek.md)): Der Core verbindet sich über `internal/twitch` mit dem Streamer-Konto, hält die EventSub-Subscriptions am Soll-Zustand und leitet die Ereignisse (Chat-Nachrichten mit Emotes und Rollen, Abo, Resub, Geschenk, Raid, Cheer, Moderation, Whisper, Shared Chat) an das Ereignis-Modell weiter — tokenabhängig, mit Keepalive, Session-Reconnect und Deduplizierung. Phase 4.4 (Funktionen) ist abgeschlossen: Chat senden, löschen und leeren, Moderation, Titel und Kategorie, Event-Commands für die Twitch-Ereignisse (Follow, Raid, Abo, Resub, Geschenk, Cheer, Channel Points, Hype Train, Werbung, Shoutout, Ziele, Charity, Moderation), Channel-Points- und Bits-Commands, die Custom-Power-Up-Einlösung als auslösendes Event, die Twitch-Action (Clip, Marker, Werbung, Raid, Shoutout, Belohnungen; Umfrage und Vorhersage mit Unterliste nach dem Ende) und der Emote-Katalog (Twitch, BetterTTV, FrankerFaceZ) mit Cache. Phase 4.6 (Zusätzliche Kanäle) ist code-seitig abgeschlossen: Über `streamcrew profile channels add` (Profil-Einstellung `channels`) werden zusätzliche Kanäle angegeben, in denen der Bot arbeitet — die einzige Voraussetzung ist der Moderator-Status des Bot-Kontos dort, kein zweiter Login ([`spec/twitch-multi-channel.md`](docs/spec/twitch-multi-channel.md)). Ereignisse eines zusätzlichen Channels lösen Commands in diesem Channel aus; ereignisgetriggerte Chat- und Moderations-Actions wirken auf den Channel des Events, Läufe ohne Channel (Timer, manueller Aufruf) auf den eigenen Channel. Owner-Actions (Raid, Werbung, Titel und Kategorie, Clip, Marker, Umfrage, Vorhersage, Belohnungen) wirken nur auf den eigenen Channel, sonst klare Fehlermeldung. Die Twitch-Plattform verbindet jeden zusätzlichen Channel mit dem Bot-Token (eigene WebSocket-Verbindung) und hält die Subscriptions je Channel; fehlt der Moderator-Status oder wird er entzogen, wird der Channel nicht mehr betrieben (Warnung `mod_missing`). Phase 4.7 (Pro-Channel-Konfiguration) ist code-seitig abgeschlossen: Ein Command trägt einen optionalen Channel-Scope (`channel` im YAML/JSON-Format, leer = alle betriebenen Channels, Standard; gesetzt = nur dort) und feuert nur für Ereignisse seines Channels, die Name-Eindeutigkeit bleibt profiltweit; das Timer-Intervall einer Command-Gruppe feuert in ihrem Ziel-Channel (`timerChannel`, leer = eigener Channel), der Scheduler des Intervalls folgt mit Roadmap 5.4. Counter, Quotes, Währungen, Cooldowns, Nutzer-Statistiken und Einstellungen gelten profiltweit ([`spec/commands.md`](docs/spec/commands.md), B9, B31; [`spec/twitch-multi-channel.md`](docs/spec/twitch-multi-channel.md), B8). Phase 5.1 (Chat) ist abgeschlossen: Der Chat-Service ist der einzige Schreibweg des Cores in die Plattform-Chats — senden, antworten, flüstern, Nachrichten löschen und Chat leeren, als Bot oder Streamer; die Chat-Action und das Löschen der auslösenden Nachricht delegieren auf ihn. Der Chat-Verlauf im Speicher (je Plattform, Standard 200 Einträge) und das optionale Chat-Protokoll (JSON Lines in `<data-dir>/chat/<plattform>.jsonl`, Rotation nach Größe) nehmen alles auf, was die Pipeline als Chatnachricht entgegennimmt, auch die Nachrichten des Bot-Kontos. Solange der Stumme Chat an ist (Moderation-Action `disable_chat`), löscht die Pipeline neue Nachrichten vor jeder Ereignis- und Command-Auslösung — außer die Nachrichten von Streamer und Bot; der Zustand ist nicht gespeichert und ein Neustart schaltet ihn aus. Die Profilkonfigurations-Sektionen `general` (Standardplattform für Such- und Reihenfolge-Regeln) und `chat` (Verlauf-Größe, Protokoll, Löschen der auslösenden Nachricht für alle Commands) werden je Vorgang gelesen, eine Änderung wirkt ab dem nächsten Vorgang ([`spec/chat-service.md`](docs/spec/chat-service.md)). Den Stand zeigt die [Roadmap](docs/roadmap.md).
+Meilenstein M1 ist erreicht (Phasen 1–5 abgeschlossen): Der Core führt Commands aus, und Commands aus YAML/JSON reagieren auf simulierte Chat-Nachrichten und Events — und auf echte Twitch-Ereignisse (Phase 4: Authentifizierung, Helix-Client, EventSub, Chat, Moderation, Titel/Kategorie, Channel Points, Bits, Emote-Katalog, zusätzliche Kanäle, Pro-Channel-Konfiguration).
 
-Das Repository ist privat. Nur der Projektinhaber schaltet es öffentlich.
+Phase 6 (Agent-Plattform) ist fast vollständig umgesetzt, M2 (Headless-MVP) ist erreicht:
+
+- **Event-Stream** (6.1): Der Core streamt Ereignisse (Chat, Channel, Stream, App, Log) als Server-Streaming-ConnectRPC-Call an die Frontends, mit Catch-up für nachverbindende Clients.
+- **Strömungsgrößen** (6.2): Die Puffer- und Catch-up-Größen sind konfigurierbar (`--stream-buffer`, `--stream-catch-up`); überschuldete Abonnenten werden fair abgeworfen.
+- **TUI** (6.3/6.4): `streamcrew tui` zeigt Dashboard, Chat, Events, Warteschlange, Commands, Nutzer und Logs live aus dem Event-Stream — lokal oder gegen einen entfernten Core (`--server`).
+- **On-the-fly-Konfiguration** (6.5): Einstellungen wie `listen`, `log_level` und `log_file` wirken im laufenden Core ohne Neustart, per Konfigurationsdatei (Watcher) oder über die API (`ConfigService`, TUI-Settings-View).
+- **Log-Stream** (6.6): Log-Zeilen sind Ereignisse; Clients abonnieren sie gefiltert nach Level, Plattform, Channel und Ereignisklasse über den Event-Stream.
+- **Release MVP** (6.7): Auslieferung und Nutzerdokumentation sind offen.
+
+Die vollständige Planung mit Abnahmekriterien steht in der [Roadmap](docs/roadmap.md).
 
 ## Dokumentation
 
-| Dokument | Inhalt |
-|---|---|
-| [`docs/plan.md`](docs/plan.md) | Architektur, Technologie-Stack, Konventionen, Risiken |
-| [`docs/roadmap.md`](docs/roadmap.md) | Phasen, Aufgaben, Änderungshistorie |
-| [`docs/adr/`](docs/adr/README.md) | Architekturentscheidungen |
-| [`docs/adr/code/`](docs/adr/code/README.md) | Entscheidungen zum Code |
-| [`docs/spec/`](docs/spec/README.md) | Verhaltensspezifikationen mit Quellennachweis |
-| [`docs/usage.md`](docs/usage.md) | Bedienungsanleitung: Schnellstart, Betriebsarten, Sicherheit |
+- [Spezifikationen](docs/spec/): das Soll der Features — was streamcrew tun soll, bevor es umgesetzt ist.
+- [ADRs](docs/adr/): Architekturentscheidungen, mit Kontext, Alternativen und Folgen.
+- [Code-ADRs](docs/adr/code/): Entscheidungen auf Code- und Modul-Ebene (z. B. Typ-Registry, Event-Bus, HTTP-Client).
+- [Roadmap](docs/roadmap.md): Meilensteine, Phasen und Abnahmekriterien.
+- [Tests](docs/tests/): Test-Matrizen je Issue.
 
-## Bedienung
+## Architektur
 
-```bash
-streamcrew serve                  # Core starten; Strg+C oder SIGTERM beendet ihn geordnet
-streamcrew version [-o json]      # Version, Commit, Go-Version, Plattform
-streamcrew config show [-o json]  # wirksame Konfiguration im Format der Konfigurationsdatei
-streamcrew config path [-o json]  # Konfigurationsdatei, Daten- und Log-Verzeichnis
-streamcrew doctor [-o json]       # Umgebung prüfen: Datenverzeichnis, Adresse, Zeitzonen
-
-streamcrew profile list [-o json]              # Profile; * markiert das aktive
-streamcrew profile create <name> [--id <id>]   # Profil anlegen; die ID folgt sonst aus dem Namen
-streamcrew profile rename <id> <name>          # Anzeigenamen ändern; die ID bleibt
-streamcrew profile use <id>                    # aktives Profil festlegen
-streamcrew profile delete <id> --yes           # löschen; vorher entsteht ein Backup
-
-streamcrew profile channels list [-o json]     # zusätzliche Kanäle des Profils; Core darf laufen
-streamcrew profile channels add <login>        # Channel hinzufügen, in dem der Bot wirkt; gestoppter Core
-streamcrew profile channels remove <login>     # Channel entfernen (Schreibweise egal); gestoppter Core
-
-streamcrew backup create                       # Backup des Profils, auch bei laufendem Core
-streamcrew backup list [-o json]               # Backups des Profils, neueste zuerst
-streamcrew backup restore <datei.zip> --yes    # zurückspielen; vorher wird der aktuelle Stand gesichert
-
-streamcrew secret rotate                       # neuen Schlüssel erzeugen, Tokens aller Profile neu verschlüsseln
-
-streamcrew auth login twitch [--bot] [--device-flow] [--client-id <id> --client-secret <secret>]   # Konto im Browser anmelden, --bot statt Streamer
-streamcrew auth status [-o json]                                                                    # Konten: Zustand, fehlende Scopes, Ablauf
-streamcrew auth logout twitch [--bot]                                                               # Refresh-Token widerrufen und Konto entfernen
-
-streamcrew schema export [--dir schemas]       # JSON-Schema der Dateien von Commands als Code schreiben
-streamcrew command validate <pfade> [-o json]  # Dateien von Commands als Code gegen das Profil prüfen
-streamcrew command import <pfade> [-o json]    # alle Dokumente übernehmen oder, bei einem Fehler, keines
-streamcrew command export [namen] [--file <datei> | --dir <verz>] [--format yaml|json]  # Commands als Dateien schreiben
+```
+┌──────────────┐  ┌────────────────┐  ┌──────────────┐
+│  CLI / TUI   │  │  Desktop-App   │  │  Web-UI      │
+└──────┬───────┘  └───────┬────────┘  └──────┬───────┘
+       │                  │                  │
+       └──────────────────┼──────────────────┘
+                          │  API (ConnectRPC, ADR-0010)
+                 ┌────────┴────────┐
+                 │   Headless Core │  ein Binary, läuft auf dem
+                 └────────┬────────┘  Streaming-PC, optional
+                          │           als Server-App (ADR-0003)
+           ┌──────────────┼──────────────┐
+           │              │              │
+     ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐
+     │  Twitch   │  │ (weitere  │  │  Mock     │
+     │ (Phase 4) │  │ Plattformen│ │ (Tests,   │
+     └───────────┘  └───────────┘  │  Demo)    │
+                                   └───────────┘
 ```
 
-- `profile …` (außer `list`), `backup restore`, `secret rotate`, `command import`, `auth login` und `auth logout` brauchen einen gestoppten Core. Sie nehmen dieselbe Sperre wie `serve` und brechen sonst mit einem Hinweis ab ([ADR-0012](docs/adr/0012-persistenz.md)).
-- `backup …` wirkt auf das aktive Profil oder auf `--profile <id>`.
-- `command validate` prüft YAML- und JSON-Dateien, auch ganze Verzeichnisse, gegen eine Kopie des aktiven Profils oder von `--profile <id>`, mit denselben Prüfungen wie beim Speichern. Es ändert nichts und darf laufen, während der Core läuft. Fehler und Warnungen nennen Datei, Zeile, Spalte und Pfad; mit Fehlern endet es mit Status 1. `command import` prüft genauso und übernimmt dann alle Dokumente in einer Transaktion: Ein Dokument ersetzt das gleicher Art und gleichen Namens und behält dessen ID; andere bleiben unverändert. `command export` schreibt die genannten Commands mit ihren Gruppen und Cooldown-Gruppen, ohne Namen alles; mit `--dir` je Dokument eine Datei wie `chat-command-hug.v1alpha1.yaml`. Exportieren und wieder Importieren ändert nichts außer der Zeit der Änderung.
-- `auth login twitch` startet die Anmeldung im Browser ([ADR-0023](docs/adr/0023-twitch-login-authorization-code-flow.md), [ADR-0024](docs/adr/0024-eingebaute-twitch-app.md)): Es wird die URL gezeigt, an der der Nutzer seine Twitch-App autorisiert; der Loopback-Redirect auf `http://localhost:8741/oauth/callback` schließt den Login ab. `--device-flow` nutzt stattdessen den Device Code Flow (Code an der URL eingeben). Ohne `--client-id`/`--client-secret` nutzt der Login die App der letzten Anmeldung der Plattform und ohne die eine die **eingebaute „StreamCrew“-App** (Client-ID und Secret verschlüsselt im Core, ADR-0024) — der erste Login braucht also keine Einrichtung. `--client-id`/`--client-secret` nutzen eine eigene Twitch-App (BYO): eine Confidential-App, die `http://localhost:8741/oauth/callback` als Redirect registriert; zusammen zu geben. `--bot` meldet das Bot-Konto an. Die App-Credentials eines BYO-Logins speichert der Login verschlüsselt im Profil und nutzt sie bei der nächsten Anmeldung; die Credentials der eingebauten App werden nicht gespeichert. `auth status` zeigt die Konten des Profils als Tabelle oder JSON — `ok` oder `login_required` (fehlende Scopes, fehlendes oder abgelaufenes Token, fehlendes App-Secret) samt Ablauf des Access-Tokens; es liest das Profil read-only und läuft neben dem Core. `auth logout` widerruft zuerst den Refresh-Token bei Twitch mit dem Client der Account-Zeile und entfernt danach Konto und Token; schlägt der Widerruf fehl, bleiben beide, so dass er erneut versucht werden kann. Die App-Credentials bleiben für die nächste Anmeldung.
-- `schema export` schreibt `streamcrew-v1alpha1.schema.json` für Editoren, etwa für die YAML-Erweiterung von VS Code; die aktuelle Fassung liegt in [`schemas/`](schemas/). Format und Regeln stehen in [`commands-as-code.md`](docs/spec/commands-as-code.md).
+Der **Headless Core** ist ein einzelnes Binary, das auf dem Streaming-PC läuft (kein Daemon, kein Root) und die gesamte Logik trägt: Events aus den Plattformen, das Command-Engine, die Actions, Persistenz und die API. Alle Frontends (CLI/TUI, Desktop-App, Web-UI) kommunizieren **ausschließlich** über die API mit dem Core — nie direkt mit Dateien oder der Datenbank ([ADR-0010](docs/adr/0010-api-protokoll.md)). Der Desktop-Modus lauscht dabei primär auf dem Unix-Domain-Socket `<data-dir>/core.sock` und hinterlegt Adresse, PID und Version in `runtime.json` sowie den API-Token für die Desktop-App in `desktop-token` (ADR-0005). Zum Launch wird nur **Twitch** unterstützt ([ADR-0004](docs/adr/0004-plattformumfang-zum-start.md)); die Architektur ist plattformoffen.
 
-Exit-Codes: `0` Erfolg, `1` Fehler, `2` ungültige Kommandozeile oder Konfiguration.
+## Voraussetzungen
 
-Der HTTP-Server lauscht standardmäßig auf `127.0.0.1:8740`, im Server-Modus auf `:8740`:
+- **Go 1.27** zum Bauen der Entwicklungsversion.
+- Für die Twitch-Anbindung: ein Twitch-Konto (Streamer), optional ein Bot-Konto, und eine Twitch-App (eingebaut oder eigene, [ADR-0024](docs/adr/0024-eingebaute-twitch-app.md)).
 
-| Pfad | Bedeutung |
+## Loslegen
+
+```bash
+# aus dem Quellverzeichnis
+go build ./cmd/streamcrew   # -> ./streamcrew
+
+./streamcrew doctor              # Umgebung prüfen
+./streamcrew profile list        # Profile
+./streamcrew profile use <id>    # aktives Profil
+./streamcrew profile channels list
+./streamcrew auth login twitch   # Streamer-Konto anmelden
+./streamcrew auth status
+./streamcrew serve --profile <id>
+```
+
+`serve` startet den Core bis SIGINT/SIGTERM, meldet sich über `/healthz` und `/readyz` und beendet sich sauber. Der Core legt beim ersten Start sein Datenverzeichnis an (siehe unten); `config.yaml` wird nicht automatisch erzeugt — eine leere Datei ist ein gültiger Startzustand.
+
+## Betriebsmodi
+
+`--mode` entscheidet über die Standard-Listenadresse und den Basissatz der Host-Rechte; die Capability-Richtlinie wird in der Codebasis zentral gepflegt, nicht pro Deployment konfiguriert ([ADR-0013](docs/adr/0013-sicherheitsmodell.md), [Code-ADR-0019](docs/adr/code/0019-host-rechte-in-der-startkonfiguration.md)).
+
+| Modus | Standard-Listenadresse |
 |---|---|
-| `/healthz` | Der Prozess läuft (Liveness). |
-| `/readyz` | Alle Komponenten laufen, kein Shutdown im Gange (Readiness). |
-| `/debug/pprof/` | nur mit `--dev` und nur auf einer Loopback-Adresse |
+| `desktop` (Standard) | Unix-Socket `<data-dir>/core.sock` |
+| `daemon` | `127.0.0.1:8740` |
+| `server` | `:8740` (alle Interfaces) |
+
+Capabilities je Modus (Standard, ohne `--grant`/`--revoke`):
+
+| Capability | Bedeutung | `desktop`/`daemon` | `server` |
+|---|---|---|---|
+| `host:fs` | Dateien lesen/schreiben, nur unter freigegebenen Wurzeln | an | aus |
+| `host:process` | Programme starten (externe Programme, Python) | an | aus |
+| `host:input` | Tastatur, Maus, Hotkeys (über den Agent) | aus | aus |
+| `host:audio` | Tonausgabe auf dem Rechner | an | aus |
+| `net:outbound` | Anfragen an andere Rechner (WebRequest-Action) | an | an, mit SSRF-Schutz |
+| `script` | JavaScript in einer Sandbox | an | an |
+
+`--grant` und `--revoke` schalten Einzelrechte an/aus (wirksame Menge = Standard des Modus + `grant` − `revoke`), `--file-root NAME=DIR` öffnet zusätzliche Wurzeln für die File-Action, `--outbound-allow` öffnet in Server-Modus einzelne interne Ziele für Web-Anfragen (SSRF-Schutz, ADR-0013 Punkt 4).
+
+## Datenverzeichnis
+
+Standard: `~/.config/streamcrew` (Linux/macOS), `%AppData%\streamcrew` (Windows), über `--data-dir` setzbar. Layout:
+
+```
+<data-dir>/
+├── config.yaml          # Konfigurationsdatei
+├── secret.key           # Schlüsselsatz (ohne System-Keyring; Priorität: Umgebungsvariable > System-Keyring > Datei)
+├── core.sock              # Unix-Socket (Desktop-Modus)
+├── runtime.json           # Adresse, PID, Version des laufenden Cores
+├── desktop-token          # API-Token der Desktop-App (Desktop-Modus, ADR-0005)
+├── logs/streamcrew.log  # JSON-Logdatei mit Rotation
+├── chat/<plattform>.jsonl    # optionales Chat-Protokoll
+├── backups/             # Profile-Backups
+└── profiles/
+    ├── active           # ID des aktiven Profils
+    └── <id>.db          # SQLite-Datenbank je Profil: Commands, Counter, Nutzer, Einstellungen, Accounts, Secrets
+```
+
+Die Profil-Datenbank ist eine SQLite-Datei ([Code-ADR-0008](docs/adr/code/0008-datenbankzugriff.md), [ADR-0012](docs/adr/0012-persistenz.md)); Secrets (Plattform-Tokens, App-Credentials) sind darin verschlüsselt, der Schlüssel kommt aus dem System-Keyring, der Umgebungsvariable oder `secret.key` ([ADR-0014](docs/adr/0014-oauth-und-app-credentials.md)).
 
 ## Konfiguration
 
-Die Startkonfiguration kommt aus Flags, Umgebungsvariablen und einer optionalen YAML-Datei, in dieser Rangfolge ([Code-ADR-0005](docs/adr/code/0005-konfiguration.md)). `streamcrew --help` listet alle Einstellungen.
+Die Konfiguration besteht aus der **Konfigurationsdatei** (`config.yaml`) und den **Flags**; jedes Flag hat eine Umgebungsvariable. Flags übersteuern die Datei; `streamcrew config show` zeigt die effektive Konfiguration im Dateiformat, `streamcrew config path` die Pfade.
 
-| Flag | Umgebungsvariable | Schlüssel in der Datei | Standard |
-|---|---|---|---|
-| `--config` | `STREAMCREW_CONFIG` | – | `config.yaml` im Standard-Datenverzeichnis, falls vorhanden |
-| `--data-dir` | `STREAMCREW_DATA_DIR` | `data_dir` | `os.UserConfigDir()/streamcrew`, z. B. `~/.config/streamcrew` |
-| `--profile` | `STREAMCREW_PROFILE` | `profile` | das aktive Profil (`profile use`); beim ersten Start `default` |
-| `--mode` | `STREAMCREW_MODE` | `mode` | `daemon`; außerdem `desktop` und `server` ([ADR-0003](docs/adr/0003-betriebsmodi.md)) |
-| `--listen` | `STREAMCREW_LISTEN` | `listen` | `127.0.0.1:8740`, im Server-Modus `:8740` |
-| `--dev` | `STREAMCREW_DEV` | `dev` | aus |
-| `--dry-run` | `STREAMCREW_DRY_RUN` | `dry_run` | aus: die Plattformen lesen den Channel und loggen, was sie machen würden, statt es zu tun (Chat, Moderation, Twitch-Aktionen) |
-| `--shutdown-timeout` | `STREAMCREW_SHUTDOWN_TIMEOUT` | `shutdown_timeout` | `15s` |
-| `--log-level` | `STREAMCREW_LOG_LEVEL` | `log_level` | `info` |
-| `--log-component-level` | `STREAMCREW_LOG_COMPONENT_LEVEL` | `log_component_level` | – |
-| `--log-format` | `STREAMCREW_LOG_FORMAT` | `log_format` | `text` |
-| `--log-file` | `STREAMCREW_LOG_FILE` | `log_file` | `true`: `<data-dir>/logs/streamcrew.log` (JSON Lines); `false`: aus; Pfad: schreibt die Logdatei dorthin |
-| `--log-max-size`, `--log-max-files` | `STREAMCREW_LOG_MAX_SIZE`, `…_MAX_FILES` | `log_max_size`, `log_max_files` | 10 MiB, 5 Dateien |
-| `--grant`, `--revoke` | `STREAMCREW_GRANT`, `STREAMCREW_REVOKE` | `grant`, `revoke` | Rechte des Modus, siehe unten |
-| `--file-root NAME=DIR` | `STREAMCREW_FILE_ROOT` | `file_root` | keine Wurzel |
-| `--outbound-allow` | `STREAMCREW_OUTBOUND_ALLOW` | `outbound_allow` | – |
+### Konfigurationsdatei
 
-Beispiel für `config.yaml`; die Ausgabe von `streamcrew config show` hat dasselbe Format:
+`config.yaml` im Datenverzeichnis (oder `--config FILE`). Fehlende Datei und leere Datei sind erlaubt. Bekannte Sektionen (jeweils auch als Flags):
 
 ```yaml
-mode: daemon
-log_level: info
-log_component_level:
+mode: daemon                # desktop, daemon, server
+listen: 127.0.0.1:8740      # Adresse des HTTP-Servers
+dev: false                  # pprof unter /debug/pprof/ (nur Loopback)
+dry_run: false              # Plattform liest den Channel und loggt, statt zu handeln
+shutdown_timeout: 15s       # Zeitlimit des kompletten Shutdowns
+log_level: info             # debug, info, warn, error
+log_component_level:        # Level einzelner Komponenten, z. B. supervisor: debug
   supervisor: debug
-# log_file: /var/log/streamcrew.log   # true (Default), false oder Pfad
+log_format: text            # text, json
+log_file: true              # true: <data-dir>/logs/streamcrew.log, false: aus, Pfad: diese Datei
+log_max_size: 10            # Rotationsgröße in MiB
+log_max_files: 5            # Anzahl der gehaltenen Rotationsdateien
+grant: []                   # zusätzlich aktivierte Capabilities
+revoke: []                  # deaktivierte Capabilities
+file_root: {}               # Verzeichnisse der File-Action, z. B. "scripts": "/opt/streams/scripts"
+outbound_allow: []          # interne Ziele für Web-Anfragen in Server-Modus (IP, CIDR, Hostname)
+cors_allow: []              # erlaubte CORS-Origin, z. B. "http://localhost:5173"
+tls_cert: ""                # TLS-Zertifikat (PEM), zusammen mit tls_key
+tls_key: ""                 # TLS-Privatschlüssel (PEM)
+stream_buffer: 1024         # Ereignisse, die die Strömungs-Hub der Bus maximal schuldet
+stream_catch_up: 256        # aktuelle Ereignisse für den Catch-up nachverbindeender Clients
 ```
 
-- Unbekannte Schlüssel in der Datei sind ein Fehler.
-- **Rechte** ([Code-ADR-0019](docs/adr/code/0019-host-rechte-in-der-startkonfiguration.md)): Desktop und Daemon dürfen Dateien unter freigegebenen Wurzeln lesen und schreiben (`host:fs`), Programme starten (`host:process`), Ton ausgeben (`host:audio`), Web-Requests senden (`net:outbound`) und Skripte ausführen (`script`). Der Server-Modus erlaubt nur `net:outbound` und `script`, und Web-Requests erreichen dort keine internen Netze. `--grant` und `--revoke` ändern die Rechte; `--file-root` gibt Verzeichnisse für die Datei-Action frei (absolut, nicht im Datenverzeichnis); `--outbound-allow` öffnet im Server-Modus interne Ziele (IP-Adresse, Netz oder Hostname). Dienste wie Twitch und öffentliche Ziele brauchen keinen Eintrag.
-- **Ohne Neustart:** Ändern sich `grant`, `revoke`, `file_root` oder `outbound_allow` in der Datei, gelten sie nach höchstens etwa einer Sekunde, alle vier gemeinsam; eine ungültige Datei ändert nichts, das Log nennt den Grund. Was per Flag oder Umgebungsvariable gesetzt ist, bleibt fest. `streamcrew doctor` zeigt die Rechte und warnt etwa vor fehlenden Wurzeln.
+Änderungen der **Hot-Settings** wirken im laufenden Core, ohne Neustart: Der Watcher liest die Datei regelmäßig, wendet die Änderung an und meldet Fehlschläge im Log. Hot sind `listen` (+ `tls_cert`/`tls_key`), `cors_allow`, `dev`, `dry_run`, die `log_*`-Einstellungen, `grant`, `revoke`, `file_root`, `outbound_allow`, `mode` und `shutdown_timeout`; nur `data_dir`, `profile` und `config` brauchen einen Neustart. Dieselben Einstellungen lassen sich über die API setzen (`ConfigService`) — die TUI-Settings-View nutzt das ([Code-ADR-0021](docs/adr/code/0021-on-the-fly-konfiguration.md)).
+
+### Flags und Umgebungsvariablen
+
+Alle Flags gelten für jeden Befehl; die dazugehörige Umgebungsvariable steht in Klamern.
+
+| Flag | Bedeutung |
+|---|---|
+| `--config FILE` (`$STREAMCREW_CONFIG`) | Konfigurationsdatei (YAML); ohne Flag wird `config.yaml` im Datenverzeichnis gelesen, falls vorhanden |
+| `--data-dir DIR` (`$STREAMCREW_DATA_DIR`) | Datenverzeichnis; Standard `~/.config/streamcrew` |
+| `--profile ID` (`$STREAMCREW_PROFILE`) | Profil; Standard: das aktive Profil |
+| `--mode MODE` (`$STREAMCREW_MODE`) | Betriebsmodus: `desktop` (Standard), `daemon`, `server` |
+| `--listen HOST:PORT` (`$STREAMCREW_LISTEN`) | HTTP-Server-Adresse; Standard `127.0.0.1:8740`, in Server-Modus `:8740` |
+| `--dev` (`$STREAMCREW_DEV`) | Entwicklermodus: pprof unter `/debug/pprof/`, erfordert Loopback-Adresse |
+| `--cors-allow ORIGIN,...` (`$STREAMCREW_CORS_ALLOW`) | erlaubte CORS-Origin, wiederholbar; Standard: cross-origin abgelehnt |
+| `--tls-cert FILE` / `--tls-key FILE` (`$STREAMCREW_TLS_CERT`/`$STREAMCREW_TLS_KEY`) | TLS des HTTP-Servers (PEM); Standard: plain HTTP |
+| `--dry-run` (`$STREAMCREW_DRY_RUN`) | Plattform liest den Channel und loggt, statt zu handeln |
+| `--shutdown-timeout DUR` (`$STREAMCREW_SHUTDOWN_TIMEOUT`) | Zeitlimit des Shutdowns, Standard `15s` |
+| `--log-level LEVEL` (`$STREAMCREW_LOG_LEVEL`) | `debug`, `info`, `warn`, `error` |
+| `--log-component-level COMP=LEVEL` (`$STREAMCREW_LOG_COMPONENT_LEVEL`) | Level einer Komponente, wiederholbar |
+| `--log-format FMT` (`$STREAMCREW_LOG_FORMAT`) | Konsolenformat: `text`, `json` |
+| `--log-file PATH` (`$STREAMCREW_LOG_FILE`) | `true`: `<data-dir>/logs/streamcrew.log`, `false`: aus, Pfad: diese Datei (JSON, mit Rotation) |
+| `--log-max-size MIB` (`$STREAMCREW_LOG_MAX_SIZE`) | Rotationsgröße, Standard `10` |
+| `--log-max-files N` (`$STREAMCREW_LOG_MAX_FILES`) | Rotationsdateien halten, Standard `5` |
+| `--stream-buffer N` (`$STREAMCREW_STREAM_BUFFER`) | Puffer der Strömungs-Hub, Standard `1024` |
+| `--stream-catch-up N` (`$STREAMCREW_STREAM_CATCH_UP`) | Catch-up-Größe, Standard `256` |
+| `--grant CAP,...` (`$STREAMCREW_GRANT`) | Capability aktivieren, z. B. `host:fs`, wiederholbar |
+| `--revoke CAP,...` (`$STREAMCREW_REVOKE`) | Capability deaktivieren, wiederholbar |
+| `--file-root NAME=DIR` (`$STREAMCREW_FILE_ROOT`) | Verzeichnis der File-Action unter NAME, wiederholbar |
+| `--outbound-allow TARGET,...` (`$STREAMCREW_OUTBOUND_ALLOW`) | ausgehende Web-Ziele in Server-Modus, wiederholbar |
+| `--server URL` (`$STREAMCREW_SERVER`) | Core-Adresse für die API-Befehle, z. B. `http://127.0.0.1:8740` |
+| `--token TOKEN` (`$STREAMCREW_TOKEN`) | API-Token für die API-Befehle |
+
+`completion <shell>` erzeugt das Shell-Completion-Skript (`bash`, `zsh`, `fish`).
+
+### Befehls-spezifische Flags (Auswahl)
+
+| Befehl | Flags |
+|---|---|
+| `mock` | `-c/--commands FILE` (Commands-as-Code in die Profil-Kopie laden), `--script FILE` (Konsole aus Datei statt stdin), `--streamer LOGIN`, `--bot LOGIN` |
+| `tui` | `--theme auto\|light\|dark` (`$STREAMCREW_THEME`) |
+| `token create` | `--scope read,control,admin,overlay` (wiederholbar, Standard `admin`) |
+| `chat send` | `--as LOGIN` (Mock-Plattform), `--channel LOGIN`, `--as-streamer` |
+| `event simulate` | `--user LOGIN`, `--target LOGIN`, `--text TEXT` (für `chat.message`) |
+| `user list` / `show` | `-o/--output text\|json`, `--platform PLATFORM`, `--prefix PREFIX`, `--stat STAT`, `--limit N` |
+| `user set` | `--platform`, `--role ROLE`, `--title TITLE`, `--strikes N`, `--excluded` / `--no-excluded` |
+| `command list` / `run` | `-o/--output`, `--kind KIND`, `--prefix PREFIX`, `--channel LOGIN` |
+
+## Commands
+
+### Commands as Code
+
+Commands liegen als YAML- oder JSON-Dateien (`kind: command`) oder direkt in der Datenablage des Profils — das Profil ist die einzige Quelle der Wahrheit. Das Format speichert jede Eigenschaft der Engine (Trigger, Aktionen, Cooldowns, Zeitpläne, Sperrmodi, Abhängigkeiten) und ist so gestaltet, dass ein LLM es schreiben kann. `streamcrew command import` lädt sie in das Profil (atomar: alle Dokumente oder bei Fehlern keines), `export` schreibt sie heraus, `validate` prüft sie gegen das Profil, ohne es zu ändern ([Spezifikation](docs/spec/commands-as-code.md)).
 
 ```yaml
-mode: server
-grant:
-  - host:fs
-file_root:
-  obs: /srv/obs
-outbound_allow:
-  - homeassistant
-  - 192.168.1.0/24
+kind: command
+name: meins
+title: Mein Command
+aliases: [me, m]
+description: Das tut was
+tags: [custom]
+trigger:
+  triggerType: chat
+  commandNames: [meins, me]
+action:
+  actionType: chat
+  message: "Hallo {user.name}"
+schedule:
+  cooldownSeconds: 10
+  repeatSeconds: 0
+  timeLimitSeconds: 0
+lock:
+  mode: self
+  maxActive: 1
 ```
-- **Portabler Modus:** Liegt neben dem Binary eine Datei `streamcrew.portable`, liegen die Daten in `streamcrew-data` neben dem Binary.
-- Secrets werden in Logs maskiert ([Code-ADR-0003](docs/adr/code/0003-fehler-und-logging.md)).
-- Einstellungen, die während des Betriebs änderbar sind (Backup-Zeitplan, Zeitzone), liegen im Profil, nicht in der Startkonfiguration.
 
-### Datenverzeichnis
+### JSON Schema
 
-| Pfad | Inhalt |
+Das JSON Schema des Formats wird aus dem Code generiert — Schema und Umsetzung können nie auseinanderlaufen:
+
+```bash
+streamcrew schema export --dir /tmp/schema   # schema-commands.json + schema-events.json
+```
+
+### Ereignistypen
+
+Events sind die Eingänge der Commands. Der fachliche Katalog (mit Plattform- und Quell-Varianten) steht in der [Spezifikation](docs/spec/events.md); die wichtigsten:
+
+| Ereignis | Auslöser |
 |---|---|
-| `profiles/<id>.db` | SQLite-Datenbank je Profil ([ADR-0012](docs/adr/0012-persistenz.md)) |
-| `profiles/active` | ID des aktiven Profils |
-| `chat/` | optionales Chat-Protokoll je Plattform (JSON Lines), an mit der Profil-Einstellung `chat.protocol` |
-| `backups/<id>-<Zeit>.zip` | Backups mit `profile.db` und `manifest.json`; automatisch täglich um 04:00 in der Zeitzone des Profils, behalten werden 7 tägliche, 4 wöchentliche und 12 monatliche |
-| `logs/` | Log-Dateien (JSON Lines) |
-| `streamcrew.lock` | Sperre gegen einen zweiten Core auf demselben Verzeichnis |
-| `secret.key` | Schlüssel für die Tokens, nur ohne Schlüsselbund des Systems und ohne `STREAMCREW_SECRET_KEY` |
+| `chat.message`, `chat.message.delete`, `chat.whisper` | Chat-Nachrichten, Löschung, Flüstern |
+| `chat.user.join/leave/entrance/new/first_message/timeout/ban` | Chat-Benutzereignisse |
+| `channel.stream.start` / `channel.stream.stop` | Stream-Start/Stopp |
+| `channel.follow`, `channel.raid` | Follow, Raid |
+| `channel.subscribe/resubscribe/subscription.gift/subscription.mass_gift` | Abos, Geschenk-Abos |
+| `app.started`, `app.stopping` | Core-Lebenszyklus |
+| `auth.login_completed/failed/action_required` | Login-Zustände |
+| `log.line` | Log-Zeilen (für den Log-Stream) |
 
-**Tokens** liegen verschlüsselt (AES-256-GCM) in der Profildatenbank. Den Schlüssel sucht der Core in dieser Reihenfolge: `STREAMCREW_SECRET_KEY` (32 Byte in Base64), der Schlüsselbund des Systems, `secret.key`. Backups enthalten den Schlüssel nicht; für einen Umzug auf einen anderen Rechner wird er mitgenommen oder die Anmeldungen erfolgen neu.
+Die Plattform-Ereignisse der Twitch-Quelle (`twitch.bits.cheer`, `twitch.channel_points.redeem`, `twitch.hype_train.*`, `twitch.channel.update`, `twitch.goal.*`, `twitch.poll.*`, `twitch.prediction.*`, `twitch.shoutout.receive`, …) werden in diese fachlichen Typen übersetzt; der komplette Katalog mit Plattform- und Quell-Varianten steht in der [Spezifikation](docs/spec/events.md).
+
+### Templates und Locales
+
+`{...}`-Platzhalter in Actions werden aus dem Event-Kontext gefüllt (Begriff: *Template*). Die Template-Engine kennt Ausdrücke mit den Rechenfunktionen der Rechenbibliothek des Originals; Datum, Uhrzeit, Monats- und Wochentagsnamen folgen der Locale des Profils mit festen Mustern für `en-US`, `en-GB`, `de-DE`, `de-AT` und `de-CH` (`system` liest die Locale der Umgebung; Standard). Die Zahlen bleiben kanonisch, weil sie in Ausdrücke, Argumente und Aufrufe fließen ([Spezifikation](docs/spec/template.md), [ADR-0022](docs/adr/0022-internationalisierung.md)).
+
+## CLI
+
+`streamcrew` ist der einzige Einstieg: Core starten, Profile, Commands, Nutzer, Token, Chat, Events, Backups und die TUI. Befehle, die auf den Core zugreifen (`command …`, `user …`, `counter …`, `chat send`, `event simulate`), sprechen die API — lokal über `--server` (Standard: die lokale API) und `--token`.
+
+| Befehl | Beschreibung |
+|---|---|
+| `serve` | Den Core starten, bis SIGINT/SIGTERM |
+| `mock` | Core mit der Mock-Plattform gegen eine Profil-Kopie; die Konsole simuliert Chat, Events und den Stream |
+| `tui` | Terminal-UI gegen lokalen oder entfernten Core |
+| `profile list/create/rename/use/delete` | Profile verwalten |
+| `profile channels list/add/remove` | zusätzliche Kanäle des Profils (Add/Remove: Core muss gestoppt sein) |
+| `auth login/status/logout` | Twitch-Konten anmelden (Authorization Code Flow, `--device-flow` als Fallback), anzeigen, abmelden |
+| `command list/show/run/delete/enable/disable` | Commands des laufenden Cores über die API |
+| `command import/export/validate` | Commands as Code ein-/ausladen, prüfen |
+| `user list/show/set/merge` | Nutzer des Cores über die API; `merge` braucht gestoppten Core |
+| `counter list/get/set/add/reset` | Zähler des Cores über die API |
+| `chat send` | Chat-Nachricht des Cores senden (Mock: `--as`) |
+| `event simulate` | Mock-Ereignis am Core auslösen |
+| `token create/list/revoke` | API-Tokens verwalten; der Wert wird beim Erstellen einmalig angezeigt |
+| `backup create/list/restore` | Profil-Backups (Restore: Core muss gestoppt sein) |
+| `secret rotate` | neuen Profil-Schlüssel erstellen und alle Tokens neu verschlüsseln (gestoppter Core) |
+| `config show/path` | effektive Konfiguration bzw. Pfade anzeigen |
+| `schema export` | JSON-Schema des Command-Formats schreiben |
+| `doctor` | die Umgebung des Cores prüfen |
+| `diag bundle` | Diagnostics-Bundle für Bug-Reports schreiben; Secrets werden maskiert |
+| `version` | Versionsinformationen |
+| `completion <shell>` | Shell-Completion-Skript |
+
+## Mock
+
+`streamcrew mock` startet den Core in einem Prozess gegen eine **Kopie** des Profils (die am Ende verworfen wird); die Konsole liest Zeilen:
+
+```
+chat send --as <login> <text>   Chat-Nachricht dieses Nutzers simulieren
+event simulate <typ> [user <login>] [target <login>]   Ereignis simulieren (z. B. channel.follow)
+stream start [title]            Stream-Start
+stream stop                     Stream-Stopp
+user add <login>                Mock-Nutzer anlegen
+help                            Hilfe
+exit                            beenden
+```
+
+Flags: `-c/--commands` lädt Commands-as-Code in die Kopie, `--script` liest die Konsole aus einer Datei (für Regressionstests), `--streamer`/`--bot` legen die Mock-Konten fest. `event simulate` und `chat send` am laufenden Core sind die API-Pendants.
+
+## TUI
+
+`streamcrew tui` zeigt den Core live — lokal (Standard) oder per `--server URL --token TOKEN` entfernt. Die Views (Tabulatorschaltleiste, `Tab`/`Shift-Tab` bzw. Zifferntasten):
+
+| View | Inhalt |
+|---|---|
+| `dashboard` | Status, Channel, Verbindungen |
+| `chat` | Chat-Verlauf aus dem Event-Stream |
+| `events` | Ereignis-Feed |
+| `queue` | Command-Warteschlange |
+| `commands` | Commands mit Status |
+| `users` | Nutzer mit Rolle, Titel, Strikes |
+| `logs` | Live-Log, Level-Filter (`l`) |
+| `settings` | Hot-Settings ändern (ConfigService), wirkt sofort |
+
+`--theme auto\|light\|dark` setzt das Farbschema.
+
+## API
+
+Der Core stellt eine **ConnectRPC**-API (Protobuf, `streamcrew.v1alpha1`) unter der Listenadresse bereit — die einzige Ansprechadresse für alle Frontends ([ADR-0010](docs/adr/0010-api-protokoll.md)). Protobuf-Definitionen liegen unter `api/proto/`, der generierte Code in `api/gen/`.
+
+**Dienste:** `SystemService` (Status, Profile, Shutdown), `CounterService`, `SettingsService`, `UserService`, `ChatService`, `BackupService`, `ConfigService` (Get/Update der Hot-Settings), `AuthService`, `CommandService` und `StreamService` (Server-Streaming `Subscribe` mit Catch-up über `since` und Filter nach Ereignis-Typen-Klassen, Plattformen, Channels und Log-Level, dazu `SimulateEvent` und `AnswerPrompt`).
+
+**Authentifizierung:** Bearer-Token im `Authorization`-Header. Tokens werden pro Profil erstellt:
+
+```bash
+streamcrew token create "Mein Token" --scope read,control   # Wert wird einmalig gezeigt
+streamcrew token list
+streamcrew token revoke <id-oder-name>
+```
+
+Scopes: `read`, `control`, `admin` (Standard), `overlay`. Solange kein Token gespeichert ist, ist die API offen (Bootstrap, nur Loopback-Standard laut [ADR-0003](docs/adr/0003-betriebsmodi.md)); sobald mindestens ein Token existiert, braucht **jeder** Request ein gültiges Bearer-Token mit dem für die Methode nötigen Scope. In `server`-Modus gehört das Erstellen eines Tokens deshalb zum Aufsetzen — der Loopback-Standard und die offene Bootstrap-Phase gelten dort nicht.
+
+**Zugriff:**
+
+- `--server URL --token TOKEN` an den API-Befehlen, oder die Umgebungsvariablen `STREAMCREW_SERVER`/`STREAMCREW_TOKEN`.
+- CORS: `--cors-allow ORIGIN` (wiederholbar); ohne Eintrag werden Cross-Origin-Anfragen abgelehnt.
+- TLS: `--tls-cert` + `--tls-key`.
+- Health: `/healthz`, `/readyz`.
+- Entwicklermodus: `--dev` zusätzlich `pprof` unter `/debug/pprof/` (nur Loopback).
+
+**Beispiel** (Client-Seite, Go):
+
+```go
+base := streamcrewv1alpha1connect.NewSystemServiceClient(http.DefaultClient, "http://127.0.0.1:8740")
+cl := base.WithHeader("Authorization", "Bearer "+token)
+_, err := cl.Status(ctx, connect.NewRequest(&streamcrewv1alpha1.StatusRequest{}))
+```
+
+## Log
+
+- **Konsole:** `--log-level`, `--log-format text|json`, `--log-component-level COMP=LEVEL`.
+- **Datei:** `--log-file` (`true` → `<data-dir>/logs/streamcrew.log`, `false` → aus, Pfad → diese Datei), JSON-Zeilen, Rotation nach `--log-max-size` MiB auf `--log-max-files` Dateien.
+- **Stream:** Log-Zeilen sind zugleich Ereignisse (`log.line`) und laufen in den Event-Stream; TUI und Clients abonnieren sie gefiltert nach Level, Plattform, Channel und Ereignisklasse ([Roadmap 6.6](docs/roadmap.md)).
+
+Alle Log-Einstellungen sind Hot-Settings: Änderungen wirken ohne Neustart.
+
+## Plattform: Twitch
+
+- **Login:** `streamcrew auth login twitch` — Authorization Code Flow mit Loopback-Redirect, Device Code Flow per `--device-flow` ([ADR-0023](docs/adr/0023-twitch-login-authorization-code-flow.md)). Tokens und App-Credentials liegen **verschlüsselt** im Profil (Vault) und werden vor Ablauf erneuert.
+- **App:** eingebauter Twitch-App-Client oder eigene (BYO) ([ADR-0024](docs/adr/0024-eingebaute-twitch-app.md)).
+- **Verbindung:** EventSub-WebSocket mit Keepalive, Session-Reconnect und Deduplizierung; die Subscriptions werden je Channel am Soll-Zustand gehalten.
+- **Funktionen:** Chat (senden, antworten, flüstern, löschen, leeren), Moderation, Titel/Kategorie, Channel Points, Bits, Emote-Katalog (Twitch, BetterTTV, FrankerFaceZ), Clips, Marker, Raid, Shoutout, Umfrage, Vorhersage, Belohnungen.
+- **Zusätzliche Kanäle:** `streamcrew profile channels add <login>` — der Bot arbeitet in jedem Kanal, in dem sein Konto Moderator ist, ohne zweiten Login; jeder Kanal bekommt die eigene WebSocket-Verbindung und Subscriptions ([Spezifikation](docs/spec/twitch-multi-channel.md)).
+- **Pro-Channel-Konfiguration:** ein Command trägt einen optionalen Channel-Scope (`channel`, leer = alle betriebenen Kanäle); Counter, Cooldowns, Währungen und Nutzer-Statistiken gelten profiltweit.
+
+## Sicherheit
+
+- **Capabilities** ([ADR-0013](docs/adr/0013-sicherheitsmodell.md)): Jede Funktion, die über den Core hinausgreift, braucht eine benannte Capability; Action- und Requirement-Typen nennen ihre Rechte im Descriptor, die Engine prüft sie vor der Ausführung und scheitert sonst mit klarer Meldung. Die Menge entsteht aus dem Betriebsmodus plus `--grant`/`--revoke` und kann ohne Neustart aus der Konfigurationsdatei nachgeladen werden ([Code-ADR-0019](docs/adr/code/0019-host-rechte-in-der-startkonfiguration.md)).
+- **Tokens:** API-Tokens sind pro Profil, verschlüsselt in der Profil-Datenbank gespeichert, per `secret rotate` neu verschlüsselbar; ohne gespeichertes Token ist die API offen (nur Loopback-Standard), mit einem Token ist jeder Request authentifiziert und berechtigt.
+- **Diagnose:** `diag bundle` sammelt Umgebungs-, Konfigurations- und Log-Informationen für Bug-Reports — Secrets und Token werden maskiert.
 
 ## Container
 
-```bash
-docker build -t streamcrew .
-docker run -d --name streamcrew -p 8740:8740 -v streamcrew-data:/data streamcrew
-```
-
-- Das Image enthält nur das statische Binary und die CA-Zertifikate (`scratch`, rund 25 MB) und läuft als Nutzer `65532`.
-- Im Container gibt es keinen Schlüsselbund. Ohne `STREAMCREW_SECRET_KEY` legt der Core den Schlüssel als `/data/secret.key` ins selbe Volume wie die Daten; wer das Volume sichert, sichert dann den Schlüssel mit. Empfohlen: den Schlüssel über `-e STREAMCREW_SECRET_KEY=…` oder ein Secret des Orchestrierers übergeben (`openssl rand -base64 32`).
-- Voreingestellt sind der Server-Modus, das Datenverzeichnis `/data` (Volume), JSON-Logs auf stderr und kein Datei-Log. Ein eingebundenes Host-Verzeichnis muss für den Nutzer `65532` beschreibbar sein.
-- Für Orchestrierer eignen sich `/healthz` als Liveness- und `/readyz` als Readiness-Probe. Einen `HEALTHCHECK` im Image gibt es nicht, weil `scratch` kein Werkzeug für HTTP-Abfragen enthält.
+Das [Dockerfile](Dockerfile) baut ein multi-stage Image: CGO-freies statisches Binary, das in ein `scratch`-Image kopiert wird und als UID 65532 (`nobody`) läuft; ENTRYPOINT `/usr/local/bin/streamcrew`. `docker build .` baut das Image; die Flags werden als Argumente übergeben (z. B. `docker run -v $HOME/.config/streamcrew:/data streamcrew serve --data-dir /data`).
 
 ## Entwicklung
 
-Voraussetzungen ([Code-ADR-0001](docs/adr/code/0001-go-toolchain-und-linting.md)):
-
-- Go in der Version aus `go.mod` (derzeit 1.27.1)
-- [golangci-lint](https://golangci-lint.run/) v2 in der neuesten Version
-
 ```bash
-go build ./...          # bauen
-go test ./...           # testen
-scripts/check.sh        # Pre-Commit-Checkliste, vor jedem Commit
-scripts/fuzz.sh         # alle Fuzz-Ziele kurz laufen lassen (FUZZTIME, Standard 30s)
-scripts/docker-smoke.sh # Image bauen und prüfen; DOCKER_BUILD_ARGS="--network host", falls Build-Container kein Netz haben
+go run ./cmd/streamcrew mock            # Core gegen die Mock-Plattform
+go run ./cmd/streamcrew serve           # Core mit dem aktiven Profil
+go run ./cmd/streamcrew auth login twitch
+go test ./...
+go test -race ./...                     # Race-Detektor
+golangci-lint run                       # Linting
+go generate ./api/...                   # Protobuf/Connect-Code neu generieren (installiert die Plugins, buf generate)
 ```
 
-- Nach Änderungen an SQL in `internal/store/queries` oder `internal/store/migrations`: `go generate ./internal/store/...` (sqlc, per `go run` gepinnt). Die CI prüft mit `sqlc diff`, dass der generierte Code passt.
-- `scripts/check.sh` führt die Checkliste aus Plan §11.1 in der festgelegten Reihenfolge aus: `go fix`, `gofmt`, `go vet`, golangci-lint, `govulncheck`, `go test`. `go fix` und `gofmt` schreiben Dateien um; den Diff vor dem Commit ansehen.
-- Die CI (`.github/workflows/ci.yml`) wiederholt diese Prüfungen und ergänzt:
-  - Tests mit Race-Detector
-  - kurze Fuzz-Läufe
-  - Lizenzprüfung der Abhängigkeiten
-  - Cross-Builds für linux, windows und darwin (amd64, arm64)
-  - Docker-Smoke-Test (`scripts/docker-smoke.sh`)
-  - wöchentlich und auf Anforderung: Tests nativ unter Windows und macOS ([Code-ADR-0006](docs/adr/code/0006-teststrategie.md))
-  - Jeder Job hat einen eigenen Go-Cache (Module und Build-Ausgaben), damit Race-, Fuzz- und Cross-Builds die Abhängigkeiten nicht bei jedem Lauf neu kompilieren.
-- `.github/workflows/docs.yml` prüft die internen Links aller Markdown-Dateien.
-- Tests nutzen `testing` mit testify (`assert`, `require`) und `testing/synctest` für Zeitverhalten ([Code-ADR-0006](docs/adr/code/0006-teststrategie.md)).
-- Die Twitch-Integrationstests (Roadmap 4.5, `internal/twitch`) laufen gegen den offiziellen twitch-cli-Mock-Server (Mock-API + EventSub-WebSocket-Server): ohne `twitch`-Binary im PATH springen sie über. Die CI installiert sie (Release v1.1.24, SHA-256-geprüft); lokal aus dem [twitch-cli-Release](https://github.com/twitchdev/twitch-cli/releases/tag/v1.1.24) in den PATH legen.
-- Wie im Repository gearbeitet wird (Branches, Commits, ADR-Abnahme, Herkunftsregeln), steht in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Die CI (`ci.yml`) prüft `go fix`, `go vet`, `golangci-lint`, `govulncheck`, Lizenz-Checks, `buf lint`/`buf generate diff`, Tests mit Race-Detektor und kurzen Fuzz-Läufen (inkl. EventSub-Mock-Server), Cross-Builds für Linux/Windows/macOS (amd64/arm64) und einen Docker-Smoke-Test; auf macOS/Windows-Runnern laufen die Tests zusätzlich wöchentlich und auf Abruf.
 
-### Aufbau
+### Code-Struktur
 
-| Paket | Aufgabe |
+| Modul | Zweck |
 |---|---|
-| `cmd/streamcrew` | nur `main.go`: Signale, Umgebung, kong-Initialisierung, Parsen, Exit-Code |
-| `internal/cli` | Definition der Kommandozeile (`cli.Root`) mit allen Unterkommandos, Fehler und Exit-Codes |
-| `internal/app` | Composition Root: verdrahtet alles, Bereitschaft ([Code-ADR-0002](docs/adr/code/0002-dependency-injection.md)) |
-| `internal/config` | Startkonfiguration, Konfigurationsdatei, Datenverzeichnis ([Code-ADR-0005](docs/adr/code/0005-konfiguration.md)); Rechte je Betriebsmodus, Wurzeln und Allowlist mit Nachladen ohne Neustart ([Code-ADR-0019](docs/adr/code/0019-host-rechte-in-der-startkonfiguration.md)) |
-| `internal/netguard` | Schutz der Verbindungen aus Commands: SSRF-Dialer, der im Server-Modus interne Netze sperrt, und die Allowlist für Netzziele ([ADR-0013](docs/adr/0013-sicherheitsmodell.md), [Code-ADR-0019](docs/adr/code/0019-host-rechte-in-der-startkonfiguration.md)) |
-| `internal/logging` | slog-Handler, Level je Komponente, Rotation, Maskierung ([Code-ADR-0003](docs/adr/code/0003-fehler-und-logging.md)) |
-| `internal/supervisor` | Runnables mit Neustart, Backoff und geordnetem Shutdown ([Code-ADR-0004](docs/adr/code/0004-nebenlaeufigkeit-und-supervisor.md)) |
-| `internal/httpserver` | HTTP-Server mit `/healthz`, `/readyz`, pprof |
-| `internal/doctor` | Prüfungen für `streamcrew doctor` |
-| `internal/buildinfo` | Version aus den eingebetteten Build-Informationen |
-| `internal/domain/id` | IDs als UUIDv7 aus der Standardbibliothek ([Code-ADR-0009](docs/adr/code/0009-ids-und-zeit.md)) |
-| `internal/domain/eventtype`, `internal/domain/platform` | Katalog der fachlichen Ereignistypen, Namen der Plattformen ([Spezifikation](docs/spec/events.md)) |
-| `internal/domain/role` | Rollen mit Rangordnung und „erfüllt Mindestrolle“ ([Spezifikation](docs/spec/users-and-roles.md)) |
-| `internal/domain/command` | Commands: Arten, Trigger, Gruppen, Cooldown-Gruppen, Anforderungen, Actions als polymorphe Dokumente ([Spezifikation](docs/spec/commands.md)) |
-| `internal/domain/user` | Nutzer mit Plattform-Identitäten und Statistiken ([Spezifikation](docs/spec/users-and-roles.md)) |
-| `internal/domain/counter`, `internal/domain/quote` | Counter und Quotes ([Spezifikation](docs/spec/counters-and-quotes.md)) |
-| `internal/decimal` | exakte Dezimalzahlen auf `cockroachdb/apd/v3`: Grenzen, Rundung, Text mit hexadezimalen Zahlen und `_`, Grundrechenarten und Funktionen ([Code-ADR-0020](docs/adr/code/0020-dezimalzahlen.md)) |
-| `internal/expr` | Ausdrücke mit `$`-Identifiern für Rechnungen und Bedingungen, eigener Auswerter mit exakten Dezimalzahlen aus `internal/decimal` ([Spezifikation](docs/spec/template.md), [Code-ADR-0012](docs/adr/code/0012-template-engine.md), [Code-ADR-0020](docs/adr/code/0020-dezimalzahlen.md)) |
-| `internal/textfunc` | Textfunktionen der Special-Identifier-Action wie `tolower(…)` und `replace(…,…,…)`, Struktur vor dem Einsetzen der Identifier gelesen ([Spezifikation](docs/spec/actions.md), B52–B55) |
-| `internal/commandfile` | Commands als Code: Arten der Dokumente, das JSON-Schema der Dateien aus den Schemas der Action- und Anforderungsarten, Lesen von YAML und JSON mit Zeile und Spalte, Umwandeln der Dokumente in Commands und Gruppen mit den IDs ihrer Namen, Speichern in der Reihenfolge des Imports mit den Fehlern an ihrer Stelle, Export in YAML und JSON mit Namen statt IDs ([Spezifikation](docs/spec/commands-as-code.md)) |
-| `internal/requirement` | Requirement-Service: prüft die Anforderungen eines ausgelösten Commands und meldet Ablehnungen in der Sprache des Profils ([Spezifikation](docs/spec/requirements.md)) |
-| `internal/i18n` | Texte des Cores in der Sprache des Profils: Kataloge EN und DE in ICU MessageFormat (Teilumfang) mit eigenem Parser und Renderer auf `golang.org/x/text`, Dauern in Worten ([ADR-0022](docs/adr/0022-internationalisierung.md)) |
-| `internal/template` | Templates mit `$`-Identifiern: Tokenizer, Präfixbaum, Quellen, Cache je Rendervorgang, Kodierung und die Identifier-Familien ([Spezifikation](docs/spec/template.md), [Code-ADR-0012](docs/adr/code/0012-template-engine.md)) |
-| `internal/engine` | Command-Engine: Instanzen, Auslösen mit Anforderungen, Warteschlange mit Sperrmodi, Pause, Aufrufe, Abbrechen, Wiederholen, Verlauf und Ereignisse; Kind-Actions, Schalter „aktiv“, Zeitlimits und Capabilities der Actions ([Spezifikation](docs/spec/command-engine.md), [Code-ADR-0013](docs/adr/code/0013-typ-registry.md)) |
-| `internal/action` | Typ-Registry der Actions: Descriptors, Kategorien, JSON-Schemas mit UI-Hinweisen (`internal/action/schema`), gemeinsame Feldtypen wie Templates und Mengenangaben, Konformitätstest (`internal/action/actiontest`) ([Spezifikation](docs/spec/actions.md), [Code-ADR-0013](docs/adr/code/0013-typ-registry.md)) |
-| `internal/action/flow` | Actions für den Ablauf: Warten, Zufall, Gruppe, Wiederholen, Bedingung ([Spezifikation](docs/spec/actions.md), B10–B29) |
-| `internal/action/commands` | Command-Action: Commands ausführen und schalten, Warteschlange abbrechen und pausieren, Cooldowns starten, Command beenden ([Spezifikation](docs/spec/actions.md), B30–B38) |
-| `internal/action/values` | Actions für Werte: Counter mit Schritten, Betrag, Setzen und Zurücksetzen; Special Identifier mit Textfunktionen, Rechnen und globalen Werten ([Spezifikation](docs/spec/actions.md), B40–B57) |
-| `internal/action/chat` | Chat-Action: Nachrichten und Antworten an alle verbundenen Plattformen, Flüstern, als Bot oder Streamer; Plattformnachricht an eine Plattform ([Spezifikation](docs/spec/actions.md), B60–B67) |
-| `internal/action/moderation` | Moderation-Action: Timeout, Bann, Nachrichten entfernen, Chat leeren, Mod, Strikes, stummer Chat ([Spezifikation](docs/spec/actions.md), B80–B86) |
-| `internal/action/network` | Web-Request: Methoden, Header, Body nach Content-Type, Antwort als Text oder über JSON-Pfade; Grenzen für Zeit, Größe und Weiterleitungen ([Spezifikation](docs/spec/actions.md), B70–B77) |
-| `internal/action/host` | Datei-Action unter freigegebenen Wurzeln mit atomarem Ersetzen; externes Programm: starten, warten mit Zeitlimit und Ausgabe, über das System öffnen, Argumente ohne Shell ([Spezifikation](docs/spec/actions.md), B100–B117) |
-| `internal/action/users` | Nutzersuche nach Name oder Plattform-ID, mit Ergebniswerten ([Spezifikation](docs/spec/actions.md), B90–B93) |
-| `internal/connector` | Ports der Streaming-Plattformen: Chat mit Antworten und Flüstern, Moderation, Nutzersuche, Kanalinformation; die Plattformen eines Profils und die Suche von Konten; Fakes in `internal/connector/connectortest` ([Plan §6.11](docs/plan.md)) |
-| `internal/capability` | Capabilities nach dem Sicherheitsmodell ([ADR-0013](docs/adr/0013-sicherheitsmodell.md)) |
-| `internal/event` | Ereignisse, Katalog und nicht blockierender Event-Bus ([Code-ADR-0011](docs/adr/code/0011-event-bus.md)) |
-| `internal/polydoc` | polymorphe JSON-Dokumente mit Typ, Version und Migrationen, auch verschachtelt, auf `encoding/json/v2` ([Code-ADR-0010](docs/adr/code/0010-polymorphe-serialisierung.md), [Code-ADR-0018](docs/adr/code/0018-json-v2.md), [Code-ADR-0013](docs/adr/code/0013-typ-registry.md)) |
-| `internal/store` | SQLite je Profil, goose-Migrationen, sqlc-Abfragen und die Repositories der Domänenpakete, eine Transaktion über mehrere Speichervorgänge mit `Atomically` ([Code-ADR-0008](docs/adr/code/0008-datenbankzugriff.md)) |
-| `internal/profile`, `internal/lockfile` | Profile und die Sperre des Datenverzeichnisses ([ADR-0012](docs/adr/0012-persistenz.md)) |
-| `internal/settings` | typisierte Einstellungen je Profil: Backups, Zeitzone, Command-Engine und Sprache des Profils ([ADR-0022](docs/adr/0022-internationalisierung.md)) |
-| `internal/backup` | Backups, Aufbewahrung, Zeitplan, Restore |
-| `internal/auth` | Plattform-Konten und ihre Tokens ([ADR-0014](docs/adr/0014-oauth-und-app-credentials.md), [ADR-0023](docs/adr/0023-twitch-login-authorization-code-flow.md), [ADR-0024](docs/adr/0024-eingebaute-twitch-app.md)): Anmelden per Authorization Code Flow (Device Code Flow als Fallback), eingebauter und eigener (BYO) Twitch-App, verschlüsselte Tokens und App-Credentials im Vault mit Refresh-Loop, die `auth`-Befehle der CLI und die Ereignisse `auth.*` ([Spezifikation](docs/spec/events.md)) |
-| `internal/vault` | verschlüsselte Secrets und ihr Schlüssel |
+| `cmd/streamcrew` | Binary-Einstieg; Parsee, Profil, Core und CLI-Befehle zusammenführen |
+| `internal/cli` | CLI-Befehle (Kong): serve, mock, profile, auth, command, user, counter, chat, event, token, backup, config, schema, doctor, diag, tui, completion |
+| `internal/app` | Orchestrierung: Core-Aufbau, API-Server, Hot-Settings, Mock-Konsole, Desktop-Runtime |
+| `internal/api` | ConnectRPC-Server: die v1alpha1-Dienste, Token-Auth, CORS, Health, Event-Stream |
+| `internal/tui` | Terminal-UI (Bubble Tea v2): Views, Event-Stream-Feed, Settings über ConfigService |
+| `core` | Öffentliche Start-API des Cores (ADR-0006): `Run` und `Options`; `serve` und der Desktop-Self-Start nutzen dieselbe Funktion |
+| `internal/config` | Konfigurationsdatei, Flags, View, Watcher (Hot-Settings) |
+| `internal/domain/…` | Fachbegriffe: Command, Counter, Event, User, Platform |
+| `internal/engine` | Command-Engine: Auslösen, Warteschlange mit Sperrmodi, Kind-Actions, Verlauf ([Spezifikation](docs/spec/command-engine.md)) |
+| `internal/template`, `internal/expr` | Template-Engine und Ausdrucksauswertung mit exakten Dezimalzahlen |
+| `internal/twitch`, `internal/helix` | Twitch-Anbindung: EventSub-WebSocket, Helix-Client, Multi-Channel |
+| `internal/auth` | Plattform-Konten, Vault, Refresh-Loop, `auth`-Befehle |
+| `internal/capability` | Capability-Modell (Rechte der Actions, Menge je Modus) |
+| `internal/store` | SQLite-Datenbank je Profil (sqlc: Queries, Migrationen) |
+| `internal/profile` | Profil-Verwaltung (Anlegen, Umbenennen, Aktiv, `.db`-Dateien) |
+| `internal/vault` | Verschlüsselte Secrets: Schlüssel aus Keyring, Umgebungsvariable oder Datei |
+| `internal/backup` | Profile-Backups (VACUUM INTO) und Zeitplan |
+| `internal/event` | Ereignis-Modell, Katalog, Event-Bus ([Code-ADR-0011](docs/adr/code/0011-event-bus.md)) |
+| `api/proto`, `api/gen` | Protobuf-Definitionen und generierter Connect-Code |
+
+### Protobuf-Generierung
+
+```bash
+go generate ./api/...   # installiert die Plugins (Versionen in api/generate.go gepinnt) und führt `buf generate` aus
+```
 
 ## Abhängigkeiten
 
-[Renovate](https://docs.renovatebot.com/) hält die Abhängigkeiten aktuell. Dependabot wird nicht verwendet. Renovate läuft als GitHub-App und liest `renovate.json` ([Code-ADR-0001](docs/adr/code/0001-go-toolchain-und-linting.md)).
-
-- **Zeitplan:** Pull Requests kommen montags vor 6 Uhr (Europe/Berlin), ohne Limit, wie viele gleichzeitig offen sind. Die Gruppierung begrenzt sie ohnehin auf einen je Ökosystem plus dessen Major-Updates.
-- **Ein Pull Request je Ökosystem**, damit sich jedes einzeln übernehmen oder zurückhalten lässt:
-
-  | Scope und Label | Inhalt |
-  |---|---|
-  | `(go)` / `go` | alle Go-Module, dazu die `go`-Direktive in `go.mod`; danach läuft `go mod tidy` |
-  | `(actions)` / `github-actions` | alle Actions, dazu die Werkzeugversionen in Workflows und `go:generate`-Zeilen (golangci-lint, `go-licenses`, sqlc) |
-  | `(docker)` / `docker` | Basis-Images im `Dockerfile`, per Digest gepinnt |
-
-  Beispiel für einen Titel: `fix(go): update go modules`. Jeder Pull Request trägt zusätzlich das Label `dependencies`.
-- **Major-Updates** kommen als zweiter Pull Request ihres Ökosystems (`renovate/major-…`), weil sie Codeänderungen brauchen können.
-- **Commit-Typen:** Updates von Go-Modulen sind `fix:`. Pins, Action-Updates und die `go`-Direktive sind `chore:` (Voreinstellung von `config:recommended`).
-- **Dependency Dashboard:** Das Issue listet alles, was Renovate kennt. Ein Häkchen dort öffnet den Pull Request sofort, statt bis Montag zu warten.
-- **Logs:** Die Protokolle der Läufe liegen auf [developer.mend.io](https://developer.mend.io), nicht unter Actions.
-
-**Sicherheitsupdates** warten nicht auf Montag. Renovate prüft bei jedem Lauf alle Abhängigkeiten gegen die [OSV](https://osv.dev)-Datenbank; die App läuft mehrmals täglich. Gibt es eine korrigierte Version, öffnet Renovate sofort einen Pull Request mit dem Label `security`. Das ersetzt `govulncheck` nicht, das zusätzlich erkennt, ob der verwundbare Code überhaupt aufgerufen wird, und die Standardbibliothek abdeckt.
-
-**Gepinnte Actions:** Actions sind auf Commit-SHAs gepinnt, mit der lesbaren Version daneben (`actions/checkout@<sha> # v7.0.1`). Ein Tag lässt sich auf anderen Code umhängen, ein Digest nicht. Renovate hebt die Digests an.
-
-Ein Update, das `ci.yml` ändert, startet die CI von selbst. Änderungen nur an anderen Workflows lassen sich von Hand prüfen:
-
-    gh workflow run ci.yml --ref <renovate-branch>
+| Abhängigkeit | Zweck |
+|---|---|
+| `github.com/alecthomas/kong` | CLI-Parser und Flags |
+| `connectrpc.com/connect/v2` | ConnectRPC-Client und Server (API) |
+| `google.golang.org/protobuf` | Protobuf-Runtim |
+| `modernc.org/sqlite` | SQLite-Datenbank (reines Go, CGO-frei) |
+| `github.com/pressly/goose/v3` | Datenbank-Migrationen |
+| `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2` | TUI |
+| `github.com/coder/websocket` | EventSub-WebSocket |
+| `github.com/santhosh-tekuri/jsonschema/v6` | JSON-Schema-Prüfung der Commands as Code |
+| `github.com/cockroachdb/apd/v3` | exakte Dezimalzahlen in Ausdrücken |
+| `github.com/zalando/go-keyring` | System-Keyring für den Schlüsselsatz |
+| `github.com/sony/gobreaker/v2`, `github.com/sethvargo/go-retry`, `golang.org/x/time` | Circuit-Breaker, Wiederholung, Rate-Limits (Twitch-HTTP-Client) |
+| `golang.org/x/oauth2` | OAuth-Flows (Twitch-Login) |
+| `golang.org/x/text` | Unicode- und Locale-Hilfen |
+| `go.yaml.in/yaml/v3` | YAML (Konfiguration, Commands as Code) |
 
 ## Lizenz
 
-[MIT](LICENSE) ([ADR-0002](docs/adr/0002-lizenz-des-projekts.md)). Jede Quelldatei beginnt mit `SPDX-License-Identifier: MIT`.
+MIT — siehe [LICENSE](LICENSE).
