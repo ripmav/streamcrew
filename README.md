@@ -91,7 +91,7 @@ Die Startkonfiguration kommt aus Flags, Umgebungsvariablen und einer optionalen 
 | `--log-level` | `STREAMCREW_LOG_LEVEL` | `log_level` | `info` |
 | `--log-component-level` | `STREAMCREW_LOG_COMPONENT_LEVEL` | `log_component_level` | – |
 | `--log-format` | `STREAMCREW_LOG_FORMAT` | `log_format` | `text` |
-| `--[no-]log-file` | `STREAMCREW_LOG_FILE` | `log_file` | an: `<data-dir>/logs/streamcrew.log` (JSON Lines) |
+| `--log-file` | `STREAMCREW_LOG_FILE` | `log_file` | `true`: `<data-dir>/logs/streamcrew.log` (JSON Lines); `false`: aus; Pfad: schreibt die Logdatei dorthin |
 | `--log-max-size`, `--log-max-files` | `STREAMCREW_LOG_MAX_SIZE`, `…_MAX_FILES` | `log_max_size`, `log_max_files` | 10 MiB, 5 Dateien |
 | `--grant`, `--revoke` | `STREAMCREW_GRANT`, `STREAMCREW_REVOKE` | `grant`, `revoke` | Rechte des Modus, siehe unten |
 | `--file-root NAME=DIR` | `STREAMCREW_FILE_ROOT` | `file_root` | keine Wurzel |
@@ -104,6 +104,7 @@ mode: daemon
 log_level: info
 log_component_level:
   supervisor: debug
+# log_file: /var/log/streamcrew.log   # true (Default), false oder Pfad
 ```
 
 - Unbekannte Schlüssel in der Datei sind ein Fehler.

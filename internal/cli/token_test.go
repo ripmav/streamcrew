@@ -48,7 +48,7 @@ func TestTokenLifecycle(t *testing.T) {
 		Mode:            config.ModeDaemon,
 		ShutdownTimeout: 5 * time.Second,
 		Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},
-		Log:             config.LogConfig{Level: "debug", Format: "json", File: true, MaxSize: 1, MaxFiles: 1},
+		Log:             config.LogConfig{Level: "debug", Format: "json", File: "true", MaxSize: 1, MaxFiles: 1},
 	}
 	require.NoError(t, cfg.Resolve())
 	env := &Env{Stdout: &syncedLog{}, Stderr: &syncedLog{}, Config: &cfg}

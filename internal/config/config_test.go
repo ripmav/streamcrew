@@ -73,7 +73,7 @@ func TestParseDefaults(t *testing.T) {
 	assert.False(t, cfg.Dev)
 	assert.False(t, cfg.DryRun)
 	assert.Equal(t, 15*time.Second, cfg.ShutdownTimeout)
-	assert.Equal(t, config.LogConfig{Level: "info", Format: "text", File: true, MaxSize: 10, MaxFiles: 5}, cfg.Log)
+	assert.Equal(t, config.LogConfig{Level: "info", Format: "text", File: "true", MaxSize: 10, MaxFiles: 5}, cfg.Log)
 	assert.Equal(t, filepath.Join(dataDir, "logs"), cfg.LogDir())
 }
 
@@ -139,7 +139,7 @@ log_max_files: 2
 	assert.Equal(t, "0.0.0.0:9000", cfg.Listen)
 	assert.Equal(t, 3*time.Second, cfg.ShutdownTimeout)
 	assert.Equal(t, map[string]string{"supervisor": "debug", "http": "warn"}, cfg.Log.ComponentLevel)
-	assert.False(t, cfg.Log.File)
+	assert.Equal(t, "false", cfg.Log.File)
 	assert.Equal(t, 2, cfg.Log.MaxFiles)
 }
 
@@ -217,7 +217,7 @@ func TestViewRoundTrip(t *testing.T) {
 	dataDir := t.TempDir()
 	want, file := parse(t, config.Defaults{DataDir: dataDir},
 		"--profile=second", "--mode=server", "--listen=:9001", "--shutdown-timeout=7s", "--log-level=debug",
-		"--log-component-level=supervisor=warn", "--log-format=json", "--no-log-file",
+		"--log-component-level=supervisor=warn", "--log-format=json", "--log-file=false",
 		"--log-max-size=3", "--log-max-files=1", "--dry-run")
 	require.NoError(t, file.Err())
 

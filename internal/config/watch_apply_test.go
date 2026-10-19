@@ -96,6 +96,27 @@ func TestWatcherAppliesHotSettings(t *testing.T) {
 	})
 }
 
+// TestWatcherAppliesTheLogFile verifies the log_file setting reaches the log
+// apply as text, as a path and as a bool (roadmap 6.5).
+func TestWatcherAppliesTheLogFile(t *testing.T) {
+	clearEnv(t)
+	dataDir := t.TempDir()
+	rec := &applyRec{}
+	writeFile(t, filepath.Join(dataDir, "config.yaml"), "log_level: info\n")
+	watch(t, dataDir, nil, rec.funcs(), func(w *watched) {
+		w.tick()
+		assert.Empty(t, rec.logCalls, "an unchanged file applies nothing")
+
+		w.write("log_file: /var/log/streamcrew/custom.log\n")
+		requireLen(t, rec.logCalls, 1)
+		assert.Equal(t, "/var/log/streamcrew/custom.log", rec.logCalls[0].File)
+
+		w.write("log_file: false\n")
+		requireLen(t, rec.logCalls, 2)
+		assert.Equal(t, "false", rec.logCalls[1].File)
+	})
+}
+
 // TestWatcherAppliesFixedOnlyWhenFromFile verifies the watcher does not
 // apply a hot setting that is fixed by flag or environment (roadmap 6.5).
 func TestWatcherAppliesFixedOnlyWhenFromFile(t *testing.T) {
