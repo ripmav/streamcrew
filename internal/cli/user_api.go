@@ -5,10 +5,7 @@ package cli
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"text/tabwriter"
-
-	"connectrpc.com/connect"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
@@ -16,7 +13,7 @@ import (
 
 // userClient returns the UserService client of the core.
 func (e *Env) userClient() streamcrewv1alpha1connect.UserServiceClient {
-	return streamcrewv1alpha1connect.NewUserServiceClient(http.DefaultClient, e.server(), e.connectOptions()...)
+	return streamcrewv1alpha1connect.NewUserServiceClient(e.connectClient())
 }
 
 // platformLogin is the "platform/login" form of a user identity.
@@ -37,20 +34,20 @@ type userListCmd struct {
 
 // Run lists the users of the core.
 func (c userListCmd) Run(ctx context.Context, e *Env) error {
-	resp, err := e.userClient().List(ctx, connect.NewRequest(&v1alpha1.ListUsersRequest{Prefix: c.Prefix, Stat: c.Stat, Limit: c.Limit}))
+	resp, err := e.userClient().List(ctx, &v1alpha1.ListUsersRequest{Prefix: c.Prefix, Stat: c.Stat, Limit: c.Limit})
 	if err != nil {
 		return err
 	}
 	if c.Output == "json" {
-		return writeJSON(e.Stdout, resp.Msg.Users)
+		return writeJSON(e.Stdout, resp.Users)
 	}
-	if len(resp.Msg.Users) == 0 {
+	if len(resp.Users) == 0 {
 		fmt.Fprintln(e.Stdout, "no users")
 		return nil
 	}
 	tw := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "LOGIN\tROLE\tTITLE\tMESSAGES\tSTRIKES")
-	for _, u := range resp.Msg.Users {
+	for _, u := range resp.Users {
 		login := "-"
 		if len(u.Identities) > 0 {
 			login = u.Identities[0].Login
@@ -68,14 +65,14 @@ type userShowCmd struct {
 
 // Run shows one user of the core.
 func (c userShowCmd) Run(ctx context.Context, e *Env) error {
-	resp, err := e.userClient().Get(ctx, connect.NewRequest(&v1alpha1.GetUserRequest{PlatformLogin: platformLogin(c.Platform, c.Login)}))
+	resp, err := e.userClient().Get(ctx, &v1alpha1.GetUserRequest{PlatformLogin: platformLogin(c.Platform, c.Login)})
 	if err != nil {
 		return err
 	}
 	if c.Output == "json" {
-		return writeJSON(e.Stdout, resp.Msg.User)
+		return writeJSON(e.Stdout, resp.User)
 	}
-	u := resp.Msg.User
+	u := resp.User
 	fmt.Fprintf(e.Stdout, "user %s (%s)\n", u.Id, u.Role)
 	if u.Title != "" {
 		fmt.Fprintf(e.Stdout, "title: %s\n", u.Title)
@@ -107,12 +104,12 @@ type userSetCmd struct {
 
 // Run changes the role, title, strikes and exclusion of a user of the core.
 func (c userSetCmd) Run(ctx context.Context, e *Env) error {
-	got, err := e.userClient().Get(ctx, connect.NewRequest(&v1alpha1.GetUserRequest{PlatformLogin: platformLogin(c.Platform, c.Login)}))
+	got, err := e.userClient().Get(ctx, &v1alpha1.GetUserRequest{PlatformLogin: platformLogin(c.Platform, c.Login)})
 	if err != nil {
 		return err
 	}
 	req := &v1alpha1.UpdateUserRequest{
-		Id:    got.Msg.User.Id,
+		Id:    got.User.Id,
 		Role:  c.Role,
 		Title: c.Title,
 	}
@@ -122,13 +119,13 @@ func (c userSetCmd) Run(ctx context.Context, e *Env) error {
 	if c.Excluded != c.NoExcluded {
 		req.Excluded = &c.Excluded
 	}
-	resp, err := e.userClient().Update(ctx, connect.NewRequest(req))
+	resp, err := e.userClient().Update(ctx, req)
 	if err != nil {
 		return err
 	}
 	if c.Output == "json" {
-		return writeJSON(e.Stdout, resp.Msg.User)
+		return writeJSON(e.Stdout, resp.User)
 	}
-	fmt.Fprintf(e.Stdout, "updated %s (role %s)\n", resp.Msg.User.Id, resp.Msg.User.Role)
+	fmt.Fprintf(e.Stdout, "updated %s (role %s)\n", resp.User.Id, resp.User.Role)
 	return nil
 }

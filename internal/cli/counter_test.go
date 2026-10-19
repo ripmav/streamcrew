@@ -12,7 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -93,8 +94,8 @@ func TestCounterCommands(t *testing.T) {
 	ctx := t.Context()
 
 	// A counter the commands work on.
-	cc := streamcrewv1alpha1connect.NewCounterServiceClient(http.DefaultClient, base)
-	_, err := cc.Create(ctx, connect.NewRequest(&v1alpha1.CreateCounterRequest{Name: "hello", Value: "10", Step: "2"}))
+	cc := streamcrewv1alpha1connect.NewCounterServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	_, err := cc.Create(ctx, &v1alpha1.CreateCounterRequest{Name: "hello", Value: "10", Step: "2"})
 	require.NoError(t, err)
 
 	var out bytes.Buffer
