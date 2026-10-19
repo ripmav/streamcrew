@@ -90,6 +90,8 @@ func (m model) mainArea(t *Theme) string {
 		return m.users.render(t, w-2)
 	case "logs":
 		return m.logs.render(t, "Logs", w-2)
+	case "settings":
+		return m.settings.render(t, w-2)
 	}
 	return t.dim.Render(m.viewName())
 }
@@ -150,7 +152,7 @@ func (t *Theme) helpView(width int) string {
 		t.title.Render("Help"),
 		"",
 		keyLine(t, "q", "quit"),
-		keyLine(t, "1 … 7", "switch view"),
+		keyLine(t, "1 … 8", "switch view"),
 		keyLine(t, "tab", "next view"),
 		keyLine(t, "t", "toggle theme"),
 		keyLine(t, "?", "this help"),
@@ -158,6 +160,8 @@ func (t *Theme) helpView(width int) string {
 		keyLine(t, "d / c", "delete last / clear (chat)"),
 		keyLine(t, "p / x / r", "pause / cancel / retry (queue)"),
 		keyLine(t, "e / E", "enable / edit (commands)"),
+		keyLine(t, "e", "edit configuration (settings)"),
+		keyLine(t, "r", "reload (settings)"),
 		keyLine(t, "/", "filter (commands, users)"),
 	}
 	body := strings.Join(lines, "\n")

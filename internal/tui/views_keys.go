@@ -190,7 +190,7 @@ func (m model) updateCommandsKey(key tea.Key) (tea.Model, tea.Cmd) {
 		}
 	case 'E':
 		if c := m.selectedCommand(); c != nil {
-			return m, m.editCommand(c.GetId())
+			return m, m.editCommand(c.GetId(), editorFromEnv())
 		}
 	case tea.KeyEnter:
 		if c := m.selectedCommand(); c != nil {
@@ -243,9 +243,7 @@ func (m model) applyCommandFilter() {
 }
 
 // editCommand opens the document of the command in $EDITOR.
-func (m model) editCommand(id string) tea.Cmd {
-	// the editor comes from the environment (no core config is involved)
-	editor := editorFromEnv()
+func (m model) editCommand(id string, editor string) tea.Cmd {
 	if editor == "" {
 		return func() tea.Msg { return actionDoneMsg{err: os.ErrNotExist} }
 	}
@@ -358,5 +356,63 @@ func (m model) applyUserFilter() {
 	m.users.list = kept
 	if m.users.selected >= len(m.users.list) {
 		m.users.selected = 0
+	}
+}
+
+// updateSettingsKey handles the keys of the settings view: edit the
+// document in $EDITOR and reload it (roadmap 6.5.3).
+func (m model) updateSettingsKey(key tea.Key) (tea.Model, tea.Cmd) {
+	switch key.Code {
+	case 'e':
+		if !m.settings.live || m.settings.err != nil || m.settings.editing {
+			return m, nil
+		}
+		return m, m.editConfig(editorFromEnv())
+	case 'r':
+		return m, m.fetchConfig()
+	}
+	return m, nil
+}
+
+// editConfig opens the configuration document in $EDITOR and stores the
+// edited document with UpdateConfig.
+func (m model) editConfig(editor string) tea.Cmd {
+	if editor == "" {
+		return func() tea.Msg { return configUpdatedMsg{err: os.ErrNotExist} }
+	}
+	m.settings.editing = true
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Minute)
+		defer cancel()
+		file, err := os.CreateTemp("", "streamcrew-config-*.yaml")
+		if err != nil {
+			return configUpdatedMsg{err: err}
+		}
+		name := file.Name()
+		if _, err := file.WriteString(m.settings.document); err != nil {
+			_ = file.Close()
+			return configUpdatedMsg{err: err}
+		}
+		if err := file.Close(); err != nil {
+			return configUpdatedMsg{err: err}
+		}
+		// run the editor blocking; the file name is the only argument, so no
+		// shell interpretation happens
+		if err := exec.CommandContext(ctx, editor, name).Run(); err != nil {
+			return configUpdatedMsg{err: err}
+		}
+		data, err := os.ReadFile(name)
+		if err != nil {
+			return configUpdatedMsg{err: err}
+		}
+		resp, err := m.cl.config.Update(ctx, &v1alpha1.UpdateConfigRequest{Document: string(data)})
+		if err != nil {
+			return configUpdatedMsg{err: err}
+		}
+		return configUpdatedMsg{
+			applied:  resp.GetApplied(),
+			restart:  resp.GetRestart(),
+			document: resp.GetDocument(),
+		}
 	}
 }
