@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,21 +23,21 @@ import (
 func TestSettingsViewShowsTheDocument(t *testing.T) {
 	t.Parallel()
 	base := startMockCoreServer(t)
-	client, _ := httpClientFor(base)
-	cfgClient := streamcrewv1alpha1connect.NewConfigServiceClient(client, base)
+	client, base := httpClientFor(base)
+	cfgClient := streamcrewv1alpha1connect.NewConfigServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))))
 
-	resp, err := cfgClient.Get(t.Context(), connect.NewRequest(&v1alpha1.GetConfigRequest{}))
+	resp, err := cfgClient.Get(t.Context(), &v1alpha1.GetConfigRequest{})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.GetLive())
+	assert.True(t, resp.GetLive())
 
 	m := model{
 		settings: settingsView{
 			loaded:   true,
-			document: resp.Msg.GetDocument(),
-			hot:      resp.Msg.GetHot(),
-			fixed:    resp.Msg.GetFixed(),
-			restart:  resp.Msg.GetRestart(),
-			live:     resp.Msg.GetLive(),
+			document: resp.GetDocument(),
+			hot:      resp.GetHot(),
+			fixed:    resp.GetFixed(),
+			restart:  resp.GetRestart(),
+			live:     resp.GetLive(),
 		},
 	}
 	out := m.settings.render(newTheme(true), 80)
@@ -51,18 +52,18 @@ func TestSettingsViewShowsTheDocument(t *testing.T) {
 func TestSettingsViewReadOnlyInDaemonMode(t *testing.T) {
 	t.Parallel()
 	base := startMockCore(t)
-	client, _ := httpClientFor(base)
-	cfgClient := streamcrewv1alpha1connect.NewConfigServiceClient(client, base)
+	client, base := httpClientFor(base)
+	cfgClient := streamcrewv1alpha1connect.NewConfigServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))))
 
-	resp, err := cfgClient.Get(t.Context(), connect.NewRequest(&v1alpha1.GetConfigRequest{}))
+	resp, err := cfgClient.Get(t.Context(), &v1alpha1.GetConfigRequest{})
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.GetLive())
+	assert.False(t, resp.GetLive())
 
 	m := model{
 		settings: settingsView{
 			loaded:   true,
-			document: resp.Msg.GetDocument(),
-			live:     resp.Msg.GetLive(),
+			document: resp.GetDocument(),
+			live:     resp.GetLive(),
 		},
 	}
 	out := m.settings.render(newTheme(true), 80)

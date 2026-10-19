@@ -11,196 +11,209 @@
 package streamcrewv1alpha1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ChatServiceName is the fully-qualified name of the ChatService service.
 	ChatServiceName = "streamcrew.v1alpha1.ChatService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ChatServiceSendProcedure is the fully-qualified name of the ChatService's Send RPC.
+	// ChatServiceSendProcedure is the procedure name of the ChatService's Send RPC.
 	ChatServiceSendProcedure = "/streamcrew.v1alpha1.ChatService/Send"
-	// ChatServiceDeleteProcedure is the fully-qualified name of the ChatService's Delete RPC.
+	// ChatServiceDeleteProcedure is the procedure name of the ChatService's Delete RPC.
 	ChatServiceDeleteProcedure = "/streamcrew.v1alpha1.ChatService/Delete"
-	// ChatServiceClearProcedure is the fully-qualified name of the ChatService's Clear RPC.
+	// ChatServiceClearProcedure is the procedure name of the ChatService's Clear RPC.
 	ChatServiceClearProcedure = "/streamcrew.v1alpha1.ChatService/Clear"
-	// ChatServiceHistoryProcedure is the fully-qualified name of the ChatService's History RPC.
+	// ChatServiceHistoryProcedure is the procedure name of the ChatService's History RPC.
 	ChatServiceHistoryProcedure = "/streamcrew.v1alpha1.ChatService/History"
+)
+
+var (
+	chatServiceSendSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_chat_proto.Services().ByName("ChatService").Methods().ByName("Send"),
+			Procedure:  ChatServiceSendProcedure,
+		}
+	})
+	chatServiceDeleteSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_chat_proto.Services().ByName("ChatService").Methods().ByName("Delete"),
+			Procedure:  ChatServiceDeleteProcedure,
+		}
+	})
+	chatServiceClearSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_chat_proto.Services().ByName("ChatService").Methods().ByName("Clear"),
+			Procedure:  ChatServiceClearProcedure,
+		}
+	})
+	chatServiceHistorySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_chat_proto.Services().ByName("ChatService").Methods().ByName("History"),
+			Procedure:  ChatServiceHistoryProcedure,
+		}
+	})
 )
 
 // ChatServiceClient is a client for the streamcrew.v1alpha1.ChatService service.
 type ChatServiceClient interface {
 	// Send sends a chat message.
-	Send(context.Context, *connect.Request[v1alpha1.SendChatRequest]) (*connect.Response[v1alpha1.SendChatResponse], error)
+	Send(context.Context, *v1alpha1.SendChatRequest) (*v1alpha1.SendChatResponse, error)
 	// Delete deletes a chat message by its platform ID.
-	Delete(context.Context, *connect.Request[v1alpha1.DeleteChatRequest]) (*connect.Response[v1alpha1.DeleteChatResponse], error)
+	Delete(context.Context, *v1alpha1.DeleteChatRequest) (*v1alpha1.DeleteChatResponse, error)
 	// Clear deletes all recent chat messages of a channel.
-	Clear(context.Context, *connect.Request[v1alpha1.ClearChatRequest]) (*connect.Response[v1alpha1.ClearChatResponse], error)
+	Clear(context.Context, *v1alpha1.ClearChatRequest) (*v1alpha1.ClearChatResponse, error)
 	// History returns the recent chat messages of a channel.
-	History(context.Context, *connect.Request[v1alpha1.HistoryChatRequest]) (*connect.Response[v1alpha1.HistoryChatResponse], error)
+	History(context.Context, *v1alpha1.HistoryChatRequest) (*v1alpha1.HistoryChatResponse, error)
 }
 
-// NewChatServiceClient constructs a client for the streamcrew.v1alpha1.ChatService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ChatServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	chatServiceMethods := v1alpha1.File_streamcrew_v1alpha1_chat_proto.Services().ByName("ChatService").Methods()
-	return &chatServiceClient{
-		send: connect.NewClient[v1alpha1.SendChatRequest, v1alpha1.SendChatResponse](
-			httpClient,
-			baseURL+ChatServiceSendProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("Send")),
-			connect.WithClientOptions(opts...),
-		),
-		delete: connect.NewClient[v1alpha1.DeleteChatRequest, v1alpha1.DeleteChatResponse](
-			httpClient,
-			baseURL+ChatServiceDeleteProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("Delete")),
-			connect.WithClientOptions(opts...),
-		),
-		clear: connect.NewClient[v1alpha1.ClearChatRequest, v1alpha1.ClearChatResponse](
-			httpClient,
-			baseURL+ChatServiceClearProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("Clear")),
-			connect.WithClientOptions(opts...),
-		),
-		history: connect.NewClient[v1alpha1.HistoryChatRequest, v1alpha1.HistoryChatResponse](
-			httpClient,
-			baseURL+ChatServiceHistoryProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("History")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// chatServiceClient implements ChatServiceClient.
-type chatServiceClient struct {
-	send    *connect.Client[v1alpha1.SendChatRequest, v1alpha1.SendChatResponse]
-	delete  *connect.Client[v1alpha1.DeleteChatRequest, v1alpha1.DeleteChatResponse]
-	clear   *connect.Client[v1alpha1.ClearChatRequest, v1alpha1.ClearChatResponse]
-	history *connect.Client[v1alpha1.HistoryChatRequest, v1alpha1.HistoryChatResponse]
-}
-
-// Send calls streamcrew.v1alpha1.ChatService.Send.
-func (c *chatServiceClient) Send(ctx context.Context, req *connect.Request[v1alpha1.SendChatRequest]) (*connect.Response[v1alpha1.SendChatResponse], error) {
-	return c.send.CallUnary(ctx, req)
-}
-
-// Delete calls streamcrew.v1alpha1.ChatService.Delete.
-func (c *chatServiceClient) Delete(ctx context.Context, req *connect.Request[v1alpha1.DeleteChatRequest]) (*connect.Response[v1alpha1.DeleteChatResponse], error) {
-	return c.delete.CallUnary(ctx, req)
-}
-
-// Clear calls streamcrew.v1alpha1.ChatService.Clear.
-func (c *chatServiceClient) Clear(ctx context.Context, req *connect.Request[v1alpha1.ClearChatRequest]) (*connect.Response[v1alpha1.ClearChatResponse], error) {
-	return c.clear.CallUnary(ctx, req)
-}
-
-// History calls streamcrew.v1alpha1.ChatService.History.
-func (c *chatServiceClient) History(ctx context.Context, req *connect.Request[v1alpha1.HistoryChatRequest]) (*connect.Response[v1alpha1.HistoryChatResponse], error) {
-	return c.history.CallUnary(ctx, req)
+// NewChatServiceClient constructs a client for the streamcrew.v1alpha1.ChatService service.
+// Multiple service clients may share a single connect.Client.
+func NewChatServiceClient(client *connect.Client) ChatServiceClient {
+	return &chatServiceClient{client: client}
 }
 
 // ChatServiceHandler is an implementation of the streamcrew.v1alpha1.ChatService service.
 type ChatServiceHandler interface {
 	// Send sends a chat message.
-	Send(context.Context, *connect.Request[v1alpha1.SendChatRequest]) (*connect.Response[v1alpha1.SendChatResponse], error)
+	Send(context.Context, *v1alpha1.SendChatRequest) (*v1alpha1.SendChatResponse, error)
 	// Delete deletes a chat message by its platform ID.
-	Delete(context.Context, *connect.Request[v1alpha1.DeleteChatRequest]) (*connect.Response[v1alpha1.DeleteChatResponse], error)
+	Delete(context.Context, *v1alpha1.DeleteChatRequest) (*v1alpha1.DeleteChatResponse, error)
 	// Clear deletes all recent chat messages of a channel.
-	Clear(context.Context, *connect.Request[v1alpha1.ClearChatRequest]) (*connect.Response[v1alpha1.ClearChatResponse], error)
+	Clear(context.Context, *v1alpha1.ClearChatRequest) (*v1alpha1.ClearChatResponse, error)
 	// History returns the recent chat messages of a channel.
-	History(context.Context, *connect.Request[v1alpha1.HistoryChatRequest]) (*connect.Response[v1alpha1.HistoryChatResponse], error)
+	History(context.Context, *v1alpha1.HistoryChatRequest) (*v1alpha1.HistoryChatResponse, error)
 }
 
-// NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	chatServiceMethods := v1alpha1.File_streamcrew_v1alpha1_chat_proto.Services().ByName("ChatService").Methods()
-	chatServiceSendHandler := connect.NewUnaryHandler(
-		ChatServiceSendProcedure,
-		svc.Send,
-		connect.WithSchema(chatServiceMethods.ByName("Send")),
-		connect.WithHandlerOptions(opts...),
+// RegisterChatServiceHandler registers svc as the streamcrew.v1alpha1.ChatService implementation on
+// server.
+func RegisterChatServiceHandler(server *connect.Server, svc ChatServiceHandler) {
+	adapter := chatServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: chatServiceSendSpec(), Handler: adapter.send},
+		connect.Method{Spec: chatServiceDeleteSpec(), Handler: adapter.delete},
+		connect.Method{Spec: chatServiceClearSpec(), Handler: adapter.clear},
+		connect.Method{Spec: chatServiceHistorySpec(), Handler: adapter.history},
 	)
-	chatServiceDeleteHandler := connect.NewUnaryHandler(
-		ChatServiceDeleteProcedure,
-		svc.Delete,
-		connect.WithSchema(chatServiceMethods.ByName("Delete")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceClearHandler := connect.NewUnaryHandler(
-		ChatServiceClearProcedure,
-		svc.Clear,
-		connect.WithSchema(chatServiceMethods.ByName("Clear")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceHistoryHandler := connect.NewUnaryHandler(
-		ChatServiceHistoryProcedure,
-		svc.History,
-		connect.WithSchema(chatServiceMethods.ByName("History")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/streamcrew.v1alpha1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ChatServiceSendProcedure:
-			chatServiceSendHandler.ServeHTTP(w, r)
-		case ChatServiceDeleteProcedure:
-			chatServiceDeleteHandler.ServeHTTP(w, r)
-		case ChatServiceClearProcedure:
-			chatServiceClearHandler.ServeHTTP(w, r)
-		case ChatServiceHistoryProcedure:
-			chatServiceHistoryHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedChatServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedChatServiceHandler struct{}
 
-func (UnimplementedChatServiceHandler) Send(context.Context, *connect.Request[v1alpha1.SendChatRequest]) (*connect.Response[v1alpha1.SendChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.ChatService.Send is not implemented"))
+func (UnimplementedChatServiceHandler) Send(context.Context, *v1alpha1.SendChatRequest) (*v1alpha1.SendChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.ChatService.Send is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) Delete(context.Context, *connect.Request[v1alpha1.DeleteChatRequest]) (*connect.Response[v1alpha1.DeleteChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.ChatService.Delete is not implemented"))
+func (UnimplementedChatServiceHandler) Delete(context.Context, *v1alpha1.DeleteChatRequest) (*v1alpha1.DeleteChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.ChatService.Delete is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) Clear(context.Context, *connect.Request[v1alpha1.ClearChatRequest]) (*connect.Response[v1alpha1.ClearChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.ChatService.Clear is not implemented"))
+func (UnimplementedChatServiceHandler) Clear(context.Context, *v1alpha1.ClearChatRequest) (*v1alpha1.ClearChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.ChatService.Clear is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) History(context.Context, *connect.Request[v1alpha1.HistoryChatRequest]) (*connect.Response[v1alpha1.HistoryChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.ChatService.History is not implemented"))
+func (UnimplementedChatServiceHandler) History(context.Context, *v1alpha1.HistoryChatRequest) (*v1alpha1.HistoryChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.ChatService.History is not implemented")
+}
+
+type chatServiceClient struct {
+	client *connect.Client
+}
+
+func (c *chatServiceClient) Send(ctx context.Context, req *v1alpha1.SendChatRequest) (*v1alpha1.SendChatResponse, error) {
+	var res v1alpha1.SendChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceSendSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) Delete(ctx context.Context, req *v1alpha1.DeleteChatRequest) (*v1alpha1.DeleteChatResponse, error) {
+	var res v1alpha1.DeleteChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceDeleteSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) Clear(ctx context.Context, req *v1alpha1.ClearChatRequest) (*v1alpha1.ClearChatResponse, error) {
+	var res v1alpha1.ClearChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceClearSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) History(ctx context.Context, req *v1alpha1.HistoryChatRequest) (*v1alpha1.HistoryChatResponse, error) {
+	var res v1alpha1.HistoryChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceHistorySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type chatServiceHandler struct{ svc ChatServiceHandler }
+
+func (h chatServiceHandler) send(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.SendChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Send(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) delete(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.DeleteChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Delete(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) clear(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.ClearChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Clear(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) history(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.HistoryChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.History(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

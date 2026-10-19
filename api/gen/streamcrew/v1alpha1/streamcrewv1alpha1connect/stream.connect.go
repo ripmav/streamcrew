@@ -12,169 +12,204 @@
 package streamcrewv1alpha1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// StreamServiceName is the fully-qualified name of the StreamService service.
 	StreamServiceName = "streamcrew.v1alpha1.StreamService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// StreamServiceSubscribeProcedure is the fully-qualified name of the StreamService's Subscribe RPC.
+	// StreamServiceSubscribeProcedure is the procedure name of the StreamService's Subscribe RPC.
 	StreamServiceSubscribeProcedure = "/streamcrew.v1alpha1.StreamService/Subscribe"
-	// StreamServiceAnswerPromptProcedure is the fully-qualified name of the StreamService's
-	// AnswerPrompt RPC.
+	// StreamServiceAnswerPromptProcedure is the procedure name of the StreamService's AnswerPrompt RPC.
 	StreamServiceAnswerPromptProcedure = "/streamcrew.v1alpha1.StreamService/AnswerPrompt"
-	// StreamServiceSimulateProcedure is the fully-qualified name of the StreamService's Simulate RPC.
+	// StreamServiceSimulateProcedure is the procedure name of the StreamService's Simulate RPC.
 	StreamServiceSimulateProcedure = "/streamcrew.v1alpha1.StreamService/Simulate"
+)
+
+var (
+	streamServiceSubscribeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_stream_proto.Services().ByName("StreamService").Methods().ByName("Subscribe"),
+			Procedure:  StreamServiceSubscribeProcedure,
+		}
+	})
+	streamServiceAnswerPromptSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_stream_proto.Services().ByName("StreamService").Methods().ByName("AnswerPrompt"),
+			Procedure:  StreamServiceAnswerPromptProcedure,
+		}
+	})
+	streamServiceSimulateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_stream_proto.Services().ByName("StreamService").Methods().ByName("Simulate"),
+			Procedure:  StreamServiceSimulateProcedure,
+		}
+	})
 )
 
 // StreamServiceClient is a client for the streamcrew.v1alpha1.StreamService service.
 type StreamServiceClient interface {
 	// Subscribe streams events to the client until the client cancels.
-	Subscribe(context.Context, *connect.Request[v1alpha1.SubscribeRequest]) (*connect.ServerStreamForClient[v1alpha1.Event], error)
+	Subscribe(context.Context, *v1alpha1.SubscribeRequest) (StreamServiceSubscribeClientStream, error)
 	// AnswerPrompt answers a prompt delivered through the stream.
-	AnswerPrompt(context.Context, *connect.Request[v1alpha1.AnswerPromptRequest]) (*connect.Response[v1alpha1.AnswerPromptResponse], error)
+	AnswerPrompt(context.Context, *v1alpha1.AnswerPromptRequest) (*v1alpha1.AnswerPromptResponse, error)
 	// Simulate publishes a platform-neutral event of the mock platform to the
 	// core, like the mock console does; for mock and dev work.
-	Simulate(context.Context, *connect.Request[v1alpha1.SimulateEventRequest]) (*connect.Response[v1alpha1.SimulateEventResponse], error)
+	Simulate(context.Context, *v1alpha1.SimulateEventRequest) (*v1alpha1.SimulateEventResponse, error)
 }
 
-// NewStreamServiceClient constructs a client for the streamcrew.v1alpha1.StreamService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewStreamServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) StreamServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	streamServiceMethods := v1alpha1.File_streamcrew_v1alpha1_stream_proto.Services().ByName("StreamService").Methods()
-	return &streamServiceClient{
-		subscribe: connect.NewClient[v1alpha1.SubscribeRequest, v1alpha1.Event](
-			httpClient,
-			baseURL+StreamServiceSubscribeProcedure,
-			connect.WithSchema(streamServiceMethods.ByName("Subscribe")),
-			connect.WithClientOptions(opts...),
-		),
-		answerPrompt: connect.NewClient[v1alpha1.AnswerPromptRequest, v1alpha1.AnswerPromptResponse](
-			httpClient,
-			baseURL+StreamServiceAnswerPromptProcedure,
-			connect.WithSchema(streamServiceMethods.ByName("AnswerPrompt")),
-			connect.WithClientOptions(opts...),
-		),
-		simulate: connect.NewClient[v1alpha1.SimulateEventRequest, v1alpha1.SimulateEventResponse](
-			httpClient,
-			baseURL+StreamServiceSimulateProcedure,
-			connect.WithSchema(streamServiceMethods.ByName("Simulate")),
-			connect.WithClientOptions(opts...),
-		),
+// NewStreamServiceClient constructs a client for the streamcrew.v1alpha1.StreamService service.
+// Multiple service clients may share a single connect.Client.
+func NewStreamServiceClient(client *connect.Client) StreamServiceClient {
+	return &streamServiceClient{client: client}
+}
+
+// StreamServiceSubscribeClientStream is the client stream for the StreamService's Subscribe RPC.
+type StreamServiceSubscribeClientStream struct {
+	stream connect.ClientStream
+}
+
+// Receive returns the next response message from the server.
+func (s StreamServiceSubscribeClientStream) Receive() (*v1alpha1.Event, error) {
+	var res v1alpha1.Event
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
 	}
+	return &res, nil
 }
 
-// streamServiceClient implements StreamServiceClient.
-type streamServiceClient struct {
-	subscribe    *connect.Client[v1alpha1.SubscribeRequest, v1alpha1.Event]
-	answerPrompt *connect.Client[v1alpha1.AnswerPromptRequest, v1alpha1.AnswerPromptResponse]
-	simulate     *connect.Client[v1alpha1.SimulateEventRequest, v1alpha1.SimulateEventResponse]
-}
-
-// Subscribe calls streamcrew.v1alpha1.StreamService.Subscribe.
-func (c *streamServiceClient) Subscribe(ctx context.Context, req *connect.Request[v1alpha1.SubscribeRequest]) (*connect.ServerStreamForClient[v1alpha1.Event], error) {
-	return c.subscribe.CallServerStream(ctx, req)
-}
-
-// AnswerPrompt calls streamcrew.v1alpha1.StreamService.AnswerPrompt.
-func (c *streamServiceClient) AnswerPrompt(ctx context.Context, req *connect.Request[v1alpha1.AnswerPromptRequest]) (*connect.Response[v1alpha1.AnswerPromptResponse], error) {
-	return c.answerPrompt.CallUnary(ctx, req)
-}
-
-// Simulate calls streamcrew.v1alpha1.StreamService.Simulate.
-func (c *streamServiceClient) Simulate(ctx context.Context, req *connect.Request[v1alpha1.SimulateEventRequest]) (*connect.Response[v1alpha1.SimulateEventResponse], error) {
-	return c.simulate.CallUnary(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s StreamServiceSubscribeClientStream) Close() error {
+	return s.stream.Close()
 }
 
 // StreamServiceHandler is an implementation of the streamcrew.v1alpha1.StreamService service.
 type StreamServiceHandler interface {
 	// Subscribe streams events to the client until the client cancels.
-	Subscribe(context.Context, *connect.Request[v1alpha1.SubscribeRequest], *connect.ServerStream[v1alpha1.Event]) error
+	Subscribe(context.Context, *v1alpha1.SubscribeRequest, StreamServiceSubscribeServerStream) error
 	// AnswerPrompt answers a prompt delivered through the stream.
-	AnswerPrompt(context.Context, *connect.Request[v1alpha1.AnswerPromptRequest]) (*connect.Response[v1alpha1.AnswerPromptResponse], error)
+	AnswerPrompt(context.Context, *v1alpha1.AnswerPromptRequest) (*v1alpha1.AnswerPromptResponse, error)
 	// Simulate publishes a platform-neutral event of the mock platform to the
 	// core, like the mock console does; for mock and dev work.
-	Simulate(context.Context, *connect.Request[v1alpha1.SimulateEventRequest]) (*connect.Response[v1alpha1.SimulateEventResponse], error)
+	Simulate(context.Context, *v1alpha1.SimulateEventRequest) (*v1alpha1.SimulateEventResponse, error)
 }
 
-// NewStreamServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewStreamServiceHandler(svc StreamServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	streamServiceMethods := v1alpha1.File_streamcrew_v1alpha1_stream_proto.Services().ByName("StreamService").Methods()
-	streamServiceSubscribeHandler := connect.NewServerStreamHandler(
-		StreamServiceSubscribeProcedure,
-		svc.Subscribe,
-		connect.WithSchema(streamServiceMethods.ByName("Subscribe")),
-		connect.WithHandlerOptions(opts...),
+// RegisterStreamServiceHandler registers svc as the streamcrew.v1alpha1.StreamService
+// implementation on server.
+func RegisterStreamServiceHandler(server *connect.Server, svc StreamServiceHandler) {
+	adapter := streamServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: streamServiceSubscribeSpec(), Handler: adapter.subscribe},
+		connect.Method{Spec: streamServiceAnswerPromptSpec(), Handler: adapter.answerPrompt},
+		connect.Method{Spec: streamServiceSimulateSpec(), Handler: adapter.simulate},
 	)
-	streamServiceAnswerPromptHandler := connect.NewUnaryHandler(
-		StreamServiceAnswerPromptProcedure,
-		svc.AnswerPrompt,
-		connect.WithSchema(streamServiceMethods.ByName("AnswerPrompt")),
-		connect.WithHandlerOptions(opts...),
-	)
-	streamServiceSimulateHandler := connect.NewUnaryHandler(
-		StreamServiceSimulateProcedure,
-		svc.Simulate,
-		connect.WithSchema(streamServiceMethods.ByName("Simulate")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/streamcrew.v1alpha1.StreamService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case StreamServiceSubscribeProcedure:
-			streamServiceSubscribeHandler.ServeHTTP(w, r)
-		case StreamServiceAnswerPromptProcedure:
-			streamServiceAnswerPromptHandler.ServeHTTP(w, r)
-		case StreamServiceSimulateProcedure:
-			streamServiceSimulateHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
+}
+
+// StreamServiceSubscribeServerStream is the server stream for the StreamService's Subscribe RPC.
+type StreamServiceSubscribeServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s StreamServiceSubscribeServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s StreamServiceSubscribeServerStream) Send(res *v1alpha1.Event) error {
+	return s.stream.Send(res)
 }
 
 // UnimplementedStreamServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedStreamServiceHandler struct{}
 
-func (UnimplementedStreamServiceHandler) Subscribe(context.Context, *connect.Request[v1alpha1.SubscribeRequest], *connect.ServerStream[v1alpha1.Event]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.StreamService.Subscribe is not implemented"))
+func (UnimplementedStreamServiceHandler) Subscribe(context.Context, *v1alpha1.SubscribeRequest, StreamServiceSubscribeServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.StreamService.Subscribe is not implemented")
 }
 
-func (UnimplementedStreamServiceHandler) AnswerPrompt(context.Context, *connect.Request[v1alpha1.AnswerPromptRequest]) (*connect.Response[v1alpha1.AnswerPromptResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.StreamService.AnswerPrompt is not implemented"))
+func (UnimplementedStreamServiceHandler) AnswerPrompt(context.Context, *v1alpha1.AnswerPromptRequest) (*v1alpha1.AnswerPromptResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.StreamService.AnswerPrompt is not implemented")
 }
 
-func (UnimplementedStreamServiceHandler) Simulate(context.Context, *connect.Request[v1alpha1.SimulateEventRequest]) (*connect.Response[v1alpha1.SimulateEventResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.StreamService.Simulate is not implemented"))
+func (UnimplementedStreamServiceHandler) Simulate(context.Context, *v1alpha1.SimulateEventRequest) (*v1alpha1.SimulateEventResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.StreamService.Simulate is not implemented")
+}
+
+type streamServiceClient struct {
+	client *connect.Client
+}
+
+func (c *streamServiceClient) Subscribe(ctx context.Context, req *v1alpha1.SubscribeRequest) (StreamServiceSubscribeClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, streamServiceSubscribeSpec(), req)
+	if err != nil {
+		return StreamServiceSubscribeClientStream{}, err
+	}
+	return StreamServiceSubscribeClientStream{stream: stream}, nil
+}
+
+func (c *streamServiceClient) AnswerPrompt(ctx context.Context, req *v1alpha1.AnswerPromptRequest) (*v1alpha1.AnswerPromptResponse, error) {
+	var res v1alpha1.AnswerPromptResponse
+	if err := c.client.CallUnary(ctx, streamServiceAnswerPromptSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *streamServiceClient) Simulate(ctx context.Context, req *v1alpha1.SimulateEventRequest) (*v1alpha1.SimulateEventResponse, error) {
+	var res v1alpha1.SimulateEventResponse
+	if err := c.client.CallUnary(ctx, streamServiceSimulateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type streamServiceHandler struct{ svc StreamServiceHandler }
+
+func (h streamServiceHandler) subscribe(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.SubscribeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.Subscribe(ctx, &req, StreamServiceSubscribeServerStream{stream: stream})
+}
+
+func (h streamServiceHandler) answerPrompt(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.AnswerPromptRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AnswerPrompt(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h streamServiceHandler) simulate(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.SimulateEventRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Simulate(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }
