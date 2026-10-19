@@ -33,6 +33,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/stream"
 	"github.com/ripmav/streamcrew/internal/domain/user"
+	"github.com/ripmav/streamcrew/internal/dryrun"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/settings"
@@ -467,6 +468,13 @@ func (s *Service) refreshData(ctx context.Context, p platform.Name, u *user.User
 	f, ok := adapter.(connector.PlatformData)
 	if !ok {
 		return
+	}
+	if inner, ok := dryrun.AsInner(adapter); ok {
+		adapter = inner
+		f, ok = adapter.(connector.PlatformData)
+		if !ok {
+			return
+		}
 	}
 	ident, ok := u.Identity(p)
 	if !ok {

@@ -35,7 +35,13 @@ func TestStoreRoundtrip(t *testing.T) {
 
 	_, ok := s.Validate(value)
 	require.True(t, ok, "the created token validates")
-	found, ok := s.Validate(value[:len(value)-1] + "0")
+	// the flipped last character must differ from the original one, or
+	// the "wrong" token is the right one (hex digits are 0-9a-f).
+	flip := '0'
+	if value[len(value)-1] == '0' {
+		flip = '1'
+	}
+	found, ok := s.Validate(value[:len(value)-1] + string(flip))
 	require.False(t, ok)
 	_ = found
 

@@ -25,12 +25,10 @@ type twitchStreamAuth struct {
 }
 
 // twitchOps returns the twitch operations for the action registry: the
-// Helix implementation, or the dry-run recording when the dry run is on.
+// Helix implementation switched with the dry-run recording at runtime
+// (roadmap 6.5).
 func (a *App) twitchOps() twitchaction.Ops {
-	if a.cfg.DryRun {
-		return dryrun.NewOps(component(a.logger, "dryrun"))
-	}
-	return twitchOps{app: a}
+	return dryrun.NewSwitchOps(twitchOps{app: a}, dryrun.NewOps(component(a.logger, "dryrun")), &a.dryRun)
 }
 
 // Streamer implements twitch.Auth.
