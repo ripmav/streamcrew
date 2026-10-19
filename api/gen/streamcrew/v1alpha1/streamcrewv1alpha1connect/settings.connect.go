@@ -12,167 +12,172 @@
 package streamcrewv1alpha1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// SettingsServiceName is the fully-qualified name of the SettingsService service.
 	SettingsServiceName = "streamcrew.v1alpha1.SettingsService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// SettingsServiceListSectionsProcedure is the fully-qualified name of the SettingsService's
-	// ListSections RPC.
+	// SettingsServiceListSectionsProcedure is the procedure name of the SettingsService's ListSections
+	// RPC.
 	SettingsServiceListSectionsProcedure = "/streamcrew.v1alpha1.SettingsService/ListSections"
-	// SettingsServiceGetProcedure is the fully-qualified name of the SettingsService's Get RPC.
+	// SettingsServiceGetProcedure is the procedure name of the SettingsService's Get RPC.
 	SettingsServiceGetProcedure = "/streamcrew.v1alpha1.SettingsService/Get"
-	// SettingsServiceUpdateProcedure is the fully-qualified name of the SettingsService's Update RPC.
+	// SettingsServiceUpdateProcedure is the procedure name of the SettingsService's Update RPC.
 	SettingsServiceUpdateProcedure = "/streamcrew.v1alpha1.SettingsService/Update"
+)
+
+var (
+	settingsServiceListSectionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_settings_proto.Services().ByName("SettingsService").Methods().ByName("ListSections"),
+			Procedure:  SettingsServiceListSectionsProcedure,
+		}
+	})
+	settingsServiceGetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_settings_proto.Services().ByName("SettingsService").Methods().ByName("Get"),
+			Procedure:  SettingsServiceGetProcedure,
+		}
+	})
+	settingsServiceUpdateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_settings_proto.Services().ByName("SettingsService").Methods().ByName("Update"),
+			Procedure:  SettingsServiceUpdateProcedure,
+		}
+	})
 )
 
 // SettingsServiceClient is a client for the streamcrew.v1alpha1.SettingsService service.
 type SettingsServiceClient interface {
 	// ListSections lists the names of the settings sections.
-	ListSections(context.Context, *connect.Request[v1alpha1.ListSectionsRequest]) (*connect.Response[v1alpha1.ListSectionsResponse], error)
+	ListSections(context.Context, *v1alpha1.ListSectionsRequest) (*v1alpha1.ListSectionsResponse, error)
 	// Get returns one settings section as its document.
-	Get(context.Context, *connect.Request[v1alpha1.GetSettingsRequest]) (*connect.Response[v1alpha1.GetSettingsResponse], error)
+	Get(context.Context, *v1alpha1.GetSettingsRequest) (*v1alpha1.GetSettingsResponse, error)
 	// Update replaces a settings section with its new document.
-	Update(context.Context, *connect.Request[v1alpha1.UpdateSettingsRequest]) (*connect.Response[v1alpha1.UpdateSettingsResponse], error)
+	Update(context.Context, *v1alpha1.UpdateSettingsRequest) (*v1alpha1.UpdateSettingsResponse, error)
 }
 
 // NewSettingsServiceClient constructs a client for the streamcrew.v1alpha1.SettingsService service.
-// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
-// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SettingsServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	settingsServiceMethods := v1alpha1.File_streamcrew_v1alpha1_settings_proto.Services().ByName("SettingsService").Methods()
-	return &settingsServiceClient{
-		listSections: connect.NewClient[v1alpha1.ListSectionsRequest, v1alpha1.ListSectionsResponse](
-			httpClient,
-			baseURL+SettingsServiceListSectionsProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("ListSections")),
-			connect.WithClientOptions(opts...),
-		),
-		get: connect.NewClient[v1alpha1.GetSettingsRequest, v1alpha1.GetSettingsResponse](
-			httpClient,
-			baseURL+SettingsServiceGetProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("Get")),
-			connect.WithClientOptions(opts...),
-		),
-		update: connect.NewClient[v1alpha1.UpdateSettingsRequest, v1alpha1.UpdateSettingsResponse](
-			httpClient,
-			baseURL+SettingsServiceUpdateProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("Update")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// settingsServiceClient implements SettingsServiceClient.
-type settingsServiceClient struct {
-	listSections *connect.Client[v1alpha1.ListSectionsRequest, v1alpha1.ListSectionsResponse]
-	get          *connect.Client[v1alpha1.GetSettingsRequest, v1alpha1.GetSettingsResponse]
-	update       *connect.Client[v1alpha1.UpdateSettingsRequest, v1alpha1.UpdateSettingsResponse]
-}
-
-// ListSections calls streamcrew.v1alpha1.SettingsService.ListSections.
-func (c *settingsServiceClient) ListSections(ctx context.Context, req *connect.Request[v1alpha1.ListSectionsRequest]) (*connect.Response[v1alpha1.ListSectionsResponse], error) {
-	return c.listSections.CallUnary(ctx, req)
-}
-
-// Get calls streamcrew.v1alpha1.SettingsService.Get.
-func (c *settingsServiceClient) Get(ctx context.Context, req *connect.Request[v1alpha1.GetSettingsRequest]) (*connect.Response[v1alpha1.GetSettingsResponse], error) {
-	return c.get.CallUnary(ctx, req)
-}
-
-// Update calls streamcrew.v1alpha1.SettingsService.Update.
-func (c *settingsServiceClient) Update(ctx context.Context, req *connect.Request[v1alpha1.UpdateSettingsRequest]) (*connect.Response[v1alpha1.UpdateSettingsResponse], error) {
-	return c.update.CallUnary(ctx, req)
+// Multiple service clients may share a single connect.Client.
+func NewSettingsServiceClient(client *connect.Client) SettingsServiceClient {
+	return &settingsServiceClient{client: client}
 }
 
 // SettingsServiceHandler is an implementation of the streamcrew.v1alpha1.SettingsService service.
 type SettingsServiceHandler interface {
 	// ListSections lists the names of the settings sections.
-	ListSections(context.Context, *connect.Request[v1alpha1.ListSectionsRequest]) (*connect.Response[v1alpha1.ListSectionsResponse], error)
+	ListSections(context.Context, *v1alpha1.ListSectionsRequest) (*v1alpha1.ListSectionsResponse, error)
 	// Get returns one settings section as its document.
-	Get(context.Context, *connect.Request[v1alpha1.GetSettingsRequest]) (*connect.Response[v1alpha1.GetSettingsResponse], error)
+	Get(context.Context, *v1alpha1.GetSettingsRequest) (*v1alpha1.GetSettingsResponse, error)
 	// Update replaces a settings section with its new document.
-	Update(context.Context, *connect.Request[v1alpha1.UpdateSettingsRequest]) (*connect.Response[v1alpha1.UpdateSettingsResponse], error)
+	Update(context.Context, *v1alpha1.UpdateSettingsRequest) (*v1alpha1.UpdateSettingsResponse, error)
 }
 
-// NewSettingsServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	settingsServiceMethods := v1alpha1.File_streamcrew_v1alpha1_settings_proto.Services().ByName("SettingsService").Methods()
-	settingsServiceListSectionsHandler := connect.NewUnaryHandler(
-		SettingsServiceListSectionsProcedure,
-		svc.ListSections,
-		connect.WithSchema(settingsServiceMethods.ByName("ListSections")),
-		connect.WithHandlerOptions(opts...),
+// RegisterSettingsServiceHandler registers svc as the streamcrew.v1alpha1.SettingsService
+// implementation on server.
+func RegisterSettingsServiceHandler(server *connect.Server, svc SettingsServiceHandler) {
+	adapter := settingsServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: settingsServiceListSectionsSpec(), Handler: adapter.listSections},
+		connect.Method{Spec: settingsServiceGetSpec(), Handler: adapter.get},
+		connect.Method{Spec: settingsServiceUpdateSpec(), Handler: adapter.update},
 	)
-	settingsServiceGetHandler := connect.NewUnaryHandler(
-		SettingsServiceGetProcedure,
-		svc.Get,
-		connect.WithSchema(settingsServiceMethods.ByName("Get")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceUpdateHandler := connect.NewUnaryHandler(
-		SettingsServiceUpdateProcedure,
-		svc.Update,
-		connect.WithSchema(settingsServiceMethods.ByName("Update")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/streamcrew.v1alpha1.SettingsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case SettingsServiceListSectionsProcedure:
-			settingsServiceListSectionsHandler.ServeHTTP(w, r)
-		case SettingsServiceGetProcedure:
-			settingsServiceGetHandler.ServeHTTP(w, r)
-		case SettingsServiceUpdateProcedure:
-			settingsServiceUpdateHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedSettingsServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSettingsServiceHandler struct{}
 
-func (UnimplementedSettingsServiceHandler) ListSections(context.Context, *connect.Request[v1alpha1.ListSectionsRequest]) (*connect.Response[v1alpha1.ListSectionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.SettingsService.ListSections is not implemented"))
+func (UnimplementedSettingsServiceHandler) ListSections(context.Context, *v1alpha1.ListSectionsRequest) (*v1alpha1.ListSectionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.SettingsService.ListSections is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) Get(context.Context, *connect.Request[v1alpha1.GetSettingsRequest]) (*connect.Response[v1alpha1.GetSettingsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.SettingsService.Get is not implemented"))
+func (UnimplementedSettingsServiceHandler) Get(context.Context, *v1alpha1.GetSettingsRequest) (*v1alpha1.GetSettingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.SettingsService.Get is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) Update(context.Context, *connect.Request[v1alpha1.UpdateSettingsRequest]) (*connect.Response[v1alpha1.UpdateSettingsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.SettingsService.Update is not implemented"))
+func (UnimplementedSettingsServiceHandler) Update(context.Context, *v1alpha1.UpdateSettingsRequest) (*v1alpha1.UpdateSettingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.SettingsService.Update is not implemented")
+}
+
+type settingsServiceClient struct {
+	client *connect.Client
+}
+
+func (c *settingsServiceClient) ListSections(ctx context.Context, req *v1alpha1.ListSectionsRequest) (*v1alpha1.ListSectionsResponse, error) {
+	var res v1alpha1.ListSectionsResponse
+	if err := c.client.CallUnary(ctx, settingsServiceListSectionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) Get(ctx context.Context, req *v1alpha1.GetSettingsRequest) (*v1alpha1.GetSettingsResponse, error) {
+	var res v1alpha1.GetSettingsResponse
+	if err := c.client.CallUnary(ctx, settingsServiceGetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) Update(ctx context.Context, req *v1alpha1.UpdateSettingsRequest) (*v1alpha1.UpdateSettingsResponse, error) {
+	var res v1alpha1.UpdateSettingsResponse
+	if err := c.client.CallUnary(ctx, settingsServiceUpdateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type settingsServiceHandler struct{ svc SettingsServiceHandler }
+
+func (h settingsServiceHandler) listSections(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.ListSectionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSections(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) get(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.GetSettingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Get(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) update(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.UpdateSettingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Update(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

@@ -9,5 +9,5 @@ package api
 
 // The plugins are installed into GOPATH/bin, which buf finds on the PATH.
 //go:generate go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
-//go:generate go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.21.1
+//go:generate go install connectrpc.com/connect/v2/cmd/protoc-gen-connect-go@v2.0.1
 //go:generate go run github.com/bufbuild/buf/cmd/buf@v1.74.0 generate

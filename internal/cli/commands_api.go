@@ -5,10 +5,7 @@ package cli
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"text/tabwriter"
-
-	"connectrpc.com/connect"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
@@ -16,17 +13,17 @@ import (
 
 // commandClient returns the CommandService client of the core.
 func (e *Env) commandClient() streamcrewv1alpha1connect.CommandServiceClient {
-	return streamcrewv1alpha1connect.NewCommandServiceClient(http.DefaultClient, e.server(), e.connectOptions()...)
+	return streamcrewv1alpha1connect.NewCommandServiceClient(e.connectClient())
 }
 
 // commandID resolves the name to the command ID of the core.
 func (e *Env) commandID(ctx context.Context, name string) (string, error) {
-	resp, err := e.commandClient().List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{Prefix: name}))
+	resp, err := e.commandClient().List(ctx, &v1alpha1.ListCommandsRequest{Prefix: name})
 	if err != nil {
 		return "", err
 	}
 	var found *v1alpha1.CommandSummary
-	for _, c := range resp.Msg.Commands {
+	for _, c := range resp.Commands {
 		if c.Name == name {
 			if found != nil {
 				return "", fmt.Errorf("the name %q is ambiguous", name)
@@ -50,20 +47,20 @@ type commandListCmd struct {
 
 // Run lists the commands of the core.
 func (c commandListCmd) Run(ctx context.Context, e *Env) error {
-	resp, err := e.commandClient().List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{Kind: c.Kind, Prefix: c.Prefix}))
+	resp, err := e.commandClient().List(ctx, &v1alpha1.ListCommandsRequest{Kind: c.Kind, Prefix: c.Prefix})
 	if err != nil {
 		return err
 	}
 	if c.Output == "json" {
-		return writeJSON(e.Stdout, resp.Msg.Commands)
+		return writeJSON(e.Stdout, resp.Commands)
 	}
-	if len(resp.Msg.Commands) == 0 {
+	if len(resp.Commands) == 0 {
 		fmt.Fprintln(e.Stdout, "no commands")
 		return nil
 	}
 	tw := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tKIND\tENABLED\tTRIGGERS")
-	for _, c := range resp.Msg.Commands {
+	for _, c := range resp.Commands {
 		fmt.Fprintf(tw, "%s\t%s\t%t\t%s\n", c.Name, c.Kind, c.Enabled, join(c.Triggers, " "))
 	}
 	return tw.Flush()
@@ -80,14 +77,14 @@ func (c commandShowCmd) Run(ctx context.Context, e *Env) error {
 	if err != nil {
 		return err
 	}
-	resp, err := e.commandClient().Get(ctx, connect.NewRequest(&v1alpha1.GetCommandRequest{Id: id}))
+	resp, err := e.commandClient().Get(ctx, &v1alpha1.GetCommandRequest{Id: id})
 	if err != nil {
 		return err
 	}
 	if c.Output == "json" {
-		return writeJSON(e.Stdout, resp.Msg)
+		return writeJSON(e.Stdout, resp)
 	}
-	s := resp.Msg.Summary
+	s := resp.Summary
 	fmt.Fprintf(e.Stdout, "%s (%s)\n", s.Name, s.Kind)
 	if !s.Enabled {
 		fmt.Fprintln(e.Stdout, "disabled")
@@ -95,8 +92,8 @@ func (c commandShowCmd) Run(ctx context.Context, e *Env) error {
 	for _, t := range s.Triggers {
 		fmt.Fprintf(e.Stdout, "trigger: %s\n", t)
 	}
-	if resp.Msg.Document != "" {
-		fmt.Fprintln(e.Stdout, resp.Msg.Document)
+	if resp.Document != "" {
+		fmt.Fprintln(e.Stdout, resp.Document)
 	}
 	return nil
 }
@@ -114,18 +111,18 @@ func (c commandRunCmd) Run(ctx context.Context, e *Env) error {
 	if err != nil {
 		return err
 	}
-	resp, err := e.commandClient().Run(ctx, connect.NewRequest(&v1alpha1.RunCommandRequest{Id: id, Args: c.Args, Channel: c.Channel}))
+	resp, err := e.commandClient().Run(ctx, &v1alpha1.RunCommandRequest{Id: id, Args: c.Args, Channel: c.Channel})
 	if err != nil {
 		return err
 	}
 	if c.Output == "json" {
-		return writeJSON(e.Stdout, resp.Msg)
+		return writeJSON(e.Stdout, resp)
 	}
-	if resp.Msg.InstanceId != "" {
-		fmt.Fprintf(e.Stdout, "running as %s\n", resp.Msg.InstanceId)
+	if resp.InstanceId != "" {
+		fmt.Fprintf(e.Stdout, "running as %s\n", resp.InstanceId)
 		return nil
 	}
-	_, err = fmt.Fprintf(e.Stdout, "not started: %s\n", resp.Msg.Reason)
+	_, err = fmt.Fprintf(e.Stdout, "not started: %s\n", resp.Reason)
 	return err
 }
 
@@ -139,7 +136,7 @@ func (c commandDeleteCmd) Run(ctx context.Context, e *Env) error {
 	if err != nil {
 		return err
 	}
-	if _, err := e.commandClient().Delete(ctx, connect.NewRequest(&v1alpha1.DeleteCommandRequest{Id: id})); err != nil {
+	if _, err := e.commandClient().Delete(ctx, &v1alpha1.DeleteCommandRequest{Id: id}); err != nil {
 		return err
 	}
 	fmt.Fprintf(e.Stdout, "deleted %s\n", c.Name)
@@ -156,11 +153,11 @@ func (c commandEnableCmd) Run(ctx context.Context, e *Env) error {
 	if err != nil {
 		return err
 	}
-	resp, err := e.commandClient().SetEnabled(ctx, connect.NewRequest(&v1alpha1.SetEnabledCommandRequest{Id: id, Enabled: true}))
+	resp, err := e.commandClient().SetEnabled(ctx, &v1alpha1.SetEnabledCommandRequest{Id: id, Enabled: true})
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(e.Stdout, "enabled %s\n", resp.Msg.Command.Name)
+	fmt.Fprintf(e.Stdout, "enabled %s\n", resp.Command.Name)
 	return nil
 }
 
@@ -174,10 +171,10 @@ func (c commandDisableCmd) Run(ctx context.Context, e *Env) error {
 	if err != nil {
 		return err
 	}
-	resp, err := e.commandClient().SetEnabled(ctx, connect.NewRequest(&v1alpha1.SetEnabledCommandRequest{Id: id, Enabled: false}))
+	resp, err := e.commandClient().SetEnabled(ctx, &v1alpha1.SetEnabledCommandRequest{Id: id, Enabled: false})
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(e.Stdout, "disabled %s\n", resp.Msg.Command.Name)
+	fmt.Fprintf(e.Stdout, "disabled %s\n", resp.Command.Name)
 	return nil
 }

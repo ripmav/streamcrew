@@ -12,6 +12,9 @@ import (
 	"net/http"
 	"time"
 
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+
 	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
 )
 
@@ -99,36 +102,40 @@ func New(cfg ServerConfig) *Server {
 // Handler returns the HTTP handler with the routes of all the services.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle(streamcrewv1alpha1connect.NewSystemServiceHandler(&systemService{s: s}))
+	server := connect.NewServer()
+	streamcrewv1alpha1connect.RegisterSystemServiceHandler(server, &systemService{s: s})
 	if c := s.cfg.Counters; c != nil {
-		mux.Handle(streamcrewv1alpha1connect.NewCounterServiceHandler(&counterService{c: c}))
+		streamcrewv1alpha1connect.RegisterCounterServiceHandler(server, &counterService{c: c})
 	}
 	if st := s.cfg.Settings; st != nil {
-		mux.Handle(streamcrewv1alpha1connect.NewSettingsServiceHandler(&settingsService{s: st}))
+		streamcrewv1alpha1connect.RegisterSettingsServiceHandler(server, &settingsService{s: st})
 	}
 	if u := s.cfg.Users; u != nil {
-		mux.Handle(streamcrewv1alpha1connect.NewUserServiceHandler(&userService{u: u}))
+		streamcrewv1alpha1connect.RegisterUserServiceHandler(server, &userService{u: u})
 	}
 	if c := s.cfg.Chat; c != nil {
-		mux.Handle(streamcrewv1alpha1connect.NewChatServiceHandler(&chatService{c: c}))
+		streamcrewv1alpha1connect.RegisterChatServiceHandler(server, &chatService{c: c})
 	}
 	if b := s.cfg.Backups; b != nil {
-		mux.Handle(streamcrewv1alpha1connect.NewBackupServiceHandler(&backupService{b: b}))
+		streamcrewv1alpha1connect.RegisterBackupServiceHandler(server, &backupService{b: b})
 	}
 	if c := s.cfg.Config; c != nil {
 		mux.Handle(streamcrewv1alpha1connect.NewConfigServiceHandler(&configService{c: c}))
 	}
 	if au := s.cfg.Auth; au != nil {
-		mux.Handle(streamcrewv1alpha1connect.NewAuthServiceHandler(&authService{a: au}))
+		streamcrewv1alpha1connect.RegisterAuthServiceHandler(server, &authService{a: au})
 	}
 	if cm := s.cfg.Commands; cm != nil {
-		mux.Handle(streamcrewv1alpha1connect.NewCommandServiceHandler(&commandService{c: cm}))
+		streamcrewv1alpha1connect.RegisterCommandServiceHandler(server, &commandService{c: cm})
 	}
 	if st := s.cfg.Stream; st != nil {
-		mux.Handle(streamcrewv1alpha1connect.NewStreamServiceHandler(&streamService{s: st}))
+		streamcrewv1alpha1connect.RegisterStreamServiceHandler(server, &streamService{s: st})
 	}
 	// The remaining services (Agent) are added as their application
 	// surface is wired (roadmap 6.2.1, 6.1.5).
+	// The v1 server accepted messages of any size; keep that with
+	// WithReadMaxBytes(0) instead of the v2 default of 4 MiB.
+	connecthttp.Mount(mux, server, connecthttp.WithReadMaxBytes(0))
 	if t := s.cfg.Tokens; t != nil {
 		return tokenAuth(t, mux)
 	}

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"connectrpc.com/connect"
-
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -70,13 +70,13 @@ const mockConsoleExampleCommands = "apiVersion: streamcrew/v1alpha1\nkind: ChatC
 func importExampleCommands(t *testing.T, base string) {
 	t.Helper()
 	client, base := httpClientFor(base)
-	cmdClient := streamcrewv1alpha1connect.NewCommandServiceClient(client, base)
+	cmdClient := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, err := cmdClient.Import(ctx, connect.NewRequest(&v1alpha1.ImportCommandsRequest{
+	_, err := cmdClient.Import(ctx, &v1alpha1.ImportCommandsRequest{
 		Document: mockConsoleExampleCommands,
 		Format:   "yaml",
-	}))
+	})
 	require.NoError(t, err)
 }
 
@@ -171,20 +171,20 @@ func TestQueueActions(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	client, base := httpClientFor(base)
-	cmdClient := streamcrewv1alpha1connect.NewCommandServiceClient(client, base)
-	list, err := cmdClient.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{}))
+	cmdClient := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))))
+	list, err := cmdClient.List(ctx, &v1alpha1.ListCommandsRequest{})
 	require.NoError(t, err)
-	require.NotEmpty(t, list.Msg.GetCommands())
-	_, err = cmdClient.Run(ctx, connect.NewRequest(&v1alpha1.RunCommandRequest{Id: list.Msg.GetCommands()[0].GetId()}))
+	require.NotEmpty(t, list.GetCommands())
+	_, err = cmdClient.Run(ctx, &v1alpha1.RunCommandRequest{Id: list.GetCommands()[0].GetId()})
 	require.NoError(t, err)
 
 	// the queue fills up from the stream or the fetch
 	require.Eventually(t, func() bool {
-		resp, err := cmdClient.ListInstances(ctx, connect.NewRequest(&v1alpha1.ListInstancesRequest{}))
+		resp, err := cmdClient.ListInstances(ctx, &v1alpha1.ListInstancesRequest{})
 		if err != nil {
 			return false
 		}
-		m.queue.instances = resp.Msg.GetInstances()
+		m.queue.instances = resp.GetInstances()
 		return len(m.queue.instances) > 0
 	}, 5*time.Second, 50*time.Millisecond, "the queue to fill")
 
@@ -261,12 +261,12 @@ func TestUsersViewRendersTheList(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	client, base := httpClientFor(base)
-	stream := streamcrewv1alpha1connect.NewStreamServiceClient(client, base)
-	_, err := stream.Simulate(ctx, connect.NewRequest(&v1alpha1.SimulateEventRequest{
+	stream := streamcrewv1alpha1connect.NewStreamServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))))
+	_, err := stream.Simulate(ctx, &v1alpha1.SimulateEventRequest{
 		EventType: "chat.message",
 		User:      "alice",
 		Text:      "hallo",
-	}))
+	})
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {

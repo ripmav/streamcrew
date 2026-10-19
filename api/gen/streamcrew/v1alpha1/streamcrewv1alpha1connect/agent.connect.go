@@ -14,227 +14,279 @@
 package streamcrewv1alpha1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// AgentServiceName is the fully-qualified name of the AgentService service.
 	AgentServiceName = "streamcrew.v1alpha1.AgentService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AgentServiceRegisterProcedure is the fully-qualified name of the AgentService's Register RPC.
+	// AgentServiceRegisterProcedure is the procedure name of the AgentService's Register RPC.
 	AgentServiceRegisterProcedure = "/streamcrew.v1alpha1.AgentService/Register"
-	// AgentServiceUnregisterProcedure is the fully-qualified name of the AgentService's Unregister RPC.
+	// AgentServiceUnregisterProcedure is the procedure name of the AgentService's Unregister RPC.
 	AgentServiceUnregisterProcedure = "/streamcrew.v1alpha1.AgentService/Unregister"
-	// AgentServiceListAgentsProcedure is the fully-qualified name of the AgentService's ListAgents RPC.
+	// AgentServiceListAgentsProcedure is the procedure name of the AgentService's ListAgents RPC.
 	AgentServiceListAgentsProcedure = "/streamcrew.v1alpha1.AgentService/ListAgents"
-	// AgentServiceTasksProcedure is the fully-qualified name of the AgentService's Tasks RPC.
+	// AgentServiceTasksProcedure is the procedure name of the AgentService's Tasks RPC.
 	AgentServiceTasksProcedure = "/streamcrew.v1alpha1.AgentService/Tasks"
-	// AgentServiceSubmitTaskResultProcedure is the fully-qualified name of the AgentService's
+	// AgentServiceSubmitTaskResultProcedure is the procedure name of the AgentService's
 	// SubmitTaskResult RPC.
 	AgentServiceSubmitTaskResultProcedure = "/streamcrew.v1alpha1.AgentService/SubmitTaskResult"
+)
+
+var (
+	agentServiceRegisterSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_agent_proto.Services().ByName("AgentService").Methods().ByName("Register"),
+			Procedure:  AgentServiceRegisterProcedure,
+		}
+	})
+	agentServiceUnregisterSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_agent_proto.Services().ByName("AgentService").Methods().ByName("Unregister"),
+			Procedure:  AgentServiceUnregisterProcedure,
+		}
+	})
+	agentServiceListAgentsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_agent_proto.Services().ByName("AgentService").Methods().ByName("ListAgents"),
+			Procedure:  AgentServiceListAgentsProcedure,
+		}
+	})
+	agentServiceTasksSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_agent_proto.Services().ByName("AgentService").Methods().ByName("Tasks"),
+			Procedure:  AgentServiceTasksProcedure,
+		}
+	})
+	agentServiceSubmitTaskResultSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_agent_proto.Services().ByName("AgentService").Methods().ByName("SubmitTaskResult"),
+			Procedure:  AgentServiceSubmitTaskResultProcedure,
+		}
+	})
 )
 
 // AgentServiceClient is a client for the streamcrew.v1alpha1.AgentService service.
 type AgentServiceClient interface {
 	// Register registers an agent with its name and capabilities.
-	Register(context.Context, *connect.Request[v1alpha1.RegisterAgentRequest]) (*connect.Response[v1alpha1.RegisterAgentResponse], error)
+	Register(context.Context, *v1alpha1.RegisterAgentRequest) (*v1alpha1.RegisterAgentResponse, error)
 	// Unregister removes a registered agent.
-	Unregister(context.Context, *connect.Request[v1alpha1.UnregisterAgentRequest]) (*connect.Response[v1alpha1.UnregisterAgentResponse], error)
+	Unregister(context.Context, *v1alpha1.UnregisterAgentRequest) (*v1alpha1.UnregisterAgentResponse, error)
 	// ListAgents lists the registered agents.
-	ListAgents(context.Context, *connect.Request[v1alpha1.ListAgentsRequest]) (*connect.Response[v1alpha1.ListAgentsResponse], error)
+	ListAgents(context.Context, *v1alpha1.ListAgentsRequest) (*v1alpha1.ListAgentsResponse, error)
 	// Tasks streams host-bound tasks to the agent until the agent cancels.
-	Tasks(context.Context, *connect.Request[v1alpha1.TasksRequest]) (*connect.ServerStreamForClient[v1alpha1.AgentTask], error)
+	Tasks(context.Context, *v1alpha1.TasksRequest) (AgentServiceTasksClientStream, error)
 	// SubmitTaskResult reports the result of a task.
-	SubmitTaskResult(context.Context, *connect.Request[v1alpha1.SubmitTaskResultRequest]) (*connect.Response[v1alpha1.SubmitTaskResultResponse], error)
+	SubmitTaskResult(context.Context, *v1alpha1.SubmitTaskResultRequest) (*v1alpha1.SubmitTaskResultResponse, error)
 }
 
-// NewAgentServiceClient constructs a client for the streamcrew.v1alpha1.AgentService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewAgentServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AgentServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	agentServiceMethods := v1alpha1.File_streamcrew_v1alpha1_agent_proto.Services().ByName("AgentService").Methods()
-	return &agentServiceClient{
-		register: connect.NewClient[v1alpha1.RegisterAgentRequest, v1alpha1.RegisterAgentResponse](
-			httpClient,
-			baseURL+AgentServiceRegisterProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("Register")),
-			connect.WithClientOptions(opts...),
-		),
-		unregister: connect.NewClient[v1alpha1.UnregisterAgentRequest, v1alpha1.UnregisterAgentResponse](
-			httpClient,
-			baseURL+AgentServiceUnregisterProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("Unregister")),
-			connect.WithClientOptions(opts...),
-		),
-		listAgents: connect.NewClient[v1alpha1.ListAgentsRequest, v1alpha1.ListAgentsResponse](
-			httpClient,
-			baseURL+AgentServiceListAgentsProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("ListAgents")),
-			connect.WithClientOptions(opts...),
-		),
-		tasks: connect.NewClient[v1alpha1.TasksRequest, v1alpha1.AgentTask](
-			httpClient,
-			baseURL+AgentServiceTasksProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("Tasks")),
-			connect.WithClientOptions(opts...),
-		),
-		submitTaskResult: connect.NewClient[v1alpha1.SubmitTaskResultRequest, v1alpha1.SubmitTaskResultResponse](
-			httpClient,
-			baseURL+AgentServiceSubmitTaskResultProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("SubmitTaskResult")),
-			connect.WithClientOptions(opts...),
-		),
+// NewAgentServiceClient constructs a client for the streamcrew.v1alpha1.AgentService service.
+// Multiple service clients may share a single connect.Client.
+func NewAgentServiceClient(client *connect.Client) AgentServiceClient {
+	return &agentServiceClient{client: client}
+}
+
+// AgentServiceTasksClientStream is the client stream for the AgentService's Tasks RPC.
+type AgentServiceTasksClientStream struct {
+	stream connect.ClientStream
+}
+
+// Receive returns the next response message from the server.
+func (s AgentServiceTasksClientStream) Receive() (*v1alpha1.AgentTask, error) {
+	var res v1alpha1.AgentTask
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
 	}
+	return &res, nil
 }
 
-// agentServiceClient implements AgentServiceClient.
-type agentServiceClient struct {
-	register         *connect.Client[v1alpha1.RegisterAgentRequest, v1alpha1.RegisterAgentResponse]
-	unregister       *connect.Client[v1alpha1.UnregisterAgentRequest, v1alpha1.UnregisterAgentResponse]
-	listAgents       *connect.Client[v1alpha1.ListAgentsRequest, v1alpha1.ListAgentsResponse]
-	tasks            *connect.Client[v1alpha1.TasksRequest, v1alpha1.AgentTask]
-	submitTaskResult *connect.Client[v1alpha1.SubmitTaskResultRequest, v1alpha1.SubmitTaskResultResponse]
-}
-
-// Register calls streamcrew.v1alpha1.AgentService.Register.
-func (c *agentServiceClient) Register(ctx context.Context, req *connect.Request[v1alpha1.RegisterAgentRequest]) (*connect.Response[v1alpha1.RegisterAgentResponse], error) {
-	return c.register.CallUnary(ctx, req)
-}
-
-// Unregister calls streamcrew.v1alpha1.AgentService.Unregister.
-func (c *agentServiceClient) Unregister(ctx context.Context, req *connect.Request[v1alpha1.UnregisterAgentRequest]) (*connect.Response[v1alpha1.UnregisterAgentResponse], error) {
-	return c.unregister.CallUnary(ctx, req)
-}
-
-// ListAgents calls streamcrew.v1alpha1.AgentService.ListAgents.
-func (c *agentServiceClient) ListAgents(ctx context.Context, req *connect.Request[v1alpha1.ListAgentsRequest]) (*connect.Response[v1alpha1.ListAgentsResponse], error) {
-	return c.listAgents.CallUnary(ctx, req)
-}
-
-// Tasks calls streamcrew.v1alpha1.AgentService.Tasks.
-func (c *agentServiceClient) Tasks(ctx context.Context, req *connect.Request[v1alpha1.TasksRequest]) (*connect.ServerStreamForClient[v1alpha1.AgentTask], error) {
-	return c.tasks.CallServerStream(ctx, req)
-}
-
-// SubmitTaskResult calls streamcrew.v1alpha1.AgentService.SubmitTaskResult.
-func (c *agentServiceClient) SubmitTaskResult(ctx context.Context, req *connect.Request[v1alpha1.SubmitTaskResultRequest]) (*connect.Response[v1alpha1.SubmitTaskResultResponse], error) {
-	return c.submitTaskResult.CallUnary(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s AgentServiceTasksClientStream) Close() error {
+	return s.stream.Close()
 }
 
 // AgentServiceHandler is an implementation of the streamcrew.v1alpha1.AgentService service.
 type AgentServiceHandler interface {
 	// Register registers an agent with its name and capabilities.
-	Register(context.Context, *connect.Request[v1alpha1.RegisterAgentRequest]) (*connect.Response[v1alpha1.RegisterAgentResponse], error)
+	Register(context.Context, *v1alpha1.RegisterAgentRequest) (*v1alpha1.RegisterAgentResponse, error)
 	// Unregister removes a registered agent.
-	Unregister(context.Context, *connect.Request[v1alpha1.UnregisterAgentRequest]) (*connect.Response[v1alpha1.UnregisterAgentResponse], error)
+	Unregister(context.Context, *v1alpha1.UnregisterAgentRequest) (*v1alpha1.UnregisterAgentResponse, error)
 	// ListAgents lists the registered agents.
-	ListAgents(context.Context, *connect.Request[v1alpha1.ListAgentsRequest]) (*connect.Response[v1alpha1.ListAgentsResponse], error)
+	ListAgents(context.Context, *v1alpha1.ListAgentsRequest) (*v1alpha1.ListAgentsResponse, error)
 	// Tasks streams host-bound tasks to the agent until the agent cancels.
-	Tasks(context.Context, *connect.Request[v1alpha1.TasksRequest], *connect.ServerStream[v1alpha1.AgentTask]) error
+	Tasks(context.Context, *v1alpha1.TasksRequest, AgentServiceTasksServerStream) error
 	// SubmitTaskResult reports the result of a task.
-	SubmitTaskResult(context.Context, *connect.Request[v1alpha1.SubmitTaskResultRequest]) (*connect.Response[v1alpha1.SubmitTaskResultResponse], error)
+	SubmitTaskResult(context.Context, *v1alpha1.SubmitTaskResultRequest) (*v1alpha1.SubmitTaskResultResponse, error)
 }
 
-// NewAgentServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewAgentServiceHandler(svc AgentServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	agentServiceMethods := v1alpha1.File_streamcrew_v1alpha1_agent_proto.Services().ByName("AgentService").Methods()
-	agentServiceRegisterHandler := connect.NewUnaryHandler(
-		AgentServiceRegisterProcedure,
-		svc.Register,
-		connect.WithSchema(agentServiceMethods.ByName("Register")),
-		connect.WithHandlerOptions(opts...),
+// RegisterAgentServiceHandler registers svc as the streamcrew.v1alpha1.AgentService implementation
+// on server.
+func RegisterAgentServiceHandler(server *connect.Server, svc AgentServiceHandler) {
+	adapter := agentServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: agentServiceRegisterSpec(), Handler: adapter.register},
+		connect.Method{Spec: agentServiceUnregisterSpec(), Handler: adapter.unregister},
+		connect.Method{Spec: agentServiceListAgentsSpec(), Handler: adapter.listAgents},
+		connect.Method{Spec: agentServiceTasksSpec(), Handler: adapter.tasks},
+		connect.Method{Spec: agentServiceSubmitTaskResultSpec(), Handler: adapter.submitTaskResult},
 	)
-	agentServiceUnregisterHandler := connect.NewUnaryHandler(
-		AgentServiceUnregisterProcedure,
-		svc.Unregister,
-		connect.WithSchema(agentServiceMethods.ByName("Unregister")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceListAgentsHandler := connect.NewUnaryHandler(
-		AgentServiceListAgentsProcedure,
-		svc.ListAgents,
-		connect.WithSchema(agentServiceMethods.ByName("ListAgents")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceTasksHandler := connect.NewServerStreamHandler(
-		AgentServiceTasksProcedure,
-		svc.Tasks,
-		connect.WithSchema(agentServiceMethods.ByName("Tasks")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceSubmitTaskResultHandler := connect.NewUnaryHandler(
-		AgentServiceSubmitTaskResultProcedure,
-		svc.SubmitTaskResult,
-		connect.WithSchema(agentServiceMethods.ByName("SubmitTaskResult")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/streamcrew.v1alpha1.AgentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case AgentServiceRegisterProcedure:
-			agentServiceRegisterHandler.ServeHTTP(w, r)
-		case AgentServiceUnregisterProcedure:
-			agentServiceUnregisterHandler.ServeHTTP(w, r)
-		case AgentServiceListAgentsProcedure:
-			agentServiceListAgentsHandler.ServeHTTP(w, r)
-		case AgentServiceTasksProcedure:
-			agentServiceTasksHandler.ServeHTTP(w, r)
-		case AgentServiceSubmitTaskResultProcedure:
-			agentServiceSubmitTaskResultHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
+}
+
+// AgentServiceTasksServerStream is the server stream for the AgentService's Tasks RPC.
+type AgentServiceTasksServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s AgentServiceTasksServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s AgentServiceTasksServerStream) Send(res *v1alpha1.AgentTask) error {
+	return s.stream.Send(res)
 }
 
 // UnimplementedAgentServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAgentServiceHandler struct{}
 
-func (UnimplementedAgentServiceHandler) Register(context.Context, *connect.Request[v1alpha1.RegisterAgentRequest]) (*connect.Response[v1alpha1.RegisterAgentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.AgentService.Register is not implemented"))
+func (UnimplementedAgentServiceHandler) Register(context.Context, *v1alpha1.RegisterAgentRequest) (*v1alpha1.RegisterAgentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.AgentService.Register is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) Unregister(context.Context, *connect.Request[v1alpha1.UnregisterAgentRequest]) (*connect.Response[v1alpha1.UnregisterAgentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.AgentService.Unregister is not implemented"))
+func (UnimplementedAgentServiceHandler) Unregister(context.Context, *v1alpha1.UnregisterAgentRequest) (*v1alpha1.UnregisterAgentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.AgentService.Unregister is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) ListAgents(context.Context, *connect.Request[v1alpha1.ListAgentsRequest]) (*connect.Response[v1alpha1.ListAgentsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.AgentService.ListAgents is not implemented"))
+func (UnimplementedAgentServiceHandler) ListAgents(context.Context, *v1alpha1.ListAgentsRequest) (*v1alpha1.ListAgentsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.AgentService.ListAgents is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) Tasks(context.Context, *connect.Request[v1alpha1.TasksRequest], *connect.ServerStream[v1alpha1.AgentTask]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.AgentService.Tasks is not implemented"))
+func (UnimplementedAgentServiceHandler) Tasks(context.Context, *v1alpha1.TasksRequest, AgentServiceTasksServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.AgentService.Tasks is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) SubmitTaskResult(context.Context, *connect.Request[v1alpha1.SubmitTaskResultRequest]) (*connect.Response[v1alpha1.SubmitTaskResultResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.AgentService.SubmitTaskResult is not implemented"))
+func (UnimplementedAgentServiceHandler) SubmitTaskResult(context.Context, *v1alpha1.SubmitTaskResultRequest) (*v1alpha1.SubmitTaskResultResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.AgentService.SubmitTaskResult is not implemented")
+}
+
+type agentServiceClient struct {
+	client *connect.Client
+}
+
+func (c *agentServiceClient) Register(ctx context.Context, req *v1alpha1.RegisterAgentRequest) (*v1alpha1.RegisterAgentResponse, error) {
+	var res v1alpha1.RegisterAgentResponse
+	if err := c.client.CallUnary(ctx, agentServiceRegisterSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) Unregister(ctx context.Context, req *v1alpha1.UnregisterAgentRequest) (*v1alpha1.UnregisterAgentResponse, error) {
+	var res v1alpha1.UnregisterAgentResponse
+	if err := c.client.CallUnary(ctx, agentServiceUnregisterSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) ListAgents(ctx context.Context, req *v1alpha1.ListAgentsRequest) (*v1alpha1.ListAgentsResponse, error) {
+	var res v1alpha1.ListAgentsResponse
+	if err := c.client.CallUnary(ctx, agentServiceListAgentsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) Tasks(ctx context.Context, req *v1alpha1.TasksRequest) (AgentServiceTasksClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, agentServiceTasksSpec(), req)
+	if err != nil {
+		return AgentServiceTasksClientStream{}, err
+	}
+	return AgentServiceTasksClientStream{stream: stream}, nil
+}
+
+func (c *agentServiceClient) SubmitTaskResult(ctx context.Context, req *v1alpha1.SubmitTaskResultRequest) (*v1alpha1.SubmitTaskResultResponse, error) {
+	var res v1alpha1.SubmitTaskResultResponse
+	if err := c.client.CallUnary(ctx, agentServiceSubmitTaskResultSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type agentServiceHandler struct{ svc AgentServiceHandler }
+
+func (h agentServiceHandler) register(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.RegisterAgentRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Register(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) unregister(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.UnregisterAgentRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Unregister(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) listAgents(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.ListAgentsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListAgents(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) tasks(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.TasksRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.Tasks(ctx, &req, AgentServiceTasksServerStream{stream: stream})
+}
+
+func (h agentServiceHandler) submitTaskResult(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.SubmitTaskResultRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SubmitTaskResult(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }
