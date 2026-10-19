@@ -5,8 +5,6 @@ package api
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 )
 
@@ -30,18 +28,18 @@ type settingsService struct {
 }
 
 // ListSections lists the names of the settings sections.
-func (ss *settingsService) ListSections(_ context.Context, _ *connect.Request[v1alpha1.ListSectionsRequest]) (*connect.Response[v1alpha1.ListSectionsResponse], error) {
+func (ss *settingsService) ListSections(_ context.Context, _ *v1alpha1.ListSectionsRequest) (*v1alpha1.ListSectionsResponse, error) {
 	resp := &v1alpha1.ListSectionsResponse{}
 	for _, name := range ss.s.Sections() {
 		resp.Sections = append(resp.Sections, &v1alpha1.Section{Name: name})
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // Get returns a settings section as its document; a section that was never
 // saved is returned as its defaults.
-func (ss *settingsService) Get(ctx context.Context, req *connect.Request[v1alpha1.GetSettingsRequest]) (*connect.Response[v1alpha1.GetSettingsResponse], error) {
-	name := req.Msg.GetName()
+func (ss *settingsService) Get(ctx context.Context, req *v1alpha1.GetSettingsRequest) (*v1alpha1.GetSettingsResponse, error) {
+	name := req.GetName()
 	doc, found, err := ss.s.Document(ctx, name)
 	if err != nil {
 		return nil, apiError(err)
@@ -52,14 +50,14 @@ func (ss *settingsService) Get(ctx context.Context, req *connect.Request[v1alpha
 			return nil, apiError(err)
 		}
 	}
-	return connect.NewResponse(&v1alpha1.GetSettingsResponse{Name: name, Document: string(doc)}), nil
+	return &v1alpha1.GetSettingsResponse{Name: name, Document: string(doc)}, nil
 }
 
 // Update replaces a settings section with its new document.
-func (ss *settingsService) Update(ctx context.Context, req *connect.Request[v1alpha1.UpdateSettingsRequest]) (*connect.Response[v1alpha1.UpdateSettingsResponse], error) {
-	m := req.Msg
+func (ss *settingsService) Update(ctx context.Context, req *v1alpha1.UpdateSettingsRequest) (*v1alpha1.UpdateSettingsResponse, error) {
+	m := req
 	if err := ss.s.SetDocument(ctx, m.GetName(), []byte(m.GetDocument())); err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.UpdateSettingsResponse{Name: m.GetName(), Document: m.GetDocument()}), nil
+	return &v1alpha1.UpdateSettingsResponse{Name: m.GetName(), Document: m.GetDocument()}, nil
 }

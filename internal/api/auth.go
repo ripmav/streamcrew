@@ -7,7 +7,6 @@ import (
 	"errors"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
@@ -63,7 +62,7 @@ type authService struct {
 	a Auth
 }
 
-func (s *authService) ListAccounts(ctx context.Context, _ *connect.Request[v1alpha1.ListAccountsRequest]) (*connect.Response[v1alpha1.ListAccountsResponse], error) {
+func (s *authService) ListAccounts(ctx context.Context, _ *v1alpha1.ListAccountsRequest) (*v1alpha1.ListAccountsResponse, error) {
 	accs, err := s.a.ListAccounts(ctx)
 	if err != nil {
 		return nil, apiError(err)
@@ -78,11 +77,11 @@ func (s *authService) ListAccounts(ctx context.Context, _ *connect.Request[v1alp
 			Scopes:      acc.Scopes,
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *authService) StartLogin(ctx context.Context, req *connect.Request[v1alpha1.StartLoginRequest]) (*connect.Response[v1alpha1.StartLoginResponse], error) {
-	m := req.Msg
+func (s *authService) StartLogin(ctx context.Context, req *v1alpha1.StartLoginRequest) (*v1alpha1.StartLoginResponse, error) {
+	m := req
 	prompt, err := s.a.StartLogin(ctx, m.Platform, m.Bot, m.DeviceFlow)
 	if err != nil {
 		return nil, apiError(err)
@@ -91,19 +90,19 @@ func (s *authService) StartLogin(ctx context.Context, req *connect.Request[v1alp
 	if !prompt.ExpiresAt.IsZero() {
 		resp.ExpiresAt = timestamppb.New(prompt.ExpiresAt)
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
-func (s *authService) CancelLogin(ctx context.Context, req *connect.Request[v1alpha1.CancelLoginRequest]) (*connect.Response[v1alpha1.CancelLoginResponse], error) {
-	if err := s.a.CancelLogin(ctx, req.Msg.Platform, req.Msg.Bot); err != nil {
+func (s *authService) CancelLogin(ctx context.Context, req *v1alpha1.CancelLoginRequest) (*v1alpha1.CancelLoginResponse, error) {
+	if err := s.a.CancelLogin(ctx, req.Platform, req.Bot); err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.CancelLoginResponse{}), nil
+	return &v1alpha1.CancelLoginResponse{}, nil
 }
 
-func (s *authService) Logout(ctx context.Context, req *connect.Request[v1alpha1.LogoutRequest]) (*connect.Response[v1alpha1.LogoutResponse], error) {
-	if err := s.a.Logout(ctx, req.Msg.Platform, req.Msg.Bot); err != nil {
+func (s *authService) Logout(ctx context.Context, req *v1alpha1.LogoutRequest) (*v1alpha1.LogoutResponse, error) {
+	if err := s.a.Logout(ctx, req.Platform, req.Bot); err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.LogoutResponse{}), nil
+	return &v1alpha1.LogoutResponse{}, nil
 }

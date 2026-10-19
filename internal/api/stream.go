@@ -8,9 +8,10 @@ import (
 	"log/slog"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
+	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
 )
 
 // EventFilter limits which events are delivered; empty lists mean all.
@@ -78,10 +79,10 @@ type streamService struct {
 }
 
 // Subscribe streams events to the client until the client cancels.
-func (s *streamService) Subscribe(ctx context.Context, req *connect.Request[v1alpha1.SubscribeRequest], stream *connect.ServerStream[v1alpha1.Event]) error {
-	f := filterFrom(req.Msg.GetFilter())
+func (s *streamService) Subscribe(ctx context.Context, req *v1alpha1.SubscribeRequest, stream streamcrewv1alpha1connect.StreamServiceSubscribeServerStream) error {
+	f := filterFrom(req.GetFilter())
 	if _, err := f.minLevel(); err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	// A no-op send flushes the response headers, so the client's Subscribe
 	// call returns before the first event arrives (over HTTP/1.1 the headers
@@ -89,7 +90,7 @@ func (s *streamService) Subscribe(ctx context.Context, req *connect.Request[v1al
 	if err := stream.Send(nil); err != nil {
 		return err
 	}
-	events := s.s.Stream(ctx, f, req.Msg.GetSince())
+	events := s.s.Stream(ctx, f, req.GetSince())
 	for {
 		select {
 		case <-ctx.Done():
@@ -106,27 +107,27 @@ func (s *streamService) Subscribe(ctx context.Context, req *connect.Request[v1al
 }
 
 // AnswerPrompt answers a prompt delivered through the stream.
-func (s *streamService) AnswerPrompt(ctx context.Context, req *connect.Request[v1alpha1.AnswerPromptRequest]) (*connect.Response[v1alpha1.AnswerPromptResponse], error) {
-	if req.Msg.Id == "" {
+func (s *streamService) AnswerPrompt(ctx context.Context, req *v1alpha1.AnswerPromptRequest) (*v1alpha1.AnswerPromptResponse, error) {
+	if req.Id == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
 	}
-	if err := s.s.AnswerPrompt(ctx, req.Msg.Id, req.Msg.Value, req.Msg.Confirmed); err != nil {
+	if err := s.s.AnswerPrompt(ctx, req.Id, req.Value, req.Confirmed); err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.AnswerPromptResponse{}), nil
+	return &v1alpha1.AnswerPromptResponse{}, nil
 }
 
 // Simulate publishes a simulated event of the mock platform (roadmap
 // 6.3).
-func (s *streamService) Simulate(ctx context.Context, req *connect.Request[v1alpha1.SimulateEventRequest]) (*connect.Response[v1alpha1.SimulateEventResponse], error) {
-	if req.Msg.EventType == "" {
+func (s *streamService) Simulate(ctx context.Context, req *v1alpha1.SimulateEventRequest) (*v1alpha1.SimulateEventResponse, error) {
+	if req.EventType == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("event_type is required"))
 	}
-	id, err := s.s.Simulate(ctx, req.Msg.EventType, req.Msg.User, req.Msg.Target, req.Msg.Text)
+	id, err := s.s.Simulate(ctx, req.EventType, req.User, req.Target, req.Text)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.SimulateEventResponse{EventId: id}), nil
+	return &v1alpha1.SimulateEventResponse{EventId: id}, nil
 }
 
 // filterFrom converts the protocol filter.
