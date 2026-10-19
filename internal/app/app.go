@@ -1117,8 +1117,17 @@ func logConfig(cfg config.Config, console io.Writer) (logging.Config, error) {
 		MaxSize:         int64(cfg.Log.MaxSize) << 20,
 		MaxFiles:        cfg.Log.MaxFiles,
 	}
-	if cfg.Log.File {
-		lc.File = filepath.Join(cfg.LogDir(), logFileName)
+	switch cfg.Log.File {
+	case "false":
+		// no log file
+	default:
+		// true or an empty value keep the default location; anything else
+		// is the path of the log file.
+		if path := cfg.Log.File; path != "" && path != "true" {
+			lc.File = path
+		} else {
+			lc.File = filepath.Join(cfg.LogDir(), logFileName)
+		}
 	}
 	return lc, nil
 }

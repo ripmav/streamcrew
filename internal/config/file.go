@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/alecthomas/kong"
@@ -184,6 +185,11 @@ func (r *FileResolver) load(kctx *kong.Context) error {
 	values, err := parseFile(path, data, r.allowed)
 	if err != nil {
 		return err
+	}
+	// log_file is a text flag; a bool in the file is the old form and
+	// converts to its text.
+	if b, ok := values["log_file"].(bool); ok {
+		values["log_file"] = strconv.FormatBool(b)
 	}
 	r.values, r.data = values, data
 	return nil

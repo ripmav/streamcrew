@@ -109,7 +109,7 @@ func TestConfigShow(t *testing.T) {
 		ShutdownTimeout: "15s",
 		LogLevel:        "debug",
 		LogFormat:       "json",
-		LogFile:         true,
+		LogFile:         "true",
 		LogMaxSize:      10,
 		LogMaxFiles:     3,
 	}, view)
@@ -277,7 +277,7 @@ func TestServePortInUse(t *testing.T) {
 	require.NoError(t, err)
 	defer busy.Close()
 
-	res := runCLI(t.Context(), t, "--data-dir", t.TempDir(), "--listen", busy.Addr().String(), "--no-log-file", "serve")
+	res := runCLI(t.Context(), t, "--data-dir", t.TempDir(), "--listen", busy.Addr().String(), "--log-file=false", "serve")
 	assert.Equal(t, cli.ExitFailure, res.code)
 	assert.Contains(t, res.stderr, "streamcrew stopped with an error")
 	assert.NotContains(t, res.stderr, "streamcrew: ", "the error is logged once, not printed again")
@@ -367,7 +367,7 @@ func TestCommandsRefuseWhileCoreRuns(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan result, 1)
 	go func() {
-		done <- runCLI(ctx, t, "--data-dir", dataDir, "--listen", addr, "--no-log-file", "serve")
+		done <- runCLI(ctx, t, "--data-dir", dataDir, "--listen", addr, "--log-file=false", "serve")
 	}()
 	require.Eventually(t, func() bool {
 		return httpStatus(t.Context(), "http://"+addr+"/readyz") == http.StatusOK

@@ -39,7 +39,7 @@ func testConfig(t *testing.T) config.Config {
 		Listen:          "127.0.0.1:0",
 		ShutdownTimeout: 5 * time.Second,
 		Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},
-		Log:             config.LogConfig{Level: "debug", Format: "json", File: true, MaxSize: 1, MaxFiles: 1},
+		Log:             config.LogConfig{Level: "debug", Format: "json", File: "true", MaxSize: 1, MaxFiles: 1},
 	}
 	require.NoError(t, cfg.Resolve())
 	return cfg
@@ -156,12 +156,24 @@ func TestRunFailsWhenPortIsInUse(t *testing.T) {
 func TestNewWithoutLogFile(t *testing.T) {
 	t.Parallel()
 	cfg := testConfig(t)
-	cfg.Log.File = false
+	cfg.Log.File = "false"
 	a, err := app.New(t.Context(), cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
 	require.NoError(t, err)
 	require.NoError(t, a.Close())
 	require.NoError(t, a.Close(), "closing twice is harmless")
 	assert.NoDirExists(t, cfg.LogDir())
+}
+
+func TestNewWritesTheLogFileAtTheConfiguredPath(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig(t)
+	other := t.TempDir()
+	cfg.Log.File = filepath.Join(other, "custom.log")
+	a, err := app.New(t.Context(), cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
+	require.NoError(t, err)
+	require.NoError(t, a.Close())
+	assert.FileExists(t, filepath.Join(other, "custom.log"))
+	assert.NoDirExists(t, cfg.LogDir(), "the default location is not touched")
 }
 
 func TestNewFailsWithoutDataDirectory(t *testing.T) {

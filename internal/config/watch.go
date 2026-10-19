@@ -446,10 +446,12 @@ func (w *Watcher) parse(data []byte) (Config, []string, error) {
 				errs = append(errs, fmt.Errorf("%s: not a text", key))
 			}
 		case "log_file":
-			if b, ok := v.(bool); ok {
-				cfg.Log.File = b
+			if s, ok := v.(string); ok {
+				cfg.Log.File = s
+			} else if b, ok := v.(bool); ok {
+				cfg.Log.File = strconv.FormatBool(b)
 			} else if v != nil {
-				errs = append(errs, fmt.Errorf("%s: not a bool", key))
+				errs = append(errs, fmt.Errorf("%s: not a bool or text", key))
 			}
 		case "log_max_size":
 			if n, ok := v.(int); ok {

@@ -16,7 +16,7 @@ type FileView struct {
 	LogLevel          string            `yaml:"log_level" json:"log_level"`
 	LogComponentLevel map[string]string `yaml:"log_component_level,omitempty" json:"log_component_level,omitempty"`
 	LogFormat         string            `yaml:"log_format" json:"log_format"`
-	LogFile           bool              `yaml:"log_file" json:"log_file"`
+	LogFile           string            `yaml:"log_file" json:"log_file"`
 	LogMaxSize        int               `yaml:"log_max_size" json:"log_max_size"`
 	LogMaxFiles       int               `yaml:"log_max_files" json:"log_max_files"`
 	Grant             []string          `yaml:"grant,omitempty" json:"grant,omitempty"`

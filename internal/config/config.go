@@ -70,7 +70,7 @@ type LogConfig struct {
 	Level          string            `default:"info" enum:"debug,info,warn,error" help:"Log level: ${enum}."`
 	ComponentLevel map[string]string `name:"component-level" placeholder:"COMPONENT=LEVEL" help:"Log level of a single component, e.g. supervisor=debug. Repeatable."`
 	Format         string            `default:"text" enum:"text,json" help:"Format of the console log: ${enum}."`
-	File           bool              `default:"true" negatable:"" help:"Write a JSON log file with rotation to <data-dir>/logs."`
+	File           string            `default:"true" placeholder:"PATH" help:"The JSON log file with rotation: true writes <data-dir>/logs/streamcrew.log, false disables it, a path writes that file."`
 	MaxSize        int               `default:"10" placeholder:"MIB" help:"Rotate the log file when it would exceed this size in MiB. Default: ${default}."`
 	MaxFiles       int               `default:"5" placeholder:"N" help:"Number of rotated log files to keep. Default: ${default}."`
 }

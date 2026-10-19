@@ -52,13 +52,14 @@ type Options struct {
 	FileRoot      map[string]string
 	OutboundAllow []string
 	// LogLevel and LogFormat configure the console log (empty is "info" and
-	// "text"); LogFile writes the JSON log file in the data directory (the
-	// streamcrew binary defaults to on); LogMaxSize and LogMaxFiles bound
+	// "text"); LogFile is the JSON log file: "true" (the streamcrew binary
+	// default) writes the file in the data directory, "false" disables it,
+	// and a path writes that file; LogMaxSize and LogMaxFiles bound
 	// its rotation (empty is 10 MiB and 5 files); LogComponentLevel
 	// overrides the level of one component.
 	LogLevel          string
 	LogFormat         string
-	LogFile           bool
+	LogFile           string
 	LogMaxSize        int
 	LogMaxFiles       int
 	LogComponentLevel map[string]string
