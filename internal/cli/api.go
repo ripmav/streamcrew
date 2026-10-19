@@ -7,7 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
 )
@@ -24,14 +25,15 @@ func (e *Env) server() string {
 	return defaultServer
 }
 
-// connectOptions are the client options for the API of the core: the Bearer
-// header when a token is set.
-func (e *Env) connectOptions() []connect.ClientOption {
-	if e.APIToken == "" {
-		return nil
+// connectClient returns the connect client for the API of the core with the
+// Bearer header when a token is set.
+func (e *Env) connectClient() *connect.Client {
+	interceptors := []connect.ClientInterceptor{}
+	if e.APIToken != "" {
+		interceptors = append(interceptors, bearerInterceptor(e.APIToken))
 	}
-	b := &bearer{token: e.APIToken}
-	return []connect.ClientOption{connect.WithInterceptors(b)}
+	transport := connecthttp.NewTransport(http.DefaultClient, e.server(), connecthttp.WithReadMaxBytes(0))
+	return connect.NewClient(transport, interceptors...)
 }
 
 // join joins the strings with the separator.
@@ -48,28 +50,24 @@ func join(list []string, sep string) string {
 
 // streamClient returns the StreamService client of the core.
 func (e *Env) streamClient() streamcrewv1alpha1connect.StreamServiceClient {
-	return streamcrewv1alpha1connect.NewStreamServiceClient(http.DefaultClient, e.server(), e.connectOptions()...)
+	return streamcrewv1alpha1connect.NewStreamServiceClient(e.connectClient())
 }
 
 // chatClient returns the ChatService client of the core.
 func (e *Env) chatClient() streamcrewv1alpha1connect.ChatServiceClient {
-	return streamcrewv1alpha1connect.NewChatServiceClient(http.DefaultClient, e.server(), e.connectOptions()...)
+	return streamcrewv1alpha1connect.NewChatServiceClient(e.connectClient())
 }
 
-// bearer sets the Authorization header on every unary request.
-type bearer struct{ token string }
-
-func (b *bearer) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		req.Header().Set("Authorization", "Bearer "+b.token)
-		return next(ctx, req)
+// bearerInterceptor sets the Authorization header on every request.
+func bearerInterceptor(token string) connect.ClientInterceptor {
+	return func(next connect.ClientFunc) connect.ClientFunc {
+		return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
+			// The client attaches a CallInfo to the context before the
+			// interceptor chain runs.
+			if info, ok := connect.CallInfoForClientContext(ctx); ok {
+				info.RequestHeader().Set("Authorization", "Bearer "+token)
+			}
+			return next(ctx, spec)
+		}
 	}
-}
-
-func (b *bearer) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (b *bearer) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
 }

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
@@ -53,15 +53,15 @@ func apiError(err error) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, store.ErrNotFound):
-		return connect.NewError(connect.CodeNotFound, err)
+		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	case errors.Is(err, store.ErrConflict):
-		return connect.NewError(connect.CodeAlreadyExists, err)
+		return connect.NewError(connect.CodeAlreadyExists, err.Error()).WithCause(err)
 	case errors.Is(err, ErrRestoreRunning):
-		return connect.NewError(connect.CodeFailedPrecondition, err)
+		return connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	case errors.Is(err, counter.ErrInvalid), errors.Is(err, counter.ErrOverflow):
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	return connect.NewError(connect.CodeInternal, err)
+	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 }
 
 // counterService implements streamcrewv1alpha1.CounterServiceHandler.
@@ -82,8 +82,8 @@ func (cs *counterService) view(c Counter) *v1alpha1.CounterView {
 }
 
 // List lists the counters.
-func (cs *counterService) List(ctx context.Context, req *connect.Request[v1alpha1.ListCountersRequest]) (*connect.Response[v1alpha1.ListCountersResponse], error) {
-	counters, err := cs.c.List(ctx, req.Msg.GetPrefix())
+func (cs *counterService) List(ctx context.Context, req *v1alpha1.ListCountersRequest) (*v1alpha1.ListCountersResponse, error) {
+	counters, err := cs.c.List(ctx, req.GetPrefix())
 	if err != nil {
 		return nil, apiError(err)
 	}
@@ -91,71 +91,71 @@ func (cs *counterService) List(ctx context.Context, req *connect.Request[v1alpha
 	for _, c := range counters {
 		resp.Counters = append(resp.Counters, cs.view(c))
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // Get returns one counter by name.
-func (cs *counterService) Get(ctx context.Context, req *connect.Request[v1alpha1.GetCounterRequest]) (*connect.Response[v1alpha1.GetCounterResponse], error) {
-	c, err := cs.c.Get(ctx, req.Msg.GetName())
+func (cs *counterService) Get(ctx context.Context, req *v1alpha1.GetCounterRequest) (*v1alpha1.GetCounterResponse, error) {
+	c, err := cs.c.Get(ctx, req.GetName())
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.GetCounterResponse{Counter: cs.view(c)}), nil
+	return &v1alpha1.GetCounterResponse{Counter: cs.view(c)}, nil
 }
 
 // Create creates a counter.
-func (cs *counterService) Create(ctx context.Context, req *connect.Request[v1alpha1.CreateCounterRequest]) (*connect.Response[v1alpha1.CreateCounterResponse], error) {
-	m := req.Msg
+func (cs *counterService) Create(ctx context.Context, req *v1alpha1.CreateCounterRequest) (*v1alpha1.CreateCounterResponse, error) {
+	m := req
 	c, err := cs.c.Create(ctx, m.GetName(), m.GetValue(), m.GetStep(), m.GetResetOnStart())
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.CreateCounterResponse{Counter: cs.view(c)}), nil
+	return &v1alpha1.CreateCounterResponse{Counter: cs.view(c)}, nil
 }
 
 // Update changes the step and the reset-on-start switch of a counter.
-func (cs *counterService) Update(ctx context.Context, req *connect.Request[v1alpha1.UpdateCounterRequest]) (*connect.Response[v1alpha1.UpdateCounterResponse], error) {
-	m := req.Msg
+func (cs *counterService) Update(ctx context.Context, req *v1alpha1.UpdateCounterRequest) (*v1alpha1.UpdateCounterResponse, error) {
+	m := req
 	c, err := cs.c.Update(ctx, m.GetName(), m.GetStep(), m.ResetOnStart)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.UpdateCounterResponse{Counter: cs.view(c)}), nil
+	return &v1alpha1.UpdateCounterResponse{Counter: cs.view(c)}, nil
 }
 
 // Set sets the value of a counter.
-func (cs *counterService) Set(ctx context.Context, req *connect.Request[v1alpha1.SetCounterRequest]) (*connect.Response[v1alpha1.SetCounterResponse], error) {
-	m := req.Msg
+func (cs *counterService) Set(ctx context.Context, req *v1alpha1.SetCounterRequest) (*v1alpha1.SetCounterResponse, error) {
+	m := req
 	c, err := cs.c.Set(ctx, m.GetName(), m.GetValue())
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.SetCounterResponse{Counter: cs.view(c)}), nil
+	return &v1alpha1.SetCounterResponse{Counter: cs.view(c)}, nil
 }
 
 // Add adds an amount to a counter.
-func (cs *counterService) Add(ctx context.Context, req *connect.Request[v1alpha1.AddCounterRequest]) (*connect.Response[v1alpha1.AddCounterResponse], error) {
-	m := req.Msg
+func (cs *counterService) Add(ctx context.Context, req *v1alpha1.AddCounterRequest) (*v1alpha1.AddCounterResponse, error) {
+	m := req
 	c, err := cs.c.Add(ctx, m.GetName(), m.GetAmount())
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.AddCounterResponse{Counter: cs.view(c)}), nil
+	return &v1alpha1.AddCounterResponse{Counter: cs.view(c)}, nil
 }
 
 // Reset sets a counter to its reset value.
-func (cs *counterService) Reset(ctx context.Context, req *connect.Request[v1alpha1.ResetCounterRequest]) (*connect.Response[v1alpha1.ResetCounterResponse], error) {
-	c, err := cs.c.Reset(ctx, req.Msg.GetName())
+func (cs *counterService) Reset(ctx context.Context, req *v1alpha1.ResetCounterRequest) (*v1alpha1.ResetCounterResponse, error) {
+	c, err := cs.c.Reset(ctx, req.GetName())
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.ResetCounterResponse{Counter: cs.view(c)}), nil
+	return &v1alpha1.ResetCounterResponse{Counter: cs.view(c)}, nil
 }
 
 // Delete removes a counter.
-func (cs *counterService) Delete(ctx context.Context, req *connect.Request[v1alpha1.DeleteCounterRequest]) (*connect.Response[v1alpha1.DeleteCounterResponse], error) {
-	if err := cs.c.Delete(ctx, req.Msg.GetName()); err != nil {
+func (cs *counterService) Delete(ctx context.Context, req *v1alpha1.DeleteCounterRequest) (*v1alpha1.DeleteCounterResponse, error) {
+	if err := cs.c.Delete(ctx, req.GetName()); err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.DeleteCounterResponse{}), nil
+	return &v1alpha1.DeleteCounterResponse{}, nil
 }

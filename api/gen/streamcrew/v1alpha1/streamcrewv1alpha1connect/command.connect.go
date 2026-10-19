@@ -16,504 +16,594 @@
 package streamcrewv1alpha1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// CommandServiceName is the fully-qualified name of the CommandService service.
 	CommandServiceName = "streamcrew.v1alpha1.CommandService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// CommandServiceListProcedure is the fully-qualified name of the CommandService's List RPC.
+	// CommandServiceListProcedure is the procedure name of the CommandService's List RPC.
 	CommandServiceListProcedure = "/streamcrew.v1alpha1.CommandService/List"
-	// CommandServiceGetProcedure is the fully-qualified name of the CommandService's Get RPC.
+	// CommandServiceGetProcedure is the procedure name of the CommandService's Get RPC.
 	CommandServiceGetProcedure = "/streamcrew.v1alpha1.CommandService/Get"
-	// CommandServiceCreateProcedure is the fully-qualified name of the CommandService's Create RPC.
+	// CommandServiceCreateProcedure is the procedure name of the CommandService's Create RPC.
 	CommandServiceCreateProcedure = "/streamcrew.v1alpha1.CommandService/Create"
-	// CommandServiceUpdateProcedure is the fully-qualified name of the CommandService's Update RPC.
+	// CommandServiceUpdateProcedure is the procedure name of the CommandService's Update RPC.
 	CommandServiceUpdateProcedure = "/streamcrew.v1alpha1.CommandService/Update"
-	// CommandServiceDeleteProcedure is the fully-qualified name of the CommandService's Delete RPC.
+	// CommandServiceDeleteProcedure is the procedure name of the CommandService's Delete RPC.
 	CommandServiceDeleteProcedure = "/streamcrew.v1alpha1.CommandService/Delete"
-	// CommandServiceSetEnabledProcedure is the fully-qualified name of the CommandService's SetEnabled
-	// RPC.
+	// CommandServiceSetEnabledProcedure is the procedure name of the CommandService's SetEnabled RPC.
 	CommandServiceSetEnabledProcedure = "/streamcrew.v1alpha1.CommandService/SetEnabled"
-	// CommandServiceRunProcedure is the fully-qualified name of the CommandService's Run RPC.
+	// CommandServiceRunProcedure is the procedure name of the CommandService's Run RPC.
 	CommandServiceRunProcedure = "/streamcrew.v1alpha1.CommandService/Run"
-	// CommandServiceListInstancesProcedure is the fully-qualified name of the CommandService's
-	// ListInstances RPC.
-	CommandServiceListInstancesProcedure = "/streamcrew.v1alpha1.CommandService/ListInstances"
-	// CommandServicePauseQueueProcedure is the fully-qualified name of the CommandService's PauseQueue
+	// CommandServiceListInstancesProcedure is the procedure name of the CommandService's ListInstances
 	// RPC.
+	CommandServiceListInstancesProcedure = "/streamcrew.v1alpha1.CommandService/ListInstances"
+	// CommandServicePauseQueueProcedure is the procedure name of the CommandService's PauseQueue RPC.
 	CommandServicePauseQueueProcedure = "/streamcrew.v1alpha1.CommandService/PauseQueue"
-	// CommandServiceCancelInstanceProcedure is the fully-qualified name of the CommandService's
+	// CommandServiceCancelInstanceProcedure is the procedure name of the CommandService's
 	// CancelInstance RPC.
 	CommandServiceCancelInstanceProcedure = "/streamcrew.v1alpha1.CommandService/CancelInstance"
-	// CommandServiceRetryInstanceProcedure is the fully-qualified name of the CommandService's
-	// RetryInstance RPC.
+	// CommandServiceRetryInstanceProcedure is the procedure name of the CommandService's RetryInstance
+	// RPC.
 	CommandServiceRetryInstanceProcedure = "/streamcrew.v1alpha1.CommandService/RetryInstance"
-	// CommandServiceTypeCatalogProcedure is the fully-qualified name of the CommandService's
-	// TypeCatalog RPC.
+	// CommandServiceTypeCatalogProcedure is the procedure name of the CommandService's TypeCatalog RPC.
 	CommandServiceTypeCatalogProcedure = "/streamcrew.v1alpha1.CommandService/TypeCatalog"
-	// CommandServiceImportProcedure is the fully-qualified name of the CommandService's Import RPC.
+	// CommandServiceImportProcedure is the procedure name of the CommandService's Import RPC.
 	CommandServiceImportProcedure = "/streamcrew.v1alpha1.CommandService/Import"
-	// CommandServiceExportProcedure is the fully-qualified name of the CommandService's Export RPC.
+	// CommandServiceExportProcedure is the procedure name of the CommandService's Export RPC.
 	CommandServiceExportProcedure = "/streamcrew.v1alpha1.CommandService/Export"
+)
+
+var (
+	commandServiceListSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("List"),
+			Procedure:  CommandServiceListProcedure,
+		}
+	})
+	commandServiceGetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("Get"),
+			Procedure:  CommandServiceGetProcedure,
+		}
+	})
+	commandServiceCreateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("Create"),
+			Procedure:  CommandServiceCreateProcedure,
+		}
+	})
+	commandServiceUpdateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("Update"),
+			Procedure:  CommandServiceUpdateProcedure,
+		}
+	})
+	commandServiceDeleteSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("Delete"),
+			Procedure:  CommandServiceDeleteProcedure,
+		}
+	})
+	commandServiceSetEnabledSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("SetEnabled"),
+			Procedure:  CommandServiceSetEnabledProcedure,
+		}
+	})
+	commandServiceRunSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("Run"),
+			Procedure:  CommandServiceRunProcedure,
+		}
+	})
+	commandServiceListInstancesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("ListInstances"),
+			Procedure:  CommandServiceListInstancesProcedure,
+		}
+	})
+	commandServicePauseQueueSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("PauseQueue"),
+			Procedure:  CommandServicePauseQueueProcedure,
+		}
+	})
+	commandServiceCancelInstanceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("CancelInstance"),
+			Procedure:  CommandServiceCancelInstanceProcedure,
+		}
+	})
+	commandServiceRetryInstanceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("RetryInstance"),
+			Procedure:  CommandServiceRetryInstanceProcedure,
+		}
+	})
+	commandServiceTypeCatalogSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("TypeCatalog"),
+			Procedure:  CommandServiceTypeCatalogProcedure,
+		}
+	})
+	commandServiceImportSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("Import"),
+			Procedure:  CommandServiceImportProcedure,
+		}
+	})
+	commandServiceExportSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods().ByName("Export"),
+			Procedure:  CommandServiceExportProcedure,
+		}
+	})
 )
 
 // CommandServiceClient is a client for the streamcrew.v1alpha1.CommandService service.
 type CommandServiceClient interface {
 	// List lists the commands, optionally filtered.
-	List(context.Context, *connect.Request[v1alpha1.ListCommandsRequest]) (*connect.Response[v1alpha1.ListCommandsResponse], error)
+	List(context.Context, *v1alpha1.ListCommandsRequest) (*v1alpha1.ListCommandsResponse, error)
 	// Get returns one command as its document and summary.
-	Get(context.Context, *connect.Request[v1alpha1.GetCommandRequest]) (*connect.Response[v1alpha1.GetCommandResponse], error)
+	Get(context.Context, *v1alpha1.GetCommandRequest) (*v1alpha1.GetCommandResponse, error)
 	// Create creates a command from its document.
-	Create(context.Context, *connect.Request[v1alpha1.CreateCommandRequest]) (*connect.Response[v1alpha1.CreateCommandResponse], error)
+	Create(context.Context, *v1alpha1.CreateCommandRequest) (*v1alpha1.CreateCommandResponse, error)
 	// Update replaces a command with its new document.
-	Update(context.Context, *connect.Request[v1alpha1.UpdateCommandRequest]) (*connect.Response[v1alpha1.UpdateCommandResponse], error)
+	Update(context.Context, *v1alpha1.UpdateCommandRequest) (*v1alpha1.UpdateCommandResponse, error)
 	// Delete removes a command.
-	Delete(context.Context, *connect.Request[v1alpha1.DeleteCommandRequest]) (*connect.Response[v1alpha1.DeleteCommandResponse], error)
+	Delete(context.Context, *v1alpha1.DeleteCommandRequest) (*v1alpha1.DeleteCommandResponse, error)
 	// SetEnabled switches the active switch of a command.
-	SetEnabled(context.Context, *connect.Request[v1alpha1.SetEnabledCommandRequest]) (*connect.Response[v1alpha1.SetEnabledCommandResponse], error)
+	SetEnabled(context.Context, *v1alpha1.SetEnabledCommandRequest) (*v1alpha1.SetEnabledCommandResponse, error)
 	// Run starts a command manually.
-	Run(context.Context, *connect.Request[v1alpha1.RunCommandRequest]) (*connect.Response[v1alpha1.RunCommandResponse], error)
+	Run(context.Context, *v1alpha1.RunCommandRequest) (*v1alpha1.RunCommandResponse, error)
 	// ListInstances lists the command queue and recent instances.
-	ListInstances(context.Context, *connect.Request[v1alpha1.ListInstancesRequest]) (*connect.Response[v1alpha1.ListInstancesResponse], error)
+	ListInstances(context.Context, *v1alpha1.ListInstancesRequest) (*v1alpha1.ListInstancesResponse, error)
 	// Pause toggles the pause of the command queue.
-	PauseQueue(context.Context, *connect.Request[v1alpha1.PauseQueueRequest]) (*connect.Response[v1alpha1.PauseQueueResponse], error)
+	PauseQueue(context.Context, *v1alpha1.PauseQueueRequest) (*v1alpha1.PauseQueueResponse, error)
 	// Cancel cancels a queued or running instance.
-	CancelInstance(context.Context, *connect.Request[v1alpha1.CancelInstanceRequest]) (*connect.Response[v1alpha1.CancelInstanceResponse], error)
+	CancelInstance(context.Context, *v1alpha1.CancelInstanceRequest) (*v1alpha1.CancelInstanceResponse, error)
 	// Retry re-runs a failed instance.
-	RetryInstance(context.Context, *connect.Request[v1alpha1.RetryInstanceRequest]) (*connect.Response[v1alpha1.RetryInstanceResponse], error)
+	RetryInstance(context.Context, *v1alpha1.RetryInstanceRequest) (*v1alpha1.RetryInstanceResponse, error)
 	// TypeCatalog returns the action and requirement types for generic
 	// editors.
-	TypeCatalog(context.Context, *connect.Request[v1alpha1.TypeCatalogRequest]) (*connect.Response[v1alpha1.TypeCatalogResponse], error)
+	TypeCatalog(context.Context, *v1alpha1.TypeCatalogRequest) (*v1alpha1.TypeCatalogResponse, error)
 	// Import reads commands from a document (YAML or JSON).
-	Import(context.Context, *connect.Request[v1alpha1.ImportCommandsRequest]) (*connect.Response[v1alpha1.ImportCommandsResponse], error)
+	Import(context.Context, *v1alpha1.ImportCommandsRequest) (*v1alpha1.ImportCommandsResponse, error)
 	// Export writes commands to a document (YAML or JSON).
-	Export(context.Context, *connect.Request[v1alpha1.ExportCommandsRequest]) (*connect.Response[v1alpha1.ExportCommandsResponse], error)
+	Export(context.Context, *v1alpha1.ExportCommandsRequest) (*v1alpha1.ExportCommandsResponse, error)
 }
 
 // NewCommandServiceClient constructs a client for the streamcrew.v1alpha1.CommandService service.
-// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
-// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewCommandServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) CommandServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	commandServiceMethods := v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods()
-	return &commandServiceClient{
-		list: connect.NewClient[v1alpha1.ListCommandsRequest, v1alpha1.ListCommandsResponse](
-			httpClient,
-			baseURL+CommandServiceListProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("List")),
-			connect.WithClientOptions(opts...),
-		),
-		get: connect.NewClient[v1alpha1.GetCommandRequest, v1alpha1.GetCommandResponse](
-			httpClient,
-			baseURL+CommandServiceGetProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("Get")),
-			connect.WithClientOptions(opts...),
-		),
-		create: connect.NewClient[v1alpha1.CreateCommandRequest, v1alpha1.CreateCommandResponse](
-			httpClient,
-			baseURL+CommandServiceCreateProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("Create")),
-			connect.WithClientOptions(opts...),
-		),
-		update: connect.NewClient[v1alpha1.UpdateCommandRequest, v1alpha1.UpdateCommandResponse](
-			httpClient,
-			baseURL+CommandServiceUpdateProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("Update")),
-			connect.WithClientOptions(opts...),
-		),
-		delete: connect.NewClient[v1alpha1.DeleteCommandRequest, v1alpha1.DeleteCommandResponse](
-			httpClient,
-			baseURL+CommandServiceDeleteProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("Delete")),
-			connect.WithClientOptions(opts...),
-		),
-		setEnabled: connect.NewClient[v1alpha1.SetEnabledCommandRequest, v1alpha1.SetEnabledCommandResponse](
-			httpClient,
-			baseURL+CommandServiceSetEnabledProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("SetEnabled")),
-			connect.WithClientOptions(opts...),
-		),
-		run: connect.NewClient[v1alpha1.RunCommandRequest, v1alpha1.RunCommandResponse](
-			httpClient,
-			baseURL+CommandServiceRunProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("Run")),
-			connect.WithClientOptions(opts...),
-		),
-		listInstances: connect.NewClient[v1alpha1.ListInstancesRequest, v1alpha1.ListInstancesResponse](
-			httpClient,
-			baseURL+CommandServiceListInstancesProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("ListInstances")),
-			connect.WithClientOptions(opts...),
-		),
-		pauseQueue: connect.NewClient[v1alpha1.PauseQueueRequest, v1alpha1.PauseQueueResponse](
-			httpClient,
-			baseURL+CommandServicePauseQueueProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("PauseQueue")),
-			connect.WithClientOptions(opts...),
-		),
-		cancelInstance: connect.NewClient[v1alpha1.CancelInstanceRequest, v1alpha1.CancelInstanceResponse](
-			httpClient,
-			baseURL+CommandServiceCancelInstanceProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("CancelInstance")),
-			connect.WithClientOptions(opts...),
-		),
-		retryInstance: connect.NewClient[v1alpha1.RetryInstanceRequest, v1alpha1.RetryInstanceResponse](
-			httpClient,
-			baseURL+CommandServiceRetryInstanceProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("RetryInstance")),
-			connect.WithClientOptions(opts...),
-		),
-		typeCatalog: connect.NewClient[v1alpha1.TypeCatalogRequest, v1alpha1.TypeCatalogResponse](
-			httpClient,
-			baseURL+CommandServiceTypeCatalogProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("TypeCatalog")),
-			connect.WithClientOptions(opts...),
-		),
-		_import: connect.NewClient[v1alpha1.ImportCommandsRequest, v1alpha1.ImportCommandsResponse](
-			httpClient,
-			baseURL+CommandServiceImportProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("Import")),
-			connect.WithClientOptions(opts...),
-		),
-		export: connect.NewClient[v1alpha1.ExportCommandsRequest, v1alpha1.ExportCommandsResponse](
-			httpClient,
-			baseURL+CommandServiceExportProcedure,
-			connect.WithSchema(commandServiceMethods.ByName("Export")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// commandServiceClient implements CommandServiceClient.
-type commandServiceClient struct {
-	list           *connect.Client[v1alpha1.ListCommandsRequest, v1alpha1.ListCommandsResponse]
-	get            *connect.Client[v1alpha1.GetCommandRequest, v1alpha1.GetCommandResponse]
-	create         *connect.Client[v1alpha1.CreateCommandRequest, v1alpha1.CreateCommandResponse]
-	update         *connect.Client[v1alpha1.UpdateCommandRequest, v1alpha1.UpdateCommandResponse]
-	delete         *connect.Client[v1alpha1.DeleteCommandRequest, v1alpha1.DeleteCommandResponse]
-	setEnabled     *connect.Client[v1alpha1.SetEnabledCommandRequest, v1alpha1.SetEnabledCommandResponse]
-	run            *connect.Client[v1alpha1.RunCommandRequest, v1alpha1.RunCommandResponse]
-	listInstances  *connect.Client[v1alpha1.ListInstancesRequest, v1alpha1.ListInstancesResponse]
-	pauseQueue     *connect.Client[v1alpha1.PauseQueueRequest, v1alpha1.PauseQueueResponse]
-	cancelInstance *connect.Client[v1alpha1.CancelInstanceRequest, v1alpha1.CancelInstanceResponse]
-	retryInstance  *connect.Client[v1alpha1.RetryInstanceRequest, v1alpha1.RetryInstanceResponse]
-	typeCatalog    *connect.Client[v1alpha1.TypeCatalogRequest, v1alpha1.TypeCatalogResponse]
-	_import        *connect.Client[v1alpha1.ImportCommandsRequest, v1alpha1.ImportCommandsResponse]
-	export         *connect.Client[v1alpha1.ExportCommandsRequest, v1alpha1.ExportCommandsResponse]
-}
-
-// List calls streamcrew.v1alpha1.CommandService.List.
-func (c *commandServiceClient) List(ctx context.Context, req *connect.Request[v1alpha1.ListCommandsRequest]) (*connect.Response[v1alpha1.ListCommandsResponse], error) {
-	return c.list.CallUnary(ctx, req)
-}
-
-// Get calls streamcrew.v1alpha1.CommandService.Get.
-func (c *commandServiceClient) Get(ctx context.Context, req *connect.Request[v1alpha1.GetCommandRequest]) (*connect.Response[v1alpha1.GetCommandResponse], error) {
-	return c.get.CallUnary(ctx, req)
-}
-
-// Create calls streamcrew.v1alpha1.CommandService.Create.
-func (c *commandServiceClient) Create(ctx context.Context, req *connect.Request[v1alpha1.CreateCommandRequest]) (*connect.Response[v1alpha1.CreateCommandResponse], error) {
-	return c.create.CallUnary(ctx, req)
-}
-
-// Update calls streamcrew.v1alpha1.CommandService.Update.
-func (c *commandServiceClient) Update(ctx context.Context, req *connect.Request[v1alpha1.UpdateCommandRequest]) (*connect.Response[v1alpha1.UpdateCommandResponse], error) {
-	return c.update.CallUnary(ctx, req)
-}
-
-// Delete calls streamcrew.v1alpha1.CommandService.Delete.
-func (c *commandServiceClient) Delete(ctx context.Context, req *connect.Request[v1alpha1.DeleteCommandRequest]) (*connect.Response[v1alpha1.DeleteCommandResponse], error) {
-	return c.delete.CallUnary(ctx, req)
-}
-
-// SetEnabled calls streamcrew.v1alpha1.CommandService.SetEnabled.
-func (c *commandServiceClient) SetEnabled(ctx context.Context, req *connect.Request[v1alpha1.SetEnabledCommandRequest]) (*connect.Response[v1alpha1.SetEnabledCommandResponse], error) {
-	return c.setEnabled.CallUnary(ctx, req)
-}
-
-// Run calls streamcrew.v1alpha1.CommandService.Run.
-func (c *commandServiceClient) Run(ctx context.Context, req *connect.Request[v1alpha1.RunCommandRequest]) (*connect.Response[v1alpha1.RunCommandResponse], error) {
-	return c.run.CallUnary(ctx, req)
-}
-
-// ListInstances calls streamcrew.v1alpha1.CommandService.ListInstances.
-func (c *commandServiceClient) ListInstances(ctx context.Context, req *connect.Request[v1alpha1.ListInstancesRequest]) (*connect.Response[v1alpha1.ListInstancesResponse], error) {
-	return c.listInstances.CallUnary(ctx, req)
-}
-
-// PauseQueue calls streamcrew.v1alpha1.CommandService.PauseQueue.
-func (c *commandServiceClient) PauseQueue(ctx context.Context, req *connect.Request[v1alpha1.PauseQueueRequest]) (*connect.Response[v1alpha1.PauseQueueResponse], error) {
-	return c.pauseQueue.CallUnary(ctx, req)
-}
-
-// CancelInstance calls streamcrew.v1alpha1.CommandService.CancelInstance.
-func (c *commandServiceClient) CancelInstance(ctx context.Context, req *connect.Request[v1alpha1.CancelInstanceRequest]) (*connect.Response[v1alpha1.CancelInstanceResponse], error) {
-	return c.cancelInstance.CallUnary(ctx, req)
-}
-
-// RetryInstance calls streamcrew.v1alpha1.CommandService.RetryInstance.
-func (c *commandServiceClient) RetryInstance(ctx context.Context, req *connect.Request[v1alpha1.RetryInstanceRequest]) (*connect.Response[v1alpha1.RetryInstanceResponse], error) {
-	return c.retryInstance.CallUnary(ctx, req)
-}
-
-// TypeCatalog calls streamcrew.v1alpha1.CommandService.TypeCatalog.
-func (c *commandServiceClient) TypeCatalog(ctx context.Context, req *connect.Request[v1alpha1.TypeCatalogRequest]) (*connect.Response[v1alpha1.TypeCatalogResponse], error) {
-	return c.typeCatalog.CallUnary(ctx, req)
-}
-
-// Import calls streamcrew.v1alpha1.CommandService.Import.
-func (c *commandServiceClient) Import(ctx context.Context, req *connect.Request[v1alpha1.ImportCommandsRequest]) (*connect.Response[v1alpha1.ImportCommandsResponse], error) {
-	return c._import.CallUnary(ctx, req)
-}
-
-// Export calls streamcrew.v1alpha1.CommandService.Export.
-func (c *commandServiceClient) Export(ctx context.Context, req *connect.Request[v1alpha1.ExportCommandsRequest]) (*connect.Response[v1alpha1.ExportCommandsResponse], error) {
-	return c.export.CallUnary(ctx, req)
+// Multiple service clients may share a single connect.Client.
+func NewCommandServiceClient(client *connect.Client) CommandServiceClient {
+	return &commandServiceClient{client: client}
 }
 
 // CommandServiceHandler is an implementation of the streamcrew.v1alpha1.CommandService service.
 type CommandServiceHandler interface {
 	// List lists the commands, optionally filtered.
-	List(context.Context, *connect.Request[v1alpha1.ListCommandsRequest]) (*connect.Response[v1alpha1.ListCommandsResponse], error)
+	List(context.Context, *v1alpha1.ListCommandsRequest) (*v1alpha1.ListCommandsResponse, error)
 	// Get returns one command as its document and summary.
-	Get(context.Context, *connect.Request[v1alpha1.GetCommandRequest]) (*connect.Response[v1alpha1.GetCommandResponse], error)
+	Get(context.Context, *v1alpha1.GetCommandRequest) (*v1alpha1.GetCommandResponse, error)
 	// Create creates a command from its document.
-	Create(context.Context, *connect.Request[v1alpha1.CreateCommandRequest]) (*connect.Response[v1alpha1.CreateCommandResponse], error)
+	Create(context.Context, *v1alpha1.CreateCommandRequest) (*v1alpha1.CreateCommandResponse, error)
 	// Update replaces a command with its new document.
-	Update(context.Context, *connect.Request[v1alpha1.UpdateCommandRequest]) (*connect.Response[v1alpha1.UpdateCommandResponse], error)
+	Update(context.Context, *v1alpha1.UpdateCommandRequest) (*v1alpha1.UpdateCommandResponse, error)
 	// Delete removes a command.
-	Delete(context.Context, *connect.Request[v1alpha1.DeleteCommandRequest]) (*connect.Response[v1alpha1.DeleteCommandResponse], error)
+	Delete(context.Context, *v1alpha1.DeleteCommandRequest) (*v1alpha1.DeleteCommandResponse, error)
 	// SetEnabled switches the active switch of a command.
-	SetEnabled(context.Context, *connect.Request[v1alpha1.SetEnabledCommandRequest]) (*connect.Response[v1alpha1.SetEnabledCommandResponse], error)
+	SetEnabled(context.Context, *v1alpha1.SetEnabledCommandRequest) (*v1alpha1.SetEnabledCommandResponse, error)
 	// Run starts a command manually.
-	Run(context.Context, *connect.Request[v1alpha1.RunCommandRequest]) (*connect.Response[v1alpha1.RunCommandResponse], error)
+	Run(context.Context, *v1alpha1.RunCommandRequest) (*v1alpha1.RunCommandResponse, error)
 	// ListInstances lists the command queue and recent instances.
-	ListInstances(context.Context, *connect.Request[v1alpha1.ListInstancesRequest]) (*connect.Response[v1alpha1.ListInstancesResponse], error)
+	ListInstances(context.Context, *v1alpha1.ListInstancesRequest) (*v1alpha1.ListInstancesResponse, error)
 	// Pause toggles the pause of the command queue.
-	PauseQueue(context.Context, *connect.Request[v1alpha1.PauseQueueRequest]) (*connect.Response[v1alpha1.PauseQueueResponse], error)
+	PauseQueue(context.Context, *v1alpha1.PauseQueueRequest) (*v1alpha1.PauseQueueResponse, error)
 	// Cancel cancels a queued or running instance.
-	CancelInstance(context.Context, *connect.Request[v1alpha1.CancelInstanceRequest]) (*connect.Response[v1alpha1.CancelInstanceResponse], error)
+	CancelInstance(context.Context, *v1alpha1.CancelInstanceRequest) (*v1alpha1.CancelInstanceResponse, error)
 	// Retry re-runs a failed instance.
-	RetryInstance(context.Context, *connect.Request[v1alpha1.RetryInstanceRequest]) (*connect.Response[v1alpha1.RetryInstanceResponse], error)
+	RetryInstance(context.Context, *v1alpha1.RetryInstanceRequest) (*v1alpha1.RetryInstanceResponse, error)
 	// TypeCatalog returns the action and requirement types for generic
 	// editors.
-	TypeCatalog(context.Context, *connect.Request[v1alpha1.TypeCatalogRequest]) (*connect.Response[v1alpha1.TypeCatalogResponse], error)
+	TypeCatalog(context.Context, *v1alpha1.TypeCatalogRequest) (*v1alpha1.TypeCatalogResponse, error)
 	// Import reads commands from a document (YAML or JSON).
-	Import(context.Context, *connect.Request[v1alpha1.ImportCommandsRequest]) (*connect.Response[v1alpha1.ImportCommandsResponse], error)
+	Import(context.Context, *v1alpha1.ImportCommandsRequest) (*v1alpha1.ImportCommandsResponse, error)
 	// Export writes commands to a document (YAML or JSON).
-	Export(context.Context, *connect.Request[v1alpha1.ExportCommandsRequest]) (*connect.Response[v1alpha1.ExportCommandsResponse], error)
+	Export(context.Context, *v1alpha1.ExportCommandsRequest) (*v1alpha1.ExportCommandsResponse, error)
 }
 
-// NewCommandServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewCommandServiceHandler(svc CommandServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	commandServiceMethods := v1alpha1.File_streamcrew_v1alpha1_command_proto.Services().ByName("CommandService").Methods()
-	commandServiceListHandler := connect.NewUnaryHandler(
-		CommandServiceListProcedure,
-		svc.List,
-		connect.WithSchema(commandServiceMethods.ByName("List")),
-		connect.WithHandlerOptions(opts...),
+// RegisterCommandServiceHandler registers svc as the streamcrew.v1alpha1.CommandService
+// implementation on server.
+func RegisterCommandServiceHandler(server *connect.Server, svc CommandServiceHandler) {
+	adapter := commandServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: commandServiceListSpec(), Handler: adapter.list},
+		connect.Method{Spec: commandServiceGetSpec(), Handler: adapter.get},
+		connect.Method{Spec: commandServiceCreateSpec(), Handler: adapter.create},
+		connect.Method{Spec: commandServiceUpdateSpec(), Handler: adapter.update},
+		connect.Method{Spec: commandServiceDeleteSpec(), Handler: adapter.delete},
+		connect.Method{Spec: commandServiceSetEnabledSpec(), Handler: adapter.setEnabled},
+		connect.Method{Spec: commandServiceRunSpec(), Handler: adapter.run},
+		connect.Method{Spec: commandServiceListInstancesSpec(), Handler: adapter.listInstances},
+		connect.Method{Spec: commandServicePauseQueueSpec(), Handler: adapter.pauseQueue},
+		connect.Method{Spec: commandServiceCancelInstanceSpec(), Handler: adapter.cancelInstance},
+		connect.Method{Spec: commandServiceRetryInstanceSpec(), Handler: adapter.retryInstance},
+		connect.Method{Spec: commandServiceTypeCatalogSpec(), Handler: adapter.typeCatalog},
+		connect.Method{Spec: commandServiceImportSpec(), Handler: adapter._import},
+		connect.Method{Spec: commandServiceExportSpec(), Handler: adapter.export},
 	)
-	commandServiceGetHandler := connect.NewUnaryHandler(
-		CommandServiceGetProcedure,
-		svc.Get,
-		connect.WithSchema(commandServiceMethods.ByName("Get")),
-		connect.WithHandlerOptions(opts...),
-	)
-	commandServiceCreateHandler := connect.NewUnaryHandler(
-		CommandServiceCreateProcedure,
-		svc.Create,
-		connect.WithSchema(commandServiceMethods.ByName("Create")),
-		connect.WithHandlerOptions(opts...),
-	)
-	commandServiceUpdateHandler := connect.NewUnaryHandler(
-		CommandServiceUpdateProcedure,
-		svc.Update,
-		connect.WithSchema(commandServiceMethods.ByName("Update")),
-		connect.WithHandlerOptions(opts...),
-	)
-	commandServiceDeleteHandler := connect.NewUnaryHandler(
-		CommandServiceDeleteProcedure,
-		svc.Delete,
-		connect.WithSchema(commandServiceMethods.ByName("Delete")),
-		connect.WithHandlerOptions(opts...),
-	)
-	commandServiceSetEnabledHandler := connect.NewUnaryHandler(
-		CommandServiceSetEnabledProcedure,
-		svc.SetEnabled,
-		connect.WithSchema(commandServiceMethods.ByName("SetEnabled")),
-		connect.WithHandlerOptions(opts...),
-	)
-	commandServiceRunHandler := connect.NewUnaryHandler(
-		CommandServiceRunProcedure,
-		svc.Run,
-		connect.WithSchema(commandServiceMethods.ByName("Run")),
-		connect.WithHandlerOptions(opts...),
-	)
-	commandServiceListInstancesHandler := connect.NewUnaryHandler(
-		CommandServiceListInstancesProcedure,
-		svc.ListInstances,
-		connect.WithSchema(commandServiceMethods.ByName("ListInstances")),
-		connect.WithHandlerOptions(opts...),
-	)
-	commandServicePauseQueueHandler := connect.NewUnaryHandler(
-		CommandServicePauseQueueProcedure,
-		svc.PauseQueue,
-		connect.WithSchema(commandServiceMethods.ByName("PauseQueue")),
-		connect.WithHandlerOptions(opts...),
-	)
-	commandServiceCancelInstanceHandler := connect.NewUnaryHandler(
-		CommandServiceCancelInstanceProcedure,
-		svc.CancelInstance,
-		connect.WithSchema(commandServiceMethods.ByName("CancelInstance")),
-		connect.WithHandlerOptions(opts...),
-	)
-	commandServiceRetryInstanceHandler := connect.NewUnaryHandler(
-		CommandServiceRetryInstanceProcedure,
-		svc.RetryInstance,
-		connect.WithSchema(commandServiceMethods.ByName("RetryInstance")),
-		connect.WithHandlerOptions(opts...),
-	)
-	commandServiceTypeCatalogHandler := connect.NewUnaryHandler(
-		CommandServiceTypeCatalogProcedure,
-		svc.TypeCatalog,
-		connect.WithSchema(commandServiceMethods.ByName("TypeCatalog")),
-		connect.WithHandlerOptions(opts...),
-	)
-	commandServiceImportHandler := connect.NewUnaryHandler(
-		CommandServiceImportProcedure,
-		svc.Import,
-		connect.WithSchema(commandServiceMethods.ByName("Import")),
-		connect.WithHandlerOptions(opts...),
-	)
-	commandServiceExportHandler := connect.NewUnaryHandler(
-		CommandServiceExportProcedure,
-		svc.Export,
-		connect.WithSchema(commandServiceMethods.ByName("Export")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/streamcrew.v1alpha1.CommandService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case CommandServiceListProcedure:
-			commandServiceListHandler.ServeHTTP(w, r)
-		case CommandServiceGetProcedure:
-			commandServiceGetHandler.ServeHTTP(w, r)
-		case CommandServiceCreateProcedure:
-			commandServiceCreateHandler.ServeHTTP(w, r)
-		case CommandServiceUpdateProcedure:
-			commandServiceUpdateHandler.ServeHTTP(w, r)
-		case CommandServiceDeleteProcedure:
-			commandServiceDeleteHandler.ServeHTTP(w, r)
-		case CommandServiceSetEnabledProcedure:
-			commandServiceSetEnabledHandler.ServeHTTP(w, r)
-		case CommandServiceRunProcedure:
-			commandServiceRunHandler.ServeHTTP(w, r)
-		case CommandServiceListInstancesProcedure:
-			commandServiceListInstancesHandler.ServeHTTP(w, r)
-		case CommandServicePauseQueueProcedure:
-			commandServicePauseQueueHandler.ServeHTTP(w, r)
-		case CommandServiceCancelInstanceProcedure:
-			commandServiceCancelInstanceHandler.ServeHTTP(w, r)
-		case CommandServiceRetryInstanceProcedure:
-			commandServiceRetryInstanceHandler.ServeHTTP(w, r)
-		case CommandServiceTypeCatalogProcedure:
-			commandServiceTypeCatalogHandler.ServeHTTP(w, r)
-		case CommandServiceImportProcedure:
-			commandServiceImportHandler.ServeHTTP(w, r)
-		case CommandServiceExportProcedure:
-			commandServiceExportHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedCommandServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedCommandServiceHandler struct{}
 
-func (UnimplementedCommandServiceHandler) List(context.Context, *connect.Request[v1alpha1.ListCommandsRequest]) (*connect.Response[v1alpha1.ListCommandsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.List is not implemented"))
+func (UnimplementedCommandServiceHandler) List(context.Context, *v1alpha1.ListCommandsRequest) (*v1alpha1.ListCommandsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.List is not implemented")
 }
 
-func (UnimplementedCommandServiceHandler) Get(context.Context, *connect.Request[v1alpha1.GetCommandRequest]) (*connect.Response[v1alpha1.GetCommandResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.Get is not implemented"))
+func (UnimplementedCommandServiceHandler) Get(context.Context, *v1alpha1.GetCommandRequest) (*v1alpha1.GetCommandResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.Get is not implemented")
 }
 
-func (UnimplementedCommandServiceHandler) Create(context.Context, *connect.Request[v1alpha1.CreateCommandRequest]) (*connect.Response[v1alpha1.CreateCommandResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.Create is not implemented"))
+func (UnimplementedCommandServiceHandler) Create(context.Context, *v1alpha1.CreateCommandRequest) (*v1alpha1.CreateCommandResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.Create is not implemented")
 }
 
-func (UnimplementedCommandServiceHandler) Update(context.Context, *connect.Request[v1alpha1.UpdateCommandRequest]) (*connect.Response[v1alpha1.UpdateCommandResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.Update is not implemented"))
+func (UnimplementedCommandServiceHandler) Update(context.Context, *v1alpha1.UpdateCommandRequest) (*v1alpha1.UpdateCommandResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.Update is not implemented")
 }
 
-func (UnimplementedCommandServiceHandler) Delete(context.Context, *connect.Request[v1alpha1.DeleteCommandRequest]) (*connect.Response[v1alpha1.DeleteCommandResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.Delete is not implemented"))
+func (UnimplementedCommandServiceHandler) Delete(context.Context, *v1alpha1.DeleteCommandRequest) (*v1alpha1.DeleteCommandResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.Delete is not implemented")
 }
 
-func (UnimplementedCommandServiceHandler) SetEnabled(context.Context, *connect.Request[v1alpha1.SetEnabledCommandRequest]) (*connect.Response[v1alpha1.SetEnabledCommandResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.SetEnabled is not implemented"))
+func (UnimplementedCommandServiceHandler) SetEnabled(context.Context, *v1alpha1.SetEnabledCommandRequest) (*v1alpha1.SetEnabledCommandResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.SetEnabled is not implemented")
 }
 
-func (UnimplementedCommandServiceHandler) Run(context.Context, *connect.Request[v1alpha1.RunCommandRequest]) (*connect.Response[v1alpha1.RunCommandResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.Run is not implemented"))
+func (UnimplementedCommandServiceHandler) Run(context.Context, *v1alpha1.RunCommandRequest) (*v1alpha1.RunCommandResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.Run is not implemented")
 }
 
-func (UnimplementedCommandServiceHandler) ListInstances(context.Context, *connect.Request[v1alpha1.ListInstancesRequest]) (*connect.Response[v1alpha1.ListInstancesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.ListInstances is not implemented"))
+func (UnimplementedCommandServiceHandler) ListInstances(context.Context, *v1alpha1.ListInstancesRequest) (*v1alpha1.ListInstancesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.ListInstances is not implemented")
 }
 
-func (UnimplementedCommandServiceHandler) PauseQueue(context.Context, *connect.Request[v1alpha1.PauseQueueRequest]) (*connect.Response[v1alpha1.PauseQueueResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.PauseQueue is not implemented"))
+func (UnimplementedCommandServiceHandler) PauseQueue(context.Context, *v1alpha1.PauseQueueRequest) (*v1alpha1.PauseQueueResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.PauseQueue is not implemented")
 }
 
-func (UnimplementedCommandServiceHandler) CancelInstance(context.Context, *connect.Request[v1alpha1.CancelInstanceRequest]) (*connect.Response[v1alpha1.CancelInstanceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.CancelInstance is not implemented"))
+func (UnimplementedCommandServiceHandler) CancelInstance(context.Context, *v1alpha1.CancelInstanceRequest) (*v1alpha1.CancelInstanceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.CancelInstance is not implemented")
 }
 
-func (UnimplementedCommandServiceHandler) RetryInstance(context.Context, *connect.Request[v1alpha1.RetryInstanceRequest]) (*connect.Response[v1alpha1.RetryInstanceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.RetryInstance is not implemented"))
+func (UnimplementedCommandServiceHandler) RetryInstance(context.Context, *v1alpha1.RetryInstanceRequest) (*v1alpha1.RetryInstanceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.RetryInstance is not implemented")
 }
 
-func (UnimplementedCommandServiceHandler) TypeCatalog(context.Context, *connect.Request[v1alpha1.TypeCatalogRequest]) (*connect.Response[v1alpha1.TypeCatalogResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.TypeCatalog is not implemented"))
+func (UnimplementedCommandServiceHandler) TypeCatalog(context.Context, *v1alpha1.TypeCatalogRequest) (*v1alpha1.TypeCatalogResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.TypeCatalog is not implemented")
 }
 
-func (UnimplementedCommandServiceHandler) Import(context.Context, *connect.Request[v1alpha1.ImportCommandsRequest]) (*connect.Response[v1alpha1.ImportCommandsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.Import is not implemented"))
+func (UnimplementedCommandServiceHandler) Import(context.Context, *v1alpha1.ImportCommandsRequest) (*v1alpha1.ImportCommandsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.Import is not implemented")
 }
 
-func (UnimplementedCommandServiceHandler) Export(context.Context, *connect.Request[v1alpha1.ExportCommandsRequest]) (*connect.Response[v1alpha1.ExportCommandsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.CommandService.Export is not implemented"))
+func (UnimplementedCommandServiceHandler) Export(context.Context, *v1alpha1.ExportCommandsRequest) (*v1alpha1.ExportCommandsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.CommandService.Export is not implemented")
+}
+
+type commandServiceClient struct {
+	client *connect.Client
+}
+
+func (c *commandServiceClient) List(ctx context.Context, req *v1alpha1.ListCommandsRequest) (*v1alpha1.ListCommandsResponse, error) {
+	var res v1alpha1.ListCommandsResponse
+	if err := c.client.CallUnary(ctx, commandServiceListSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *commandServiceClient) Get(ctx context.Context, req *v1alpha1.GetCommandRequest) (*v1alpha1.GetCommandResponse, error) {
+	var res v1alpha1.GetCommandResponse
+	if err := c.client.CallUnary(ctx, commandServiceGetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *commandServiceClient) Create(ctx context.Context, req *v1alpha1.CreateCommandRequest) (*v1alpha1.CreateCommandResponse, error) {
+	var res v1alpha1.CreateCommandResponse
+	if err := c.client.CallUnary(ctx, commandServiceCreateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *commandServiceClient) Update(ctx context.Context, req *v1alpha1.UpdateCommandRequest) (*v1alpha1.UpdateCommandResponse, error) {
+	var res v1alpha1.UpdateCommandResponse
+	if err := c.client.CallUnary(ctx, commandServiceUpdateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *commandServiceClient) Delete(ctx context.Context, req *v1alpha1.DeleteCommandRequest) (*v1alpha1.DeleteCommandResponse, error) {
+	var res v1alpha1.DeleteCommandResponse
+	if err := c.client.CallUnary(ctx, commandServiceDeleteSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *commandServiceClient) SetEnabled(ctx context.Context, req *v1alpha1.SetEnabledCommandRequest) (*v1alpha1.SetEnabledCommandResponse, error) {
+	var res v1alpha1.SetEnabledCommandResponse
+	if err := c.client.CallUnary(ctx, commandServiceSetEnabledSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *commandServiceClient) Run(ctx context.Context, req *v1alpha1.RunCommandRequest) (*v1alpha1.RunCommandResponse, error) {
+	var res v1alpha1.RunCommandResponse
+	if err := c.client.CallUnary(ctx, commandServiceRunSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *commandServiceClient) ListInstances(ctx context.Context, req *v1alpha1.ListInstancesRequest) (*v1alpha1.ListInstancesResponse, error) {
+	var res v1alpha1.ListInstancesResponse
+	if err := c.client.CallUnary(ctx, commandServiceListInstancesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *commandServiceClient) PauseQueue(ctx context.Context, req *v1alpha1.PauseQueueRequest) (*v1alpha1.PauseQueueResponse, error) {
+	var res v1alpha1.PauseQueueResponse
+	if err := c.client.CallUnary(ctx, commandServicePauseQueueSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *commandServiceClient) CancelInstance(ctx context.Context, req *v1alpha1.CancelInstanceRequest) (*v1alpha1.CancelInstanceResponse, error) {
+	var res v1alpha1.CancelInstanceResponse
+	if err := c.client.CallUnary(ctx, commandServiceCancelInstanceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *commandServiceClient) RetryInstance(ctx context.Context, req *v1alpha1.RetryInstanceRequest) (*v1alpha1.RetryInstanceResponse, error) {
+	var res v1alpha1.RetryInstanceResponse
+	if err := c.client.CallUnary(ctx, commandServiceRetryInstanceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *commandServiceClient) TypeCatalog(ctx context.Context, req *v1alpha1.TypeCatalogRequest) (*v1alpha1.TypeCatalogResponse, error) {
+	var res v1alpha1.TypeCatalogResponse
+	if err := c.client.CallUnary(ctx, commandServiceTypeCatalogSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *commandServiceClient) Import(ctx context.Context, req *v1alpha1.ImportCommandsRequest) (*v1alpha1.ImportCommandsResponse, error) {
+	var res v1alpha1.ImportCommandsResponse
+	if err := c.client.CallUnary(ctx, commandServiceImportSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *commandServiceClient) Export(ctx context.Context, req *v1alpha1.ExportCommandsRequest) (*v1alpha1.ExportCommandsResponse, error) {
+	var res v1alpha1.ExportCommandsResponse
+	if err := c.client.CallUnary(ctx, commandServiceExportSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type commandServiceHandler struct{ svc CommandServiceHandler }
+
+func (h commandServiceHandler) list(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.ListCommandsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.List(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h commandServiceHandler) get(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.GetCommandRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Get(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h commandServiceHandler) create(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.CreateCommandRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Create(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h commandServiceHandler) update(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.UpdateCommandRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Update(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h commandServiceHandler) delete(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.DeleteCommandRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Delete(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h commandServiceHandler) setEnabled(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.SetEnabledCommandRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetEnabled(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h commandServiceHandler) run(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.RunCommandRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Run(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h commandServiceHandler) listInstances(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.ListInstancesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListInstances(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h commandServiceHandler) pauseQueue(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.PauseQueueRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PauseQueue(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h commandServiceHandler) cancelInstance(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.CancelInstanceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CancelInstance(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h commandServiceHandler) retryInstance(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.RetryInstanceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RetryInstance(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h commandServiceHandler) typeCatalog(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.TypeCatalogRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.TypeCatalog(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h commandServiceHandler) _import(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.ImportCommandsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Import(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h commandServiceHandler) export(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.ExportCommandsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Export(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

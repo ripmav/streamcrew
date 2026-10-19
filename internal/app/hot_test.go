@@ -14,7 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -130,7 +131,7 @@ func freePort(t *testing.T) string {
 
 func chatClient(t *testing.T, base string) streamcrewv1alpha1connect.ChatServiceClient {
 	t.Helper()
-	return streamcrewv1alpha1connect.NewChatServiceClient(http.DefaultClient, base)
+	return streamcrewv1alpha1connect.NewChatServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base)))
 }
 
 // rewriteFile rewrites the file and waits for the watcher interval to pass.
@@ -149,21 +150,21 @@ func TestHotApplyDryRun(t *testing.T) {
 	// Dry run off: the core's chat message goes to the platform.
 	base := "http://" + mustServerAddr(t, a)
 	chat := chatClient(t, base)
-	_, err := chat.Send(t.Context(), connect.NewRequest(&v1alpha1.SendChatRequest{Text: "hello"}))
+	_, err := chat.Send(t.Context(), &v1alpha1.SendChatRequest{Text: "hello"})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool { return pub.sentText("hello") },
 		2*time.Second, 10*time.Millisecond, "dry run off: the message is delivered")
 
 	// Switch the dry run on: the next message is not delivered.
 	rewriteFile(t, path, "log_level: debug\ndry_run: true\n")
-	_, err = chat.Send(t.Context(), connect.NewRequest(&v1alpha1.SendChatRequest{Text: "dry"}))
+	_, err = chat.Send(t.Context(), &v1alpha1.SendChatRequest{Text: "dry"})
 	require.NoError(t, err)
 	time.Sleep(config.ReloadInterval)
 	assert.False(t, pub.sentText("dry"), "dry run on: the message is not delivered")
 
 	// Switch it off again.
 	rewriteFile(t, path, "log_level: debug\ndry_run: false\n")
-	_, err = chat.Send(t.Context(), connect.NewRequest(&v1alpha1.SendChatRequest{Text: "again"}))
+	_, err = chat.Send(t.Context(), &v1alpha1.SendChatRequest{Text: "again"})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool { return pub.sentText("again") },
 		2*time.Second, 10*time.Millisecond, "dry run off again: the message is delivered")

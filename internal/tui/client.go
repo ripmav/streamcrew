@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 // defaultServer is the local core the TUI connects to when no --server is
@@ -59,32 +59,18 @@ func httpClientFor(base string) (*http.Client, string) {
 	return http.DefaultClient, base
 }
 
-// bearerOption returns the client option that sends the token with every
-// request; nil for an empty token.
-func bearerOption(token string) []connect.ClientOption {
-	if token == "" {
-		return nil
+// bearerInterceptor sets the Authorization header on every request.
+func bearerInterceptor(token string) connect.ClientInterceptor {
+	return func(next connect.ClientFunc) connect.ClientFunc {
+		return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
+			// The client attaches a CallInfo to the context before the
+			// interceptor chain runs.
+			if info, ok := connect.CallInfoForClientContext(ctx); ok {
+				info.RequestHeader().Set("Authorization", "Bearer "+token)
+			}
+			return next(ctx, spec)
+		}
 	}
-	b := &bearer{token: token}
-	return []connect.ClientOption{connect.WithInterceptors(b)}
-}
-
-// bearer sets the Authorization header on every unary request.
-type bearer struct{ token string }
-
-func (b *bearer) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		req.Header().Set("Authorization", "Bearer "+b.token)
-		return next(ctx, req)
-	}
-}
-
-func (b *bearer) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (b *bearer) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
 }
 
 // runtimePath is the runtime file in the data directory.
