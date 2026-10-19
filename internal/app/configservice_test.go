@@ -7,7 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -31,7 +32,7 @@ func hotCoreServer(t *testing.T, pub *outPub) (*app.App, string) {
 func configClient(t *testing.T, a *app.App) streamcrewv1alpha1connect.ConfigServiceClient {
 	t.Helper()
 	base := "http://" + mustServerAddr(t, a)
-	return streamcrewv1alpha1connect.NewConfigServiceClient(http.DefaultClient, base)
+	return streamcrewv1alpha1connect.NewConfigServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
 }
 
 // TestConfigServiceUpdatesTheLiveDocument runs the core in the server mode
@@ -46,30 +47,30 @@ func TestConfigServiceUpdatesTheLiveDocument(t *testing.T) {
 	chat := chatClient(t, base)
 
 	// The document is live and shows the current settings.
-	g, err := cfg.Get(t.Context(), connect.NewRequest(&v1alpha1.GetConfigRequest{}))
+	g, err := cfg.Get(t.Context(), &v1alpha1.GetConfigRequest{})
 	require.NoError(t, err)
-	assert.True(t, g.Msg.GetLive())
-	assert.Contains(t, g.Msg.GetDocument(), "log_level: debug")
-	assert.Contains(t, g.Msg.GetHot(), "dry-run")
-	assert.Contains(t, g.Msg.GetRestart(), "data-dir")
+	assert.True(t, g.GetLive())
+	assert.Contains(t, g.GetDocument(), "log_level: debug")
+	assert.Contains(t, g.GetHot(), "dry-run")
+	assert.Contains(t, g.GetRestart(), "data-dir")
 
 	// The dry run is off: the chat goes to the platform.
-	_, err = chat.Send(t.Context(), connect.NewRequest(&v1alpha1.SendChatRequest{Text: "real"}))
+	_, err = chat.Send(t.Context(), &v1alpha1.SendChatRequest{Text: "real"})
 	require.NoError(t, err)
 	assert.Eventually(t, func() bool { return pub.sentText("real") }, tTimeout, 50*time.Millisecond)
 
 	// The Update stores the document; the change applies at runtime.
-	u, err := cfg.Update(t.Context(), connect.NewRequest(&v1alpha1.UpdateConfigRequest{
+	u, err := cfg.Update(t.Context(), &v1alpha1.UpdateConfigRequest{
 		Document: "log_level: debug\ndry_run: true\n",
-	}))
+	})
 	require.NoError(t, err)
-	assert.Contains(t, u.Msg.GetApplied(), "dry-run")
+	assert.Contains(t, u.GetApplied(), "dry-run")
 
 	// The watcher applies the document on its next comparison (1 s).
 	time.Sleep(2 * time.Second)
 
 	// The dry run is on: the chat is only recorded, not sent.
-	_, err = chat.Send(t.Context(), connect.NewRequest(&v1alpha1.SendChatRequest{Text: "recorded"}))
+	_, err = chat.Send(t.Context(), &v1alpha1.SendChatRequest{Text: "recorded"})
 	require.NoError(t, err)
 	time.Sleep(500 * time.Millisecond)
 	assert.False(t, pub.sentText("recorded"))
@@ -83,11 +84,11 @@ func TestConfigServiceReadOnlyInDaemonMode(t *testing.T) {
 	a, _ := hotCore(t, &outPub{})
 	cfg := configClient(t, a)
 
-	g, err := cfg.Get(t.Context(), connect.NewRequest(&v1alpha1.GetConfigRequest{}))
+	g, err := cfg.Get(t.Context(), &v1alpha1.GetConfigRequest{})
 	require.NoError(t, err)
-	assert.False(t, g.Msg.GetLive())
+	assert.False(t, g.GetLive())
 
-	_, err = cfg.Update(t.Context(), connect.NewRequest(&v1alpha1.UpdateConfigRequest{Document: "log_level: debug\n"}))
+	_, err = cfg.Update(t.Context(), &v1alpha1.UpdateConfigRequest{Document: "log_level: debug\n"})
 	assert.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 }

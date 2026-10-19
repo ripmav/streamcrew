@@ -11,201 +11,213 @@
 package streamcrewv1alpha1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// AuthServiceName is the fully-qualified name of the AuthService service.
 	AuthServiceName = "streamcrew.v1alpha1.AuthService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AuthServiceListAccountsProcedure is the fully-qualified name of the AuthService's ListAccounts
-	// RPC.
+	// AuthServiceListAccountsProcedure is the procedure name of the AuthService's ListAccounts RPC.
 	AuthServiceListAccountsProcedure = "/streamcrew.v1alpha1.AuthService/ListAccounts"
-	// AuthServiceStartLoginProcedure is the fully-qualified name of the AuthService's StartLogin RPC.
+	// AuthServiceStartLoginProcedure is the procedure name of the AuthService's StartLogin RPC.
 	AuthServiceStartLoginProcedure = "/streamcrew.v1alpha1.AuthService/StartLogin"
-	// AuthServiceCancelLoginProcedure is the fully-qualified name of the AuthService's CancelLogin RPC.
+	// AuthServiceCancelLoginProcedure is the procedure name of the AuthService's CancelLogin RPC.
 	AuthServiceCancelLoginProcedure = "/streamcrew.v1alpha1.AuthService/CancelLogin"
-	// AuthServiceLogoutProcedure is the fully-qualified name of the AuthService's Logout RPC.
+	// AuthServiceLogoutProcedure is the procedure name of the AuthService's Logout RPC.
 	AuthServiceLogoutProcedure = "/streamcrew.v1alpha1.AuthService/Logout"
+)
+
+var (
+	authServiceListAccountsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_auth_proto.Services().ByName("AuthService").Methods().ByName("ListAccounts"),
+			Procedure:  AuthServiceListAccountsProcedure,
+		}
+	})
+	authServiceStartLoginSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_auth_proto.Services().ByName("AuthService").Methods().ByName("StartLogin"),
+			Procedure:  AuthServiceStartLoginProcedure,
+		}
+	})
+	authServiceCancelLoginSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_auth_proto.Services().ByName("AuthService").Methods().ByName("CancelLogin"),
+			Procedure:  AuthServiceCancelLoginProcedure,
+		}
+	})
+	authServiceLogoutSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_auth_proto.Services().ByName("AuthService").Methods().ByName("Logout"),
+			Procedure:  AuthServiceLogoutProcedure,
+		}
+	})
 )
 
 // AuthServiceClient is a client for the streamcrew.v1alpha1.AuthService service.
 type AuthServiceClient interface {
 	// ListAccounts lists the accounts of the profile.
-	ListAccounts(context.Context, *connect.Request[v1alpha1.ListAccountsRequest]) (*connect.Response[v1alpha1.ListAccountsResponse], error)
+	ListAccounts(context.Context, *v1alpha1.ListAccountsRequest) (*v1alpha1.ListAccountsResponse, error)
 	// StartLogin starts a login flow for a platform account and returns the
 	// code and URL (authorization code flow) or the device code and URL
 	// (device code flow).
-	StartLogin(context.Context, *connect.Request[v1alpha1.StartLoginRequest]) (*connect.Response[v1alpha1.StartLoginResponse], error)
+	StartLogin(context.Context, *v1alpha1.StartLoginRequest) (*v1alpha1.StartLoginResponse, error)
 	// CancelLogin cancels a running login flow.
-	CancelLogin(context.Context, *connect.Request[v1alpha1.CancelLoginRequest]) (*connect.Response[v1alpha1.CancelLoginResponse], error)
+	CancelLogin(context.Context, *v1alpha1.CancelLoginRequest) (*v1alpha1.CancelLoginResponse, error)
 	// Logout revokes the tokens of a platform account and removes them.
-	Logout(context.Context, *connect.Request[v1alpha1.LogoutRequest]) (*connect.Response[v1alpha1.LogoutResponse], error)
+	Logout(context.Context, *v1alpha1.LogoutRequest) (*v1alpha1.LogoutResponse, error)
 }
 
-// NewAuthServiceClient constructs a client for the streamcrew.v1alpha1.AuthService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AuthServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	authServiceMethods := v1alpha1.File_streamcrew_v1alpha1_auth_proto.Services().ByName("AuthService").Methods()
-	return &authServiceClient{
-		listAccounts: connect.NewClient[v1alpha1.ListAccountsRequest, v1alpha1.ListAccountsResponse](
-			httpClient,
-			baseURL+AuthServiceListAccountsProcedure,
-			connect.WithSchema(authServiceMethods.ByName("ListAccounts")),
-			connect.WithClientOptions(opts...),
-		),
-		startLogin: connect.NewClient[v1alpha1.StartLoginRequest, v1alpha1.StartLoginResponse](
-			httpClient,
-			baseURL+AuthServiceStartLoginProcedure,
-			connect.WithSchema(authServiceMethods.ByName("StartLogin")),
-			connect.WithClientOptions(opts...),
-		),
-		cancelLogin: connect.NewClient[v1alpha1.CancelLoginRequest, v1alpha1.CancelLoginResponse](
-			httpClient,
-			baseURL+AuthServiceCancelLoginProcedure,
-			connect.WithSchema(authServiceMethods.ByName("CancelLogin")),
-			connect.WithClientOptions(opts...),
-		),
-		logout: connect.NewClient[v1alpha1.LogoutRequest, v1alpha1.LogoutResponse](
-			httpClient,
-			baseURL+AuthServiceLogoutProcedure,
-			connect.WithSchema(authServiceMethods.ByName("Logout")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// authServiceClient implements AuthServiceClient.
-type authServiceClient struct {
-	listAccounts *connect.Client[v1alpha1.ListAccountsRequest, v1alpha1.ListAccountsResponse]
-	startLogin   *connect.Client[v1alpha1.StartLoginRequest, v1alpha1.StartLoginResponse]
-	cancelLogin  *connect.Client[v1alpha1.CancelLoginRequest, v1alpha1.CancelLoginResponse]
-	logout       *connect.Client[v1alpha1.LogoutRequest, v1alpha1.LogoutResponse]
-}
-
-// ListAccounts calls streamcrew.v1alpha1.AuthService.ListAccounts.
-func (c *authServiceClient) ListAccounts(ctx context.Context, req *connect.Request[v1alpha1.ListAccountsRequest]) (*connect.Response[v1alpha1.ListAccountsResponse], error) {
-	return c.listAccounts.CallUnary(ctx, req)
-}
-
-// StartLogin calls streamcrew.v1alpha1.AuthService.StartLogin.
-func (c *authServiceClient) StartLogin(ctx context.Context, req *connect.Request[v1alpha1.StartLoginRequest]) (*connect.Response[v1alpha1.StartLoginResponse], error) {
-	return c.startLogin.CallUnary(ctx, req)
-}
-
-// CancelLogin calls streamcrew.v1alpha1.AuthService.CancelLogin.
-func (c *authServiceClient) CancelLogin(ctx context.Context, req *connect.Request[v1alpha1.CancelLoginRequest]) (*connect.Response[v1alpha1.CancelLoginResponse], error) {
-	return c.cancelLogin.CallUnary(ctx, req)
-}
-
-// Logout calls streamcrew.v1alpha1.AuthService.Logout.
-func (c *authServiceClient) Logout(ctx context.Context, req *connect.Request[v1alpha1.LogoutRequest]) (*connect.Response[v1alpha1.LogoutResponse], error) {
-	return c.logout.CallUnary(ctx, req)
+// NewAuthServiceClient constructs a client for the streamcrew.v1alpha1.AuthService service.
+// Multiple service clients may share a single connect.Client.
+func NewAuthServiceClient(client *connect.Client) AuthServiceClient {
+	return &authServiceClient{client: client}
 }
 
 // AuthServiceHandler is an implementation of the streamcrew.v1alpha1.AuthService service.
 type AuthServiceHandler interface {
 	// ListAccounts lists the accounts of the profile.
-	ListAccounts(context.Context, *connect.Request[v1alpha1.ListAccountsRequest]) (*connect.Response[v1alpha1.ListAccountsResponse], error)
+	ListAccounts(context.Context, *v1alpha1.ListAccountsRequest) (*v1alpha1.ListAccountsResponse, error)
 	// StartLogin starts a login flow for a platform account and returns the
 	// code and URL (authorization code flow) or the device code and URL
 	// (device code flow).
-	StartLogin(context.Context, *connect.Request[v1alpha1.StartLoginRequest]) (*connect.Response[v1alpha1.StartLoginResponse], error)
+	StartLogin(context.Context, *v1alpha1.StartLoginRequest) (*v1alpha1.StartLoginResponse, error)
 	// CancelLogin cancels a running login flow.
-	CancelLogin(context.Context, *connect.Request[v1alpha1.CancelLoginRequest]) (*connect.Response[v1alpha1.CancelLoginResponse], error)
+	CancelLogin(context.Context, *v1alpha1.CancelLoginRequest) (*v1alpha1.CancelLoginResponse, error)
 	// Logout revokes the tokens of a platform account and removes them.
-	Logout(context.Context, *connect.Request[v1alpha1.LogoutRequest]) (*connect.Response[v1alpha1.LogoutResponse], error)
+	Logout(context.Context, *v1alpha1.LogoutRequest) (*v1alpha1.LogoutResponse, error)
 }
 
-// NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	authServiceMethods := v1alpha1.File_streamcrew_v1alpha1_auth_proto.Services().ByName("AuthService").Methods()
-	authServiceListAccountsHandler := connect.NewUnaryHandler(
-		AuthServiceListAccountsProcedure,
-		svc.ListAccounts,
-		connect.WithSchema(authServiceMethods.ByName("ListAccounts")),
-		connect.WithHandlerOptions(opts...),
+// RegisterAuthServiceHandler registers svc as the streamcrew.v1alpha1.AuthService implementation on
+// server.
+func RegisterAuthServiceHandler(server *connect.Server, svc AuthServiceHandler) {
+	adapter := authServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: authServiceListAccountsSpec(), Handler: adapter.listAccounts},
+		connect.Method{Spec: authServiceStartLoginSpec(), Handler: adapter.startLogin},
+		connect.Method{Spec: authServiceCancelLoginSpec(), Handler: adapter.cancelLogin},
+		connect.Method{Spec: authServiceLogoutSpec(), Handler: adapter.logout},
 	)
-	authServiceStartLoginHandler := connect.NewUnaryHandler(
-		AuthServiceStartLoginProcedure,
-		svc.StartLogin,
-		connect.WithSchema(authServiceMethods.ByName("StartLogin")),
-		connect.WithHandlerOptions(opts...),
-	)
-	authServiceCancelLoginHandler := connect.NewUnaryHandler(
-		AuthServiceCancelLoginProcedure,
-		svc.CancelLogin,
-		connect.WithSchema(authServiceMethods.ByName("CancelLogin")),
-		connect.WithHandlerOptions(opts...),
-	)
-	authServiceLogoutHandler := connect.NewUnaryHandler(
-		AuthServiceLogoutProcedure,
-		svc.Logout,
-		connect.WithSchema(authServiceMethods.ByName("Logout")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/streamcrew.v1alpha1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case AuthServiceListAccountsProcedure:
-			authServiceListAccountsHandler.ServeHTTP(w, r)
-		case AuthServiceStartLoginProcedure:
-			authServiceStartLoginHandler.ServeHTTP(w, r)
-		case AuthServiceCancelLoginProcedure:
-			authServiceCancelLoginHandler.ServeHTTP(w, r)
-		case AuthServiceLogoutProcedure:
-			authServiceLogoutHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedAuthServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAuthServiceHandler struct{}
 
-func (UnimplementedAuthServiceHandler) ListAccounts(context.Context, *connect.Request[v1alpha1.ListAccountsRequest]) (*connect.Response[v1alpha1.ListAccountsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.AuthService.ListAccounts is not implemented"))
+func (UnimplementedAuthServiceHandler) ListAccounts(context.Context, *v1alpha1.ListAccountsRequest) (*v1alpha1.ListAccountsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.AuthService.ListAccounts is not implemented")
 }
 
-func (UnimplementedAuthServiceHandler) StartLogin(context.Context, *connect.Request[v1alpha1.StartLoginRequest]) (*connect.Response[v1alpha1.StartLoginResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.AuthService.StartLogin is not implemented"))
+func (UnimplementedAuthServiceHandler) StartLogin(context.Context, *v1alpha1.StartLoginRequest) (*v1alpha1.StartLoginResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.AuthService.StartLogin is not implemented")
 }
 
-func (UnimplementedAuthServiceHandler) CancelLogin(context.Context, *connect.Request[v1alpha1.CancelLoginRequest]) (*connect.Response[v1alpha1.CancelLoginResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.AuthService.CancelLogin is not implemented"))
+func (UnimplementedAuthServiceHandler) CancelLogin(context.Context, *v1alpha1.CancelLoginRequest) (*v1alpha1.CancelLoginResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.AuthService.CancelLogin is not implemented")
 }
 
-func (UnimplementedAuthServiceHandler) Logout(context.Context, *connect.Request[v1alpha1.LogoutRequest]) (*connect.Response[v1alpha1.LogoutResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.AuthService.Logout is not implemented"))
+func (UnimplementedAuthServiceHandler) Logout(context.Context, *v1alpha1.LogoutRequest) (*v1alpha1.LogoutResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.AuthService.Logout is not implemented")
+}
+
+type authServiceClient struct {
+	client *connect.Client
+}
+
+func (c *authServiceClient) ListAccounts(ctx context.Context, req *v1alpha1.ListAccountsRequest) (*v1alpha1.ListAccountsResponse, error) {
+	var res v1alpha1.ListAccountsResponse
+	if err := c.client.CallUnary(ctx, authServiceListAccountsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *authServiceClient) StartLogin(ctx context.Context, req *v1alpha1.StartLoginRequest) (*v1alpha1.StartLoginResponse, error) {
+	var res v1alpha1.StartLoginResponse
+	if err := c.client.CallUnary(ctx, authServiceStartLoginSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *authServiceClient) CancelLogin(ctx context.Context, req *v1alpha1.CancelLoginRequest) (*v1alpha1.CancelLoginResponse, error) {
+	var res v1alpha1.CancelLoginResponse
+	if err := c.client.CallUnary(ctx, authServiceCancelLoginSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *authServiceClient) Logout(ctx context.Context, req *v1alpha1.LogoutRequest) (*v1alpha1.LogoutResponse, error) {
+	var res v1alpha1.LogoutResponse
+	if err := c.client.CallUnary(ctx, authServiceLogoutSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type authServiceHandler struct{ svc AuthServiceHandler }
+
+func (h authServiceHandler) listAccounts(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.ListAccountsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListAccounts(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h authServiceHandler) startLogin(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.StartLoginRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartLogin(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h authServiceHandler) cancelLogin(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.CancelLoginRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CancelLogin(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h authServiceHandler) logout(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.LogoutRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Logout(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

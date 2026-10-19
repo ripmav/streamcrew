@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
@@ -59,15 +59,15 @@ func (s *backupService) view(info BackupInfo) *v1alpha1.BackupView {
 	}
 }
 
-func (s *backupService) Create(ctx context.Context, _ *connect.Request[v1alpha1.CreateBackupRequest]) (*connect.Response[v1alpha1.CreateBackupResponse], error) {
+func (s *backupService) Create(ctx context.Context, _ *v1alpha1.CreateBackupRequest) (*v1alpha1.CreateBackupResponse, error) {
 	info, err := s.b.Create(ctx)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.CreateBackupResponse{Backup: s.view(info)}), nil
+	return &v1alpha1.CreateBackupResponse{Backup: s.view(info)}, nil
 }
 
-func (s *backupService) List(ctx context.Context, _ *connect.Request[v1alpha1.ListBackupsRequest]) (*connect.Response[v1alpha1.ListBackupsResponse], error) {
+func (s *backupService) List(ctx context.Context, _ *v1alpha1.ListBackupsRequest) (*v1alpha1.ListBackupsResponse, error) {
 	infos, err := s.b.List(ctx)
 	if err != nil {
 		return nil, apiError(err)
@@ -76,16 +76,16 @@ func (s *backupService) List(ctx context.Context, _ *connect.Request[v1alpha1.Li
 	for _, info := range infos {
 		out.Backups = append(out.Backups, s.view(info))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *backupService) Restore(ctx context.Context, req *connect.Request[v1alpha1.RestoreBackupRequest]) (*connect.Response[v1alpha1.RestoreBackupResponse], error) {
-	if req.Msg.Id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
+func (s *backupService) Restore(ctx context.Context, req *v1alpha1.RestoreBackupRequest) (*v1alpha1.RestoreBackupResponse, error) {
+	if req.Id == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "id is required")
 	}
-	schema, err := s.b.Restore(ctx, req.Msg.Id)
+	schema, err := s.b.Restore(ctx, req.Id)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.RestoreBackupResponse{SchemaVersion: uint32(schema)}), nil //nolint:gosec // a schema version fits in uint32
+	return &v1alpha1.RestoreBackupResponse{SchemaVersion: uint32(schema)}, nil //nolint:gosec // a schema version fits in uint32
 }

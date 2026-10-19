@@ -6,7 +6,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
@@ -105,8 +104,8 @@ func (us *userService) view(u User) *v1alpha1.UserView {
 }
 
 // List lists the users, optionally filtered and ranked.
-func (us *userService) List(ctx context.Context, req *connect.Request[v1alpha1.ListUsersRequest]) (*connect.Response[v1alpha1.ListUsersResponse], error) {
-	m := req.Msg
+func (us *userService) List(ctx context.Context, req *v1alpha1.ListUsersRequest) (*v1alpha1.ListUsersResponse, error) {
+	m := req
 	users, err := us.u.List(ctx, m.GetPrefix(), m.GetStat(), int(m.GetLimit()))
 	if err != nil {
 		return nil, apiError(err)
@@ -115,42 +114,42 @@ func (us *userService) List(ctx context.Context, req *connect.Request[v1alpha1.L
 	for _, u := range users {
 		resp.Users = append(resp.Users, us.view(u))
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // Get returns one user by ID or by platform login.
-func (us *userService) Get(ctx context.Context, req *connect.Request[v1alpha1.GetUserRequest]) (*connect.Response[v1alpha1.GetUserResponse], error) {
-	m := req.Msg
+func (us *userService) Get(ctx context.Context, req *v1alpha1.GetUserRequest) (*v1alpha1.GetUserResponse, error) {
+	m := req
 	u, err := us.u.Get(ctx, m.GetId(), m.GetPlatformLogin())
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.GetUserResponse{User: us.view(u)}), nil
+	return &v1alpha1.GetUserResponse{User: us.view(u)}, nil
 }
 
 // Update edits the mutable fields of a user.
-func (us *userService) Update(ctx context.Context, req *connect.Request[v1alpha1.UpdateUserRequest]) (*connect.Response[v1alpha1.UpdateUserResponse], error) {
-	m := req.Msg
+func (us *userService) Update(ctx context.Context, req *v1alpha1.UpdateUserRequest) (*v1alpha1.UpdateUserResponse, error) {
+	m := req
 	u, err := us.u.Update(ctx, m.GetId(), m.GetRole(), m.GetTitle(), m.Excluded, m.Strikes)
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.UpdateUserResponse{User: us.view(u)}), nil
+	return &v1alpha1.UpdateUserResponse{User: us.view(u)}, nil
 }
 
 // Merge folds the accounts of two users into one.
-func (us *userService) Merge(ctx context.Context, req *connect.Request[v1alpha1.MergeUsersRequest]) (*connect.Response[v1alpha1.MergeUsersResponse], error) {
-	m := req.Msg
+func (us *userService) Merge(ctx context.Context, req *v1alpha1.MergeUsersRequest) (*v1alpha1.MergeUsersResponse, error) {
+	m := req
 	id, err := us.u.Merge(ctx, m.GetKeepPlatformLogin(), m.GetMergePlatformLogin())
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return connect.NewResponse(&v1alpha1.MergeUsersResponse{Id: id}), nil
+	return &v1alpha1.MergeUsersResponse{Id: id}, nil
 }
 
 // Rankings returns the top users per statistic.
-func (us *userService) Rankings(ctx context.Context, req *connect.Request[v1alpha1.RankingsRequest]) (*connect.Response[v1alpha1.RankingsResponse], error) {
-	rankings, err := us.u.Rankings(ctx, int(req.Msg.GetLimit()))
+func (us *userService) Rankings(ctx context.Context, req *v1alpha1.RankingsRequest) (*v1alpha1.RankingsResponse, error) {
+	rankings, err := us.u.Rankings(ctx, int(req.GetLimit()))
 	if err != nil {
 		return nil, apiError(err)
 	}
@@ -162,5 +161,5 @@ func (us *userService) Rankings(ctx context.Context, req *connect.Request[v1alph
 		}
 		resp.Rankings = append(resp.Rankings, rr)
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
