@@ -109,7 +109,7 @@ func (s *streamService) Subscribe(ctx context.Context, req *v1alpha1.SubscribeRe
 // AnswerPrompt answers a prompt delivered through the stream.
 func (s *streamService) AnswerPrompt(ctx context.Context, req *v1alpha1.AnswerPromptRequest) (*v1alpha1.AnswerPromptResponse, error) {
 	if req.Id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "id is required")
 	}
 	if err := s.s.AnswerPrompt(ctx, req.Id, req.Value, req.Confirmed); err != nil {
 		return nil, apiError(err)
@@ -121,7 +121,7 @@ func (s *streamService) AnswerPrompt(ctx context.Context, req *v1alpha1.AnswerPr
 // 6.3).
 func (s *streamService) Simulate(ctx context.Context, req *v1alpha1.SimulateEventRequest) (*v1alpha1.SimulateEventResponse, error) {
 	if req.EventType == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("event_type is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "event_type is required")
 	}
 	id, err := s.s.Simulate(ctx, req.EventType, req.User, req.Target, req.Text)
 	if err != nil {
