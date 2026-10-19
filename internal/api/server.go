@@ -120,7 +120,7 @@ func (s *Server) Handler() http.Handler {
 		streamcrewv1alpha1connect.RegisterBackupServiceHandler(server, &backupService{b: b})
 	}
 	if c := s.cfg.Config; c != nil {
-		mux.Handle(streamcrewv1alpha1connect.NewConfigServiceHandler(&configService{c: c}))
+		streamcrewv1alpha1connect.RegisterConfigServiceHandler(server, &configService{c: c})
 	}
 	if au := s.cfg.Auth; au != nil {
 		streamcrewv1alpha1connect.RegisterAuthServiceHandler(server, &authService{a: au})
