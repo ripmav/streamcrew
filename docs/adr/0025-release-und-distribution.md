@@ -5,7 +5,7 @@
 | **Status** | Vorgeschlagen |
 | **Datum** | 2026-10-17 |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
-| **Bezug** | Konkretisiert [ADR-0007](0007-release-artefakte-des-cores.md); [ADR-0003](0003-betriebsmodi.md) (Server-Modus), [ADR-0005](0005-core-in-desktop-builds.md)/[ADR-0006](0006-core-als-bibliothek-fuer-selbststart.md) (Desktop), [ADR-0013](0013-sicherheitsmodell.md); Plan §11.3; Roadmap Phase 6.5 |
+| **Bezug** | Konkretisiert [ADR-0007](0007-release-artefakte-des-cores.md); [ADR-0003](0003-betriebsmodi.md) (Server-Modus), [ADR-0005](0005-core-in-desktop-builds.md)/[ADR-0006](0006-core-als-bibliothek-fuer-selbststart.md) (Desktop), [ADR-0013](0013-sicherheitsmodell.md); Plan §11.3; Roadmap Phase 6.7 |
 
 ## Kontext
 
