@@ -442,11 +442,11 @@ func (m model) fetchConfig() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 		defer cancel()
-		resp, err := m.cl.config.Get(ctx, connect.NewRequest(&v1alpha1.GetConfigRequest{}))
+		resp, err := m.cl.config.Get(ctx, &v1alpha1.GetConfigRequest{})
 		if err != nil {
 			return configLoadedMsg{err: err}
 		}
-		return configLoadedMsg{resp: resp.Msg}
+		return configLoadedMsg{resp: resp}
 	}
 }
 

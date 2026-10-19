@@ -405,14 +405,14 @@ func (m model) editConfig(editor string) tea.Cmd {
 		if err != nil {
 			return configUpdatedMsg{err: err}
 		}
-		resp, err := m.cl.config.Update(ctx, connect.NewRequest(&v1alpha1.UpdateConfigRequest{Document: string(data)}))
+		resp, err := m.cl.config.Update(ctx, &v1alpha1.UpdateConfigRequest{Document: string(data)})
 		if err != nil {
 			return configUpdatedMsg{err: err}
 		}
 		return configUpdatedMsg{
-			applied:  resp.Msg.GetApplied(),
-			restart:  resp.Msg.GetRestart(),
-			document: resp.Msg.GetDocument(),
+			applied:  resp.GetApplied(),
+			restart:  resp.GetRestart(),
+			document: resp.GetDocument(),
 		}
 	}
 }
