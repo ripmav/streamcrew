@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -49,67 +50,67 @@ func TestAPIServesTheCounterAndSettings(t *testing.T) {
 	}
 
 	base := "http://" + mustServerAddr(t, a)
-	counterClient := streamcrewv1alpha1connect.NewCounterServiceClient(http.DefaultClient, base)
-	settingsClient := streamcrewv1alpha1connect.NewSettingsServiceClient(http.DefaultClient, base)
+	counterClient := streamcrewv1alpha1connect.NewCounterServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	settingsClient := streamcrewv1alpha1connect.NewSettingsServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
 	name := "apiTestCounter"
 
 	// Counter: create, read, change, delete.
-	cr, err := counterClient.Create(t.Context(), connect.NewRequest(&v1alpha1.CreateCounterRequest{Name: name, Value: "10", Step: "2"}))
+	cr, err := counterClient.Create(t.Context(), &v1alpha1.CreateCounterRequest{Name: name, Value: "10", Step: "2"})
 	require.NoError(t, err)
-	assert.Equal(t, "10", cr.Msg.Counter.Value)
-	assert.Equal(t, "2", cr.Msg.Counter.Step)
+	assert.Equal(t, "10", cr.Counter.Value)
+	assert.Equal(t, "2", cr.Counter.Step)
 
-	got, err := counterClient.Get(t.Context(), connect.NewRequest(&v1alpha1.GetCounterRequest{Name: name}))
+	got, err := counterClient.Get(t.Context(), &v1alpha1.GetCounterRequest{Name: name})
 	require.NoError(t, err)
-	assert.Equal(t, "10", got.Msg.Counter.Value)
+	assert.Equal(t, "10", got.Counter.Value)
 
-	add, err := counterClient.Add(t.Context(), connect.NewRequest(&v1alpha1.AddCounterRequest{Name: name}))
+	add, err := counterClient.Add(t.Context(), &v1alpha1.AddCounterRequest{Name: name})
 	require.NoError(t, err)
-	assert.Equal(t, "12", add.Msg.Counter.Value, "empty amount adds one step")
+	assert.Equal(t, "12", add.Counter.Value, "empty amount adds one step")
 
-	set, err := counterClient.Set(t.Context(), connect.NewRequest(&v1alpha1.SetCounterRequest{Name: name, Value: "5"}))
+	set, err := counterClient.Set(t.Context(), &v1alpha1.SetCounterRequest{Name: name, Value: "5"})
 	require.NoError(t, err)
-	assert.Equal(t, "5", set.Msg.Counter.Value)
+	assert.Equal(t, "5", set.Counter.Value)
 
-	reset, err := counterClient.Reset(t.Context(), connect.NewRequest(&v1alpha1.ResetCounterRequest{Name: name}))
+	reset, err := counterClient.Reset(t.Context(), &v1alpha1.ResetCounterRequest{Name: name})
 	require.NoError(t, err)
-	assert.Equal(t, "0", reset.Msg.Counter.Value)
+	assert.Equal(t, "0", reset.Counter.Value)
 
-	list, err := counterClient.List(t.Context(), connect.NewRequest(&v1alpha1.ListCountersRequest{Prefix: name[:3]}))
+	list, err := counterClient.List(t.Context(), &v1alpha1.ListCountersRequest{Prefix: name[:3]})
 	require.NoError(t, err)
-	assert.NotEmpty(t, list.Msg.Counters, "the prefix filter finds the counter")
+	assert.NotEmpty(t, list.Counters, "the prefix filter finds the counter")
 
 	// Update keeps the value, changes the step and the reset-on-start switch.
-	up, err := counterClient.Update(t.Context(), connect.NewRequest(&v1alpha1.UpdateCounterRequest{Name: name, Step: "5"}))
+	up, err := counterClient.Update(t.Context(), &v1alpha1.UpdateCounterRequest{Name: name, Step: "5"})
 	require.NoError(t, err)
-	assert.Equal(t, "5", up.Msg.Counter.Step)
+	assert.Equal(t, "5", up.Counter.Step)
 
-	del, err := counterClient.Delete(t.Context(), connect.NewRequest(&v1alpha1.DeleteCounterRequest{Name: name}))
+	del, err := counterClient.Delete(t.Context(), &v1alpha1.DeleteCounterRequest{Name: name})
 	require.NoError(t, err)
-	require.NotNil(t, del.Msg)
+	require.NotNil(t, del)
 
-	_, err = counterClient.Get(t.Context(), connect.NewRequest(&v1alpha1.GetCounterRequest{Name: name}))
+	_, err = counterClient.Get(t.Context(), &v1alpha1.GetCounterRequest{Name: name})
 	assert.Error(t, err, "the counter is gone")
 
 	// Settings: the sections are listed, a stored section is read back, and a
 	// never-saved section returns its defaults.
-	secs, err := settingsClient.ListSections(t.Context(), connect.NewRequest(&v1alpha1.ListSectionsRequest{}))
+	secs, err := settingsClient.ListSections(t.Context(), &v1alpha1.ListSectionsRequest{})
 	require.NoError(t, err)
-	assert.NotEmpty(t, secs.Msg.Sections)
+	assert.NotEmpty(t, secs.Sections)
 
-	g, err := settingsClient.Get(t.Context(), connect.NewRequest(&v1alpha1.GetSettingsRequest{Name: "chat"}))
+	g, err := settingsClient.Get(t.Context(), &v1alpha1.GetSettingsRequest{Name: "chat"})
 	require.NoError(t, err)
-	assert.Contains(t, g.Msg.Document, `"type":"chat"`, "a never-saved section returns its defaults")
+	assert.Contains(t, g.Document, `"type":"chat"`, "a never-saved section returns its defaults")
 
-	u, err := settingsClient.Update(t.Context(), connect.NewRequest(&v1alpha1.UpdateSettingsRequest{Name: "chat", Document: `{"type":"chat","schemaVersion":1,"historySize":7}`}))
+	u, err := settingsClient.Update(t.Context(), &v1alpha1.UpdateSettingsRequest{Name: "chat", Document: `{"type":"chat","schemaVersion":1,"historySize":7}`})
 	require.NoError(t, err)
-	assert.Contains(t, u.Msg.Document, "7")
+	assert.Contains(t, u.Document, "7")
 
-	g2, err := settingsClient.Get(t.Context(), connect.NewRequest(&v1alpha1.GetSettingsRequest{Name: "chat"}))
+	g2, err := settingsClient.Get(t.Context(), &v1alpha1.GetSettingsRequest{Name: "chat"})
 	require.NoError(t, err)
-	assert.Contains(t, g2.Msg.Document, "7", "the updated section is stored")
+	assert.Contains(t, g2.Document, "7", "the updated section is stored")
 
-	_, err = settingsClient.Update(t.Context(), connect.NewRequest(&v1alpha1.UpdateSettingsRequest{Name: "chat", Document: `{"type":"general","schemaVersion":1}`}))
+	_, err = settingsClient.Update(t.Context(), &v1alpha1.UpdateSettingsRequest{Name: "chat", Document: `{"type":"general","schemaVersion":1}`})
 	assert.Error(t, err, "a document with the wrong type is rejected")
 }
 
@@ -134,19 +135,19 @@ func TestAPIServesTheCore(t *testing.T) {
 		t.Fatalf("Run returned early: %v", err)
 	}
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewSystemServiceClient(http.DefaultClient, base)
+	client := streamcrewv1alpha1connect.NewSystemServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
 
-	st, err := client.Status(t.Context(), connect.NewRequest(&v1alpha1.StatusRequest{}))
+	st, err := client.Status(t.Context(), &v1alpha1.StatusRequest{})
 	require.NoError(t, err)
-	assert.NotEmpty(t, st.Msg.Version, "the core reports its version")
-	assert.NotEmpty(t, st.Msg.Profile, "the core reports its active profile")
+	assert.NotEmpty(t, st.Version, "the core reports its version")
+	assert.NotEmpty(t, st.Profile, "the core reports its active profile")
 
-	lp, err := client.ListProfiles(t.Context(), connect.NewRequest(&v1alpha1.ListProfilesRequest{}))
+	lp, err := client.ListProfiles(t.Context(), &v1alpha1.ListProfilesRequest{})
 	require.NoError(t, err)
-	assert.Equal(t, st.Msg.Profile, lp.Msg.Active, "the active profile matches Status")
+	assert.Equal(t, st.Profile, lp.Active, "the active profile matches Status")
 	seen := false
-	for _, p := range lp.Msg.Profiles {
-		if p.Name == lp.Msg.Active {
+	for _, p := range lp.Profiles {
+		if p.Name == lp.Active {
 			seen = true
 		}
 	}
@@ -183,37 +184,37 @@ func TestAPIServesTheUserService(t *testing.T) {
 	require.NoError(t, st.AddStats(ctx, []user.StatsDelta{{UserID: alice.ID, Messages: 5}, {UserID: bob.ID, Messages: 2}}))
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewUserServiceClient(http.DefaultClient, base)
+	client := streamcrewv1alpha1connect.NewUserServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
 
-	l, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListUsersRequest{}))
+	l, err := client.List(ctx, &v1alpha1.ListUsersRequest{})
 	require.NoError(t, err)
 	logins := map[string]bool{}
-	for _, u := range l.Msg.Users {
+	for _, u := range l.Users {
 		for _, i := range u.Identities {
 			logins[i.Login] = true
 		}
 	}
 	assert.True(t, logins["alice"] && logins["bob"], "both created users are listed")
 
-	g, err := client.Get(ctx, connect.NewRequest(&v1alpha1.GetUserRequest{PlatformLogin: "mock/alice"}))
+	g, err := client.Get(ctx, &v1alpha1.GetUserRequest{PlatformLogin: "mock/alice"})
 	require.NoError(t, err)
-	assert.Equal(t, "alice", g.Msg.User.Identities[0].Login)
-	aliceID := g.Msg.User.Id
+	assert.Equal(t, "alice", g.User.Identities[0].Login)
+	aliceID := g.User.Id
 
-	gi, err := client.Get(ctx, connect.NewRequest(&v1alpha1.GetUserRequest{Id: aliceID}))
+	gi, err := client.Get(ctx, &v1alpha1.GetUserRequest{Id: aliceID})
 	require.NoError(t, err)
-	assert.Equal(t, aliceID, gi.Msg.User.Id)
+	assert.Equal(t, aliceID, gi.User.Id)
 
 	three := uint32(3)
-	up, err := client.Update(ctx, connect.NewRequest(&v1alpha1.UpdateUserRequest{Id: aliceID, Title: "Queen", Strikes: &three}))
+	up, err := client.Update(ctx, &v1alpha1.UpdateUserRequest{Id: aliceID, Title: "Queen", Strikes: &three})
 	require.NoError(t, err)
-	assert.Equal(t, "Queen", up.Msg.User.Title)
-	assert.Equal(t, uint32(3), up.Msg.User.Strikes)
+	assert.Equal(t, "Queen", up.User.Title)
+	assert.Equal(t, uint32(3), up.User.Strikes)
 
-	r, err := client.Rankings(ctx, connect.NewRequest(&v1alpha1.RankingsRequest{}))
+	r, err := client.Rankings(ctx, &v1alpha1.RankingsRequest{})
 	require.NoError(t, err)
 	var msgs *v1alpha1.Ranking
-	for _, k := range r.Msg.Rankings {
+	for _, k := range r.Rankings {
 		if k.Stat == "messages" {
 			msgs = k
 		}
@@ -222,13 +223,13 @@ func TestAPIServesTheUserService(t *testing.T) {
 	require.NotEmpty(t, msgs.Users, "the messages ranking has users")
 	assert.EqualValues(t, 5, msgs.Users[0].Value, "alice is on top with 5 messages")
 
-	m, err := client.Merge(ctx, connect.NewRequest(&v1alpha1.MergeUsersRequest{KeepPlatformLogin: "mock/alice", MergePlatformLogin: "mock/bob"}))
+	m, err := client.Merge(ctx, &v1alpha1.MergeUsersRequest{KeepPlatformLogin: "mock/alice", MergePlatformLogin: "mock/bob"})
 	require.NoError(t, err)
-	assert.Equal(t, aliceID, m.Msg.Id, "the keep user remains")
+	assert.Equal(t, aliceID, m.Id, "the keep user remains")
 
-	gb, err := client.Get(ctx, connect.NewRequest(&v1alpha1.GetUserRequest{PlatformLogin: "mock/bob"}))
+	gb, err := client.Get(ctx, &v1alpha1.GetUserRequest{PlatformLogin: "mock/bob"})
 	require.NoError(t, err)
-	assert.Equal(t, aliceID, gb.Msg.User.Id, "the merged login now resolves to the keep user")
+	assert.Equal(t, aliceID, gb.User.Id, "the merged login now resolves to the keep user")
 }
 
 // TestAPIServesTheChatService exercises the ChatService through the real
@@ -240,16 +241,16 @@ func TestAPIServesTheChatService(t *testing.T) {
 	ctx := t.Context()
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewChatServiceClient(http.DefaultClient, base)
+	client := streamcrewv1alpha1connect.NewChatServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
 
 	// A message with a known platform ID lands in the history.
 	_, err := mp.SayWithID(ctx, "alice", "hi there", "msg-1")
 	require.NoError(t, err)
 
-	h, err := client.History(ctx, connect.NewRequest(&v1alpha1.HistoryChatRequest{}))
+	h, err := client.History(ctx, &v1alpha1.HistoryChatRequest{})
 	require.NoError(t, err)
 	var seen bool
-	for _, m := range h.Msg.Messages {
+	for _, m := range h.Messages {
 		if m.MessageId == "msg-1" && m.Text == "hi there" {
 			seen = true
 		}
@@ -257,12 +258,12 @@ func TestAPIServesTheChatService(t *testing.T) {
 	assert.True(t, seen, "the message is in the history")
 
 	// Send goes through the chat service to the platform.
-	_, err = client.Send(ctx, connect.NewRequest(&v1alpha1.SendChatRequest{Text: "hello from api"}))
+	_, err = client.Send(ctx, &v1alpha1.SendChatRequest{Text: "hello from api"})
 	require.NoError(t, err)
 	coll.waitFor(t, "the sent message on the platform", func(e event.Envelope) bool { return mockSent(e, "hello from api") })
 
 	// Delete removes a message by its platform ID.
-	_, err = client.Delete(ctx, connect.NewRequest(&v1alpha1.DeleteChatRequest{MessageId: "msg-1", Platform: "mock"}))
+	_, err = client.Delete(ctx, &v1alpha1.DeleteChatRequest{MessageId: "msg-1", Platform: "mock"})
 	require.NoError(t, err)
 	coll.waitFor(t, "the delete on the platform", func(e event.Envelope) bool {
 		if e.Type != mock.TypeOutput {
@@ -273,7 +274,7 @@ func TestAPIServesTheChatService(t *testing.T) {
 	})
 
 	// Clear empties the channel on the platform.
-	_, err = client.Clear(ctx, connect.NewRequest(&v1alpha1.ClearChatRequest{Platform: "mock"}))
+	_, err = client.Clear(ctx, &v1alpha1.ClearChatRequest{Platform: "mock"})
 	require.NoError(t, err)
 	coll.waitFor(t, "the clear on the platform", func(e event.Envelope) bool {
 		if e.Type != mock.TypeOutput {
@@ -342,21 +343,21 @@ func TestAPIServesTheBackupService(t *testing.T) {
 	}
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewBackupServiceClient(http.DefaultClient, base)
+	client := streamcrewv1alpha1connect.NewBackupServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
 
 	// Create a manual backup.
-	c, err := client.Create(ctx, connect.NewRequest(&v1alpha1.CreateBackupRequest{}))
+	c, err := client.Create(ctx, &v1alpha1.CreateBackupRequest{})
 	require.NoError(t, err)
-	created := c.Msg.Backup
+	created := c.Backup
 	assert.NotEmpty(t, created.Id)
 	assert.Equal(t, "manual", created.Kind)
 	assert.NotZero(t, created.SchemaVersion)
 
 	// List finds the created backup.
-	l, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListBackupsRequest{}))
+	l, err := client.List(ctx, &v1alpha1.ListBackupsRequest{})
 	require.NoError(t, err)
 	var found bool
-	for _, b := range l.Msg.Backups {
+	for _, b := range l.Backups {
 		if b.Id == created.Id {
 			found = true
 		}
@@ -364,7 +365,7 @@ func TestAPIServesTheBackupService(t *testing.T) {
 	assert.True(t, found, "the created backup is listed")
 
 	// Restore is refused while the app runs (the profile is open).
-	_, err = client.Restore(ctx, connect.NewRequest(&v1alpha1.RestoreBackupRequest{Id: created.Id}))
+	_, err = client.Restore(ctx, &v1alpha1.RestoreBackupRequest{Id: created.Id})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 }
@@ -389,19 +390,19 @@ func TestAPIServesTheAuthService(t *testing.T) {
 	}
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewAuthServiceClient(http.DefaultClient, base)
+	client := streamcrewv1alpha1connect.NewAuthServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
 
 	// ListAccounts succeeds (the fresh profile has no logged-in account).
-	l, err := client.ListAccounts(ctx, connect.NewRequest(&v1alpha1.ListAccountsRequest{}))
+	l, err := client.ListAccounts(ctx, &v1alpha1.ListAccountsRequest{})
 	require.NoError(t, err)
-	assert.Empty(t, l.Msg.Accounts)
+	assert.Empty(t, l.Accounts)
 
 	// Starting a login of an unknown platform is refused.
-	_, err = client.StartLogin(ctx, connect.NewRequest(&v1alpha1.StartLoginRequest{Platform: "nope"}))
+	_, err = client.StartLogin(ctx, &v1alpha1.StartLoginRequest{Platform: "nope"})
 	require.Error(t, err)
 
 	// Canceling a login that is not in progress is a no-op.
-	_, err = client.CancelLogin(ctx, connect.NewRequest(&v1alpha1.CancelLoginRequest{Platform: "nope"}))
+	_, err = client.CancelLogin(ctx, &v1alpha1.CancelLoginRequest{Platform: "nope"})
 	require.NoError(t, err)
 }
 
@@ -415,13 +416,13 @@ func TestAPIServesTheCommandService(t *testing.T) {
 	ctx := t.Context()
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewCommandServiceClient(http.DefaultClient, base)
+	client := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
 
 	// The fresh profile comes with the preset commands.
-	l0, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{}))
+	l0, err := client.List(ctx, &v1alpha1.ListCommandsRequest{})
 	require.NoError(t, err)
-	count0 := len(l0.Msg.Commands)
-	assert.NotEmpty(t, l0.Msg.Commands)
+	count0 := len(l0.Commands)
+	assert.NotEmpty(t, l0.Commands)
 
 	// Create a chat command from its document.
 	doc := "apiVersion: streamcrew/v1alpha1\n" +
@@ -433,56 +434,56 @@ func TestAPIServesTheCommandService(t *testing.T) {
 		"  errorPolicy: abort\n" +
 		"  actions:\n" +
 		"    - {type: chat, kind: message, message: \"hi\"}\n"
-	cr, err := client.Create(ctx, connect.NewRequest(&v1alpha1.CreateCommandRequest{Document: doc, Format: "yaml"}))
+	cr, err := client.Create(ctx, &v1alpha1.CreateCommandRequest{Document: doc, Format: "yaml"})
 	require.NoError(t, err)
-	assert.Equal(t, "hug", cr.Msg.Command.Name)
-	id := cr.Msg.Command.Id
+	assert.Equal(t, "hug", cr.Command.Name)
+	id := cr.Command.Id
 	assert.NotEmpty(t, id)
 
 	// The prefix filter finds the new command, and the list grew by one.
-	l1, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{Prefix: "hu"}))
+	l1, err := client.List(ctx, &v1alpha1.ListCommandsRequest{Prefix: "hu"})
 	require.NoError(t, err)
-	assert.Len(t, l1.Msg.Commands, 1)
-	assert.Equal(t, "hug", l1.Msg.Commands[0].Name)
-	all, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{}))
+	assert.Len(t, l1.Commands, 1)
+	assert.Equal(t, "hug", l1.Commands[0].Name)
+	all, err := client.List(ctx, &v1alpha1.ListCommandsRequest{})
 	require.NoError(t, err)
-	assert.Len(t, all.Msg.Commands, count0+1)
+	assert.Len(t, all.Commands, count0+1)
 
 	// Get returns the command and its document.
-	g, err := client.Get(ctx, connect.NewRequest(&v1alpha1.GetCommandRequest{Id: id}))
+	g, err := client.Get(ctx, &v1alpha1.GetCommandRequest{Id: id})
 	require.NoError(t, err)
-	assert.Equal(t, "hug", g.Msg.Summary.Name)
-	assert.NotEmpty(t, g.Msg.Document)
-	assert.Equal(t, "yaml", g.Msg.Format)
+	assert.Equal(t, "hug", g.Summary.Name)
+	assert.NotEmpty(t, g.Document)
+	assert.Equal(t, "yaml", g.Format)
 
 	// Export writes the commands to a document.
-	ex, err := client.Export(ctx, connect.NewRequest(&v1alpha1.ExportCommandsRequest{Format: "yaml"}))
+	ex, err := client.Export(ctx, &v1alpha1.ExportCommandsRequest{Format: "yaml"})
 	require.NoError(t, err)
-	assert.Contains(t, ex.Msg.Document, "hug")
+	assert.Contains(t, ex.Document, "hug")
 
 	// TypeCatalog lists the action types.
-	tc, err := client.TypeCatalog(ctx, connect.NewRequest(&v1alpha1.TypeCatalogRequest{}))
+	tc, err := client.TypeCatalog(ctx, &v1alpha1.TypeCatalogRequest{})
 	require.NoError(t, err)
-	assert.NotEmpty(t, tc.Msg.Actions)
+	assert.NotEmpty(t, tc.Actions)
 
 	// The instance queue is not paused at first.
-	li, err := client.ListInstances(ctx, connect.NewRequest(&v1alpha1.ListInstancesRequest{}))
+	li, err := client.ListInstances(ctx, &v1alpha1.ListInstancesRequest{})
 	require.NoError(t, err)
-	assert.False(t, li.Msg.Paused)
+	assert.False(t, li.Paused)
 
 	// Pause and resume the queue.
-	pq, err := client.PauseQueue(ctx, connect.NewRequest(&v1alpha1.PauseQueueRequest{Pause: true}))
+	pq, err := client.PauseQueue(ctx, &v1alpha1.PauseQueueRequest{Pause: true})
 	require.NoError(t, err)
-	assert.True(t, pq.Msg.Paused)
-	_, err = client.PauseQueue(ctx, connect.NewRequest(&v1alpha1.PauseQueueRequest{Pause: false}))
+	assert.True(t, pq.Paused)
+	_, err = client.PauseQueue(ctx, &v1alpha1.PauseQueueRequest{Pause: false})
 	require.NoError(t, err)
 
 	// Delete removes the command; the list is back to the presets.
-	_, err = client.Delete(ctx, connect.NewRequest(&v1alpha1.DeleteCommandRequest{Id: id}))
+	_, err = client.Delete(ctx, &v1alpha1.DeleteCommandRequest{Id: id})
 	require.NoError(t, err)
-	l2, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{Prefix: "hu"}))
+	l2, err := client.List(ctx, &v1alpha1.ListCommandsRequest{Prefix: "hu"})
 	require.NoError(t, err)
-	assert.Empty(t, l2.Msg.Commands)
+	assert.Empty(t, l2.Commands)
 }
 
 // TestAPIServesTheStreamService exercises the StreamService through the real
@@ -496,45 +497,39 @@ func TestAPIServesTheStreamService(t *testing.T) {
 	ctx := t.Context()
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewStreamServiceClient(http.DefaultClient, base)
+	client := streamcrewv1alpha1connect.NewStreamServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
 
 	subCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stream, err := client.Subscribe(subCtx, connect.NewRequest(&v1alpha1.SubscribeRequest{}))
+	stream, err := client.Subscribe(subCtx, &v1alpha1.SubscribeRequest{})
 	require.NoError(t, err)
 
 	// A chat message arrives on the stream.
 	_, err = mp.Say(ctx, "alice", "hello stream")
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		if !stream.Receive() {
-			return false
-		}
-		return stream.Msg().GetChat() != nil && stream.Msg().GetChat().GetText() == "hello stream"
+		event, err := stream.Receive()
+		return err == nil && event.GetChat() != nil && event.GetChat().GetText() == "hello stream"
 	}, 5*time.Second, 10*time.Millisecond, "the chat message on the stream")
 
 	// A prompt is delivered through the stream.
 	p := prompt.Prompt{ID: "test-prompt", Kind: prompt.KindConfirmation, Text: "a prompt"}
 	require.NoError(t, a.Bus().Publish(ctx, event.New(event.Source{Kind: event.SourceSystem, Name: "prompt"}, prompt.Type, p)))
 	require.Eventually(t, func() bool {
-		if !stream.Receive() {
-			return false
-		}
-		return stream.Msg().GetPrompt() != nil && stream.Msg().GetPrompt().GetId() == "test-prompt"
+		event, err := stream.Receive()
+		return err == nil && event.GetPrompt() != nil && event.GetPrompt().GetId() == "test-prompt"
 	}, 5*time.Second, 10*time.Millisecond, "the prompt on the stream")
 
 	// Answering a prompt that is not pending is refused.
-	_, err = client.AnswerPrompt(ctx, connect.NewRequest(&v1alpha1.AnswerPromptRequest{Id: "test-prompt"}))
+	_, err = client.AnswerPrompt(ctx, &v1alpha1.AnswerPromptRequest{Id: "test-prompt"})
 	require.Error(t, err)
 
 	// A reconnecting client catches up with the since buffer.
-	catchup, err := client.Subscribe(ctx, connect.NewRequest(&v1alpha1.SubscribeRequest{Since: 10}))
+	catchup, err := client.Subscribe(ctx, &v1alpha1.SubscribeRequest{Since: 10})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		if !catchup.Receive() {
-			return false
-		}
-		return catchup.Msg().GetChat() != nil && catchup.Msg().GetChat().GetText() == "hello stream"
+		event, err := catchup.Receive()
+		return err == nil && event.GetChat() != nil && event.GetChat().GetText() == "hello stream"
 	}, 5*time.Second, 10*time.Millisecond, "the catch-up of the chat message")
 }
 
@@ -547,18 +542,18 @@ func TestAPIServesSetEnabled(t *testing.T) {
 	ctx := t.Context()
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewCommandServiceClient(http.DefaultClient, base)
+	client := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
 
-	l0, err := client.List(ctx, connect.NewRequest(&v1alpha1.ListCommandsRequest{}))
+	l0, err := client.List(ctx, &v1alpha1.ListCommandsRequest{})
 	require.NoError(t, err)
-	require.NotEmpty(t, l0.Msg.Commands)
-	id, enabled := l0.Msg.Commands[0].Id, l0.Msg.Commands[0].Enabled
+	require.NotEmpty(t, l0.Commands)
+	id, enabled := l0.Commands[0].Id, l0.Commands[0].Enabled
 
-	resp, err := client.SetEnabled(ctx, connect.NewRequest(&v1alpha1.SetEnabledCommandRequest{Id: id, Enabled: !enabled}))
+	resp, err := client.SetEnabled(ctx, &v1alpha1.SetEnabledCommandRequest{Id: id, Enabled: !enabled})
 	require.NoError(t, err)
-	assert.Equal(t, !enabled, resp.Msg.Command.Enabled)
+	assert.Equal(t, !enabled, resp.Command.Enabled)
 
-	_, err = client.SetEnabled(ctx, connect.NewRequest(&v1alpha1.SetEnabledCommandRequest{Id: "no-such-id"}))
+	_, err = client.SetEnabled(ctx, &v1alpha1.SetEnabledCommandRequest{Id: "no-such-id"})
 	require.Error(t, err)
 }
 
@@ -572,28 +567,28 @@ func TestAPIServesSimulate(t *testing.T) {
 	ctx := t.Context()
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewStreamServiceClient(http.DefaultClient, base)
-	chat := streamcrewv1alpha1connect.NewChatServiceClient(http.DefaultClient, base)
+	client := streamcrewv1alpha1connect.NewStreamServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	chat := streamcrewv1alpha1connect.NewChatServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
 	follows := a.Bus().Subscribe(ctx, event.WithPrefixes("channel."))
 
 	// A chat message of a user appears in the chat history.
-	resp, err := client.Simulate(ctx, connect.NewRequest(&v1alpha1.SimulateEventRequest{
+	resp, err := client.Simulate(ctx, &v1alpha1.SimulateEventRequest{
 		EventType: "chat.message",
 		User:      "alice",
 		Text:      "hello from the API",
-	}))
+	})
 	require.NoError(t, err)
-	assert.NotEmpty(t, resp.Msg.EventId)
+	assert.NotEmpty(t, resp.EventId)
 	require.Eventually(t, func() bool {
-		h, err := chat.History(ctx, connect.NewRequest(&v1alpha1.HistoryChatRequest{}))
-		return err == nil && len(h.Msg.Messages) > 0 && h.Msg.Messages[0].Login == "alice" && h.Msg.Messages[0].Text == "hello from the API"
+		h, err := chat.History(ctx, &v1alpha1.HistoryChatRequest{})
+		return err == nil && len(h.Messages) > 0 && h.Messages[0].Login == "alice" && h.Messages[0].Text == "hello from the API"
 	}, 5*time.Second, 10*time.Millisecond, "the simulated chat message in the history")
 
 	// A platform-neutral event fires on the bus.
-	_, err = client.Simulate(ctx, connect.NewRequest(&v1alpha1.SimulateEventRequest{
+	_, err = client.Simulate(ctx, &v1alpha1.SimulateEventRequest{
 		EventType: "channel.follow",
 		User:      "dave",
-	}))
+	})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		select {
@@ -605,28 +600,30 @@ func TestAPIServesSimulate(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond, "the simulated follow on the bus")
 
 	// A chat message without a user is refused.
-	_, err = client.Simulate(ctx, connect.NewRequest(&v1alpha1.SimulateEventRequest{
+	_, err = client.Simulate(ctx, &v1alpha1.SimulateEventRequest{
 		EventType: "chat.message",
 		Text:      "no user",
-	}))
+	})
 	require.Error(t, err)
 
 	// A type the mock platform does not simulate is refused.
-	_, err = client.Simulate(ctx, connect.NewRequest(&v1alpha1.SimulateEventRequest{
+	_, err = client.Simulate(ctx, &v1alpha1.SimulateEventRequest{
 		EventType: "twitch.channel.follow",
-	}))
+	})
 	require.Error(t, err)
 }
 
-// withAuth returns the client option that sends the bearer token of value
-// with every unary call.
-func withAuth(value string) connect.Option {
-	return connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			req.Header().Set("Authorization", "Bearer "+value)
-			return next(ctx, req)
+// withAuth returns the client interceptor that sends the bearer token of
+// value with every call.
+func withAuth(value string) connect.ClientInterceptor {
+	return func(next connect.ClientFunc) connect.ClientFunc {
+		return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
+			if info, ok := connect.CallInfoForClientContext(ctx); ok {
+				info.RequestHeader().Set("Authorization", "Bearer "+value)
+			}
+			return next(ctx, spec)
 		}
-	}))
+	}
 }
 
 // TestAPITokensProtectTheAPI covers the token access control (roadmap
@@ -641,8 +638,8 @@ func TestAPITokensProtectTheAPI(t *testing.T) {
 	base := "http://" + mustServerAddr(t, a)
 
 	// Without tokens the API is open.
-	open := streamcrewv1alpha1connect.NewCounterServiceClient(http.DefaultClient, base)
-	_, err := open.List(ctx, connect.NewRequest(&v1alpha1.ListCountersRequest{}))
+	open := streamcrewv1alpha1connect.NewCounterServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	_, err := open.List(ctx, &v1alpha1.ListCountersRequest{})
 	require.NoError(t, err)
 
 	// With tokens the API is protected.
@@ -655,33 +652,33 @@ func TestAPITokensProtectTheAPI(t *testing.T) {
 	require.NoError(t, err)
 
 	// Without or with an invalid token: unauthenticated.
-	_, err = open.List(ctx, connect.NewRequest(&v1alpha1.ListCountersRequest{}))
+	_, err = open.List(ctx, &v1alpha1.ListCountersRequest{})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 
-	bogus := streamcrewv1alpha1connect.NewCounterServiceClient(http.DefaultClient, base, withAuth("sc_bogus"))
-	_, err = bogus.List(ctx, connect.NewRequest(&v1alpha1.ListCountersRequest{}))
+	bogus := streamcrewv1alpha1connect.NewCounterServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0)), withAuth("sc_bogus")))
+	_, err = bogus.List(ctx, &v1alpha1.ListCountersRequest{})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 
 	// A read token can read, but not create.
-	read := streamcrewv1alpha1connect.NewCounterServiceClient(http.DefaultClient, base, withAuth(readValue))
-	_, err = read.List(ctx, connect.NewRequest(&v1alpha1.ListCountersRequest{}))
+	read := streamcrewv1alpha1connect.NewCounterServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0)), withAuth(readValue)))
+	_, err = read.List(ctx, &v1alpha1.ListCountersRequest{})
 	require.NoError(t, err)
-	_, err = read.Create(ctx, connect.NewRequest(&v1alpha1.CreateCounterRequest{Name: "hugs"}))
+	_, err = read.Create(ctx, &v1alpha1.CreateCounterRequest{Name: "hugs"})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 
 	// An admin token can create.
-	admin := streamcrewv1alpha1connect.NewCounterServiceClient(http.DefaultClient, base, withAuth(adminValue))
-	_, err = admin.Create(ctx, connect.NewRequest(&v1alpha1.CreateCounterRequest{Name: "hugs"}))
+	admin := streamcrewv1alpha1connect.NewCounterServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0)), withAuth(adminValue)))
+	_, err = admin.Create(ctx, &v1alpha1.CreateCounterRequest{Name: "hugs"})
 	require.NoError(t, err)
 
 	// An overlay token can read, but not control.
-	overlay := streamcrewv1alpha1connect.NewChatServiceClient(http.DefaultClient, base, withAuth(overlayValue))
-	_, err = overlay.History(ctx, connect.NewRequest(&v1alpha1.HistoryChatRequest{}))
+	overlay := streamcrewv1alpha1connect.NewChatServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0)), withAuth(overlayValue)))
+	_, err = overlay.History(ctx, &v1alpha1.HistoryChatRequest{})
 	require.NoError(t, err)
-	_, err = overlay.Send(ctx, connect.NewRequest(&v1alpha1.SendChatRequest{Text: "nope"}))
+	_, err = overlay.Send(ctx, &v1alpha1.SendChatRequest{Text: "nope"})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 }

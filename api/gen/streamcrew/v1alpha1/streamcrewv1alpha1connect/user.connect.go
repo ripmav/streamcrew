@@ -10,228 +10,249 @@
 package streamcrewv1alpha1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// UserServiceName is the fully-qualified name of the UserService service.
 	UserServiceName = "streamcrew.v1alpha1.UserService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// UserServiceListProcedure is the fully-qualified name of the UserService's List RPC.
+	// UserServiceListProcedure is the procedure name of the UserService's List RPC.
 	UserServiceListProcedure = "/streamcrew.v1alpha1.UserService/List"
-	// UserServiceGetProcedure is the fully-qualified name of the UserService's Get RPC.
+	// UserServiceGetProcedure is the procedure name of the UserService's Get RPC.
 	UserServiceGetProcedure = "/streamcrew.v1alpha1.UserService/Get"
-	// UserServiceUpdateProcedure is the fully-qualified name of the UserService's Update RPC.
+	// UserServiceUpdateProcedure is the procedure name of the UserService's Update RPC.
 	UserServiceUpdateProcedure = "/streamcrew.v1alpha1.UserService/Update"
-	// UserServiceMergeProcedure is the fully-qualified name of the UserService's Merge RPC.
+	// UserServiceMergeProcedure is the procedure name of the UserService's Merge RPC.
 	UserServiceMergeProcedure = "/streamcrew.v1alpha1.UserService/Merge"
-	// UserServiceRankingsProcedure is the fully-qualified name of the UserService's Rankings RPC.
+	// UserServiceRankingsProcedure is the procedure name of the UserService's Rankings RPC.
 	UserServiceRankingsProcedure = "/streamcrew.v1alpha1.UserService/Rankings"
+)
+
+var (
+	userServiceListSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_user_proto.Services().ByName("UserService").Methods().ByName("List"),
+			Procedure:  UserServiceListProcedure,
+		}
+	})
+	userServiceGetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_user_proto.Services().ByName("UserService").Methods().ByName("Get"),
+			Procedure:  UserServiceGetProcedure,
+		}
+	})
+	userServiceUpdateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_user_proto.Services().ByName("UserService").Methods().ByName("Update"),
+			Procedure:  UserServiceUpdateProcedure,
+		}
+	})
+	userServiceMergeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_user_proto.Services().ByName("UserService").Methods().ByName("Merge"),
+			Procedure:  UserServiceMergeProcedure,
+		}
+	})
+	userServiceRankingsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_user_proto.Services().ByName("UserService").Methods().ByName("Rankings"),
+			Procedure:  UserServiceRankingsProcedure,
+		}
+	})
 )
 
 // UserServiceClient is a client for the streamcrew.v1alpha1.UserService service.
 type UserServiceClient interface {
 	// List lists the users, optionally filtered and ranked.
-	List(context.Context, *connect.Request[v1alpha1.ListUsersRequest]) (*connect.Response[v1alpha1.ListUsersResponse], error)
+	List(context.Context, *v1alpha1.ListUsersRequest) (*v1alpha1.ListUsersResponse, error)
 	// Get returns one user by ID or by platform login.
-	Get(context.Context, *connect.Request[v1alpha1.GetUserRequest]) (*connect.Response[v1alpha1.GetUserResponse], error)
+	Get(context.Context, *v1alpha1.GetUserRequest) (*v1alpha1.GetUserResponse, error)
 	// Update edits the mutable fields of a user (roles, title, strikes,
 	// excluded).
-	Update(context.Context, *connect.Request[v1alpha1.UpdateUserRequest]) (*connect.Response[v1alpha1.UpdateUserResponse], error)
+	Update(context.Context, *v1alpha1.UpdateUserRequest) (*v1alpha1.UpdateUserResponse, error)
 	// Link merges the accounts of two users into one.
-	Merge(context.Context, *connect.Request[v1alpha1.MergeUsersRequest]) (*connect.Response[v1alpha1.MergeUsersResponse], error)
+	Merge(context.Context, *v1alpha1.MergeUsersRequest) (*v1alpha1.MergeUsersResponse, error)
 	// Rankings returns the top users per statistic.
-	Rankings(context.Context, *connect.Request[v1alpha1.RankingsRequest]) (*connect.Response[v1alpha1.RankingsResponse], error)
+	Rankings(context.Context, *v1alpha1.RankingsRequest) (*v1alpha1.RankingsResponse, error)
 }
 
-// NewUserServiceClient constructs a client for the streamcrew.v1alpha1.UserService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewUserServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) UserServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	userServiceMethods := v1alpha1.File_streamcrew_v1alpha1_user_proto.Services().ByName("UserService").Methods()
-	return &userServiceClient{
-		list: connect.NewClient[v1alpha1.ListUsersRequest, v1alpha1.ListUsersResponse](
-			httpClient,
-			baseURL+UserServiceListProcedure,
-			connect.WithSchema(userServiceMethods.ByName("List")),
-			connect.WithClientOptions(opts...),
-		),
-		get: connect.NewClient[v1alpha1.GetUserRequest, v1alpha1.GetUserResponse](
-			httpClient,
-			baseURL+UserServiceGetProcedure,
-			connect.WithSchema(userServiceMethods.ByName("Get")),
-			connect.WithClientOptions(opts...),
-		),
-		update: connect.NewClient[v1alpha1.UpdateUserRequest, v1alpha1.UpdateUserResponse](
-			httpClient,
-			baseURL+UserServiceUpdateProcedure,
-			connect.WithSchema(userServiceMethods.ByName("Update")),
-			connect.WithClientOptions(opts...),
-		),
-		merge: connect.NewClient[v1alpha1.MergeUsersRequest, v1alpha1.MergeUsersResponse](
-			httpClient,
-			baseURL+UserServiceMergeProcedure,
-			connect.WithSchema(userServiceMethods.ByName("Merge")),
-			connect.WithClientOptions(opts...),
-		),
-		rankings: connect.NewClient[v1alpha1.RankingsRequest, v1alpha1.RankingsResponse](
-			httpClient,
-			baseURL+UserServiceRankingsProcedure,
-			connect.WithSchema(userServiceMethods.ByName("Rankings")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// userServiceClient implements UserServiceClient.
-type userServiceClient struct {
-	list     *connect.Client[v1alpha1.ListUsersRequest, v1alpha1.ListUsersResponse]
-	get      *connect.Client[v1alpha1.GetUserRequest, v1alpha1.GetUserResponse]
-	update   *connect.Client[v1alpha1.UpdateUserRequest, v1alpha1.UpdateUserResponse]
-	merge    *connect.Client[v1alpha1.MergeUsersRequest, v1alpha1.MergeUsersResponse]
-	rankings *connect.Client[v1alpha1.RankingsRequest, v1alpha1.RankingsResponse]
-}
-
-// List calls streamcrew.v1alpha1.UserService.List.
-func (c *userServiceClient) List(ctx context.Context, req *connect.Request[v1alpha1.ListUsersRequest]) (*connect.Response[v1alpha1.ListUsersResponse], error) {
-	return c.list.CallUnary(ctx, req)
-}
-
-// Get calls streamcrew.v1alpha1.UserService.Get.
-func (c *userServiceClient) Get(ctx context.Context, req *connect.Request[v1alpha1.GetUserRequest]) (*connect.Response[v1alpha1.GetUserResponse], error) {
-	return c.get.CallUnary(ctx, req)
-}
-
-// Update calls streamcrew.v1alpha1.UserService.Update.
-func (c *userServiceClient) Update(ctx context.Context, req *connect.Request[v1alpha1.UpdateUserRequest]) (*connect.Response[v1alpha1.UpdateUserResponse], error) {
-	return c.update.CallUnary(ctx, req)
-}
-
-// Merge calls streamcrew.v1alpha1.UserService.Merge.
-func (c *userServiceClient) Merge(ctx context.Context, req *connect.Request[v1alpha1.MergeUsersRequest]) (*connect.Response[v1alpha1.MergeUsersResponse], error) {
-	return c.merge.CallUnary(ctx, req)
-}
-
-// Rankings calls streamcrew.v1alpha1.UserService.Rankings.
-func (c *userServiceClient) Rankings(ctx context.Context, req *connect.Request[v1alpha1.RankingsRequest]) (*connect.Response[v1alpha1.RankingsResponse], error) {
-	return c.rankings.CallUnary(ctx, req)
+// NewUserServiceClient constructs a client for the streamcrew.v1alpha1.UserService service.
+// Multiple service clients may share a single connect.Client.
+func NewUserServiceClient(client *connect.Client) UserServiceClient {
+	return &userServiceClient{client: client}
 }
 
 // UserServiceHandler is an implementation of the streamcrew.v1alpha1.UserService service.
 type UserServiceHandler interface {
 	// List lists the users, optionally filtered and ranked.
-	List(context.Context, *connect.Request[v1alpha1.ListUsersRequest]) (*connect.Response[v1alpha1.ListUsersResponse], error)
+	List(context.Context, *v1alpha1.ListUsersRequest) (*v1alpha1.ListUsersResponse, error)
 	// Get returns one user by ID or by platform login.
-	Get(context.Context, *connect.Request[v1alpha1.GetUserRequest]) (*connect.Response[v1alpha1.GetUserResponse], error)
+	Get(context.Context, *v1alpha1.GetUserRequest) (*v1alpha1.GetUserResponse, error)
 	// Update edits the mutable fields of a user (roles, title, strikes,
 	// excluded).
-	Update(context.Context, *connect.Request[v1alpha1.UpdateUserRequest]) (*connect.Response[v1alpha1.UpdateUserResponse], error)
+	Update(context.Context, *v1alpha1.UpdateUserRequest) (*v1alpha1.UpdateUserResponse, error)
 	// Link merges the accounts of two users into one.
-	Merge(context.Context, *connect.Request[v1alpha1.MergeUsersRequest]) (*connect.Response[v1alpha1.MergeUsersResponse], error)
+	Merge(context.Context, *v1alpha1.MergeUsersRequest) (*v1alpha1.MergeUsersResponse, error)
 	// Rankings returns the top users per statistic.
-	Rankings(context.Context, *connect.Request[v1alpha1.RankingsRequest]) (*connect.Response[v1alpha1.RankingsResponse], error)
+	Rankings(context.Context, *v1alpha1.RankingsRequest) (*v1alpha1.RankingsResponse, error)
 }
 
-// NewUserServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewUserServiceHandler(svc UserServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	userServiceMethods := v1alpha1.File_streamcrew_v1alpha1_user_proto.Services().ByName("UserService").Methods()
-	userServiceListHandler := connect.NewUnaryHandler(
-		UserServiceListProcedure,
-		svc.List,
-		connect.WithSchema(userServiceMethods.ByName("List")),
-		connect.WithHandlerOptions(opts...),
+// RegisterUserServiceHandler registers svc as the streamcrew.v1alpha1.UserService implementation on
+// server.
+func RegisterUserServiceHandler(server *connect.Server, svc UserServiceHandler) {
+	adapter := userServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: userServiceListSpec(), Handler: adapter.list},
+		connect.Method{Spec: userServiceGetSpec(), Handler: adapter.get},
+		connect.Method{Spec: userServiceUpdateSpec(), Handler: adapter.update},
+		connect.Method{Spec: userServiceMergeSpec(), Handler: adapter.merge},
+		connect.Method{Spec: userServiceRankingsSpec(), Handler: adapter.rankings},
 	)
-	userServiceGetHandler := connect.NewUnaryHandler(
-		UserServiceGetProcedure,
-		svc.Get,
-		connect.WithSchema(userServiceMethods.ByName("Get")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceUpdateHandler := connect.NewUnaryHandler(
-		UserServiceUpdateProcedure,
-		svc.Update,
-		connect.WithSchema(userServiceMethods.ByName("Update")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceMergeHandler := connect.NewUnaryHandler(
-		UserServiceMergeProcedure,
-		svc.Merge,
-		connect.WithSchema(userServiceMethods.ByName("Merge")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceRankingsHandler := connect.NewUnaryHandler(
-		UserServiceRankingsProcedure,
-		svc.Rankings,
-		connect.WithSchema(userServiceMethods.ByName("Rankings")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/streamcrew.v1alpha1.UserService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case UserServiceListProcedure:
-			userServiceListHandler.ServeHTTP(w, r)
-		case UserServiceGetProcedure:
-			userServiceGetHandler.ServeHTTP(w, r)
-		case UserServiceUpdateProcedure:
-			userServiceUpdateHandler.ServeHTTP(w, r)
-		case UserServiceMergeProcedure:
-			userServiceMergeHandler.ServeHTTP(w, r)
-		case UserServiceRankingsProcedure:
-			userServiceRankingsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedUserServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedUserServiceHandler struct{}
 
-func (UnimplementedUserServiceHandler) List(context.Context, *connect.Request[v1alpha1.ListUsersRequest]) (*connect.Response[v1alpha1.ListUsersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.UserService.List is not implemented"))
+func (UnimplementedUserServiceHandler) List(context.Context, *v1alpha1.ListUsersRequest) (*v1alpha1.ListUsersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.UserService.List is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) Get(context.Context, *connect.Request[v1alpha1.GetUserRequest]) (*connect.Response[v1alpha1.GetUserResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.UserService.Get is not implemented"))
+func (UnimplementedUserServiceHandler) Get(context.Context, *v1alpha1.GetUserRequest) (*v1alpha1.GetUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.UserService.Get is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) Update(context.Context, *connect.Request[v1alpha1.UpdateUserRequest]) (*connect.Response[v1alpha1.UpdateUserResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.UserService.Update is not implemented"))
+func (UnimplementedUserServiceHandler) Update(context.Context, *v1alpha1.UpdateUserRequest) (*v1alpha1.UpdateUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.UserService.Update is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) Merge(context.Context, *connect.Request[v1alpha1.MergeUsersRequest]) (*connect.Response[v1alpha1.MergeUsersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.UserService.Merge is not implemented"))
+func (UnimplementedUserServiceHandler) Merge(context.Context, *v1alpha1.MergeUsersRequest) (*v1alpha1.MergeUsersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.UserService.Merge is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) Rankings(context.Context, *connect.Request[v1alpha1.RankingsRequest]) (*connect.Response[v1alpha1.RankingsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.UserService.Rankings is not implemented"))
+func (UnimplementedUserServiceHandler) Rankings(context.Context, *v1alpha1.RankingsRequest) (*v1alpha1.RankingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.UserService.Rankings is not implemented")
+}
+
+type userServiceClient struct {
+	client *connect.Client
+}
+
+func (c *userServiceClient) List(ctx context.Context, req *v1alpha1.ListUsersRequest) (*v1alpha1.ListUsersResponse, error) {
+	var res v1alpha1.ListUsersResponse
+	if err := c.client.CallUnary(ctx, userServiceListSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) Get(ctx context.Context, req *v1alpha1.GetUserRequest) (*v1alpha1.GetUserResponse, error) {
+	var res v1alpha1.GetUserResponse
+	if err := c.client.CallUnary(ctx, userServiceGetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) Update(ctx context.Context, req *v1alpha1.UpdateUserRequest) (*v1alpha1.UpdateUserResponse, error) {
+	var res v1alpha1.UpdateUserResponse
+	if err := c.client.CallUnary(ctx, userServiceUpdateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) Merge(ctx context.Context, req *v1alpha1.MergeUsersRequest) (*v1alpha1.MergeUsersResponse, error) {
+	var res v1alpha1.MergeUsersResponse
+	if err := c.client.CallUnary(ctx, userServiceMergeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) Rankings(ctx context.Context, req *v1alpha1.RankingsRequest) (*v1alpha1.RankingsResponse, error) {
+	var res v1alpha1.RankingsResponse
+	if err := c.client.CallUnary(ctx, userServiceRankingsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type userServiceHandler struct{ svc UserServiceHandler }
+
+func (h userServiceHandler) list(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.ListUsersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.List(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) get(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.GetUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Get(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) update(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.UpdateUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Update(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) merge(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.MergeUsersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Merge(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) rankings(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.RankingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Rankings(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

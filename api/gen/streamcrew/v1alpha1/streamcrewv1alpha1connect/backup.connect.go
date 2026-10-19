@@ -11,166 +11,171 @@
 package streamcrewv1alpha1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// BackupServiceName is the fully-qualified name of the BackupService service.
 	BackupServiceName = "streamcrew.v1alpha1.BackupService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// BackupServiceCreateProcedure is the fully-qualified name of the BackupService's Create RPC.
+	// BackupServiceCreateProcedure is the procedure name of the BackupService's Create RPC.
 	BackupServiceCreateProcedure = "/streamcrew.v1alpha1.BackupService/Create"
-	// BackupServiceListProcedure is the fully-qualified name of the BackupService's List RPC.
+	// BackupServiceListProcedure is the procedure name of the BackupService's List RPC.
 	BackupServiceListProcedure = "/streamcrew.v1alpha1.BackupService/List"
-	// BackupServiceRestoreProcedure is the fully-qualified name of the BackupService's Restore RPC.
+	// BackupServiceRestoreProcedure is the procedure name of the BackupService's Restore RPC.
 	BackupServiceRestoreProcedure = "/streamcrew.v1alpha1.BackupService/Restore"
+)
+
+var (
+	backupServiceCreateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_backup_proto.Services().ByName("BackupService").Methods().ByName("Create"),
+			Procedure:  BackupServiceCreateProcedure,
+		}
+	})
+	backupServiceListSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_backup_proto.Services().ByName("BackupService").Methods().ByName("List"),
+			Procedure:  BackupServiceListProcedure,
+		}
+	})
+	backupServiceRestoreSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1alpha1.File_streamcrew_v1alpha1_backup_proto.Services().ByName("BackupService").Methods().ByName("Restore"),
+			Procedure:  BackupServiceRestoreProcedure,
+		}
+	})
 )
 
 // BackupServiceClient is a client for the streamcrew.v1alpha1.BackupService service.
 type BackupServiceClient interface {
 	// Create creates a new backup and returns it.
-	Create(context.Context, *connect.Request[v1alpha1.CreateBackupRequest]) (*connect.Response[v1alpha1.CreateBackupResponse], error)
+	Create(context.Context, *v1alpha1.CreateBackupRequest) (*v1alpha1.CreateBackupResponse, error)
 	// List lists the backups of the profile.
-	List(context.Context, *connect.Request[v1alpha1.ListBackupsRequest]) (*connect.Response[v1alpha1.ListBackupsResponse], error)
+	List(context.Context, *v1alpha1.ListBackupsRequest) (*v1alpha1.ListBackupsResponse, error)
 	// Restore restores a backup, replacing the current profile data.
-	Restore(context.Context, *connect.Request[v1alpha1.RestoreBackupRequest]) (*connect.Response[v1alpha1.RestoreBackupResponse], error)
+	Restore(context.Context, *v1alpha1.RestoreBackupRequest) (*v1alpha1.RestoreBackupResponse, error)
 }
 
-// NewBackupServiceClient constructs a client for the streamcrew.v1alpha1.BackupService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewBackupServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BackupServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	backupServiceMethods := v1alpha1.File_streamcrew_v1alpha1_backup_proto.Services().ByName("BackupService").Methods()
-	return &backupServiceClient{
-		create: connect.NewClient[v1alpha1.CreateBackupRequest, v1alpha1.CreateBackupResponse](
-			httpClient,
-			baseURL+BackupServiceCreateProcedure,
-			connect.WithSchema(backupServiceMethods.ByName("Create")),
-			connect.WithClientOptions(opts...),
-		),
-		list: connect.NewClient[v1alpha1.ListBackupsRequest, v1alpha1.ListBackupsResponse](
-			httpClient,
-			baseURL+BackupServiceListProcedure,
-			connect.WithSchema(backupServiceMethods.ByName("List")),
-			connect.WithClientOptions(opts...),
-		),
-		restore: connect.NewClient[v1alpha1.RestoreBackupRequest, v1alpha1.RestoreBackupResponse](
-			httpClient,
-			baseURL+BackupServiceRestoreProcedure,
-			connect.WithSchema(backupServiceMethods.ByName("Restore")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// backupServiceClient implements BackupServiceClient.
-type backupServiceClient struct {
-	create  *connect.Client[v1alpha1.CreateBackupRequest, v1alpha1.CreateBackupResponse]
-	list    *connect.Client[v1alpha1.ListBackupsRequest, v1alpha1.ListBackupsResponse]
-	restore *connect.Client[v1alpha1.RestoreBackupRequest, v1alpha1.RestoreBackupResponse]
-}
-
-// Create calls streamcrew.v1alpha1.BackupService.Create.
-func (c *backupServiceClient) Create(ctx context.Context, req *connect.Request[v1alpha1.CreateBackupRequest]) (*connect.Response[v1alpha1.CreateBackupResponse], error) {
-	return c.create.CallUnary(ctx, req)
-}
-
-// List calls streamcrew.v1alpha1.BackupService.List.
-func (c *backupServiceClient) List(ctx context.Context, req *connect.Request[v1alpha1.ListBackupsRequest]) (*connect.Response[v1alpha1.ListBackupsResponse], error) {
-	return c.list.CallUnary(ctx, req)
-}
-
-// Restore calls streamcrew.v1alpha1.BackupService.Restore.
-func (c *backupServiceClient) Restore(ctx context.Context, req *connect.Request[v1alpha1.RestoreBackupRequest]) (*connect.Response[v1alpha1.RestoreBackupResponse], error) {
-	return c.restore.CallUnary(ctx, req)
+// NewBackupServiceClient constructs a client for the streamcrew.v1alpha1.BackupService service.
+// Multiple service clients may share a single connect.Client.
+func NewBackupServiceClient(client *connect.Client) BackupServiceClient {
+	return &backupServiceClient{client: client}
 }
 
 // BackupServiceHandler is an implementation of the streamcrew.v1alpha1.BackupService service.
 type BackupServiceHandler interface {
 	// Create creates a new backup and returns it.
-	Create(context.Context, *connect.Request[v1alpha1.CreateBackupRequest]) (*connect.Response[v1alpha1.CreateBackupResponse], error)
+	Create(context.Context, *v1alpha1.CreateBackupRequest) (*v1alpha1.CreateBackupResponse, error)
 	// List lists the backups of the profile.
-	List(context.Context, *connect.Request[v1alpha1.ListBackupsRequest]) (*connect.Response[v1alpha1.ListBackupsResponse], error)
+	List(context.Context, *v1alpha1.ListBackupsRequest) (*v1alpha1.ListBackupsResponse, error)
 	// Restore restores a backup, replacing the current profile data.
-	Restore(context.Context, *connect.Request[v1alpha1.RestoreBackupRequest]) (*connect.Response[v1alpha1.RestoreBackupResponse], error)
+	Restore(context.Context, *v1alpha1.RestoreBackupRequest) (*v1alpha1.RestoreBackupResponse, error)
 }
 
-// NewBackupServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewBackupServiceHandler(svc BackupServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	backupServiceMethods := v1alpha1.File_streamcrew_v1alpha1_backup_proto.Services().ByName("BackupService").Methods()
-	backupServiceCreateHandler := connect.NewUnaryHandler(
-		BackupServiceCreateProcedure,
-		svc.Create,
-		connect.WithSchema(backupServiceMethods.ByName("Create")),
-		connect.WithHandlerOptions(opts...),
+// RegisterBackupServiceHandler registers svc as the streamcrew.v1alpha1.BackupService
+// implementation on server.
+func RegisterBackupServiceHandler(server *connect.Server, svc BackupServiceHandler) {
+	adapter := backupServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: backupServiceCreateSpec(), Handler: adapter.create},
+		connect.Method{Spec: backupServiceListSpec(), Handler: adapter.list},
+		connect.Method{Spec: backupServiceRestoreSpec(), Handler: adapter.restore},
 	)
-	backupServiceListHandler := connect.NewUnaryHandler(
-		BackupServiceListProcedure,
-		svc.List,
-		connect.WithSchema(backupServiceMethods.ByName("List")),
-		connect.WithHandlerOptions(opts...),
-	)
-	backupServiceRestoreHandler := connect.NewUnaryHandler(
-		BackupServiceRestoreProcedure,
-		svc.Restore,
-		connect.WithSchema(backupServiceMethods.ByName("Restore")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/streamcrew.v1alpha1.BackupService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case BackupServiceCreateProcedure:
-			backupServiceCreateHandler.ServeHTTP(w, r)
-		case BackupServiceListProcedure:
-			backupServiceListHandler.ServeHTTP(w, r)
-		case BackupServiceRestoreProcedure:
-			backupServiceRestoreHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedBackupServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedBackupServiceHandler struct{}
 
-func (UnimplementedBackupServiceHandler) Create(context.Context, *connect.Request[v1alpha1.CreateBackupRequest]) (*connect.Response[v1alpha1.CreateBackupResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.BackupService.Create is not implemented"))
+func (UnimplementedBackupServiceHandler) Create(context.Context, *v1alpha1.CreateBackupRequest) (*v1alpha1.CreateBackupResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.BackupService.Create is not implemented")
 }
 
-func (UnimplementedBackupServiceHandler) List(context.Context, *connect.Request[v1alpha1.ListBackupsRequest]) (*connect.Response[v1alpha1.ListBackupsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.BackupService.List is not implemented"))
+func (UnimplementedBackupServiceHandler) List(context.Context, *v1alpha1.ListBackupsRequest) (*v1alpha1.ListBackupsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.BackupService.List is not implemented")
 }
 
-func (UnimplementedBackupServiceHandler) Restore(context.Context, *connect.Request[v1alpha1.RestoreBackupRequest]) (*connect.Response[v1alpha1.RestoreBackupResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("streamcrew.v1alpha1.BackupService.Restore is not implemented"))
+func (UnimplementedBackupServiceHandler) Restore(context.Context, *v1alpha1.RestoreBackupRequest) (*v1alpha1.RestoreBackupResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "streamcrew.v1alpha1.BackupService.Restore is not implemented")
+}
+
+type backupServiceClient struct {
+	client *connect.Client
+}
+
+func (c *backupServiceClient) Create(ctx context.Context, req *v1alpha1.CreateBackupRequest) (*v1alpha1.CreateBackupResponse, error) {
+	var res v1alpha1.CreateBackupResponse
+	if err := c.client.CallUnary(ctx, backupServiceCreateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backupServiceClient) List(ctx context.Context, req *v1alpha1.ListBackupsRequest) (*v1alpha1.ListBackupsResponse, error) {
+	var res v1alpha1.ListBackupsResponse
+	if err := c.client.CallUnary(ctx, backupServiceListSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backupServiceClient) Restore(ctx context.Context, req *v1alpha1.RestoreBackupRequest) (*v1alpha1.RestoreBackupResponse, error) {
+	var res v1alpha1.RestoreBackupResponse
+	if err := c.client.CallUnary(ctx, backupServiceRestoreSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type backupServiceHandler struct{ svc BackupServiceHandler }
+
+func (h backupServiceHandler) create(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.CreateBackupRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Create(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backupServiceHandler) list(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.ListBackupsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.List(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backupServiceHandler) restore(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1alpha1.RestoreBackupRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Restore(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }
