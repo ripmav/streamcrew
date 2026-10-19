@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 )
@@ -37,7 +37,7 @@ type configService struct {
 
 // Get returns the current configuration document and the categories of
 // its settings.
-func (cs *configService) Get(_ context.Context, _ *connect.Request[v1alpha1.GetConfigRequest]) (*connect.Response[v1alpha1.GetConfigResponse], error) {
+func (cs *configService) Get(_ context.Context, _ *v1alpha1.GetConfigRequest) (*v1alpha1.GetConfigResponse, error) {
 	document, hot, fixed, restart, live, err := cs.c.Get()
 	if err != nil {
 		return nil, configError(err)
@@ -49,13 +49,13 @@ func (cs *configService) Get(_ context.Context, _ *connect.Request[v1alpha1.GetC
 		Restart:  restart,
 		Live:     live,
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // Update replaces the configuration document; an invalid document is
 // rejected without a change.
-func (cs *configService) Update(ctx context.Context, req *connect.Request[v1alpha1.UpdateConfigRequest]) (*connect.Response[v1alpha1.UpdateConfigResponse], error) {
-	applied, restart, stored, err := cs.c.Update(ctx, req.Msg.GetDocument())
+func (cs *configService) Update(ctx context.Context, req *v1alpha1.UpdateConfigRequest) (*v1alpha1.UpdateConfigResponse, error) {
+	applied, restart, stored, err := cs.c.Update(ctx, req.GetDocument())
 	if err != nil {
 		return nil, configError(err)
 	}
@@ -64,7 +64,7 @@ func (cs *configService) Update(ctx context.Context, req *connect.Request[v1alph
 		Restart:  restart,
 		Document: stored,
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // configError maps the errors of the port to protocol codes.
@@ -73,9 +73,9 @@ func configError(err error) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, ErrConfigReadOnly):
-		return connect.NewError(connect.CodeFailedPrecondition, err)
+		return connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	case errors.Is(err, ErrConfigInvalid):
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	return connect.NewError(connect.CodeInternal, err)
+	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 }
