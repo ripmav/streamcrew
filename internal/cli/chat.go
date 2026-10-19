@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 )
 
@@ -38,22 +36,22 @@ func (c chatSendCmd) Run(ctx context.Context, e *Env) error {
 		return &usageError{err: errors.New("the text is empty")}
 	}
 	if c.As != "" {
-		resp, err := e.streamClient().Simulate(ctx, connect.NewRequest(&v1alpha1.SimulateEventRequest{
+		resp, err := e.streamClient().Simulate(ctx, &v1alpha1.SimulateEventRequest{
 			EventType: "chat.message",
 			User:      c.As,
 			Text:      text,
-		}))
+		})
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(e.Stdout, "sent as %s (event %s)\n", c.As, resp.Msg.EventId)
+		fmt.Fprintf(e.Stdout, "sent as %s (event %s)\n", c.As, resp.EventId)
 		return nil
 	}
-	_, err := e.chatClient().Send(ctx, connect.NewRequest(&v1alpha1.SendChatRequest{
+	_, err := e.chatClient().Send(ctx, &v1alpha1.SendChatRequest{
 		Text:       text,
 		Channel:    c.Channel,
 		AsStreamer: c.Streamer,
-	}))
+	})
 	if err != nil {
 		return err
 	}
