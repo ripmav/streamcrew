@@ -35,10 +35,15 @@ type EventFilter struct {
 	// kinds are event type prefixes, e.g. "chat", "feed", "command",
 	// "platform", "log", "prompt"; empty matches everything.
 	Kinds []string `protobuf:"bytes,1,rep,name=kinds,proto3" json:"kinds,omitempty"`
+	// min_level is the lowest level of the log events (log.line) that are
+	// delivered: "debug", "info", "warn" or "error"; empty delivers all log
+	// events and does not touch any other event type. It is a read-side
+	// filter: the core's log level is unchanged.
+	MinLevel string `protobuf:"bytes,2,opt,name=min_level,json=minLevel,proto3" json:"min_level,omitempty"`
 	// platforms are platform names; empty matches everything.
-	Platforms []string `protobuf:"bytes,2,rep,name=platforms,proto3" json:"platforms,omitempty"`
+	Platforms []string `protobuf:"bytes,3,rep,name=platforms,proto3" json:"platforms,omitempty"`
 	// channels are channel logins; empty matches everything.
-	Channels      []string `protobuf:"bytes,3,rep,name=channels,proto3" json:"channels,omitempty"`
+	Channels      []string `protobuf:"bytes,4,rep,name=channels,proto3" json:"channels,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -78,6 +83,13 @@ func (x *EventFilter) GetKinds() []string {
 		return x.Kinds
 	}
 	return nil
+}
+
+func (x *EventFilter) GetMinLevel() string {
+	if x != nil {
+		return x.MinLevel
+	}
+	return ""
 }
 
 func (x *EventFilter) GetPlatforms() []string {
@@ -1025,11 +1037,12 @@ var File_streamcrew_v1alpha1_stream_proto protoreflect.FileDescriptor
 
 const file_streamcrew_v1alpha1_stream_proto_rawDesc = "" +
 	"\n" +
-	" streamcrew/v1alpha1/stream.proto\x12\x13streamcrew.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a streamcrew/v1alpha1/system.proto\"]\n" +
+	" streamcrew/v1alpha1/stream.proto\x12\x13streamcrew.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a streamcrew/v1alpha1/system.proto\"z\n" +
 	"\vEventFilter\x12\x14\n" +
-	"\x05kinds\x18\x01 \x03(\tR\x05kinds\x12\x1c\n" +
-	"\tplatforms\x18\x02 \x03(\tR\tplatforms\x12\x1a\n" +
-	"\bchannels\x18\x03 \x03(\tR\bchannels\"b\n" +
+	"\x05kinds\x18\x01 \x03(\tR\x05kinds\x12\x1b\n" +
+	"\tmin_level\x18\x02 \x01(\tR\bminLevel\x12\x1c\n" +
+	"\tplatforms\x18\x03 \x03(\tR\tplatforms\x12\x1a\n" +
+	"\bchannels\x18\x04 \x03(\tR\bchannels\"b\n" +
 	"\x10SubscribeRequest\x128\n" +
 	"\x06filter\x18\x01 \x01(\v2 .streamcrew.v1alpha1.EventFilterR\x06filter\x12\x14\n" +
 	"\x05since\x18\x02 \x01(\rR\x05since\"\xf2\x01\n" +

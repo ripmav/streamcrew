@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -354,7 +355,26 @@ func matchesFilter(ev *v1alpha1.Event, f api.EventFilter) bool {
 	if len(f.Channels) > 0 && !inList(ev.GetChannel(), f.Channels) {
 		return false
 	}
+	// The min level filters the log events only; the level is part of the
+	// protocol (lower-case), so it is compared here (roadmap 6.6.3).
+	if f.MinLevel != "" && ev.GetLog() != nil && slogLevel(ev.GetLog().GetLevel()) < f.MinLevelOr(slog.LevelDebug) {
+		return false
+	}
 	return true
+}
+
+// slogLevel turns a protocol level string into a slog.Level; unknown
+// strings count as the lowest level.
+func slogLevel(s string) slog.Level {
+	switch strings.ToLower(s) {
+	case "info":
+		return slog.LevelInfo
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	}
+	return slog.LevelDebug
 }
 
 func hasPrefixAny(s string, prefixes []string) bool {
