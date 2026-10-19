@@ -48,6 +48,7 @@ func startMockCoreWithConfigFile(t *testing.T, cfgFile string, mode config.Mode)
 		Mode:            mode,
 		Listen:          "127.0.0.1:0",
 		ShutdownTimeout: 5 * time.Second,
+		Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},
 		Log:             config.LogConfig{Level: "info", Format: "text", MaxSize: 1, MaxFiles: 1},
 	}
 	var opts []app.Option

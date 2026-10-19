@@ -64,6 +64,12 @@ type Options struct {
 	LogComponentLevel map[string]string
 	// ShutdownTimeout limits the whole shutdown.
 	ShutdownTimeout time.Duration
+	// StreamBuffer is how many events the stream hub may owe to the bus
+	// before the bus drops them (0 is 1024); StreamCatchUp is how many of
+	// the last events are kept for the since catch-up (0 is 256). Both
+	// apply only at the start of the core (roadmap 6.2.6).
+	StreamBuffer  int
+	StreamCatchUp int
 	// SecretKey is the value of STREAMCREW_SECRET_KEY (ADR-0012); it wins
 	// over the environment variable.
 	SecretKey string
@@ -98,6 +104,12 @@ func Run(ctx context.Context, opts Options) error {
 	if opts.ShutdownTimeout <= 0 {
 		opts.ShutdownTimeout = 15 * time.Second
 	}
+	if opts.StreamBuffer <= 0 {
+		opts.StreamBuffer = 1024
+	}
+	if opts.StreamCatchUp <= 0 {
+		opts.StreamCatchUp = 256
+	}
 	cfg := config.Config{
 		DataDir:         opts.DataDir,
 		Profile:         opts.Profile,
@@ -113,6 +125,10 @@ func Run(ctx context.Context, opts Options) error {
 		FileRoot:        opts.FileRoot,
 		OutboundAllow:   opts.OutboundAllow,
 		ShutdownTimeout: opts.ShutdownTimeout,
+		Stream: config.StreamConfig{
+			Buffer:  opts.StreamBuffer,
+			CatchUp: opts.StreamCatchUp,
+		},
 		Log: config.LogConfig{
 			Level:          opts.LogLevel,
 			ComponentLevel: opts.LogComponentLevel,

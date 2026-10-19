@@ -52,6 +52,9 @@ type Config struct {
 	DryRun          bool          `name:"dry-run" help:"Dry run: the platforms read the channel and log what they would do, instead of doing it (chat, moderation, twitch actions)."`
 	ShutdownTimeout time.Duration `default:"15s" help:"Time limit for the whole shutdown."`
 	Log             LogConfig     `embed:"" prefix:"log-"`
+	// Stream configures the sizes of the stream path; both apply only at
+	// the start of the core (roadmap 6.2.6).
+	Stream StreamConfig `embed:"" prefix:"stream-"`
 
 	// Grant, Revoke, FileRoot and OutboundAllow are the rights of
 	// Code-ADR-0019. Changes of them in the configuration file apply
@@ -70,6 +73,32 @@ type LogConfig struct {
 	File           bool              `default:"true" negatable:"" help:"Write a JSON log file with rotation to <data-dir>/logs."`
 	MaxSize        int               `default:"10" placeholder:"MIB" help:"Rotate the log file when it would exceed this size in MiB. Default: ${default}."`
 	MaxFiles       int               `default:"5" placeholder:"N" help:"Number of rotated log files to keep. Default: ${default}."`
+}
+
+// StreamConfig sets the sizes of the stream path (roadmap 6.2.6): the bus
+// buffer the stream hub owes to the bus and the catch-up buffer for the
+// since replays. Both apply only at the start of the core; a change in the
+// configuration file needs a restart (no hot apply, no API or TUI path).
+type StreamConfig struct {
+	// Buffer is how many events the stream hub may owe to the bus before
+	// the bus drops them for the hub (event.lag).
+	Buffer int `default:"1024" placeholder:"N" help:"Events the stream hub may owe to the bus before the bus drops them. Default: ${default}."`
+	// CatchUp is how many of the last events are kept for the since catch-up
+	// of a reconnecting client.
+	CatchUp int `default:"256" placeholder:"N" help:"Recent events kept for the since catch-up of reconnecting clients. Default: ${default}."`
+}
+
+// check validates the stream sizes; like the other startup settings they
+// must be positive.
+func (s *StreamConfig) check() []error {
+	var errs []error
+	if s.Buffer <= 0 {
+		errs = append(errs, fmt.Errorf("--stream-buffer: must be positive, got %d", s.Buffer))
+	}
+	if s.CatchUp <= 0 {
+		errs = append(errs, fmt.Errorf("--stream-catchup: must be positive, got %d", s.CatchUp))
+	}
+	return errs
 }
 
 // SocketPath is the Unix socket of the desktop core.
@@ -148,6 +177,7 @@ func (c *Config) Resolve() error {
 	if c.ShutdownTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("--shutdown-timeout: must be positive, got %s", c.ShutdownTimeout))
 	}
+	errs = append(errs, c.Stream.check()...)
 	errs = append(errs, c.Log.check()...)
 	if _, err := c.Rights(); err != nil {
 		errs = append(errs, err)

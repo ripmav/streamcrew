@@ -240,6 +240,7 @@ func TestResolve(t *testing.T) {
 			DataDir:         "/data",
 			Mode:            config.ModeDaemon,
 			ShutdownTimeout: time.Second,
+			Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},
 			Log:             config.LogConfig{Level: "info", Format: "text", MaxSize: 1},
 		}
 	}
@@ -272,6 +273,8 @@ func TestResolve(t *testing.T) {
 		{name: "listen without port", modify: func(c *config.Config) { c.Listen = "localhost" }, wantErr: []string{"--listen"}},
 		{name: "listen with bad port", modify: func(c *config.Config) { c.Listen = "localhost:http" }, wantErr: []string{"--listen"}},
 		{name: "shutdown timeout", modify: func(c *config.Config) { c.ShutdownTimeout = 0 }, wantErr: []string{"--shutdown-timeout"}},
+		{name: "stream buffer", modify: func(c *config.Config) { c.Stream.Buffer = 0 }, wantErr: []string{"--stream-buffer"}},
+		{name: "stream catch-up", modify: func(c *config.Config) { c.Stream.CatchUp = -1 }, wantErr: []string{"--stream-catchup"}},
 		{name: "tls cert without key", modify: func(c *config.Config) { c.TLSCert = "/cert.pem" }, wantErr: []string{"--tls-cert and --tls-key"}},
 		{name: "tls key without cert", modify: func(c *config.Config) { c.TLSKey = "/key.pem" }, wantErr: []string{"--tls-cert and --tls-key"}},
 		{name: "tls cert and key", modify: func(c *config.Config) { c.TLSCert = "/cert.pem"; c.TLSKey = "/key.pem" }, wantListen: "127.0.0.1:8740"},

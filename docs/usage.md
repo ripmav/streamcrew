@@ -212,6 +212,18 @@ seit dem Abo (optional mit `since` für den Puffer), und bei Überlast
 wirft der Bus ab (`event.lag`). Die vollständige Historie liegt in der
 Logdatei (`log-file`).
 
+**Größen der Stream-Pfade (Startzeit):** Zwei Puffergrößen lassen sich
+über die üblichen Kanäle festlegen — Flag, Umgebungsvariable oder
+Konfigurationsdatei (`--stream-buffer`, `--stream-catchup`,
+`STREAMCREW_STREAM_BUFFER`, `STREAMCREW_STREAM_CATCHUP`). Beide gelten
+**nur zum Start** des Cores (⟳, Neustart bei Änderung; kein Hot-Apply,
+kein API- oder TUI-Pfad):
+
+| Schlüssel | Default | Bedeutung |
+|---|---|---|
+| `stream-buffer` | `1024` | Wie viele Events der Stream-Hub dem Event-Bus gegenüber schulden darf, bevor der Bus für ihn wegwirft (`event.lag`). |
+| `stream-catchup` | `256` | Wie viele der letzten Events ein neu abonnierender Client per `since` nachholen kann. |
+
 ## Sicherheitshinweise
 
 1. **Loopback ist der Standard.** Der Daemon-Modus lauscht nur auf
