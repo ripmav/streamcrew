@@ -224,6 +224,8 @@ kein API- oder TUI-Pfad):
 | `stream-buffer` | `1024` | Wie viele Events der Stream-Hub dem Event-Bus gegenüber schulden darf, bevor der Bus für ihn wegwirft (`event.lag`). |
 | `stream-catchup` | `256` | Wie viele der letzten Events ein neu abonnierender Client per `since` nachholen kann. |
 
+**Lag-Meldung im Log:** Der Bus wirft für träge Aboenten Events weg (die Clients sehen das als `event.lag`). Zusätzlich loggt der Core pro Minute pro Aboent, wie viele Events er für es weggeworfen hat (Warn-Log „event subscription is dropping events“ mit `drops` im Fenster und `total` seit Beginn des Abos) — nur wenn etwas weggeworfen wurde.
+
 ## Sicherheitshinweise
 
 1. **Loopback ist der Standard.** Der Daemon-Modus lauscht nur auf

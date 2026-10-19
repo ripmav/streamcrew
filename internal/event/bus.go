@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -103,6 +104,32 @@ func (b *Bus) Subscribe(ctx context.Context, opts ...SubscribeOption) *Subscript
 	return s
 }
 
+// DropCounter is the monotonically growing drop counter of one live
+// subscription; the bus hands them out through DropCounters. The counter
+// identifies its subscription, so it can be used as a map key.
+type DropCounter interface {
+	// Name is the subscription name; empty if it has none.
+	Name() string
+	// Count is the total number of dropped events since the subscription
+	// was created.
+	Count() uint64
+}
+
+var _ DropCounter = (*Subscription)(nil)
+
+// DropCounters returns the drop counters of the live subscriptions, a
+// snapshot: subscriptions that end meanwhile keep counting but no longer
+// appear.
+func (b *Bus) DropCounters() []DropCounter {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	c := make([]DropCounter, 0, len(b.subs))
+	for s := range b.subs {
+		c = append(c, s)
+	}
+	return c
+}
+
 // Close ends all subscriptions. Later subscriptions end at once.
 func (b *Bus) Close() {
 	b.mu.Lock()
@@ -192,6 +219,7 @@ type Subscription struct {
 	sendMu   sync.Mutex // serializes offers, so a lag notice precedes the next event
 	dropped  uint64
 	lastWarn time.Time
+	total    atomic.Uint64 // every drop ever, never reset (DropCounter)
 }
 
 // C returns the channel of the subscription. It is closed when the
@@ -199,6 +227,14 @@ type Subscription struct {
 func (s *Subscription) C() <-chan Envelope {
 	return s.ch
 }
+
+// Name returns the subscription name for log messages; empty if WithName
+// did not set one.
+func (s *Subscription) Name() string { return s.name }
+
+// Count returns the total number of events dropped for this subscription
+// since it was created; it never resets.
+func (s *Subscription) Count() uint64 { return s.total.Load() }
 
 // Close ends the subscription. It is safe to call more than once.
 func (s *Subscription) Close() {
@@ -254,6 +290,7 @@ func (s *Subscription) offer(ctx context.Context, logger *slog.Logger, e Envelop
 
 func (s *Subscription) drop(ctx context.Context, logger *slog.Logger) {
 	s.dropped++
+	s.total.Add(1)
 	if now := time.Now(); now.Sub(s.lastWarn) >= lagWarnInterval {
 		s.lastWarn = now
 		logger.WarnContext(ctx, "event subscription is lagging, dropping events",

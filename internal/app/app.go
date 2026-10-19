@@ -887,6 +887,10 @@ func (a *App) Run(ctx context.Context) (err error) {
 	supErr := make(chan error, 1)
 	go func() { supErr <- a.sup.Run(runCtx) }()
 
+	// The lag reporter logs the drop rate of the bus subscriptions
+	// (roadmap 6.2.7), drops per minute per subscription.
+	go event.NewLagReporter(a.bus, component(a.logger, "event")).Run(runCtx)
+
 	// The runtime file (ADR-0005): the desktop app and diagnostic tools
 	// read the address, the PID and the version from the data directory;
 	// it is removed when the core stops.

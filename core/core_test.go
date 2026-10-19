@@ -3,7 +3,9 @@
 package core_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"net"
 	"net/http"
 	"strconv"
@@ -26,7 +28,10 @@ func TestRunStartsAndStopsTheCore(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	errc := make(chan error, 1)
-	go func() { errc <- core.Run(ctx, core.Options{DataDir: t.TempDir(), Listen: addr}) }()
+	// A test secret key keeps the core away from the system keyring, which
+	// is slow or blocked on machines without a working session bus.
+	secretKey := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{42}, 32))
+	go func() { errc <- core.Run(ctx, core.Options{DataDir: t.TempDir(), Listen: addr, SecretKey: secretKey}) }()
 
 	// The core comes up and answers the health endpoint.
 	deadline := time.Now().Add(30 * time.Second)

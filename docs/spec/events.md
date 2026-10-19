@@ -217,6 +217,7 @@ Keine.
 
 | Datum | Änderung |
 |---|---|
+| 2026-10-18 | Bus-Lag-Reporter (Roadmap 6.2.7): die App loggt pro Minute und pro Aboent, wie viele Events der Bus für ihn weggeworfen hat (Feld `drops` im Fenster, `total` seit Beginn des Abos); der Bus selbst trägt dazu den monotonen Zähler `DropCounter`. |
 | 2026-10-18 | Neue Log-Ereignisse (Roadmap 6.6): `log.line` trägt die Log-Zeilen des Cores in den Stream (Nutzlast `level`, `component`, `message`); wie die Authentifizierungsereignisse nicht im Trigger-Katalog `All()`. |
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
 | 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |
