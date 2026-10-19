@@ -23,6 +23,9 @@ type FileView struct {
 	Revoke            []string          `yaml:"revoke,omitempty" json:"revoke,omitempty"`
 	FileRoot          map[string]string `yaml:"file_root,omitempty" json:"file_root,omitempty"`
 	OutboundAllow     []string          `yaml:"outbound_allow,omitempty" json:"outbound_allow,omitempty"`
+	CorsAllow         []string          `yaml:"cors_allow,omitempty" json:"cors_allow,omitempty"`
+	TLSCert           string            `yaml:"tls_cert,omitempty" json:"tls_cert,omitempty"`
+	TLSKey            string            `yaml:"tls_key,omitempty" json:"tls_key,omitempty"`
 }
 
 // View returns the configuration in the form of the configuration file.

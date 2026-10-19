@@ -51,6 +51,11 @@ var scopeForMethod = map[string]apitoken.Scope{
 	"BackupService/List":    apitoken.Read,
 	"BackupService/Restore": apitoken.Admin,
 
+	// ConfigService. The document shows the server settings, so even
+	// Get needs admin (roadmap 6.5.2).
+	"ConfigService/Get":    apitoken.Admin,
+	"ConfigService/Update": apitoken.Admin,
+
 	// AuthService.
 	"AuthService/ListAccounts": apitoken.Read,
 	"AuthService/StartLogin":   apitoken.Admin,

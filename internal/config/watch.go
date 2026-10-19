@@ -249,6 +249,78 @@ func (w *Watcher) applyError(ctx context.Context, setting string, err error) {
 	w.logger.WarnContext(ctx, "setting not applied, the previous value stays", "setting", setting, "error", err)
 }
 
+// Update validates data against the configuration the core runs with
+// and stores it in the file when it differs from the content last seen
+// (roadmap 6.5.2). It returns the hot settings that change at runtime
+// and the settings that apply after a restart, and the stored document.
+// The Watcher applies the change on its next comparison.
+func (w *Watcher) Update(ctx context.Context, data []byte) (applied, restart []string, stored []byte, err error) {
+	cfg, restart, err := w.parse(data)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("update configuration: %w", err)
+	}
+	if w.existed && bytes.Equal(data, w.last) {
+		return nil, restart, data, nil
+	}
+	if err := writeFile(w.path, data); err != nil {
+		return nil, nil, nil, fmt.Errorf("update configuration: %w", err)
+	}
+	applied = hotChanges(w.current, cfg)
+	w.logger.InfoContext(ctx, "configuration document updated", "file", w.path)
+	return applied, restart, data, nil
+}
+
+// hotChanges returns the hot settings that differ between old and new.
+func hotChanges(old, next Config) []string {
+	var out []string
+	oldLog := old.Log
+	if !reflect.DeepEqual(oldLog, next.Log) {
+		out = append(out, "log")
+	}
+	if old.DryRun != next.DryRun {
+		out = append(out, "dry-run")
+	}
+	if old.Dev != next.Dev {
+		out = append(out, "dev")
+	}
+	if !slices.Equal(old.CorsAllow, next.CorsAllow) {
+		out = append(out, "cors-allow")
+	}
+	if old.Listen != next.Listen || old.TLSCert != next.TLSCert || old.TLSKey != next.TLSKey {
+		out = append(out, "listen")
+	}
+	if old.Mode != next.Mode {
+		out = append(out, "mode")
+	}
+	if old.ShutdownTimeout != next.ShutdownTimeout {
+		out = append(out, "shutdown-timeout")
+	}
+	return out
+}
+
+// writeFile stores data at path atomically (tmp + rename) with mode 0600.
+func writeFile(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer os.Remove(name) // no-op after a successful rename
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, filepath.Clean(path))
+}
+
 // report logs a problem with the file once; the settings stay as they are.
 func (w *Watcher) report(ctx context.Context, problem string) {
 	if problem == w.problem {

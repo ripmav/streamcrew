@@ -1,0 +1,59 @@
+// SPDX-License-Identifier: MIT
+
+// ConfigService (roadmap 6.5.2): the live configuration of the core. The
+// document is the configuration file (YAML) in its valid form; Get returns
+// it with the categories of the settings, Update replaces it. The change
+// applies at runtime where hot (roadmap 6.5.1) and after a restart where
+// not. Live only in server mode; the other modes are read-only.
+syntax = "proto3";
+
+package streamcrew.v1alpha1;
+
+option go_package = "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1;streamcrewv1alpha1";
+
+// ConfigService manages the configuration of the core.
+service ConfigService {
+  // Get returns the current configuration document and the categories
+  // of its settings.
+  rpc Get(GetConfigRequest) returns (GetConfigResponse);
+  // Update replaces the configuration document; the valid document is
+  // validated before it is stored.
+  rpc Update(UpdateConfigRequest) returns (UpdateConfigResponse);
+}
+
+// GetConfigRequest is the request of Get.
+message GetConfigRequest {}
+
+// GetConfigResponse is the response of Get.
+message GetConfigResponse {
+  // document is the current configuration in the format of the
+  // configuration file.
+  string document = 1;
+  // hot are the settings that apply without a restart.
+  repeated string hot = 2;
+  // fixed are the settings fixed by a flag or environment variable,
+  // whose file value the core does not apply.
+  repeated string fixed = 3;
+  // restart are the settings that apply only after a restart.
+  repeated string restart = 4;
+  // live is true if Update applies the change at runtime; false makes
+  // the document read-only.
+  bool live = 5;
+}
+
+// UpdateConfigRequest is the request of Update.
+message UpdateConfigRequest {
+  // document is the new configuration in the format of the
+  // configuration file.
+  string document = 1;
+}
+
+// UpdateConfigResponse is the response of Update.
+message UpdateConfigResponse {
+  // applied are the settings that change at runtime.
+  repeated string applied = 1;
+  // restart are the settings that apply only after a restart.
+  repeated string restart = 2;
+  // document is the stored configuration.
+  string document = 3;
+}
