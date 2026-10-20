@@ -275,11 +275,11 @@ func TestRunDialFailureRetriesAtTheBaseURL(t *testing.T) {
 		}
 		conn, err := websocket.Accept(w, r, nil)
 		require.NoError(t, err)
-		writeText(t, conn, welcomeJSON("s1", "10"))
+		require.NoError(t, conn.Write(r.Context(), websocket.MessageText, []byte(welcomeJSON("s1", "10"))))
 		// After the handshake, so the test's cancel() cannot race the
 		// reading of the new connection.
 		up.Store(1)
-		hold(conn)
+		_, _, _ = conn.Read(r.Context())
 	}))
 	defer srv.Close()
 
