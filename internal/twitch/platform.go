@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -157,6 +158,8 @@ type Platform struct {
 	// socketBase is the BetterTTV socket URL for the live emote updates
 	// (plan phase 2); empty for none.
 	socketBase string
+	// socketStarted guards the single start of the BetterTTV socket.
+	socketStarted atomic.Bool
 }
 
 // PlatformOptions configures NewPlatform.
@@ -290,11 +293,6 @@ func (p *Platform) Channel(ctx context.Context) (connector.ChannelInfo, error) {
 // token; a lost token or a revoked one ends the session, and the poll
 // starts it again with a fresh token.
 func (p *Platform) Run(ctx context.Context) error {
-	// The BetterTTV socket (plan phase 2) keeps the channel emotes of
-	// the catalog fresh; the polling with the TTL stays the safety net.
-	if p.emotes != nil && p.socketBase != "" {
-		go p.runBTTVSocket(ctx)
-	}
 	poll := p.poll
 	if poll <= 0 {
 		poll = pollInterval
@@ -305,6 +303,12 @@ func (p *Platform) Run(ctx context.Context) error {
 			p.log.WarnContext(ctx, "the state of the streamer account is unknown", "error", err)
 		} else {
 			p.setAccount(st)
+			// The BetterTTV socket (plan phase 2) joins the channels once
+			// they are operated, so without a token it stays off (the
+			// tests); the polling with the TTL stays the safety net.
+			if st.Ready && p.emotes != nil && p.socketBase != "" && p.socketStarted.CompareAndSwap(false, true) {
+				go p.runBTTVSocket(ctx)
+			}
 			if st.Ready {
 				if err := p.connect(ctx, st); ctx.Err() == nil && err != nil {
 					p.log.WarnContext(ctx, "the eventsub session ended", "error", err)
