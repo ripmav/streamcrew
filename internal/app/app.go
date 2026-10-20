@@ -582,13 +582,14 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 				channels = chs.Additional
 			}
 			return twitch.NewPlatform(twitch.PlatformOptions{
-				Receiver:   b.Receiver,
-				Auth:       twitchStreamAuth{s: a.auth},
-				Helix:      twitchHelix,
-				DialClient: authClient,
-				Emotes:     a.emotes,
-				Channels:   channels,
-				Logger:     component(b.Logger, "twitch"),
+				Receiver:       b.Receiver,
+				Auth:           twitchStreamAuth{s: a.auth},
+				Helix:          twitchHelix,
+				DialClient:     authClient,
+				Emotes:         a.emotes,
+				Channels:       channels,
+				BTTVSocketBase: emote.BTTVSocketBase,
+				Logger:         component(b.Logger, "twitch"),
 			}), nil
 		}
 	}
