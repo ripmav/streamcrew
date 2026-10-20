@@ -19,3 +19,5 @@
 docs/phase-*-summary.md
 modulezip
 scripts/modulecheck/go.sum
+
+docs/analyse*.md
