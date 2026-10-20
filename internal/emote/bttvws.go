@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
+	"github.com/ripmav/streamcrew/internal/breaker"
 )
 
 // BTTVSocketBase is the official BetterTTV socket URL (plan
@@ -49,6 +51,10 @@ type SocketOptions struct {
 	Channels func(ctx context.Context) []SocketChannel
 	// Catalog is updated by the emote events.
 	Catalog CatalogUpdater
+	// Breaker is the circuit breaker of the socket endpoint
+	// (Code-ADR-0007); the handshake runs through it, a dropped
+	// session does not. If nil, the layer is skipped.
+	Breaker *breaker.Breaker
 }
 
 // BTTVSocket is the BetterTTV WebSocket client (plan phase 2): it joins
@@ -61,6 +67,7 @@ type BTTVSocket struct {
 	log      *slog.Logger
 	channels func(ctx context.Context) []SocketChannel
 	catalog  CatalogUpdater
+	brk      *breaker.Breaker
 }
 
 // NewBTTVSocket makes the BetterTTV socket.
@@ -71,7 +78,7 @@ func NewBTTVSocket(o SocketOptions) *BTTVSocket {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
-	return &BTTVSocket{base: o.Base, log: o.Logger, channels: o.Channels, catalog: o.Catalog}
+	return &BTTVSocket{base: o.Base, log: o.Logger, channels: o.Channels, catalog: o.Catalog, brk: o.Breaker}
 }
 
 // Run dials the socket, joins the channels, and applies the emote events
@@ -114,8 +121,17 @@ func (s *BTTVSocket) session(ctx context.Context) error {
 			},
 		},
 	}
-	conn, _, err := websocket.Dial(ctx, s.base, opts) //nolint:bodyclose // the body is consumed by Dial
-	if err != nil {
+	var conn *websocket.Conn
+	dial := func(ctx context.Context) error {
+		var err error
+		conn, _, err = websocket.Dial(ctx, s.base, opts) //nolint:bodyclose // the body is consumed by Dial
+		return err
+	}
+	if s.brk != nil {
+		if err := s.brk.Execute(ctx, dial); err != nil {
+			return err
+		}
+	} else if err := dial(ctx); err != nil {
 		return err
 	}
 	sessCtx, cancel := context.WithCancel(ctx)

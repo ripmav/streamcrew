@@ -3,7 +3,10 @@
 package emote
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +17,9 @@ import (
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ripmav/streamcrew/internal/breaker"
+	"github.com/ripmav/streamcrew/internal/httpclient"
 )
 
 // wsTestServer accepts socket connections and hands the connection to
@@ -170,4 +176,50 @@ func TestBTTVSocketReconnect(t *testing.T) {
 		defer mu.Unlock()
 		return conns >= 2
 	}, 10*time.Second, 50*time.Millisecond)
+}
+
+// TestBTTVSocketBreakerOpens covers that the handshake failures run
+// through the circuit breaker and open it (Code-ADR-0007).
+func TestBTTVSocketBreakerOpens(t *testing.T) {
+	t.Parallel()
+	var lc net.ListenConfig
+	l, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := l.Addr().String()
+	require.NoError(t, l.Close())
+	var (
+		mu  sync.Mutex
+		buf bytes.Buffer
+	)
+	log := slog.New(slog.NewTextHandler(&lockedWriter{mu: &mu, w: &buf}, nil))
+	sock := NewBTTVSocket(SocketOptions{
+		Base:    "ws://" + addr,
+		Catalog: New(nil, time.Millisecond, nil),
+		Channels: func(context.Context) []SocketChannel {
+			return []SocketChannel{{Login: "chan", ID: "123"}}
+		},
+		Logger:  log,
+		Breaker: breaker.New("test.bttv.socket", log, httpclient.Evaluator),
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go func() { _ = sock.Run(ctx) }()
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return strings.Contains(buf.String(), "circuit breaker open")
+	}, 20*time.Second, 50*time.Millisecond)
+}
+
+// lockedWriter serializes the writes of the log handler and the reads of
+// the tests on the same buffer.
+type lockedWriter struct {
+	mu *sync.Mutex
+	w  *bytes.Buffer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
 }

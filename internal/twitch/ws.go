@@ -22,6 +22,8 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/sethvargo/go-retry"
+
+	"github.com/ripmav/streamcrew/internal/breaker"
 )
 
 // defaultBase is the official EventSub WebSocket base URL.
@@ -68,6 +70,10 @@ type Options struct {
 	// discards the ID. The subscription manager uses it for the
 	// websocket transport of the subscriptions.
 	Session func(id string)
+	// Breaker is the circuit breaker of the EventSub endpoint
+	// (Code-ADR-0007); the handshake runs through it, a dropped
+	// session does not. If nil, the layer is skipped.
+	Breaker *breaker.Breaker
 }
 
 // TokenFunc supplies an access token for the connection.
@@ -90,6 +96,7 @@ type Client struct {
 	httpc     *http.Client
 	log       *slog.Logger
 	onSession func(string)
+	brk       *breaker.Breaker
 }
 
 // New creates a Client.
@@ -106,7 +113,7 @@ func New(o Options) *Client {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Client{base: base, token: o.Token, httpc: httpc, log: log, onSession: o.Session}
+	return &Client{base: base, token: o.Token, httpc: httpc, log: log, onSession: o.Session, brk: o.Breaker}
 }
 
 // Run drives the connection until the context is canceled: connect,
@@ -185,7 +192,17 @@ func (c *Client) session(ctx context.Context, h Handler, dialURL string) (next, 
 	defer cancel()
 	// The response body is consumed by the library (the handshake).
 	headers := http.Header{"Twitch-Session-Id": []string{sessionID()}}
-	conn, _, err := websocket.Dial(dctx, u.String(), &websocket.DialOptions{HTTPClient: c.httpc, HTTPHeader: headers}) //nolint:bodyclose // the body is consumed by Dial
+	var conn *websocket.Conn
+	dial := func(ctx context.Context) error {
+		var err error
+		conn, _, err = websocket.Dial(ctx, u.String(), &websocket.DialOptions{HTTPClient: c.httpc, HTTPHeader: headers}) //nolint:bodyclose // the body is consumed by Dial
+		return err
+	}
+	if c.brk != nil {
+		err = c.brk.Execute(dctx, dial)
+	} else {
+		err = dial(dctx)
+	}
 	if err != nil {
 		return next{url: c.base}, err
 	}

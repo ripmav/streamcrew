@@ -259,6 +259,34 @@ func TestDo429WaitsRetryAfter(t *testing.T) {
 	})
 }
 
+// TestDo429TwitchHeaders covers the Twitch header variants of the rate
+// limit headers (Ratelimit-Remaining/Reset, no x- prefix) in the 429
+// wait.
+func TestDo429TwitchHeaders(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		var calls atomic.Int64
+		reset := time.Now().Add(2 * time.Second).Unix()
+		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Ratelimit-Limit", "800")
+			w.Header().Set("Ratelimit-Remaining", "0")
+			w.Header().Set("Ratelimit-Reset", strconv.FormatInt(reset, 10))
+			if calls.Add(1) == 1 {
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+			_, _ = w.Write([]byte(`{}`))
+		}))
+		defer srv.Close()
+		c := newClient(t, srv.Client(), newBreaker(), nil)
+		resp, err := c.Do(t.Context(), newGetRequest(t.Context(), srv.URL))
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, int64(2), calls.Load())
+		assert.False(t, time.Now().Before(time.Unix(reset, 0)), "the retry waited until the Twitch reset")
+	})
+}
+
 func TestDoRemainingZeroDelaysNextRequest(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {

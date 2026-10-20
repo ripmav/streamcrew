@@ -306,7 +306,12 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	}
 	// The token calls run through the resilient HTTP client (Code-ADR-0014)
 	// with one breaker per API (Code-ADR-0007); the Helix endpoints of
-	// phase 4.2 join the same instances (roadmap 4.2).
+	// phase 4.2 join the same instances (roadmap 4.2). The client rate of
+	// 4/s (240/min) stays below the Twitch default of 800 points per
+	// minute per (client id, user id); the Helix client serves the
+	// streamer and the bot, so the 240/min is shared by both buckets,
+	// and a 429 waits until the Ratelimit-Reset header (dev.twitch.tv,
+	// "Twitch Rate Limits").
 	twitchAuth := httpclient.New(httpclient.Options{
 		Name:    "twitch.auth",
 		Base:    authClient,
