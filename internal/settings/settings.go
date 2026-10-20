@@ -624,7 +624,20 @@ type Channels struct {
 	// Additional is the list of the logins of the additional channels,
 	// in the order they were added; empty for none.
 	Additional []string `json:"additional"`
+	// ChatAdapter is the chat adapter of the additional channels (spec
+	// twitch-multi-channel.md, B15): ChatAdapterEventsub or
+	// ChatAdapterIRC; empty for the default, the EventSub adapter. It is
+	// read only at the core start, there is no hot reload.
+	ChatAdapter string `json:"chatAdapter"`
 }
+
+// The chat adapters of the additional channels (spec
+// twitch-multi-channel.md, B15); ChatAdapterEventsub is the default,
+// an empty ChatAdapter counts as it.
+const (
+	ChatAdapterEventsub = "eventsub"
+	ChatAdapterIRC      = "irc"
+)
 
 // DefaultChannels returns the default of the section: no additional
 // channel, only the home channel is operated.
@@ -641,6 +654,9 @@ func (Channels) DocType() string { return sectionChannels }
 func (c Channels) Validate() error { return c.validate() }
 
 func (c Channels) validate() error {
+	if c.ChatAdapter != "" && c.ChatAdapter != ChatAdapterEventsub && c.ChatAdapter != ChatAdapterIRC {
+		return fmt.Errorf("the chat adapter %q is unknown: want %q or %q", c.ChatAdapter, ChatAdapterEventsub, ChatAdapterIRC)
+	}
 	seen := make(map[string]bool, len(c.Additional))
 	for _, login := range c.Additional {
 		if err := validLogin(login); err != nil {

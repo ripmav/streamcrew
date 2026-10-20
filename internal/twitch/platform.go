@@ -156,6 +156,16 @@ type Platform struct {
 	// channels are the logins of the additional channels (spec
 	// twitch-multi-channel.md, B1); empty for the home channel only.
 	channels []string
+	// chatAdapter is the chat adapter of the additional channels (spec
+	// twitch-multi-channel.md, B15): ChatAdapterIRC for the IRC session,
+	// otherwise the EventSub sessions.
+	chatAdapter string
+	// ircBase is the IRC server address (tests use the test server);
+	// empty for the official one.
+	ircBase string
+	// irc is the IRC session while it runs (nil outside of it); the
+	// chat send of the additional channels routes through it (B18).
+	irc *IRCSession
 	// socketBase is the BetterTTV socket URL for the live emote updates
 	// (plan phase 2); empty for none.
 	socketBase string
@@ -196,6 +206,14 @@ type PlatformOptions struct {
 	// in besides the home channel (spec twitch-multi-channel.md, B1); the
 	// home channel must not be listed (B3).
 	Channels []string
+	// ChatAdapter is the chat adapter of the additional channels (spec
+	// twitch-multi-channel.md, B15): "irc" for the IRC chat adapter,
+	// "" or "eventsub" for the EventSub session. It is read once, when
+	// the platform is built, and not hot-reloaded.
+	ChatAdapter string
+	// IRCBase overrides the IRC server address (tests use the test
+	// server); empty for the official one.
+	IRCBase string
 	// BTTVSocketBase is the BetterTTV socket URL for the live emote
 	// updates (plan phase 2); empty for none.
 	BTTVSocketBase string
@@ -212,17 +230,19 @@ func NewPlatform(o PlatformOptions) *Platform {
 		dial = &http.Client{}
 	}
 	return &Platform{
-		receiver:   o.Receiver,
-		auth:       o.Auth,
-		helix:      o.Helix,
-		dialClient: dial,
-		base:       o.Base,
-		helixBase:  o.HelixBase,
-		log:        log,
-		poll:       o.Poll,
-		emotes:     o.Emotes,
-		channels:   o.Channels,
-		socketBase: o.BTTVSocketBase,
+		receiver:    o.Receiver,
+		auth:        o.Auth,
+		helix:       o.Helix,
+		dialClient:  dial,
+		base:        o.Base,
+		helixBase:   o.HelixBase,
+		log:         log,
+		poll:        o.Poll,
+		emotes:      o.Emotes,
+		channels:    o.Channels,
+		chatAdapter: o.ChatAdapter,
+		ircBase:     o.IRCBase,
+		socketBase:  o.BTTVSocketBase,
 		// The circuit breakers of the two external endpoints
 		// (Code-ADR-0007); the handshakes run through them.
 		eventSubBrk: breaker.New("twitch.eventsub", log, httpclient.Evaluator),
@@ -382,18 +402,26 @@ func (p *Platform) connect(ctx context.Context, st AccountState) error {
 		home.botID = bot.AccountID
 	}
 	var cancels []context.CancelFunc
-	for _, cs := range p.additionalChannels(ctx, st, bot) {
-		csCtx, cancel := context.WithCancel(ctx)
-		cancels = append(cancels, cancel)
-		go func(cs channelSession) {
-			if err := p.channelSession(csCtx, cs); err != nil && csCtx.Err() == nil {
-				p.log.WarnContext(ctx, "the eventsub session of an additional channel ended", "channel", cs.login, "error", err)
-			}
-		}(cs)
+	if p.chatAdapter == ChatAdapterIRC {
+		// The additional channels run over the IRC session of the bot
+		// account (spec twitch-multi-channel.md, B16); without an EventSub
+		// session there are no additional-channel subscriptions.
+		p.runIRCSessions(ctx, st, bot, &cancels)
+	} else {
+		for _, cs := range p.additionalChannels(ctx, st, bot) {
+			csCtx, cancel := context.WithCancel(ctx)
+			cancels = append(cancels, cancel)
+			go func(cs channelSession) {
+				if err := p.channelSession(csCtx, cs); err != nil && csCtx.Err() == nil {
+					p.log.WarnContext(ctx, "the eventsub session of an additional channel ended", "channel", cs.login, "error", err)
+				}
+			}(cs)
+		}
 	}
 	if len(cancels) > 0 {
 		p.setBot(true)
 		defer p.setBot(false)
+		defer p.setIRC(nil)
 		defer func() {
 			for _, cancel := range cancels {
 				cancel()
@@ -401,6 +429,64 @@ func (p *Platform) connect(ctx context.Context, st AccountState) error {
 		}()
 	}
 	return p.channelSession(ctx, home)
+}
+
+// runIRCSessions starts the IRC session of the additional channels (spec
+// twitch-multi-channel.md, B16, B19): it needs the bot account, and the
+// channels — with the home channel left out, as in the EventSub path —
+// plus a warm channel ID cache and the emote refresh of the channels for
+// the emote catalog and the BetterTTV socket.
+func (p *Platform) runIRCSessions(ctx context.Context, st, bot AccountState, cancels *[]context.CancelFunc) {
+	logins := p.ircLogins(ctx, st.Login)
+	if !bot.Ready {
+		return
+	}
+	if len(logins) == 0 {
+		p.log.InfoContext(ctx, "the additional channels are not operated: no channel is listed")
+		return
+	}
+	csCtx, cancel := context.WithCancel(ctx)
+	*cancels = append(*cancels, cancel)
+	for _, login := range logins {
+		if _, err := p.channelID(ctx, connector.Channel(login)); err != nil {
+			p.log.WarnContext(ctx, "an additional channel is unknown", "channel", login, "error", err)
+		}
+		if p.emotes != nil {
+			go p.refreshEmotes(csCtx, login)
+		}
+	}
+	s := NewIRCSession(ctx, IRCOptions{
+		Receiver: p.receiver,
+		Login:    bot.Login,
+		Token:    p.auth.BotToken,
+		Channels: logins,
+		BotID:    bot.AccountID,
+		Base:     p.ircBase,
+		Emotes:   p.emotes,
+		Logger:   p.log,
+	})
+	p.setIRC(s)
+	go func() {
+		if err := s.Run(csCtx); err != nil && csCtx.Err() == nil {
+			p.log.WarnContext(ctx, "the irc session ended", "error", err)
+			p.setIRC(nil)
+		}
+	}()
+}
+
+// ircLogins is the additional channels the IRC session joins (spec
+// twitch-multi-channel.md, B16): the listed channels, the home channel
+// left out with a warning, as in the EventSub path.
+func (p *Platform) ircLogins(ctx context.Context, homeLogin string) []string {
+	var out []string
+	for _, login := range p.channels {
+		if strings.EqualFold(login, homeLogin) {
+			p.log.WarnContext(ctx, "the channels section lists the home channel, it is not additional", "channel", login)
+			continue
+		}
+		out = append(out, login)
+	}
+	return out
 }
 
 // additionalChannels selects the sessions of the additional channels
@@ -638,6 +724,15 @@ func (p *Platform) SessionID() string {
 	return p.sessions.peek()
 }
 
+// setIRC sets the IRC session while it runs (nil on the end);
+// guarded by the platform's mutex like the status.
+func (p *Platform) setIRC(s *IRCSession) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.irc = s
+}
+
+// setConnected sets the status of the home channel session.
 func (p *Platform) setConnected(v bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

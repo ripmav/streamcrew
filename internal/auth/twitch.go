@@ -71,6 +71,7 @@ const (
 var Scopes = []string{
 	"user:read:chat",
 	"user:write:chat",
+	"chat:write:bot",
 	"moderator:read:chat_settings",
 	"moderator:manage:chat_settings",
 	"moderator:read:chat_messages",

@@ -45,6 +45,13 @@ func (r *fakeReceiver) received() []connector.Incoming {
 	return append([]connector.Incoming(nil), r.messages...)
 }
 
+// eventList is a copy of the received events.
+func (r *fakeReceiver) eventList() []connector.Event {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]connector.Event(nil), r.events...)
+}
+
 func (r *fakeReceiver) Join(_ context.Context, _ platform.Name, _ connector.Channel, _ user.Identity) error {
 	return nil
 }

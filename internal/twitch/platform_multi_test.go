@@ -309,3 +309,59 @@ func dedup(t *testing.T) *connector.Dedup {
 	require.NoError(t, err)
 	return d
 }
+
+// TestPlatformIRCMode operates the additional channel over the IRC
+// session of the bot account (spec twitch-multi-channel.md, B16): the
+// home channel keeps its EventSub session, the additional channel has
+// no EventSub session, and the IRC session joins it.
+func TestPlatformIRCMode(t *testing.T) {
+	t.Parallel()
+	r := &fakeReceiver{}
+	a := &botAuth{fakeAuth: &fakeAuth{token: "tok", ready: true}, botID: "99", botReady: true, botToken: "btok"}
+	firc := newFakeIRCServer(t, map[string]string{"other": "moderator/1"})
+	ws := &eventSubServer{}
+	hl := &multiHelixServer{
+		helixServer: &helixServer{},
+		users:       map[string]string{"other": "100"},
+		mods:        a,
+	}
+	hlSrv := httptest.NewTestServer(t, hl.handler(t))
+	t.Cleanup(hlSrv.Close)
+	wsSrv := httptest.NewTestServer(t, ws.handler(t))
+	t.Cleanup(wsSrv.Close)
+	hc := httpclient.New(httpclient.Options{Name: "twitch.helix", Base: hlSrv.Client(), Rate: 100, Burst: 100})
+	p := twitch.NewPlatform(twitch.PlatformOptions{
+		Receiver:    r,
+		Auth:        a,
+		Helix:       hc,
+		DialClient:  wsSrv.Client(),
+		Base:        wsSrv.URL + "/",
+		HelixBase:   hlSrv.URL,
+		Poll:        10 * time.Millisecond,
+		Channels:    []string{"other"},
+		ChatAdapter: twitch.ChatAdapterIRC,
+		IRCBase:     firc.addr,
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		assert.NoError(t, p.Run(ctx))
+	}()
+	// The IRC session joins the additional channel, and the home
+	// channel keeps its one EventSub session (the bot token never
+	// connects to EventSub).
+	firc.waitJoin(t)
+	waitFor(t, 10*time.Second, func() int64 {
+		if len(ws.tokens()) == 1 {
+			return 1
+		}
+		return 0
+	})
+	require.True(t, p.Status().Streamer && p.Status().Bot)
+	require.Equal(t, []string{"tok"}, ws.tokens(), "only the home channel has an EventSub session")
+	cancel()
+	<-done
+	assert.False(t, p.Status().Streamer)
+	assert.False(t, p.Status().Bot)
+}

@@ -34,8 +34,14 @@ var _ connector.Chat = chat{}
 
 // Send implements connector.Chat: it splits a text that is longer than
 // Twitch allows and keeps to the rate limits of the platform through
-// the resilient HTTP client (actions.md B65).
+// the resilient HTTP client (actions.md B65). The additional channels
+// of the IRC mode run through the IRC session of the bot account
+// (spec twitch-multi-channel.md, B18); there the bot account is the
+// sender, so a message from it is the normal case.
 func (c chat) Send(ctx context.Context, m connector.Message) error {
+	if m.Channel != "" && c.p.chatAdapter == ChatAdapterIRC {
+		return c.p.ircSend(ctx, m.Channel, m.Text)
+	}
 	if m.From == connector.AccountBot {
 		return errors.Join(connector.ErrNotConnected, errors.New("the bot account is not connected"))
 	}
@@ -83,6 +89,19 @@ func (c chat) Delete(ctx context.Context, ch connector.Channel, messageID string
 		return err
 	}
 	return refuse(hc.DeleteChatMessage(ctx, broadcaster, st.AccountID, messageID))
+}
+
+// ircSend hands the message to the IRC session of the additional
+// channels (spec twitch-multi-channel.md, B18); the session applies
+// the per-channel bucket and the splitting.
+func (p *Platform) ircSend(ctx context.Context, ch connector.Channel, text string) error {
+	p.mu.Lock()
+	s := p.irc
+	p.mu.Unlock()
+	if s == nil {
+		return errors.New("the irc session is not connected")
+	}
+	return s.Send(ctx, ch, text)
 }
 
 // chatLimiter returns the chat send limiter of the channel ch; each
