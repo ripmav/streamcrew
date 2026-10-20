@@ -264,7 +264,7 @@ Die Plattform-Ereignisse der Twitch-Quelle (`twitch.bits.cheer`, `twitch.channel
 | `mock` | Core mit der Mock-Plattform gegen eine Profil-Kopie; die Konsole simuliert Chat, Events und den Stream |
 | `tui` | Terminal-UI gegen lokalen oder entfernten Core |
 | `profile list/create/rename/use/delete` | Profile verwalten |
-| `profile channels list/add/remove` | zusätzliche Kanäle des Profils (Add/Remove: Core muss gestoppt sein) |
+| `profile channels list/add/remove/chat` | zusätzliche Kanäle des Profils (Add/Remove/Chat: Core muss gestoppt sein); `chat` wechselt den Chat-Adapter der zusätzlichen Kanäle zwischen `eventsub` (Standard) und `irc` |
 | `auth login/status/logout` | Twitch-Konten anmelden (Authorization Code Flow, `--device-flow` als Fallback), anzeigen, abmelden |
 | `command list/show/run/delete/enable/disable` | Commands des laufenden Cores über die API |
 | `command import/export/validate` | Commands as Code ein-/ausladen, prüfen |
@@ -361,7 +361,7 @@ Alle Log-Einstellungen sind Hot-Settings: Änderungen wirken ohne Neustart.
 - **App:** eingebauter Twitch-App-Client oder eigene (BYO) ([ADR-0024](docs/adr/0024-eingebaute-twitch-app.md)).
 - **Verbindung:** EventSub-WebSocket mit Keepalive, Session-Reconnect und Deduplizierung; die Subscriptions werden je Channel am Soll-Zustand gehalten.
 - **Funktionen:** Chat (senden, antworten, flüstern, löschen, leeren), Moderation, Titel/Kategorie, Channel Points, Bits, Emote-Katalog (Twitch, BetterTTV, FrankerFaceZ), Clips, Marker, Raid, Shoutout, Umfrage, Vorhersage, Belohnungen.
-- **Zusätzliche Kanäle:** `streamcrew profile channels add <login>` — der Bot arbeitet in jedem Kanal, in dem sein Konto Moderator ist, ohne zweiten Login; jeder Kanal bekommt die eigene WebSocket-Verbindung und Subscriptions ([Spezifikation](docs/spec/twitch-multi-channel.md)).
+- **Zusätzliche Kanäle:** `streamcrew profile channels add <login>` — der Bot arbeitet in jedem Kanal, in dem sein Konto Moderator ist, ohne zweiten Login; jeder Kanal bekommt die eigene WebSocket-Verbindung und Subscriptions. `streamcrew profile channels chat irc` (Neustart nötig) lässt die zusätzlichen Kanäle stattdessen über den Twitch-IRC-Chat des Bot-Kontos laufen — ohne Mod-Voraussetzung, mit Whisper und Senden; der Mod-Status wird dann aus den Chat-Badges erkannt. Details in der [Spezifikation](docs/spec/twitch-multi-channel.md).
 - **Pro-Channel-Konfiguration:** ein Command trägt einen optionalen Channel-Scope (`channel`, leer = alle betriebenen Kanäle); Counter, Cooldowns, Währungen und Nutzer-Statistiken gelten profiltweit.
 
 ## Sicherheit
