@@ -117,30 +117,38 @@ func TestTwitchSource(t *testing.T) {
 	assert.Equal(t, []Emote{{ID: "9", Code: "H", Image: "i"}}, emotes)
 }
 
-// TestBTTVSource lists the global and the channel emotes over the v2 API.
+// TestBTTVSource lists the global and the channel emotes of the current
+// API, addressed by the channel login; a 404 channel is an empty list.
 func TestBTTVSource(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
-			case "/api/v2/emotes":
-				_, _ = w.Write([]byte(`{"emotes":[{"id":"g1","name":"GG","imageUrl":"u/gg"}]}`))
-			case "/api/v2/channels/42/emotes":
-				_, _ = w.Write([]byte(`{"emotes":[{"id":"c1","name":"CC","imageUrl":"u/cc"}]}`))
+			case "/2/emotes":
+				_, _ = w.Write([]byte(`{"urlTemplate":"//cdn.betterttv.net/emote/{{id}}/{{image}}","emotes":[{"id":"g1","code":"GG","imageType":"png"}]}`))
+			case "/2/channels/chan":
+				_, _ = w.Write([]byte(`{"urlTemplate":"//cdn.betterttv.net/emote/{{id}}/{{image}}","emotes":[{"id":"c1","code":"CC","imageType":"gif"}]}`))
+			case "/2/channels/plain":
+				w.WriteHeader(http.StatusNotFound)
 			default:
 				t.Errorf("unexpected path %s", r.URL.Path)
 			}
 		}))
 		defer srv.Close()
-		resolve := func(context.Context, string) (string, error) { return "42", nil }
-		s := NewBTTVSource(httpclient.New(httpclient.Options{Name: "bttv", Base: srv.Client()}), srv.URL+"/api/v2", resolve)
+		s := NewBTTVSource(httpclient.New(httpclient.Options{Name: "bttv", Base: srv.Client()}), srv.URL)
 		assert.Equal(t, "bttv", s.Name())
 		emotes, err := s.Emotes(t.Context(), "chan")
 		require.NoError(t, err)
 		assert.ElementsMatch(t, []Emote{
-			{ID: "g1", Code: "GG", Image: "u/gg"},
-			{ID: "c1", Code: "CC", Image: "u/cc"},
+			{ID: "g1", Code: "GG", Image: "https://cdn.betterttv.net/emote/g1"},
+			{ID: "c1", Code: "CC", Image: "https://cdn.betterttv.net/emote/c1"},
 		}, emotes)
+		// A channel without BTTV data answers 404: the global emotes stay.
+		emotes, err = s.Emotes(t.Context(), "plain")
+		require.NoError(t, err)
+		assert.Equal(t, []Emote{{ID: "g1", Code: "GG", Image: "https://cdn.betterttv.net/emote/g1"}}, emotes)
+		// Without urlTemplate the fallback template is used.
+		assert.Equal(t, "https://cdn.betterttv.net/emote/9", bttvImageBase("", "9"))
 	})
 }
 
