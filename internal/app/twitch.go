@@ -115,6 +115,25 @@ func (a *App) twitchEmotes(ctx context.Context) ([]emote.Emote, error) {
 	return out, nil
 }
 
+// bttvChannelID resolves a channel login to the Twitch channel ID the
+// BetterTTV v2 API needs (roadmap 4.4, task 9).
+func bttvChannelID(a *App) func(ctx context.Context, channel string) (string, error) {
+	return func(ctx context.Context, channel string) (string, error) {
+		c, _, err := twitchOps{app: a}.client(ctx)
+		if err != nil {
+			return "", err
+		}
+		users, err := c.GetUsers(ctx, nil, []string{channel})
+		if err != nil {
+			return "", err
+		}
+		if len(users) == 0 {
+			return "", fmt.Errorf("the channel %q is unknown", channel)
+		}
+		return users[0].ID, nil
+	}
+}
+
 // client returns a Helix client bound to the streamer and the streamer's
 // account ID.
 func (o twitchOps) client(ctx context.Context) (*helix.Client, string, error) {

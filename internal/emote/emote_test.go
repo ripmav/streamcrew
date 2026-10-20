@@ -117,22 +117,23 @@ func TestTwitchSource(t *testing.T) {
 	assert.Equal(t, []Emote{{ID: "9", Code: "H", Image: "i"}}, emotes)
 }
 
-// TestBTTVSource lists the global and the channel emotes.
+// TestBTTVSource lists the global and the channel emotes over the v2 API.
 func TestBTTVSource(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
-			case "/3/emotes":
-				_, _ = w.Write([]byte(`{"emotes":[{"id":"g1","code":"GG","url":"u/gg"}]}`))
-			case "/3/channels/chan/emotes":
-				_, _ = w.Write([]byte(`{"emotes":[{"id":"c1","code":"CC","url":"u/cc"}]}`))
+			case "/api/v2/emotes":
+				_, _ = w.Write([]byte(`{"emotes":[{"id":"g1","name":"GG","imageUrl":"u/gg"}]}`))
+			case "/api/v2/channels/42/emotes":
+				_, _ = w.Write([]byte(`{"emotes":[{"id":"c1","name":"CC","imageUrl":"u/cc"}]}`))
 			default:
 				t.Errorf("unexpected path %s", r.URL.Path)
 			}
 		}))
 		defer srv.Close()
-		s := NewBTTVSource(httpclient.New(httpclient.Options{Name: "bttv", Base: srv.Client()}), srv.URL)
+		resolve := func(context.Context, string) (string, error) { return "42", nil }
+		s := NewBTTVSource(httpclient.New(httpclient.Options{Name: "bttv", Base: srv.Client()}), srv.URL+"/api/v2", resolve)
 		assert.Equal(t, "bttv", s.Name())
 		emotes, err := s.Emotes(t.Context(), "chan")
 		require.NoError(t, err)
