@@ -40,15 +40,20 @@ func TestRuntimeFileCoversStartAndStop(t *testing.T) {
 	path := cfg.RuntimePath()
 	deadline := time.Now().Add(10 * time.Second)
 	var info app.RuntimeInfo
+	var readErr error
 	for {
-		data, err := os.ReadFile(path)
-		if err == nil {
-			require.NoError(t, json.Unmarshal(data, &info))
+		var data []byte
+		data, readErr = os.ReadFile(path)
+		if readErr == nil && json.Unmarshal(data, &info) == nil {
 			break
 		}
-		require.ErrorIs(t, err, os.ErrNotExist, "the runtime file must appear after listening")
+		// The file is written in one go, but the read can catch the write
+		// between the truncate and the fill: wait for the next attempt.
+		if readErr != nil {
+			require.ErrorIs(t, readErr, os.ErrNotExist, "the runtime file must appear after listening")
+		}
 		if time.Now().After(deadline) {
-			t.Fatalf("runtime file did not appear: %v", err)
+			t.Fatalf("runtime file did not appear: %v", readErr)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

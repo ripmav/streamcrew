@@ -144,3 +144,31 @@ func (c *Catalog) List(channel string) []Emote {
 	}
 	return out
 }
+
+// SourceList is the cached list of one source for a channel; empty if the
+// source never refreshed the channel.
+func (c *Catalog) SourceList(source, channel string) []Emote {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	l := c.lists[key{channel: channel, source: source}]
+	out := make([]Emote, 0, len(l.order))
+	for _, id := range l.order {
+		out = append(out, l.byID[id])
+	}
+	return out
+}
+
+// Update replaces the cached list of one source for a channel — a live
+// update from the source (the BetterTTV socket, plan phase 2); it bypasses
+// the refresh of the TTL but keeps the age of the last poll, so the
+// polling stays the safety net.
+func (c *Catalog) Update(source, channel string, emotes []Emote) {
+	c.mu.Lock()
+	k := key{channel: channel, source: source}
+	l := makeList(emotes, c.now())
+	if old, ok := c.lists[k]; ok {
+		l.at = old.at
+	}
+	c.lists[k] = l
+	c.mu.Unlock()
+}

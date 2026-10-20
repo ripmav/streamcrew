@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -154,6 +155,11 @@ type Platform struct {
 	// channels are the logins of the additional channels (spec
 	// twitch-multi-channel.md, B1); empty for the home channel only.
 	channels []string
+	// socketBase is the BetterTTV socket URL for the live emote updates
+	// (plan phase 2); empty for none.
+	socketBase string
+	// socketStarted guards the single start of the BetterTTV socket.
+	socketStarted atomic.Bool
 }
 
 // PlatformOptions configures NewPlatform.
@@ -185,6 +191,9 @@ type PlatformOptions struct {
 	// in besides the home channel (spec twitch-multi-channel.md, B1); the
 	// home channel must not be listed (B3).
 	Channels []string
+	// BTTVSocketBase is the BetterTTV socket URL for the live emote
+	// updates (plan phase 2); empty for none.
+	BTTVSocketBase string
 }
 
 // NewPlatform creates a Platform.
@@ -208,6 +217,7 @@ func NewPlatform(o PlatformOptions) *Platform {
 		poll:       o.Poll,
 		emotes:     o.Emotes,
 		channels:   o.Channels,
+		socketBase: o.BTTVSocketBase,
 		chIDs:      make(map[string]string),
 		chatLim:    make(map[string]*rate.Limiter),
 	}
@@ -293,6 +303,12 @@ func (p *Platform) Run(ctx context.Context) error {
 			p.log.WarnContext(ctx, "the state of the streamer account is unknown", "error", err)
 		} else {
 			p.setAccount(st)
+			// The BetterTTV socket (plan phase 2) joins the channels once
+			// they are operated, so without a token it stays off (the
+			// tests); the polling with the TTL stays the safety net.
+			if st.Ready && p.emotes != nil && p.socketBase != "" && p.socketStarted.CompareAndSwap(false, true) {
+				go p.runBTTVSocket(ctx)
+			}
 			if st.Ready {
 				if err := p.connect(ctx, st); ctx.Err() == nil && err != nil {
 					p.log.WarnContext(ctx, "the eventsub session ended", "error", err)
@@ -560,6 +576,43 @@ func (p *Platform) refreshEmotes(ctx context.Context, channel string) {
 			p.emotes.Refresh(ctx, channel)
 		}
 	}
+}
+
+// runBTTVSocket runs the BetterTTV socket (plan phase 2) for the lifetime
+// of the platform: it joins the operated channels and applies the emote
+// events to the catalog.
+func (p *Platform) runBTTVSocket(ctx context.Context) {
+	s := emotecat.NewBTTVSocket(emotecat.SocketOptions{
+		Base:     p.socketBase,
+		Logger:   p.log,
+		Channels: p.socketChannels,
+		Catalog:  p.emotes,
+	})
+	if err := s.Run(ctx); err != nil && ctx.Err() == nil {
+		p.log.ErrorContext(ctx, "the bttv socket stopped", "error", err)
+	}
+}
+
+// socketChannels is the channels the socket joins: the home channel while
+// the streamer account is ready and the additional channels while their
+// IDs are resolved; the socket picks up new channels on the running
+// connection.
+func (p *Platform) socketChannels(_ context.Context) []emotecat.SocketChannel {
+	var out []emotecat.SocketChannel
+	p.mu.Lock()
+	st := p.lastAccount
+	p.mu.Unlock()
+	if st.Ready && st.Login != "" && st.AccountID != "" {
+		out = append(out, emotecat.SocketChannel{Login: st.Login, ID: st.AccountID})
+	}
+	p.chMu.Lock()
+	for _, login := range p.channels {
+		if id, ok := p.chIDs[strings.ToLower(login)]; ok {
+			out = append(out, emotecat.SocketChannel{Login: login, ID: id})
+		}
+	}
+	p.chMu.Unlock()
+	return out
 }
 
 // SessionID is the ID of the currently connected EventSub session
