@@ -66,12 +66,13 @@ der BYO-Ansatz bleibt optional erhalten.
    Fehler. Das eingebaute Secret wird **nicht** zusätzlich in den Vault
    geschrieben. Der BYO-Weg ändert sich nicht.
 5. **Rotation:** Neues Secret in der Twitch-Konsole → Generator erneut
-   laufen lassen → neue Binary/Release. Damit der alte Stand nach einer
-   Rotation nicht bricht, laufen **Refresh und Revoke des Authorization
-   Code Flows ohne `client_secret`** (nur Client-ID; von Twitch
-   akzeptiert, im Feld seit Jahren so praktiziert — MixItUp). Eine
-   Rotation betrifft dann nur *neue* Logins; bestehende Accounts
-   refreshen und widerrufen mit ihrer Binary weiter. Der Generator
+   laufen lassen → neue Binary/Release. Der **Refresh sendet das eingebaute
+   `client_secret`**: Twitch verlangt für Confidential Apps das Secret beim
+   Refresh — auch nach einem Device-Code-Login (im Feld bestätigt, 2026-10-20:
+   ohne Secret 400 „missing client secret"). Der **Revoke** läuft ohne Secret
+   weiter (Twitch akzeptiert für das Revoke nur die Client-ID). Ein
+   rotiertes Secret kann den Refresh bestehender Accounts brechen; dann ist
+   ein einmaliger Re-Login nötig. Der Generator
    (intern, `go:generate`) erzeugt aus ID und Secret (Secret über
    Umgebungsvariable/Stdin, nie als CLI-Argument) das `embedded.go`;
    der Wert verlässt die Maschine des Projektinhabers nicht.

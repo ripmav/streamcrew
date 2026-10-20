@@ -824,6 +824,40 @@ func TestToken(t *testing.T) {
 	assert.False(t, last.DeviceFlow)
 }
 
+// A device-flow account of the built-in confidential app is refreshed
+// with the embedded secret: Twitch needs the secret of a confidential
+// app for the refresh, also for a device code login (ADR-0024).
+func TestTokenDeviceFlowRefreshUsesTheEmbeddedSecret(t *testing.T) {
+	t.Parallel()
+	flow := newTestFlow(t)
+	a := newTestAuthEmbedded(t, flow, func(p platform.Name) (Credentials, bool) {
+		if p == platform.Twitch {
+			return Credentials{ID: "built-in", Secret: "built-in-secret"}, true
+		}
+		return Credentials{}, false
+	})
+	ctx := t.Context()
+	now := a.Clock.Now()
+	flow.refreshExpiry = now.Add(3 * time.Hour)
+
+	acc := streamerAccount(Scopes...)
+	acc.ClientID = "built-in"
+	require.NoError(t, a.Store.UpsertAccount(ctx, acc.ToStore()))
+	require.NoError(t, a.Vault.Put(ctx, authName(platform.Twitch, acc.Role),
+		secretJSON(t, Token{AccessToken: "at-1", RefreshToken: "rt-1", ExpiresAt: now.Add(-time.Hour)})))
+
+	tok, err := a.Service.Token(ctx, platform.Twitch, acc.Role)
+	require.NoError(t, err)
+	assert.Equal(t, "at-2", tok)
+
+	calls := a.FlowIDs.list()
+	require.NotEmpty(t, calls)
+	last := calls[len(calls)-1]
+	assert.Equal(t, "built-in", last.ID)
+	assert.Equal(t, "built-in-secret", last.Secret, "the embedded secret reaches the flow")
+	assert.True(t, last.DeviceFlow)
+}
+
 // TestLogout covers the revoke, the deletion, and the kept app
 // credentials.
 func TestLogout(t *testing.T) {

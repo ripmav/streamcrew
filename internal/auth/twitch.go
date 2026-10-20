@@ -144,7 +144,7 @@ func NewTwitch(c Credentials, client *http.Client, twitchAuth, twitchHelix *http
 		usersURL:  usersURL,
 	}
 	if c.DeviceFlow {
-		return &twitchFlow{twitchBase: base, deviceURL: deviceURL}, nil
+		return &twitchFlow{twitchBase: base, deviceURL: deviceURL, secret: c.Secret}, nil
 	}
 	return &twitchCodeFlow{
 		twitchBase: base,
@@ -252,6 +252,10 @@ func (b *twitchBase) User(ctx context.Context, token string) (string, string, er
 type twitchFlow struct {
 	twitchBase
 	deviceURL string
+	// secret is the client secret of the app, set when the app is
+	// confidential (the built-in app): the device code grants it without
+	// a secret, but the refresh of a confidential app still needs it.
+	secret string
 }
 
 func (f *twitchFlow) config() *oauth2.Config {
@@ -379,7 +383,9 @@ func devicePollCode(body []byte) string {
 }
 
 // Refresh exchanges a refresh token for a new token. A public client
-// sends only the client ID; there is no secret (ADR-0014). An answer that
+// sends only the client ID; there is no secret (ADR-0014). A confidential
+// app (the built-in one, ADR-0024) sends its secret, which the refresh
+// needs even for a device code login. An answer that
 // says the grant is gone, e.g. the refresh token is invalid, is
 // ErrTokenExpired: the login must be started again.
 func (f *twitchFlow) Refresh(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
@@ -387,6 +393,9 @@ func (f *twitchFlow) Refresh(ctx context.Context, refreshToken string) (*oauth2.
 		"client_id":     {f.clientID},
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
+	}
+	if f.secret != "" {
+		v.Set("client_secret", f.secret)
 	}
 	body, err := f.post(ctx, f.tokenURL, v)
 	if err != nil {
@@ -481,6 +490,7 @@ func (f *twitchCodeFlow) Wait(ctx context.Context, l *Login) (*oauth2.Token, err
 func (f *twitchCodeFlow) Refresh(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
 	v := url.Values{
 		"client_id":     {f.clientID},
+		"client_secret": {f.secret},
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
 	}

@@ -594,9 +594,10 @@ func (s *Service) clientSecret(ctx context.Context, p platform.Name, id string) 
 // authorization code flow (ADR-0023).
 func (s *Service) flowForAccount(ctx context.Context, acc Account) (Flow, error) {
 	c := Credentials{ID: acc.ClientID, DeviceFlow: acc.Flow == FlowDeviceCode}
-	if !c.DeviceFlow {
-		c.Secret = s.clientSecret(ctx, acc.Platform, c.ID)
-	}
+	// The secret of the app of the account, for both flows: a device
+	// code login can use a confidential app (the built-in one), and its
+	// refresh still needs the secret (ADR-0024).
+	c.Secret = s.clientSecret(ctx, acc.Platform, c.ID)
 	flow, err := s.ports.Flows(acc.Platform, c)
 	if err != nil {
 		return nil, fmt.Errorf("login flow %s %s: %w", acc.Platform, acc.ClientID, err)
