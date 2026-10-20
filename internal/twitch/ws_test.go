@@ -388,7 +388,8 @@ func TestClientBreakerOpens(t *testing.T) {
 	}, 20*time.Second, 50*time.Millisecond)
 	cancel()
 	select {
-	case <-done:
+	case runErr := <-done:
+		require.NoError(t, runErr)
 	case <-time.After(10 * time.Second):
 		t.Fatal("Run did not end")
 	}
