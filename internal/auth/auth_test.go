@@ -565,6 +565,48 @@ func TestWaitLoginStoresClient(t *testing.T) {
 	assert.Equal(t, "byo-secret", rec.Secret)
 }
 
+// TestClientSecretsDoNotOverwriteEachOther covers the per-app app
+// records (ADR-0023): logging in a second app keeps the secret of the
+// first; the per-platform entry stays the app of the last login.
+func TestClientSecretsDoNotOverwriteEachOther(t *testing.T) {
+	t.Parallel()
+	flow := newTestFlow(t)
+	a := newTestAuth(t, flow)
+	ctx := t.Context()
+
+	apps := [][2]string{{"app-a", "secret-a"}, {"app-b", "secret-b"}}
+	for _, app := range apps {
+		l, _, err := flow.Start(ctx)
+		require.NoError(t, err)
+		_, err = a.Service.WaitLogin(ctx, l, platform.Twitch, connector.AccountBot, Credentials{ID: app[0], Secret: app[1]})
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, "secret-a", a.Service.clientSecret(ctx, platform.Twitch, "app-a"), "the first app keeps its secret")
+	assert.Equal(t, "secret-b", a.Service.clientSecret(ctx, platform.Twitch, "app-b"))
+	rec, found := a.storedClient()
+	require.True(t, found)
+	assert.Equal(t, "app-b", rec.ID, "the per-platform entry is the app of the last login")
+}
+
+// TestClientSecretLegacyEntry covers a profile written before the per-app
+// key: the per-platform entry is still found for its app and migrated to
+// the per-app key, and is not a match for another app.
+func TestClientSecretLegacyEntry(t *testing.T) {
+	t.Parallel()
+	a := newTestAuth(t, newTestFlow(t))
+	ctx := t.Context()
+	require.NoError(t, a.Vault.Put(ctx, clientName(platform.Twitch),
+		secretJSON(t, ClientRecord{ID: "app-legacy", Secret: "secret-legacy"})))
+
+	assert.Equal(t, "secret-legacy", a.Service.clientSecret(ctx, platform.Twitch, "app-legacy"))
+	assert.Equal(t, "", a.Service.clientSecret(ctx, platform.Twitch, "other-app"), "a legacy entry of another app is not a match")
+
+	data, err := a.Vault.Get(ctx, appName(platform.Twitch, "app-legacy"))
+	require.NoError(t, err)
+	require.NotEmpty(t, data)
+}
+
 // TestWaitLoginRevokesPrevious covers the re-login of an account: the
 // previous login is revoked before the new one is stored, best effort
 // (ADR-0023).
@@ -989,6 +1031,7 @@ func TestAccountMapping(t *testing.T) {
 	assert.Equal(t, "auth/twitch/streamer", authName(platform.Twitch, connector.AccountStreamer))
 	assert.Equal(t, "auth/twitch/bot", authName(platform.Twitch, connector.AccountBot))
 	assert.Equal(t, "auth/twitch/client", clientName(platform.Twitch))
+	assert.Equal(t, "auth/twitch/client/app-1", appName(platform.Twitch, "app-1"))
 
 	row := store.Account{
 		Platform:  "twitch",
