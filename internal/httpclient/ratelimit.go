@@ -47,11 +47,12 @@ func (c *Client) noteRateLimit(rl RateLimit) {
 	c.mu.Unlock()
 }
 
-// waitUntilRateLimit computes the 429 wait: until x-ratelimit-reset, with
+// waitUntilRateLimit computes the 429 wait: until the ratelimit-reset
+// header (x-ratelimit-reset or the Twitch variant Ratelimit-Reset), with
 // the fallback Retry-After and, without both, 0 (the backoff applies)
 // (Code-ADR-0014, point 4).
 func waitUntilRateLimit(h http.Header) time.Duration {
-	if s := h.Get("x-ratelimit-reset"); s != "" {
+	if s := firstHeader(h, "x-ratelimit-reset", "ratelimit-reset"); s != "" {
 		if secs, err := strconv.ParseInt(s, 10, 64); err == nil {
 			return positive(time.Until(time.Unix(secs, 0)))
 		}

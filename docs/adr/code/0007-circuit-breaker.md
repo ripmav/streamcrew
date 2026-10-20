@@ -30,7 +30,7 @@
 
    | Mit Breaker | Ohne Breaker |
    |---|---|
-   | Anfrage-Antwort-Aufrufe an Plattform-APIs: Twitch Helix, später YouTube Data API, Kick REST, Velora, VPZone | langlebige Verbindungen (EventSub-, OBS-WebSocket, YouTube `streamList`): Sie laufen als Runnables mit Backoff im Supervisor |
+   | Anfrage-Antwort-Aufrufe an Plattform-APIs: Twitch Helix, später YouTube Data API, Kick REST, Velora, VPZone | langlebige Verbindungen (EventSub-, OBS-WebSocket, YouTube `streamList`): Sie laufen als Runnables mit Backoff im Supervisor; nur der Handshake beim (Re-)Aufbau läuft durch den Breaker des Endpoints, ein Abbruch einer laufenden Session zählt nicht |
    | OAuth-Endpunkte (Token holen und erneuern) | lokale Abhängigkeiten wie SQLite und das Dateisystem |
    | HTTP-APIs der Integrationen | die WebRequest-Action mit frei gewählten Zielen: Der Nutzer bestimmt das Ziel, und je Ziel einen Breaker zu führen hieße, ihre Zahl nicht zu begrenzen |
 
@@ -109,3 +109,4 @@
 - [x] Breaker für `twitch.helix` und `twitch.auth` (Roadmap Phase 4.1 und 4.2), später für die übrigen Plattformen und Integrationen, erledigt 2026-10-09: beide Instanzen entstehen in den Composition Roots (Core, CLI) und werden von `internal/auth` (PR #157) und `internal/helix` (PR #163) geteilt
 - [ ] Zustandswechsel als Ereignis auf den Event-Bus legen und in API und Frontends anzeigen (Roadmap Phase 4 bzw. 6)
 - [ ] Standardwerte nach dem Test-Stream (Phase 4) und den Chaos-Tests (Phase 11) überprüfen
+- [x] Breaker für die Handshakes der langlebigen Verbindungen: EventSub-WebSocket (`twitch.eventsub`) und BTTV-Socket (`bttv.socket`); die Twitch-Ratelimit-Header `Ratelimit-Remaining`/`Ratelimit-Reset` neben den `x-ratelimit-*`-Varianten auslesen, erledigt 2026-10-20

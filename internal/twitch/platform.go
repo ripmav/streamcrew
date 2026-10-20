@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/time/rate"
 
+	"github.com/ripmav/streamcrew/internal/breaker"
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
@@ -158,6 +159,10 @@ type Platform struct {
 	// socketBase is the BetterTTV socket URL for the live emote updates
 	// (plan phase 2); empty for none.
 	socketBase string
+	// eventSubBrk and socketBrk are the circuit breakers of the two
+	// external endpoints (Code-ADR-0007).
+	eventSubBrk *breaker.Breaker
+	socketBrk   *breaker.Breaker
 	// socketStarted guards the single start of the BetterTTV socket.
 	socketStarted atomic.Bool
 }
@@ -218,8 +223,12 @@ func NewPlatform(o PlatformOptions) *Platform {
 		emotes:     o.Emotes,
 		channels:   o.Channels,
 		socketBase: o.BTTVSocketBase,
-		chIDs:      make(map[string]string),
-		chatLim:    make(map[string]*rate.Limiter),
+		// The circuit breakers of the two external endpoints
+		// (Code-ADR-0007); the handshakes run through them.
+		eventSubBrk: breaker.New("twitch.eventsub", log, httpclient.Evaluator),
+		socketBrk:   breaker.New("bttv.socket", log, httpclient.Evaluator),
+		chIDs:       make(map[string]string),
+		chatLim:     make(map[string]*rate.Limiter),
 	}
 }
 
@@ -516,6 +525,7 @@ func (p *Platform) channelSession(ctx context.Context, cs channelSession) error 
 		HTTPClient: p.dialClient,
 		Logger:     p.log,
 		Session:    sessions.report,
+		Breaker:    p.eventSubBrk,
 	})
 
 	if cs.home {
@@ -587,6 +597,7 @@ func (p *Platform) runBTTVSocket(ctx context.Context) {
 		Logger:   p.log,
 		Channels: p.socketChannels,
 		Catalog:  p.emotes,
+		Breaker:  p.socketBrk,
 	})
 	if err := s.Run(ctx); err != nil && ctx.Err() == nil {
 		p.log.ErrorContext(ctx, "the bttv socket stopped", "error", err)

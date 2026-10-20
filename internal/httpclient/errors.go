@@ -80,11 +80,23 @@ func snippet(b []byte) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
+// firstHeader returns the first non-empty of the header names (Twitch
+// answers Ratelimit-Remaining/Reset, the GitHub-style x-ratelimit-* names
+// stay supported).
+func firstHeader(h http.Header, names ...string) string {
+	for _, n := range names {
+		if s := h.Get(n); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
 // rateLimitFromHeaders reads the x-ratelimit-remaining and
-// x-ratelimit-reset headers; ok is false without a parsable remaining
-// header.
+// x-ratelimit-reset headers, or their Twitch variants Ratelimit-Remaining
+// and Ratelimit-Reset; ok is false without a parsable remaining header.
 func rateLimitFromHeaders(h http.Header) (RateLimit, bool) {
-	s := h.Get("x-ratelimit-remaining")
+	s := firstHeader(h, "x-ratelimit-remaining", "ratelimit-remaining")
 	if s == "" {
 		return RateLimit{}, false
 	}
@@ -93,7 +105,7 @@ func rateLimitFromHeaders(h http.Header) (RateLimit, bool) {
 		return RateLimit{}, false
 	}
 	rl := RateLimit{Remaining: remaining}
-	if t := h.Get("x-ratelimit-reset"); t != "" {
+	if t := firstHeader(h, "x-ratelimit-reset", "ratelimit-reset"); t != "" {
 		if secs, err := strconv.ParseInt(t, 10, 64); err == nil {
 			rl.Reset = time.Unix(secs, 0)
 		}

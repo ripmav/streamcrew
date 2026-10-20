@@ -3,10 +3,14 @@
 package twitch_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,6 +20,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ripmav/streamcrew/internal/breaker"
+	"github.com/ripmav/streamcrew/internal/httpclient"
 	"github.com/ripmav/streamcrew/internal/twitch"
 )
 
@@ -331,4 +337,60 @@ func TestRunMissingTokenEndsWithoutBackoff(t *testing.T) {
 		t.Fatal("Run did not end")
 	}
 	assert.Zero(t, dials.Load())
+}
+
+// lockedWriter serializes the writes of the log handler and the reads of
+// the tests on the same buffer.
+type lockedWriter struct {
+	mu *sync.Mutex
+	w  *bytes.Buffer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
+}
+
+// TestClientBreakerOpens covers that the handshake failures run through
+// the circuit breaker and open it (Code-ADR-0007); the dials then stop
+// until the breaker goes half-open.
+func TestClientBreakerOpens(t *testing.T) {
+	t.Parallel()
+	var lc net.ListenConfig
+	l, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := l.Addr().String()
+	require.NoError(t, l.Close())
+	var (
+		bufMu sync.Mutex
+		buf   bytes.Buffer
+	)
+	contains := func(s string) bool {
+		bufMu.Lock()
+		defer bufMu.Unlock()
+		return strings.Contains(buf.String(), s)
+	}
+	log := slog.New(slog.NewTextHandler(&lockedWriter{mu: &bufMu, w: &buf}, nil))
+	brk := breaker.New("test.eventsub", log, httpclient.Evaluator)
+	c := twitch.New(twitch.Options{
+		Base:    "ws://" + addr,
+		Token:   func(context.Context) (string, error) { return "tok", nil },
+		Breaker: brk,
+		Logger:  log,
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- c.Run(ctx, &testHandler{}) }()
+	require.Eventually(t, func() bool {
+		return contains("circuit breaker open")
+	}, 20*time.Second, 50*time.Millisecond)
+	cancel()
+	select {
+	case runErr := <-done:
+		require.NoError(t, runErr)
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run did not end")
+	}
 }
