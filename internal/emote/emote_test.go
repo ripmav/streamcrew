@@ -144,13 +144,20 @@ func TestBTTVSource(t *testing.T) {
 	})
 }
 
-// TestFFZSource lists the room emotes (global and channel) in one call.
+// TestFFZSource lists the emote sets of the channel room in one call, and
+// a 404 (no room) is an empty list.
 func TestFFZSource(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "/api/v1/room/chan/frankerfacez", r.URL.Path)
-			_, _ = w.Write([]byte(`{"emotes":{"global":[{"name":"GG","id":"g1","url":"u/gg"}],"chan":[{"name":"CC","id":"c1","url":"u/cc"}]}}`))
+			switch r.URL.Path {
+			case "/v1/room/chan":
+				_, _ = w.Write([]byte(`{"room":{"id":"chan"},"sets":{"1":{"emoticons":[{"name":"GG","id":"g1","urls":{"1":"u/gg/1"}}, {"name":"CC","id":"c1","urls":{"1":"u/cc/1"}}]}}}`))
+			case "/v1/room/empty":
+				w.WriteHeader(http.StatusNotFound)
+			default:
+				t.Errorf("unexpected path %s", r.URL.Path)
+			}
 		}))
 		defer srv.Close()
 		s := NewFFZSource(httpclient.New(httpclient.Options{Name: "ffz", Base: srv.Client()}), srv.URL)
@@ -161,5 +168,8 @@ func TestFFZSource(t *testing.T) {
 			{ID: "g1", Code: "GG", Image: "u/gg"},
 			{ID: "c1", Code: "CC", Image: "u/cc"},
 		}, emotes)
+		none, err := s.Emotes(t.Context(), "empty")
+		require.NoError(t, err)
+		assert.Empty(t, none, "a 404 room is an empty list, not an error")
 	})
 }
