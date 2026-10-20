@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -255,6 +256,55 @@ func TestRunNoKeepaliveClosesAndReconnects(t *testing.T) {
 	})
 	cancel()
 	<-done
+}
+
+// The first dial fails with 500: Run must retry at the same (base) URL,
+// not at an empty one, and the handshake must carry the
+// Twitch-Session-Id header.
+func TestRunDialFailureRetriesAtTheBaseURL(t *testing.T) {
+	var dials, up atomic.Int64
+	var mu sync.Mutex
+	sessionIDs := make([]string, 0, 2)
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		sessionIDs = append(sessionIDs, r.Header.Get("Twitch-Session-Id"))
+		mu.Unlock()
+		if dials.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		conn, err := websocket.Accept(w, r, nil)
+		require.NoError(t, err)
+		require.NoError(t, conn.Write(r.Context(), websocket.MessageText, []byte(welcomeJSON("s1", "10"))))
+		// After the handshake, so the test's cancel() cannot race the
+		// reading of the new connection.
+		up.Store(1)
+		_, _, _ = conn.Read(r.Context())
+	}))
+	defer srv.Close()
+
+	c := twitch.New(twitch.Options{
+		Base:       srv.URL + "/",
+		Token:      func(context.Context) (string, error) { return "tok", nil },
+		HTTPClient: srv.Client(),
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		assert.NoError(t, c.Run(ctx, newTestHandler()))
+	}()
+	waitFor(t, 10*time.Second, up.Load)
+	cancel()
+	<-done
+	mu.Lock()
+	ids := append([]string(nil), sessionIDs...)
+	mu.Unlock()
+	assert.GreaterOrEqual(t, dials.Load(), int64(2), "the client did not retry after the failed dial")
+	require.NotEmpty(t, ids)
+	for _, id := range ids {
+		assert.NotEmpty(t, id, "the handshake must carry the Twitch-Session-Id header")
+	}
 }
 
 func TestRunMissingTokenEndsWithoutBackoff(t *testing.T) {

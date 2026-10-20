@@ -11,18 +11,18 @@ import (
 	"github.com/ripmav/streamcrew/internal/httpclient"
 )
 
-// bttvBase is the official BetterTTV API base.
-const bttvBase = "https://api.betterttv.net"
+// bttvBase is the official BetterTTV API base (the v2 API; the legacy
+// api.betterttv.net/3 endpoints are gone).
+const bttvBase = "https://api.bttv.com/api/v2"
 
-// bttvEmote is one emote of the BetterTTV answer (roadmap 4.4, task 9).
+// bttvEmote is one emote of the BetterTTV v2 answer (roadmap 4.4, task 9).
 type bttvEmote struct {
 	ID   string `json:"id"`
-	Code string `json:"code"`
-	Name string `json:"name"`
-	URL  string `json:"url"`
+	Code string `json:"name"`
+	URL  string `json:"imageUrl"`
 }
 
-// bttvAnswer is the BetterTTV answer of the emote endpoints.
+// bttvAnswer is the BetterTTV v2 answer of the emote endpoints.
 type bttvAnswer struct {
 	Emotes []bttvEmote `json:"emotes"`
 }
@@ -31,15 +31,19 @@ type bttvAnswer struct {
 type bttvSource struct {
 	http *httpclient.Client
 	base string
+	// resolveID resolves the channel login to the Twitch channel ID;
+	// the v2 API addresses the channel emotes by ID, not by login.
+	resolveID func(ctx context.Context, channel string) (string, error)
 }
 
 // NewBTTVSource makes the Source of the BetterTTV emotes over hc. base
-// overrides the API base; empty for the official one.
-func NewBTTVSource(hc *httpclient.Client, base string) Source {
+// overrides the API base; empty for the official one. resolveID is the
+// login-to-channel-ID resolver of the v2 channel endpoint.
+func NewBTTVSource(hc *httpclient.Client, base string, resolveID func(ctx context.Context, channel string) (string, error)) Source {
 	if base == "" {
 		base = bttvBase
 	}
-	return bttvSource{http: hc, base: base}
+	return bttvSource{http: hc, base: base, resolveID: resolveID}
 }
 
 // Name implements Source.
@@ -47,11 +51,15 @@ func (bttvSource) Name() string { return "bttv" }
 
 // Emotes lists the global and the channel emotes (roadmap 4.4, task 9).
 func (s bttvSource) Emotes(ctx context.Context, channel string) ([]Emote, error) {
-	global, err := s.list(ctx, "/3/emotes")
+	global, err := s.list(ctx, "/emotes")
 	if err != nil {
 		return nil, err
 	}
-	channelEmotes, err := s.list(ctx, "/3/channels/"+url.PathEscape(channel)+"/emotes")
+	id, err := s.resolveID(ctx, channel)
+	if err != nil {
+		return nil, err
+	}
+	channelEmotes, err := s.list(ctx, "/channels/"+url.PathEscape(id)+"/emotes")
 	if err != nil {
 		return nil, err
 	}

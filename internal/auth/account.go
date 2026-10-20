@@ -99,11 +99,17 @@ type ClientRecord struct {
 	Secret string `json:"secret"`
 }
 
-// clientName is the vault entry of the app credentials of a platform
-// (ADR-0023); one entry per platform, shared by the streamer and the bot
-// account.
+// clientName is the vault entry of the app of the last login of a
+// platform (ADR-0023); it is the fallback of a flagless login.
 func clientName(p platform.Name) string {
 	return "auth/" + string(p) + "/client"
+}
+
+// appName is the vault entry of the app credentials of one client
+// (ADR-0023): one record per app, so that logging in a second app does
+// not overwrite the secret of the first.
+func appName(p platform.Name, id string) string {
+	return "auth/" + string(p) + "/client/" + id
 }
 
 func splitScopes(s string) []string {

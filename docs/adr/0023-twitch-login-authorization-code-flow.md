@@ -54,9 +54,11 @@ bleibt als Fallback.**
    App** bei Twitch (eine App für beide Konten), registriert dort die
    Redirect-URL und gibt Client-ID und -Secret einmal bei `auth login twitch`
    (`--client-id`, `--client-secret`). Das Secret ruht verschlüsselt im Vault
-   (je Plattform ein Eintrag `auth/<platform>/client`, gemeinsam für
-   Streamer- und Bot-Konto); es kommt nie ins Binary, nie in Logs und nie in
-   die `accounts`-Tabelle. Die öffentliche Projekt-App „StreamCrew“
+   (je App ein Eintrag `auth/<platform>/client/<clientID>`, plus je Plattform
+   ein Zeiger-Eintrag `auth/<platform>/client` auf die App des letzten
+   Logins; unterschiedliche Apps überschreiben sich damit nicht); es kommt
+   nie ins Binary, nie in Logs und nie in die `accounts`-Tabelle. Die
+   öffentliche Projekt-App „StreamCrew“
    (Client-ID als Konstante) dient nur noch dem Device-Code-Flow-Fallback.
 4. **Redirect-URL:** fest `http://localhost:8741` — exakt so in der App des
    Nutzers zu registrieren („OAuth Redirect URLs“). Der Host ist `localhost`

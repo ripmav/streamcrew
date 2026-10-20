@@ -9,6 +9,7 @@ package twitch
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -148,10 +149,21 @@ type next struct {
 	fatal bool
 }
 
+// sessionID returns a random UUID for the Twitch-Session-Id header the
+// EventSub WebSocket handshake requires; without it Twitch answers 403.
+func sessionID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b) // a failed read makes a shorter-looking ID, which Twitch would reject and the client would retry
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
 // session runs one connection at the given URL (the base for a fresh
 // start, the reconnect URL for a session_reconnect) with the access
-// token. It returns where to reconnect next and the error that
-// dropped the connection (nil when the context ended).
+// token. A drop before or during the setup reconnects at the base URL
+// (the reconnect URL is one-shot); it returns where to reconnect next
+// and the error that dropped the connection (nil when the context ended).
 func (c *Client) session(ctx context.Context, h Handler, dialURL string) (next, error) {
 	tok, err := c.token(ctx)
 	if err != nil {
@@ -163,7 +175,7 @@ func (c *Client) session(ctx context.Context, h Handler, dialURL string) (next, 
 	// server's reconnect identifier), so merge the token into it.
 	u, err := url.Parse(dialURL)
 	if err != nil {
-		return next{}, fmt.Errorf("eventsub: the url is invalid: %w", err)
+		return next{url: c.base}, fmt.Errorf("eventsub: the url is invalid: %w", err)
 	}
 	q := u.Query()
 	q.Set("access_token", tok)
@@ -172,30 +184,31 @@ func (c *Client) session(ctx context.Context, h Handler, dialURL string) (next, 
 	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 	// The response body is consumed by the library (the handshake).
-	conn, _, err := websocket.Dial(dctx, u.String(), &websocket.DialOptions{HTTPClient: c.httpc}) //nolint:bodyclose // the body is consumed by Dial
+	headers := http.Header{"Twitch-Session-Id": []string{sessionID()}}
+	conn, _, err := websocket.Dial(dctx, u.String(), &websocket.DialOptions{HTTPClient: c.httpc, HTTPHeader: headers}) //nolint:bodyclose // the body is consumed by Dial
 	if err != nil {
-		return next{}, err
+		return next{url: c.base}, err
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 	c.log.InfoContext(ctx, "the eventsub connection is up")
 
 	op, payload, err := conn.Read(ctx)
 	if err != nil {
-		return next{}, err
+		return next{url: c.base}, err
 	}
 	if op != websocket.MessageText {
-		return next{}, errors.New("eventsub: the first answer is not text")
+		return next{url: c.base}, errors.New("eventsub: the first answer is not text")
 	}
 	var env envelope
 	if err := jsonv2.Unmarshal(payload, &env); err != nil {
-		return next{}, err
+		return next{url: c.base}, err
 	}
 	if env.Metadata.MessageType != "session_welcome" {
-		return next{}, fmt.Errorf("eventsub: the first answer is %q, not session_welcome", env.Metadata.MessageType)
+		return next{url: c.base}, fmt.Errorf("eventsub: the first answer is %q, not session_welcome", env.Metadata.MessageType)
 	}
 	var w welcome
 	if err := jsonv2.Unmarshal(env.Payload, &w); err != nil {
-		return next{}, err
+		return next{url: c.base}, err
 	}
 	seconds := w.Session.KeepaliveTimeoutSeconds
 	if seconds <= 0 {

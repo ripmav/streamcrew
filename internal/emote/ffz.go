@@ -4,9 +4,11 @@ package emote
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/ripmav/streamcrew/internal/httpclient"
 )
@@ -14,17 +16,24 @@ import (
 // ffzBase is the official FrankerFaceZ API base.
 const ffzBase = "https://api.frankerfacez.com"
 
-// ffzEmote is one emote of the FrankerFaceZ answer (roadmap 4.4, task 9).
+// ffzEmote is one emote of the FrankerFaceZ v1 room answer (roadmap 4.4,
+// task 9); the image URL is per size, the base is the 1x URL without its
+// suffix.
 type ffzEmote struct {
-	Name string `json:"name"`
-	ID   string `json:"id"`
-	URL  string `json:"url"`
+	ID   string            `json:"id"`
+	Name string            `json:"name"`
+	URLs map[string]string `json:"urls"`
 }
 
-// ffzRoom is the FrankerFaceZ room answer: the emotes grouped by scope,
-// "global" and the channel login.
+// ffzSet is one emote set of the room answer.
+type ffzSet struct {
+	Emoticons []ffzEmote `json:"emoticons"`
+}
+
+// ffzRoom is the FrankerFaceZ v1 room answer: the room data and its emote
+// sets.
 type ffzRoom struct {
-	Emotes map[string][]ffzEmote `json:"emotes"`
+	Sets map[string]ffzSet `json:"sets"`
 }
 
 // ffzSource is the Source of the FrankerFaceZ emotes (roadmap 4.4, task 9).
@@ -45,22 +54,35 @@ func NewFFZSource(hc *httpclient.Client, base string) Source {
 // Name implements Source.
 func (ffzSource) Name() string { return "ffz" }
 
-// Emotes lists the global and the channel emotes in one room call
-// (roadmap 4.4, task 9).
+// Emotes lists the emote sets of the channel room in one call
+// (roadmap 4.4, task 9). A 404 is a channel without a room, an empty
+// list.
+// shortcut: the global FFZ emotes are not listed; the room endpoint
+// returns only the room's sets. Add a global call when the endpoint is
+// verified, if the global emotes matter.
 func (s ffzSource) Emotes(ctx context.Context, channel string) ([]Emote, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.base+"/api/v1/room/"+url.PathEscape(channel)+"/frankerfacez", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.base+"/v1/room/"+url.PathEscape(channel), nil)
 	if err != nil {
 		return nil, fmt.Errorf("ffz: room %q: %w", channel, err)
 	}
 	var room ffzRoom
 	if err := s.http.DoJSON(ctx, req, &room); err != nil {
+		var se *httpclient.StatusError
+		if errors.As(err, &se) && se.StatusCode == http.StatusNotFound {
+			return nil, nil
+		}
 		return nil, err
 	}
 	var out []Emote
-	for _, emotes := range room.Emotes {
-		for _, e := range emotes {
-			out = append(out, Emote{ID: e.ID, Code: e.Name, Image: e.URL})
+	for _, set := range room.Sets {
+		for _, e := range set.Emoticons {
+			out = append(out, Emote{ID: e.ID, Code: e.Name, Image: imageBase(e.URLs)})
 		}
 	}
 	return out, nil
+}
+
+// imageBase is the emote image URL without its size suffix (the 1x URL).
+func imageBase(urls map[string]string) string {
+	return strings.TrimSuffix(urls["1"], "/1")
 }

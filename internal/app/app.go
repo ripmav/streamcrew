@@ -335,7 +335,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		emote.NewTwitchSource(func(ctx context.Context, _ string) ([]emote.Emote, error) {
 			return a.twitchEmotes(ctx)
 		}),
-		emote.NewBTTVSource(emoteClient("emote.bttv"), ""),
+		emote.NewBTTVSource(emoteClient("emote.bttv"), "", bttvChannelID(a)),
 		emote.NewFFZSource(emoteClient("emote.ffz"), ""),
 	}, time.Hour, component(logger, "emote"))
 	if a.auth, err = auth.New(auth.Ports{

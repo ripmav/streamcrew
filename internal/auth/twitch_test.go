@@ -726,7 +726,7 @@ func TestRefresh(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("the code flow refreshes without the secret", func(t *testing.T) {
+	t.Run("the code flow refreshes with the secret", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
 		f := newOAuthFake(t)
@@ -740,9 +740,24 @@ func TestRefresh(t *testing.T) {
 
 		v := f.tokenReqs()[0]
 		assert.Equal(t, "test-client", v.Get("client_id"))
-		assert.Empty(t, v.Get("client_secret"), "no secret: a rotated embedded secret must not break the refresh (ADR-0024)")
+		assert.Equal(t, "test-secret", v.Get("client_secret"), "Twitch needs the secret of a confidential app for the refresh")
 		assert.Equal(t, "refresh_token", v.Get("grant_type"))
 		assert.Equal(t, "rt-1", v.Get("refresh_token"))
+	})
+
+	t.Run("the device flow refreshes with the secret of the confidential app", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		f := newOAuthFake(t)
+		flow := f.twitchFlow()
+		flow.secret = "test-secret"
+		f.tokenScript = []tokenReply{{http.StatusOK,
+			`{"access_token":"at-2","token_type":"bearer","refresh_token":"rt-2","expires_in":3600,"scope":["user:read:chat","user:write:chat"]}`}}
+		_, err := flow.Refresh(ctx, "rt-1")
+		require.NoError(t, err)
+
+		v := f.tokenReqs()[0]
+		assert.Equal(t, "test-secret", v.Get("client_secret"), "the built-in app is confidential, its refresh needs the secret")
 	})
 }
 

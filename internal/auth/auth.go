@@ -486,12 +486,16 @@ func putToken(ctx context.Context, v *vault.Vault, name string, tok Token) error
 	return v.Put(ctx, name, logging.Secret(data))
 }
 
-// putClient stores the app credentials of a login in the vault under
-// clientName (ADR-0023).
+// putClient stores the app credentials of a login in the vault (ADR-0023)
+// under the per-app key, and under clientName as the app of the last
+// login, the fallback of a flagless login.
 func putClient(ctx context.Context, v *vault.Vault, p platform.Name, c Credentials) error {
 	data, err := json.Marshal(ClientRecord{ID: c.ID, Secret: c.Secret})
 	if err != nil {
 		return fmt.Errorf("encode client: %w", err)
+	}
+	if err := v.Put(ctx, appName(p, c.ID), logging.Secret(data)); err != nil {
+		return fmt.Errorf("client %s: %w", p, err)
 	}
 	return v.Put(ctx, clientName(p), logging.Secret(data))
 }
@@ -556,8 +560,9 @@ func (s *Service) isEmbedded(p platform.Name, id string) bool {
 	return c.ID != "" && c.ID == id
 }
 
-// client returns the app credentials stored for the platform; found is
-// false if the platform has no entry (ADR-0023).
+// client returns the app of the last login of the platform (the
+// clientName entry); found is false if the platform has no entry
+// (ADR-0023).
 func (s *Service) client(ctx context.Context, p platform.Name) (ClientRecord, bool, error) {
 	data, err := s.ports.Vault(s.ports.Store).Get(ctx, clientName(p))
 	if err != nil {
@@ -566,9 +571,45 @@ func (s *Service) client(ctx context.Context, p platform.Name) (ClientRecord, bo
 		}
 		return ClientRecord{}, false, fmt.Errorf("client %s: %w", p, err)
 	}
+	return decodeClient(data)
+}
+
+// appRecord returns the stored app record of the client ID id of the
+// platform: the per-app entry first, then the per-platform entry written
+// before the per-app key existed (only a record for id is a match). A
+// legacy hit is written to the per-app key, best effort.
+func (s *Service) appRecord(ctx context.Context, p platform.Name, id string) (ClientRecord, bool, error) {
+	v := s.ports.Vault(s.ports.Store)
+	data, err := v.Get(ctx, appName(p, id))
+	if err == nil {
+		return decodeClient(data)
+	}
+	if !errors.Is(err, vault.ErrNotFound) {
+		return ClientRecord{}, false, fmt.Errorf("client %s: %w", p, err)
+	}
+	data, err = v.Get(ctx, clientName(p))
+	if err != nil {
+		if errors.Is(err, vault.ErrNotFound) {
+			return ClientRecord{}, false, nil
+		}
+		return ClientRecord{}, false, fmt.Errorf("client %s: %w", p, err)
+	}
+	rec, found, err := decodeClient(data)
+	if err != nil {
+		return ClientRecord{}, false, fmt.Errorf("client %s: %w", p, err)
+	}
+	if !found || rec.ID != id {
+		return ClientRecord{}, false, nil
+	}
+	_ = v.Put(ctx, appName(p, id), data) // best effort: migrate the legacy entry
+	return rec, true, nil
+}
+
+// decodeClient decodes a stored app record from its vault value.
+func decodeClient(data logging.Secret) (ClientRecord, bool, error) {
 	var rec ClientRecord
 	if err := json.Unmarshal([]byte(data.Reveal()), &rec); err != nil {
-		return ClientRecord{}, false, fmt.Errorf("client %s: %w", p, err)
+		return ClientRecord{}, false, fmt.Errorf("decode client: %w", err)
 	}
 	return rec, true, nil
 }
@@ -576,11 +617,10 @@ func (s *Service) client(ctx context.Context, p platform.Name) (ClientRecord, bo
 // clientSecret returns the stored secret of the app with the client ID id
 // of the platform, or the secret of the built-in app when the account was
 // logged in with it (ADR-0024); it is empty if the platform has no entry
-// or the entry is for another app, so that a refresh never guesses
-// (ADR-0023).
+// or no entry for the app, so that a refresh never guesses (ADR-0023).
 func (s *Service) clientSecret(ctx context.Context, p platform.Name, id string) string {
-	rec, found, err := s.client(ctx, p)
-	if err == nil && found && rec.ID == id {
+	rec, found, err := s.appRecord(ctx, p, id)
+	if err == nil && found {
 		return rec.Secret
 	}
 	if emb := s.embedded(p); emb.ID == id {
@@ -594,9 +634,10 @@ func (s *Service) clientSecret(ctx context.Context, p platform.Name, id string) 
 // authorization code flow (ADR-0023).
 func (s *Service) flowForAccount(ctx context.Context, acc Account) (Flow, error) {
 	c := Credentials{ID: acc.ClientID, DeviceFlow: acc.Flow == FlowDeviceCode}
-	if !c.DeviceFlow {
-		c.Secret = s.clientSecret(ctx, acc.Platform, c.ID)
-	}
+	// The secret of the app of the account, for both flows: a device
+	// code login can use a confidential app (the built-in one), and its
+	// refresh still needs the secret (ADR-0024).
+	c.Secret = s.clientSecret(ctx, acc.Platform, c.ID)
 	flow, err := s.ports.Flows(acc.Platform, c)
 	if err != nil {
 		return nil, fmt.Errorf("login flow %s %s: %w", acc.Platform, acc.ClientID, err)
