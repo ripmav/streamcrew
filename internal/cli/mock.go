@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ripmav/streamcrew/internal/app"
@@ -54,6 +55,20 @@ const consoleHelp = `commands:
 
 // errStop ends the console loop.
 var errStop = errors.New("stop")
+
+// lockedWriter serializes the writers that share e.Stderr: the console's
+// own lines and the app's log output (app.WithConsole), which run on
+// different goroutines.
+type lockedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
+}
 
 // Run starts the core with the mock platform on the copy of the profile and
 // takes console commands from the standard input or from --script.
@@ -108,9 +123,12 @@ func (c mockCmd) Run(ctx context.Context, e *Env) (err error) {
 	runCfg := *cfg
 	runCfg.DataDir = dir
 	runCfg.Profile = id
+	// One locked writer for the console's own lines and the app's log
+	// output: both go to e.Stderr on different goroutines.
+	shared := &lockedWriter{w: e.Stderr}
 	var mp *mock.Platform
 	appOptions := []app.Option{
-		app.WithConsole(e.Stderr),
+		app.WithConsole(shared),
 		app.WithSecretKey(e.SecretKey),
 		app.WithConfigFile(e.File),
 		app.WithPlatform(func(_ context.Context, b app.PlatformBuilder) (connector.Platform, error) {
@@ -179,7 +197,7 @@ func (c mockCmd) Run(ctx context.Context, e *Env) (err error) {
 			if errors.Is(err, errStop) {
 				break
 			}
-			if _, err2 := fmt.Fprintln(e.Stderr, "error:", err); err2 != nil {
+			if _, err2 := fmt.Fprintln(shared, "error:", err); err2 != nil {
 				break
 			}
 		}
