@@ -52,12 +52,34 @@ funktioniert `!hug <name>`; `streamcrew tui` zeigt Dashboard, Chat,
 Event-Feed, Command-Queue, Commands, Nutzer und Logs. `Strg+C` beendet den
 Core geordnet.
 
-Zusätzliche Kanäle, in denen der Bot wirken soll (Bot braucht dort
-Moderator-Rechte):
+Zusätzliche Kanäle, in denen der Bot wirken soll:
 
 ```bash
 streamcrew profile channels add <login>   # Core gestoppt
+streamcrew profile channels list           # Kanäle und aktiver Adapter
+streamcrew profile channels chat irc       # Chat-Adapter wechseln (Core gestoppt)
 ```
+
+Zwei Chat-Adapter betreiben die zusätzlichen Kanäle — der Home-Kanal
+läuft immer über EventSub und ist vom Adapter unbetroffen:
+
+| Adapter | Mod-Rechte des Bots im Kanal | Anmerkung |
+|---|---|---|
+| `eventsub` (Standard) | **erforderlich** — ohne Mod-Status wird der Kanal nicht betrieben | eigene EventSub-Verbindung und Subscriptions pro Kanal |
+| `irc` | keine Voraussetzung (ohne Mod wird `mod_missing` gewarnt, der Kanal läuft trotzdem) | der Chat der zusätzlichen Kanäle läuft über den Twitch-IRC-Chat des Bot-Kontos; zusätzlich Whispers an den Bot; Mod-Status aus den Chat-Badges |
+
+Der Adapter wird nur beim Core-Start gelesen — `profile channels chat`
+verlangt einen gestoppten Core und greift beim nächsten Start. Im
+IRC-Modus sendet der Bot in den zusätzlichen Kanälen als Bot-Konto;
+ist der Chat nur für Follower/Abonnenten offen und der Bot nicht
+entsprechend berechtigt, weist der Twitch-Server die Sendung ab (NOTICE
+in den Logs). Der IRC-Modus braucht das Bot-Konto; ohne Bot-Konto
+bleiben die zusätzlichen Kanäle unbetreut.
+
+Hinweis: Der Bot-Login verlangt mit dem IRC-Adapter zusätzlich den
+Scope `chat:write:bot`; ein älterer Bot-Login zeigt das in
+`streamcrew auth status` an und muss einmal neu angemeldet werden
+(`streamcrew auth login twitch --bot`).
 
 ## Betriebsarten
 
