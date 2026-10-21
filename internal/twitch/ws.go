@@ -21,7 +21,6 @@ import (
 	jsonv2 "encoding/json/v2"
 
 	"github.com/coder/websocket"
-	"github.com/sethvargo/go-retry"
 
 	"github.com/ripmav/streamcrew/internal/breaker"
 )
@@ -36,6 +35,11 @@ var ErrToken = errors.New("eventsub: the access token is unavailable")
 
 // dialTimeout bounds the handshake of a connection.
 const dialTimeout = 10 * time.Second
+
+// dropWait is how long Run waits after an unexpected drop before the
+// next attempt (Code-ADR-0015, Revision 2026-10-21): a fixed 10 s, no
+// lifetime budget.
+const dropWait = 10 * time.Second
 
 // pongFactor is how many keepalive intervals without a frame the
 // connection tolerates before it is closed.
@@ -74,6 +78,10 @@ type Options struct {
 	// (Code-ADR-0007); the handshake runs through it, a dropped
 	// session does not. If nil, the layer is skipped.
 	Breaker *breaker.Breaker
+	// DropWait is the wait after an unexpected drop before the next
+	// attempt (Code-ADR-0015, Revision 2026-10-21); if zero or
+	// negative, dropWait (10 s) is used.
+	DropWait time.Duration
 }
 
 // TokenFunc supplies an access token for the connection.
@@ -85,7 +93,7 @@ type TokenFunc func(ctx context.Context) (string, error)
 // frames (no frame for pongFactor intervals closes the connection),
 // reconnects on session_reconnect at the given URL (no event loss,
 // the repeats are dropped by the B22 dedup) and on unexpected drops
-// with a backoff. The client sends no application messages: the
+// after a fixed drop wait. The client sends no application messages: the
 // mock server closes clients that do (close code 4001), and the
 // server's keepalive frames already carry the liveness. Run drives
 // one connection at a time; a Client is not shared between
@@ -97,6 +105,7 @@ type Client struct {
 	log       *slog.Logger
 	onSession func(string)
 	brk       *breaker.Breaker
+	dropWait  time.Duration
 }
 
 // New creates a Client.
@@ -113,18 +122,21 @@ func New(o Options) *Client {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Client{base: base, token: o.Token, httpc: httpc, log: log, onSession: o.Session, brk: o.Breaker}
+	drop := o.DropWait
+	if drop <= 0 {
+		drop = dropWait
+	}
+	return &Client{base: base, token: o.Token, httpc: httpc, log: log, onSession: o.Session, brk: o.Breaker, dropWait: drop}
 }
 
 // Run drives the connection until the context is canceled: connect,
 // session_welcome, keepalive, events, and the reconnects. A
 // session_reconnect reconnects at once at the given URL; an
-// unexpected drop reconnects at the base URL after an exponential
-// backoff (base 1 s, full jitter, 30 s budget, the httpclient values
-// of Code-ADR-0014 point 4).
+// unexpected drop waits dropWait (10 s, Code-ADR-0015, Revision
+// 2026-10-21) at the base URL — an open breaker with a known
+// retry-after waits the longer of the two, so it is probed at its own
+// pace, not every dropWait.
 func (c *Client) Run(ctx context.Context, h Handler) error {
-	backoff := retry.WithMaxDuration(30*time.Second,
-		retry.WithFullJitter(retry.NewExponential(time.Second)))
 	dialURL := c.base
 	for ctx.Err() == nil {
 		next, err := c.session(ctx, h, dialURL)
@@ -137,7 +149,7 @@ func (c *Client) Run(ctx context.Context, h Handler) error {
 		}
 		dialURL = next.url
 		if !next.immediately {
-			d, _ := backoff.Next()
+			d := nextWait(c.dropWait, err, time.Now())
 			select {
 			case <-ctx.Done():
 				return nil
@@ -154,6 +166,20 @@ type next struct {
 	immediately bool
 	// fatal ends Run without a backoff (a missing token).
 	fatal bool
+}
+
+// nextWait is the wait before the reconnect after an unexpected drop:
+// the fixed drop wait, except when the breaker rejected the attempt and
+// knows its retry-after — then the longer of the two waits
+// (Code-ADR-0015, Revision 2026-10-21).
+func nextWait(drop time.Duration, err error, now time.Time) time.Duration {
+	var u *breaker.UnavailableError
+	if errors.As(err, &u) && !u.RetryAfter.IsZero() {
+		if until := u.RetryAfter.Sub(now); until > drop {
+			return until
+		}
+	}
+	return drop
 }
 
 // sessionID returns a random UUID for the Twitch-Session-Id header the

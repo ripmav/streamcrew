@@ -29,7 +29,7 @@ doppeln.
 1. **Bibliothek:** `github.com/coder/websocket` v1.8.15. Die ISC-Lizenz steht in der Allowlist (Code-ADR-0001); die Bibliothek ist die aktiv gepflegte Fortsetzung des `nhooyr/websocket`-Kodes.
 2. **Kontext-API:** Verbindung, Lesen und Schreiben laufen mit dem Aufrufer-Kontext (`Dial(ctx, …)`, `Read(ctx)`, `Write(ctx, …)`); das Herunterfahren schließt die Verbindung geordnet (`Close(1000, …)`). Deadlines pro Verbindung (das `gorilla`-Muster) werden nicht verwendet.
 3. **Keepalive selbst:** Der Client antwortet auf die PING-Texte von Twitch mit PONG-Texten im vorgegebenen Intervall (`keepalive_interval_seconds` aus `hello`) und schließt die Verbindung, wenn die eigene Antwort nicht mehr passt (Code-ADR-0003: Log-Eintrag). Ein WS-eigenes Ping (z. B. `Conn.Ping`) kommt nicht dazu.
-4. **Reconnect:** `session_reconnect` wird mit der mitgelieferten `reconnect_url` und der Session-ID neu verbunden (Wiederholungen liefert die Plattform erneut — die Deduplizierung (B22) wirft sie weg). Ungeplante Abbrüche verbinden mit exponentiellem Backoff neu (Basis 1 s, volles Jitter, 30-s-Budget — die Werte des HTTP-Client, Code-ADR-0014, Punkt 4).
+4. **Reconnect:** `session_reconnect` wird mit der mitgelieferten `reconnect_url` und der Session-ID sofort neu verbunden (Wiederholungen liefert die Plattform erneut — die Deduplizierung (B22) wirft sie weg). Ungeplante Abbrüche verbinden nach einem festen 10-s-Wart neu (Revision 2026-10-21); ein offener Circuit-Breaker mit bekanntem `retry-after` wird im eigenen Takt ge-probt (der längere der beiden Wartezeiten).
 5. **JSON:** Die Protokoll-Nachrichten und die Ereignis-`event`-Objekte werden mit `encoding/json/v2` gelesen (Code-ADR-0018); das innere `event`-Feld bleibt als `jsontext.Value` liegen, bis die Abbildung (Roadmap 4.3) es typisiert ausliest.
 
 ## Betrachtete Alternativen
@@ -71,4 +71,22 @@ sprechen seither das echte Frame-Format.
 **Folgearbeiten:**
 
 - [ ] WebSocket-Client von Roadmap 4.3 (Paket `internal/twitch`), Plan `docs/superpowers/plans/2026-10-10-eventsub-websocket.md`
-- [ ] Im ersten Test-Lauf prüfen, ob das In-Memory-Netzwerk von `httptest.NewTestServer` WebSocket-Upgrades trägt; Fallback: Loopback-WS-Server außerhalb der synctest-Bubble (Plan 4.3, offener Punkt 2)
+- [x] Im ersten Test-Lauf prüfen, ob das In-Memory-Netzwerk von `httptest.NewTestServer` WebSocket-Upgrades trägt (erledigt 2026-10-21 in `fix/eventsub-drop-wait`): es trägt sie, auch in der synctest-Bubble (Fake-Clock) — die Drop-Wait-Tests laufen in virtuellen Sekunden, kein Loopback-Fallback nötig
+
+## Revision 2026-10-21 (Busy-Loop-Fix, Log-Analyse F1)
+
+Punkt 4 der Entscheidung (Reconnect) ändert das Retry-Verhalten bei
+ungeplanten Abbrüchen: statt exponentiellem Backoff (Basis 1 s, volles
+Jitter, 30-s-Lifetime-Budget) wartet `Client.Run` einen **festen 10-s-Wart**
+(`dropWait`, in `Options.DropWait` für Tests übersteuerbar) und dialt dann
+erneut am Base-URL.
+
+**Begründung:** Der alte Backoff lieferte nach Ablauf des 30-s-Budgets
+`(0, true)` („aufhören"); `Run` warf den Stop-Flag weg (`d, _ :=`), und
+`time.After(0)` feuerte sofort — ein Busy-Loop mit ~286 Dial-Versuchen/s,
+CPU-Spin und ~600 MB Log/Tag (Log-Analyse 2026-10-21, F1). Der feste 10-s-
+Rhythmus ist vorhersagbar, und ein offener Circuit-Breaker (Code-ADR-0007)
+mit bekanntem `retry-after` bestimmt das Tempo: die Wartezeit ist der
+längere der beiden Werte (10 s oder `retry-after`), damit ein 30 s offener
+Breaker 1–2 Versuche/min statt 286/s sieht. `session_reconnect` bleibt
+unverändert sofort; Token-Verlust (`ErrToken`) endet ohne Wartung.

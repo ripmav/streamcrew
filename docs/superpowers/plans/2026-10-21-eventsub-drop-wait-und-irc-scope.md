@@ -29,28 +29,28 @@ respektiert.
 
 ### Schritte
 
-- [ ] `internal/twitch/ws.go` `Run()`: `retry.WithMaxDuration(30s,
+- [x] `internal/twitch/ws.go` `Run()`: `retry.WithMaxDuration(30s,
   WithFullJitter(NewExponential(1s)))` und den `go-retry`-Import entfernen;
   `const dropWait = 10 * time.Second` + `Options.DropWait` (Default
   `dropWait`) für Tests.
-- [ ] Wartezeit pro Drop: `dropWait`; bei `breaker.ErrUnavailable` mit
+- [x] Wartezeit pro Drop: `dropWait`; bei `breaker.ErrUnavailable` mit
   `RetryAfter` in der Zukunft: `max(dropWait, RetryAfter - now)` (Breaker 30 s
   offen ⇒ 1–2 Versuche/min statt 286/s).
-- [ ] `session_reconnect` bleibt `immediately: true`.
-- [ ] Kommentar in `Run` aktualisieren (heute verweist er auf Code-ADR-0014
+- [x] `session_reconnect` bleibt `immediately: true`.
+- [x] Kommentar in `Run` aktualisieren (heute verweist er auf Code-ADR-0014
   Point 4 „base 1 s, full jitter, 30 s budget" — stimmt danach nicht mehr).
-- [ ] Tests `internal/twitch/ws_test.go` (Fake-Clock vorhanden):
+- [x] Tests `internal/twitch/ws_test.go` (Fake-Clock vorhanden):
   `TestRunDialFailureRetriesAtTheBaseURL` auf 10-s-Wart umstellen;
   **Busy-Loop-Regression:** Breaker offen, `RetryAfter` +30 s ⇒ vor
   `RetryAfter` kein zweiter Dial; 10-s-Wart gilt auch nach einer zuvor
   erfolgreichen Session (kein Lifetime-Budget mehr).
-- [ ] `rg 'backoff.Next'` über alle Aufrufstellen: prüfen, dass nirgends
+- [x] `rg 'backoff.Next'` über alle Aufrufstellen: prüfen, dass nirgends
   anders der Stop-Flag verworfen wird (`internal/breaker`,
   `internal/httpclient` bleiben sonst unverändert).
-- [ ] Doku: `docs/adr/code/0015-websocket-bibliothek.md` — Retry-Verhalten
+- [x] Doku: `docs/adr/code/0015-websocket-bibliothek.md` — Retry-Verhalten
   (fester 10-s-Wart, `session_reconnect` sofort, Breaker-`retry-after`
   respektiert); `docs/analyse-log-fehler-2026-10-21.md` F1 abhaken.
-- [ ] Test-Matrix `docs/tests/I-eventsub-drop-wait.md`.
+- [x] Test-Matrix `docs/tests/I-eventsub-drop-wait.md`.
 
 ### Verifikation
 
