@@ -75,13 +75,13 @@ uncommitted neu gesealete `internal/appcreds/embedded.go`.
 
 ### Schritte
 
-- [ ] `internal/auth/twitch.go`: `"chat:read"` zu `Scopes` ergänzen (neben
+- [x] `internal/auth/twitch.go`: `"chat:read"` zu `Scopes` ergänzen (neben
   `chat:edit`).
-- [ ] `internal/appcreds/embedded.go` (neu gesealed) + Scope-Change commiten
+- [x] `internal/appcreds/embedded.go` (neu gesealed) + Scope-Change commiten
   (Attribution-Footer; PR-Body mit Doku-Quelle).
 - [ ] Bot neu autorisieren — Scope-List gewachsen, Login wird laut ADR-0014
   „required" bis zum Re-Login.
-- [ ] Doku: Scope-Tabelle in ADR-0014 um `chat:read` ergänzen.
+- [x] Doku: Scope-Tabelle in ADR-0014 um `chat:read` ergänzen.
 
 ### Verifikation
 
