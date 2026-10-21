@@ -10,7 +10,7 @@
 #
 # The build image is pinned by digest; Renovate updates it (Code-ADR-0001).
 
-FROM golang:1.27.2-trixie@sha256:47667934874913a449b96faa7ef4777fa285d9ec29126ee80ed61c45b7cccf0e AS build
+FROM golang:1.27.3-trixie@sha256:290a54a1f70d617560f843301bcb32b339f1687e8e0bff49ebc043903aeb19d8 AS build
 
 WORKDIR /src
 COPY go.mod go.sum ./

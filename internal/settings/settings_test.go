@@ -140,7 +140,7 @@ func TestSaveAndLoad(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"type":"events","schemaVersion":1,"massGiftThreshold":1000,"streamGracePeriod":"0s"}`, string(doc))
 
-	chans := settings.Channels{Additional: []string{"friend", "Other", strings.Repeat("a", 25)}}
+	chans := settings.Channels{Additional: []string{"friend", "Other", strings.Repeat("a", 25)}, ChatAdapter: settings.ChatAdapterIRC}
 	require.NoError(t, settings.Save(ctx, svc, chans))
 	gotChans, err := settings.Load(ctx, svc, settings.DefaultChannels())
 	require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestSaveAndLoad(t *testing.T) {
 	assert.False(t, gotChans.Contains("home"))
 	doc, _, err = s.Settings(ctx, "channels")
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"type":"channels","schemaVersion":1,"additional":["friend","Other","aaaaaaaaaaaaaaaaaaaaaaaaa"]}`, string(doc))
+	assert.JSONEq(t, `{"type":"channels","schemaVersion":1,"additional":["friend","Other","aaaaaaaaaaaaaaaaaaaaaaaaa"],"chatAdapter":"irc"}`, string(doc))
 
 	gen := settings.General{DefaultPlatform: platform.Mock}
 	require.NoError(t, settings.Save(ctx, svc, gen))
@@ -220,6 +220,7 @@ func TestValidation(t *testing.T) {
 		settings.Channels{Additional: []string{"a", "A"}},
 		settings.Channels{Additional: []string{"has space"}},
 		settings.Channels{Additional: []string{strings.Repeat("a", 26)}},
+		settings.Channels{ChatAdapter: "websocket"},
 		settings.General{DefaultPlatform: ""},
 		settings.General{DefaultPlatform: "Twitch"},
 		settings.General{DefaultPlatform: platform.Name(strings.Repeat("a", 33))},
