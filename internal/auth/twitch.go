@@ -72,6 +72,7 @@ var Scopes = []string{
 	"user:read:chat",
 	"user:write:chat",
 	"chat:edit",
+	"chat:read",
 	"moderator:read:chat_settings",
 	"moderator:manage:chat_settings",
 	"moderator:read:chat_messages",
