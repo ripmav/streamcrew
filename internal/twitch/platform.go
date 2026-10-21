@@ -141,6 +141,9 @@ type Platform struct {
 	connected    bool
 	botConnected bool
 	lastAccount  AccountState
+	// notReadyLogged announces the not-ready account once (Run polls
+	// every few seconds; the log must not repeat per poll).
+	notReadyLogged bool
 	// sessions is the session state of the current session (nil
 	// outside of a session).
 	sessions *sessionState
@@ -332,6 +335,9 @@ func (p *Platform) Run(ctx context.Context) error {
 			p.log.WarnContext(ctx, "the state of the streamer account is unknown", "error", err)
 		} else {
 			p.setAccount(st)
+			if !st.Ready {
+				p.logNotReady(ctx, st.Login)
+			}
 			// The BetterTTV socket (plan phase 2) joins the channels once
 			// they are operated, so without a token it stays off (the
 			// tests); the polling with the TTL stays the safety net.
@@ -439,6 +445,9 @@ func (p *Platform) connect(ctx context.Context, st AccountState) error {
 func (p *Platform) runIRCSessions(ctx context.Context, st, bot AccountState, cancels *[]context.CancelFunc) {
 	logins := p.ircLogins(ctx, st.Login)
 	if !bot.Ready {
+		if len(logins) > 0 {
+			p.log.InfoContext(ctx, "the additional channels are not operated: the bot account is not ready", "login", bot.Login)
+		}
 		return
 	}
 	if len(logins) == 0 {
@@ -749,6 +758,23 @@ func (p *Platform) setAccount(st AccountState) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.lastAccount = st
+	if st.Ready {
+		p.notReadyLogged = false
+	}
+}
+
+// logNotReady announces that the streamer account is not ready — for
+// example login_required after a new required scope until the user logs
+// in again (ADR-0014) — once per transition, not per poll.
+func (p *Platform) logNotReady(ctx context.Context, login string) {
+	p.mu.Lock()
+	if p.notReadyLogged {
+		p.mu.Unlock()
+		return
+	}
+	p.notReadyLogged = true
+	p.mu.Unlock()
+	p.log.WarnContext(ctx, "the streamer account is not ready, log in again", "login", login)
 }
 
 // Identity implements connector.Identities: the streamer from the last
