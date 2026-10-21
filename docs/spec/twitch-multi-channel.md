@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Entwurf |
-| **Stand** | 2026-10-12 |
+| **Stand** | 2026-10-20 |
 | **Bezug** | Roadmap Phase 4.6; [Plan 4.6](../superpowers/plans/2026-10-12-twitch-multi-channel.md); [`events.md`](events.md), [`actions.md`](actions.md), [`twitch-events.md`](twitch-events.md), [ADR-0024](../adr/0024-eingebaute-twitch-app.md) |
 | **Umsetzung** | noch offen (später: `internal/config`, `internal/connector`, `internal/twitch`) |
 
@@ -25,8 +25,9 @@ Empfangs-Vorgaben je EventSub-Topic (Abschnitt „Offene Fragen“, E2E).
 |---|---|
 | eigener Channel | der Channel des Streamer-Kontos |
 | zusätzlicher Channel | ein Channel, dessen Login in der Settings-Sektion `channels` steht und in dem der Bot zusätzlich arbeitet |
-| betriebener Channel | der eigene Channel und die zusätzlichen Channels, deren Voraussetzung erfüllt ist (B2, B3) |
+| betriebener Channel | der eigene Channel und die zusätzlichen Channels, deren Voraussetzung erfüllt ist (B2, B3); im IRC-Modus (B15–B19) ohne Mod-Status |
 | Mod-Status | das Bot-Konto ist Moderator des Channels; gewährt vom Channel-Owner, kein Login und keine App |
+| IRC-Chat | der Twitch-Chat über die IRC-Schnittstelle (irc.chat.twitch.tv, IRCv3 mit Tags); für jedes Konto lesbar, für jedes Konto schreibbar (`chat:write:bot`), ohne Mod-Status |
 | Owner-Action | eine Aktion, die die Broadcaster-Rechte auf dem Ziel-Channel braucht (Q1) |
 
 ## Verhalten
@@ -43,6 +44,11 @@ Empfangs-Vorgaben je EventSub-Topic (Abschnitt „Offene Fragen“, E2E).
 | B8 | Commands ohne Channel-Scope, Requirements, Counter, Quotes, Währungen, Cooldowns, Nutzer-Statistiken und Settings gelten identisch für alle betriebenen Channels. Ein Command mit Channel-Scope feuert nur in seinem Channel (Roadmap 4.7, [`commands.md`](commands.md), B9); das Timer-Intervall einer Gruppe feuert in ihrem Ziel-Channel (dort B31). Eine pro-Channel-Wirtschaft (getrennte Bits- und Währungs-Bestände, Counter und Quotes je Channel) und pro-Channel-Settings gibt es in v1 nicht. | Q2, Q3, Roadmap 4.7 |
 | B9 | Die Rate-Limits des Chat-Sendens sind je Channel eigene Buckets. | Q2 |
 | B10 | Die Channel-Information (Titel, Kategorie, Live-Zustand, Zuschauer) wird für den eigenen Channel gemeldet; für zusätzliche Channels bleibt sie in v1 ohne Angabe. | Q2 |
+| B15 | Die Sektion `channels` hat die Einstellung `chatAdapter` mit den Werten `eventsub` (Standard) oder `irc`; sie wird nur beim Start des Cores gelesen, ein laufender Core übernimmt sie nicht (kein Hot-Reload, Roadmap 6.5 erfasst sie nicht). Konfiguriert wird sie über den CLI-Befehl `profile channels chat <adapter>` (B1). | Q2, Q5 |
+| B16 | Bei `chatAdapter: irc` laufen die zusätzlichen Channels über die IRC-Chat-Verbindung des Bot-Kontos (Q5) statt einer EventSub-Session: Chat-Nachrichten, Flüsternachrichten und Nachrichten-Löschungen werden über IRC empfangen; es werden keine EventSub-Subscriptions für diese Channels angelegt (ihre `channel.*`-Ereignisse werden nicht empfangen). Der eigene Channel bleibt immer über EventSub mit dem Streamer-Konto betrieben (B4). | Q2, Q5 |
+| B17 | Bei `chatAdapter: irc` ist der Mod-Status keine Voraussetzung für den Betrieb: ein Channel wird auch ohne Mod-Status des Bot-Kontos betrieben und meldet die Warnung `mod_missing` einmalig, weil der IRC-Chat für alle les- und schreibbar ist (B16, Q5). Der Mod-Status wird aus dem `badges`-Tag (`moderator/1`) des USERSTATE erkannt, den der Server dem Bot-Konto nach jedem Join schickt, und damit neu erkannt; er steuert nur, ob Moderations-Actions erwartet werden dürfen. | Q2, Q5 |
+| B18 | Bei `chatAdapter: irc` sendet der Bot Chat-Nachrichten der zusätzlichen Channels über die IRC-Verbindung; die Send-Buckets je Channel (B9) gelten unverändert (IRC-Limit: 20 Nachrichten in 30 Sekunden, 1 Nachricht in 3 Sekunden). | Q2, Q5 |
+| B19 | Bei `chatAdapter: irc` werden die zusätzlichen Channels nicht betrieben, wenn das Bot-Konto nicht verbunden ist (kein gültiges Token, B2, B4). | Q1, Q5 |
 
 ## Randfälle
 
@@ -52,6 +58,7 @@ Empfangs-Vorgaben je EventSub-Topic (Abschnitt „Offene Fragen“, E2E).
 | B12 | Der Mod-Status wird während des Laufens entzogen | beim nächsten Abgleich ist der Channel nicht mehr betrieben; seine Ereignisse werden nicht mehr empfangen, und seine scoped Commands feuern nicht mehr ([`commands.md`](commands.md), B9) | Q1 |
 | B13 | Ein Event eines zusätzlichen Channels löst ein Command aus, das eine Owner-Action ausführt | die Owner-Action schlägt mit dem Fehler von B7 fehl; die übrigen Aktionen des Commands (Chat, Moderation) wirken weiter in dem Channel | Q2 |
 | B14 | Ein Timer oder ein manueller Aufruf sendet eine Nachricht oder moderiert | es wirkt auf den eigenen Channel (B6) | Q2 |
+| B20 | Bei `chatAdapter: irc` ist ein Channel Follower-Only oder Subs-Only | die empfangene Seite ist unverändert; die Send-Aktion des Bots wird vom IRC-Server mit einem NOTICE abgewiesen und schlägt mit einer klaren Fehlermeldung fehl (das Bot-Konto kann dem Channel einmalig manuell folgen, nicht per API) | Q5 |
 
 ## Abweichungen vom Original
 
@@ -61,15 +68,28 @@ Empfangs-Vorgaben je EventSub-Topic (Abschnitt „Offene Fragen“, E2E).
 
 ## Offene Fragen (E2E-Verifizierung, Plan-Task 7)
 
+**E2E-Befund (2026-10-20):** Der Mod-Check von B3 schlägt gegen das echte
+Twitch-API mit dem Bot-Token immer fehl, HTTP 401 („The ID in broadcaster_id
+must match the user ID found in the request's OAuth token"): `GetModerators`
+(Q1) ist nur mit `broadcaster_id` = Token-Inhaber erlaubt, es gibt keinen
+öffentlichen Endpunkt, der den Mod-Status eines Dritten mit fremdem Token
+prüft. Damit kann B3 im `eventsub`-Modus gegen echtes Twitch nie bestanden
+werden, und zusätzliche Channels werden dort nie betrieben. Der wirksame
+Mod-Check ist der IRC-Badge von B17; der IRC-Modus ist der Betriebsweg für
+zusätzliche Channels. Das Verhalten von `eventsub` bleibt unverändert erhalten (B15,
+Standard).
+
 - Die exakte je-Topic-Empfangs-Vorgabe für den Bot-Token in zusätzlichen
   Channels (die Twitch-Dokumentation verlangt für die `channel.*`-Topics mit
   User-Token Moderator- oder Broadcaster-Status; die Doku war bei der
   Recherche bot-geschützt, HTTP 403). B2 und B3 gehen von der sicheren
   Voraussetzung (Mod-Status) aus; die Verifizierung je Topic dokumentiert,
   wo sie enger oder locker ist.
-- Die Whisper-Lieferung an das Bot-Konto aus zusätzlichen Channels.
+- ~~Die Whisper-Lieferung an das Bot-Konto aus zusätzlichen Channels~~
+  (gelöst im IRC-Modus: die Flüsternachrichten kommen über die IRC-
+  Verbindung des Bot-Kontos an, B16, Q5).
 - Die Shared-Chat-Ereignisse in zusätzlichen Channels (ob der Bot sie als
-  Moderator erhält).
+  Moderator erhält; im IRC-Modus nicht empfangen, B16).
 
 Abdeckungsstand (2026-10-12): Die twitch-cli-Mock-Server stellen einen
 Broadcaster pro Umgebung dar, die Empfangs-Vorgaben je Topic lassen sich
@@ -89,6 +109,10 @@ Send-Buckets je Channel (B9).
 - [ ] B6: ein ereignisgetriggertes Chat- oder Moderations-Action wirkt auf den Channel des Events; Timer auf den eigenen Channel
 - [ ] B7: eine Owner-Action auf einem zusätzlichen Channel schlägt mit der klaren Fehlermeldung fehl
 - [ ] B9: der Send-Bucket eines Channels wird nicht durch den anderen limitiert
+- [ ] B15: die Sektion `channels` akzeptiert `chatAdapter` `eventsub`/`irc`, lehnt unbekannte Werte ab und hält ohne Angabe `eventsub`
+- [ ] B16: im IRC-Modus lösen Chat-Nachrichten und Flüsternachrichten eines zusätzlichen Channels Commands in diesem Channel aus, ohne EventSub-Subscriptions für den Channel
+- [ ] B17: im IRC-Modus wird ein Channel ohne Mod-Status betrieben und meldet `mod_missing`; der Mod-Status kommt aus den USERSTATE-Badges
+- [ ] B18: im IRC-Modus sendet eine Chat-Action eines zusätzlichen Channels über IRC innerhalb des Send-Buckets des Channels
 
 ## Quellen
 
@@ -98,11 +122,13 @@ Send-Buckets je Channel (B9).
 | Q2 | Plan | [Plan 4.6](../superpowers/plans/2026-10-12-twitch-multi-channel.md), Abschnitt 3 (Design) | Festlegungen des Projekts |
 | Q3 | Roadmap | [Roadmap 4.6](../roadmap.md) | Items und Exit-Kriterien |
 | Q4 | Plattform-Doku | <https://dev.twitch.tv/docs/eventsub/websocket-eventsub/> (Event-Typen `channel.*` mit Broadcaster-Feldern) | Channel je Ereignis |
+| Q5 | Plattform-Doku | <https://dev.twitch.tv/docs/chat/> (IRC-Chat: Authentifizierung mit User-Token, Scopes `chat:read:bot`/`chat:write:bot`, IRC-Tags `badges`/`emotes`/`user-id`, USERSTATE nach Join, Flüsternachrichten, Send-Limits) | IRC-Modus (B15–B20) |
 
 ## Änderungshistorie
 
 | Datum | Änderung |
 |---|---|
+| 2026-10-20 | IRC-Chat-Adapter (B15–B20): die Sektion `channels` gewinnt `chatAdapter` (`eventsub` = Standard, `irc`); im IRC-Modus laufen die zusätzlichen Channels über die IRC-Chat-Verbindung des Bot-Kontos (B16), der Mod-Status ist keine Betriebsvoraussetzung mehr (B17) und wird aus den USERSTATE-Badges erkannt, das Senden läuft über IRC (B18, B20). Dazu der E2E-Befund: der Helix-Mod-Check (B3) ist mit dem Bot-Token gegen echtem Twitch nie bestellbar (HTTP 401, `broadcaster_id` = Token-Inhaber), und die Whisper-Frage ist im IRC-Modus gelöst. Quelle Q5 (Twitch-Chat-IRC-Doku); Plan: [Plan 2026-10-20](../superpowers/plans/2026-10-20-twitch-irc-chat.md). |
 | 2026-10-12 | Erstellt für Phase 4.6: Voraussetzung und Prüfung (B1–B3), Token-Zuordnung (B4), Channel-Dimension (B5–B7, B9), geteilte Konfiguration (B8, B10), Randfälle (B11–B14), Abweichung A1, E2E-Fragen. |
 | 2026-10-12 | Abdeckungsstand der offenen Fragen dokumentiert: die twitch-cli-Mock-Server stellen einen Broadcaster pro Umgebung dar, die je-Topic-Empfangs-Vorgaben bleiben das manuelle E2E; automatisch abgedeckt sind Mod-Check, Nicht-Betreiben fehlender Channels, Sollzustand je Channel×Topic, Channel-Dimension und Routing, Ownership-Gate und Send-Buckets je Channel. |
 | 2026-10-12 | 4.8: B1 um die Login-Form-Prüfung beim Speichern ergänzt (1–25 Zeichen, Buchstaben, Ziffern, Unterstrich) und der Benutzerweg zur Konfiguration der Sektion: die neuen CLI-Befehle `profile channels list|add|remove` (roadmap 4.8). |

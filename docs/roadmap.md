@@ -583,6 +583,7 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 - [x] Chat, Chat löschen und Moderation in den zusätzlichen Kanälen über das Bot-Konto; Emote-Kataloge je Channel (M), erledigt 2026-10-12
 - [x] Ownership-Gate: Owner-Actions (Raid, Werbung, Titel/Kategorie, Clip, Marker, Umfrage, Vorhersage, Belohnungen) nur auf dem eigenen Channel, sonst klare Fehlermeldung (S), erledigt 2026-10-12
 - [x] Tests: Mock-Plattform multi-channel, Integrationstests, E2E auf echten Kanälen inkl. Verifizierung der je-Topic-Empfangs-Vorgaben (M), erledigt 2026-10-12 (das E2E auf echten Kanälen bleibt als Exit-Kriterium offen, siehe Änderungshistorie)
+- [ ] IRC-Chat-Adapter für die zusätzlichen Kanäle: `chatAdapter` in der Sektion `channels` (`eventsub` = Standard, `irc`); im IRC-Modus laufen die zusätzlichen Kanäle über den IRC-Chat des Bot-Kontos (Empfang, Whisper, Senden), der Mod-Status ist keine Voraussetzung mehr und kommt aus den USERSTATE-Badges ([Spec](spec/twitch-multi-channel.md) B15–B20, [Plan](superpowers/plans/2026-10-20-twitch-irc-chat.md); Auslöser: der Helix-Mod-Check ist mit dem Bot-Token nie bestellbar, HTTP 401) (M)
 
 **Exit-Kriterien:**
 
