@@ -117,7 +117,7 @@ sie ausdrücklich übernimmt.*
 |---|---|
 | `user:read:chat` | EventSub `channel.chat.*` (Nachrichten, Löschungen, Leeren, Benachrichtigungen, AutoMod-Hold) (4.4) |
 | `user:write:chat` | Chat-Nachricht senden (4.2) |
-| `chat:write:bot` | Chat-Nachricht senden über den IRC-Chat des Bot-Kontos (4.6, B18) |
+| `chat:edit` | Chat-Nachricht senden über den IRC-Chat des Bot-Kontos (4.6, B18) |
 | `moderator:read:chat_settings` | Chat-Einstellungen lesen; EventSub `channel.moderate` (4.2/4.4) |
 | `moderator:manage:chat_settings` | Chat stumm schalten: Slow, Nur-Follower, Nur-Abonnenten, Emote-only (B80 `disable_chat`) (4.2) |
 | `moderator:read:chat_messages` | Gelöschte und gepinnte Nachrichten lesen; EventSub `channel.moderate` (4.2/4.4) |

@@ -77,7 +77,7 @@ in den Logs). Der IRC-Modus braucht das Bot-Konto; ohne Bot-Konto
 bleiben die zusätzlichen Kanäle unbetreut.
 
 Hinweis: Der Bot-Login verlangt mit dem IRC-Adapter zusätzlich den
-Scope `chat:write:bot`; ein älterer Bot-Login zeigt das in
+Scope `chat:edit`; ein älterer Bot-Login zeigt das in
 `streamcrew auth status` an und muss einmal neu angemeldet werden
 (`streamcrew auth login twitch --bot`).
 
