@@ -13,7 +13,7 @@ Channels nie bestellbar. Folge: zusätzliche Channels werden im
 
 Den Bot in einen Chat stellen, in dem er **kein** Mod ist. Der Twitch-Chat
 per IRC (irc.chat.twitch.tv, IRCv3 mit Tags) ist ohne Mod-Status les- und
-schreibbar (Scope `chat:write:bot`) und liefert beim Join per USERSTATE
+schreibbar (Scope `chat:edit`) und liefert beim Join per USERSTATE
 (`badges`-Tag) den Mod-Status des Bot-Kontos — damit wird der kaputte
 Helix-Mod-Check ersetzt und der Mod-Status wird zum Information statt zur
 Voraussetzung.
@@ -47,7 +47,7 @@ Voraussetzung.
     `channel.*`-Topics brauchen ohnehin Bot-Mod-Status/Broadcaster).
 - **Bot-Konto ohne Token:** zusätzliche Channels werden nicht betrieben
   (B19), wie heute.
-- **Auth:** Scope `chat:write:bot` (IRC-Senden) in `internal/auth/twitch.go`
+- **Auth:** Scope `chat:edit` (IRC-Senden) in `internal/auth/twitch.go`
   ergänzt → bestehende Token tragen ihn nicht, beide Accounts müssen einmal
   neu eingelogen werden (das Auth-Flow markiert den Login als required).
 
@@ -91,7 +91,7 @@ PR 2 im Detail (eine Abgabe, Feature muss end-to-end funktionieren):
    eine IRC-Session; `chat.Send` routet IRC-Channels über die
    IRC-Verbindung. `internal/app/app.go` liest `chatAdapter` aus den
    Settings und reicht es an.
-5. **Auth:** Scope `chat:write:bot` an `Scopes` in
+5. **Auth:** Scope `chat:edit` an `Scopes` in
    `internal/auth/twitch.go`.
 6. **Tests:** `internal/twitch/irc_test.go` — kleiner Mock-IRC-Server
    (IPC-Textprotokoll, TLS-los per `IrcAddress`/`TLS=false`): Join →
@@ -111,7 +111,7 @@ PR 2 im Detail (eine Abgabe, Feature muss end-to-end funktionieren):
 ## 5. E2E-Checkliste (manuell, nach Merge, mit echten Accounts)
 
 - [ ] `profile channels chat irc`, Core-Neustart
-- [ ] Bot (neu eingelogen wegen `chat:write:bot`) tritt einen Channel bei,
+- [ ] Bot (neu eingelogen wegen `chat:edit`) tritt einen Channel bei,
       in dem er **kein** Mod ist → Warnung `mod_missing` einmalig,
       Commands feuern auf Chat-Eingaben
 - [ ] Bot sendet dort (Command-Action) → Nachricht erscheint

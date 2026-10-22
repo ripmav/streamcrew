@@ -27,7 +27,7 @@ Empfangs-Vorgaben je EventSub-Topic (Abschnitt „Offene Fragen“, E2E).
 | zusätzlicher Channel | ein Channel, dessen Login in der Settings-Sektion `channels` steht und in dem der Bot zusätzlich arbeitet |
 | betriebener Channel | der eigene Channel und die zusätzlichen Channels, deren Voraussetzung erfüllt ist (B2, B3); im IRC-Modus (B15–B19) ohne Mod-Status |
 | Mod-Status | das Bot-Konto ist Moderator des Channels; gewährt vom Channel-Owner, kein Login und keine App |
-| IRC-Chat | der Twitch-Chat über die IRC-Schnittstelle (irc.chat.twitch.tv, IRCv3 mit Tags); für jedes Konto lesbar, für jedes Konto schreibbar (`chat:write:bot`), ohne Mod-Status |
+| IRC-Chat | der Twitch-Chat über die IRC-Schnittstelle (irc.chat.twitch.tv, IRCv3 mit Tags); für jedes Konto lesbar, für jedes Konto schreibbar (`chat:edit`), ohne Mod-Status |
 | Owner-Action | eine Aktion, die die Broadcaster-Rechte auf dem Ziel-Channel braucht (Q1) |
 
 ## Verhalten
@@ -122,7 +122,7 @@ Send-Buckets je Channel (B9).
 | Q2 | Plan | [Plan 4.6](../superpowers/plans/2026-10-12-twitch-multi-channel.md), Abschnitt 3 (Design) | Festlegungen des Projekts |
 | Q3 | Roadmap | [Roadmap 4.6](../roadmap.md) | Items und Exit-Kriterien |
 | Q4 | Plattform-Doku | <https://dev.twitch.tv/docs/eventsub/websocket-eventsub/> (Event-Typen `channel.*` mit Broadcaster-Feldern) | Channel je Ereignis |
-| Q5 | Plattform-Doku | <https://dev.twitch.tv/docs/chat/> (IRC-Chat: Authentifizierung mit User-Token, Scopes `chat:read:bot`/`chat:write:bot`, IRC-Tags `badges`/`emotes`/`user-id`, USERSTATE nach Join, Flüsternachrichten, Send-Limits) | IRC-Modus (B15–B20) |
+| Q5 | Plattform-Doku | <https://dev.twitch.tv/docs/chat/> (IRC-Chat: Authentifizierung mit User-Token, Scopes `chat:read`/`chat:edit`, IRC-Tags `badges`/`emotes`/`user-id`, USERSTATE nach Join, Flüsternachrichten, Send-Limits) | IRC-Modus (B15–B20) |
 
 ## Änderungshistorie
 

@@ -20,9 +20,9 @@ func TestScopes(t *testing.T) {
 		require.False(t, seen[s], "duplicate scope %q", s)
 		seen[s] = true
 	}
-	// The table of ADR-0014 has 42 scopes (2026-10-20); a change there
-	// must update this list.
-	assert.Len(t, auth.Scopes, 42)
+	// The table of ADR-0014 has 43 scopes (2026-10-21, chat:read);
+	// a change there must update this list.
+	assert.Len(t, auth.Scopes, 43)
 }
 
 func TestMissing(t *testing.T) {

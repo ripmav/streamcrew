@@ -3,11 +3,14 @@
 package twitch_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -216,4 +219,54 @@ func TestPlatformStopsOnTokenLoss(t *testing.T) {
 	})
 	cancel()
 	<-done
+}
+
+// logBuf is a bytes.Buffer guarded by a mutex: the log handler writes
+// from the platform's goroutine while the test reads it.
+type logBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *logBuf) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *logBuf) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+// TestPlatformRunLogsNotReadyOnce: an account that is not ready (for
+// example login_required after a new required scope, ADR-0014) is
+// announced once, not per poll.
+func TestPlatformRunLogsNotReadyOnce(t *testing.T) {
+	t.Parallel()
+	buf := &logBuf{}
+	a := &fakeAuth{ready: false}
+	p := twitch.NewPlatform(twitch.PlatformOptions{
+		Receiver: &fakeReceiver{},
+		Auth:     a,
+		Logger:   slog.New(slog.NewTextHandler(buf, nil)),
+		Poll:     5 * time.Millisecond,
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		assert.NoError(t, p.Run(ctx))
+	}()
+	waitFor(t, 10*time.Second, func() int64 {
+		if strings.Contains(buf.String(), "the streamer account is not ready") {
+			return 1
+		}
+		return 0
+	})
+	time.Sleep(100 * time.Millisecond) // a few more polls: no repeat
+	cancel()
+	<-done
+	assert.Equal(t, 1, strings.Count(buf.String(), "the streamer account is not ready"))
 }
