@@ -133,23 +133,29 @@ type App struct {
 	logger  *slog.Logger
 	// dynLog changes the log levels and output at runtime (roadmap 6.5);
 	// console is the console writer the log always goes to.
-	dynLog   *logging.Dynamic
-	console  io.Writer
-	lock     *lockfile.Lock
-	profile  profile.Profile
-	profiles *profile.Manager
-	store    *store.Store
-	backups  string
-	settings *settings.Service
-	vault    *vault.Vault
-	auth     *auth.Service
-	prompts  *prompt.Service
-	bus      *event.Bus
-	sup      *supervisor.Supervisor
-	http     *httpserver.Server
-	api      *api.Server
-	ready    *readiness
-	rights   *config.Live
+	dynLog  *logging.Dynamic
+	console io.Writer
+	// msgLog writes the user messages (chat messages and whispers, with
+	// the full text) to the separate file beside the log file; it is open
+	// in the debug log level and in dry run (the gate is evaluated at
+	// start), msgLogCloser closes it.
+	msgLog       *slog.Logger
+	msgLogCloser io.Closer
+	lock         *lockfile.Lock
+	profile      profile.Profile
+	profiles     *profile.Manager
+	store        *store.Store
+	backups      string
+	settings     *settings.Service
+	vault        *vault.Vault
+	auth         *auth.Service
+	prompts      *prompt.Service
+	bus          *event.Bus
+	sup          *supervisor.Supervisor
+	http         *httpserver.Server
+	api          *api.Server
+	ready        *readiness
+	rights       *config.Live
 	// file is the resolver of the configuration file; watcher applies
 	// its changes at runtime (roadmap 6.5), nil without a file.
 	file    *config.FileResolver
@@ -217,7 +223,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create data directory: %w", err)
 	}
-	logger, dynLog, err := newLogger(cfg, o.console)
+	logger, dynLog, lc, err := newLogger(cfg, o.console)
 	if err != nil {
 		return nil, err
 	}
@@ -227,6 +233,23 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		ready: newReadiness(), startedAt: time.Now(),
 	}
 	a.dryRun.Store(cfg.DryRun)
+	// verbose is on in the debug log level and in dry run: the user
+	// messages go to the separate file and the API answers log their
+	// bodies into the normal log. The gate is evaluated at start; a hot
+	// change of the level or dry run does not open or close the file.
+	verbose := cfg.DryRun
+	if l, err := config.ParseLevel(cfg.Log.Level); err == nil && l <= slog.LevelDebug {
+		verbose = true
+	}
+	if verbose && lc.File != "" {
+		path := filepath.Join(filepath.Dir(lc.File), "messages.json")
+		msgLog, closer, err := logging.NewFileLogger(path, lc.MaxSize, lc.MaxFiles)
+		if err != nil {
+			return a, fmt.Errorf("open the messages file: %w", err)
+		}
+		a.msgLog, a.msgLogCloser = msgLog, closer
+		a.logger.InfoContext(ctx, "the user messages are logged to the separate file", "file", path)
+	}
 	a.shutdownTimeout.Store(int64(cfg.ShutdownTimeout))
 	defer func() {
 		if err != nil {
@@ -313,16 +336,18 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	// and a 429 waits until the Ratelimit-Reset header (dev.twitch.tv,
 	// "Twitch Rate Limits").
 	twitchAuth := httpclient.New(httpclient.Options{
-		Name:    "twitch.auth",
-		Base:    authClient,
-		Breaker: breaker.New("twitch.auth", component(logger, "auth"), httpclient.Evaluator),
-		Logger:  component(logger, "auth"),
+		Name:      "twitch.auth",
+		Base:      authClient,
+		Breaker:   breaker.New("twitch.auth", component(logger, "auth"), httpclient.Evaluator),
+		Logger:    component(logger, "auth"),
+		Responses: verbose,
 	})
 	twitchHelix := httpclient.New(httpclient.Options{
-		Name:    "twitch.helix",
-		Base:    authClient,
-		Breaker: breaker.New("twitch.helix", component(logger, "auth"), httpclient.Evaluator),
-		Logger:  component(logger, "auth"),
+		Name:      "twitch.helix",
+		Base:      authClient,
+		Breaker:   breaker.New("twitch.helix", component(logger, "auth"), httpclient.Evaluator),
+		Logger:    component(logger, "auth"),
+		Responses: verbose,
 	})
 	a.twitchHelix = twitchHelix
 	// The emote catalog (roadmap 4.4, task 9) resolves the emote IDs of
@@ -330,10 +355,11 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	// their own resilient clients (own allow list names, Code-ADR-0019).
 	emoteClient := func(name string) *httpclient.Client {
 		return httpclient.New(httpclient.Options{
-			Name:    name,
-			Base:    authClient,
-			Breaker: breaker.New(name, component(logger, "emote"), httpclient.Evaluator),
-			Logger:  component(logger, "emote"),
+			Name:      name,
+			Base:      authClient,
+			Breaker:   breaker.New(name, component(logger, "emote"), httpclient.Evaluator),
+			Logger:    component(logger, "emote"),
+			Responses: verbose,
 		})
 	}
 	a.emotes = emote.New([]emote.Source{
@@ -478,6 +504,19 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if err != nil {
 		return a, err
 	}
+	eventOpts := []eventservice.Option{
+		eventservice.WithLogger(component(logger, "events")),
+		eventservice.WithUnknownCommandGate(func() bool {
+			// unknown commands are log noise: only in the debug log
+			// level or in dry run (the gate stays a function so a hot
+			// change of either can flip it without a restart)
+			l, err := config.ParseLevel(a.cfg.Log.Level)
+			return a.cfg.DryRun || err == nil && l <= slog.LevelDebug
+		}),
+	}
+	if a.msgLog != nil {
+		eventOpts = append(eventOpts, eventservice.WithMessagesLogger(a.msgLog))
+	}
 	a.events, err = eventservice.New(ctx, eventservice.Ports{
 		Store:         a.store,
 		Commands:      a.commands,
@@ -487,16 +526,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Moderation:    a.moderation,
 		Settings:      a.eventsSettings,
 		ChannelPoints: a.channelPointsSettings,
-	},
-		eventservice.WithLogger(component(logger, "events")),
-		eventservice.WithUnknownCommandGate(func() bool {
-			// unknown commands are log noise: only in the debug log
-			// level or in dry run (the gate stays a function so a hot
-			// change of either can flip it without a restart)
-			l, err := config.ParseLevel(a.cfg.Log.Level)
-			return a.cfg.DryRun || err == nil && l <= slog.LevelDebug
-		}),
-	)
+	}, eventOpts...)
 	if err != nil {
 		return a, err
 	}
@@ -987,6 +1017,10 @@ func (a *App) close() error {
 		errs = append(errs, a.lock.Release())
 		a.lock = nil
 	}
+	if a.msgLogCloser != nil {
+		errs = append(errs, a.msgLogCloser.Close())
+		a.msgLogCloser = nil
+	}
 	if a.dynLog != nil {
 		errs = append(errs, a.dynLog.Close())
 		a.dynLog = nil
@@ -1094,16 +1128,16 @@ func httpShutdownTimeout(total time.Duration) time.Duration {
 	return min(total/2, 5*time.Second)
 }
 
-func newLogger(cfg config.Config, console io.Writer) (*slog.Logger, *logging.Dynamic, error) {
+func newLogger(cfg config.Config, console io.Writer) (*slog.Logger, *logging.Dynamic, logging.Config, error) {
 	lc, err := logConfig(cfg, console)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, logging.Config{}, err
 	}
 	logger, dyn, err := logging.NewDynamic(lc)
 	if err != nil {
-		return nil, nil, fmt.Errorf("set up logging: %w", err)
+		return nil, nil, logging.Config{}, fmt.Errorf("set up logging: %w", err)
 	}
-	return logger, dyn, nil
+	return logger, dyn, lc, nil
 }
 
 // logConfig translates the log settings of the configuration to the

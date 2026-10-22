@@ -104,13 +104,13 @@ func (a *App) twitchEmotes(ctx context.Context) ([]emote.Emote, error) {
 	if err != nil {
 		return nil, err
 	}
-	emotes, err := c.GetEmotes(ctx, me)
+	emotes, err := c.GetChannelEmotes(ctx, me)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]emote.Emote, 0, len(emotes))
 	for _, e := range emotes {
-		out = append(out, emote.Emote{ID: e.ID, Code: e.Name, Image: e.Image})
+		out = append(out, emote.Emote{ID: e.ID, Code: e.Name, Image: e.Images.URL1x})
 	}
 	return out, nil
 }

@@ -501,6 +501,75 @@ func TestDoLogsRateLimitAsInfo(t *testing.T) {
 	})
 }
 
+// TestDoLogsResponseBodies covers Options.Responses: the body of the
+// answer goes into the client log at info level, truncated at the cap,
+// while the caller still receives the full body.
+func TestDoLogsResponseBodies(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		var body string
+		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = io.WriteString(w, body)
+		}))
+		defer srv.Close()
+		var buf bytes.Buffer
+		log := slog.New(slog.NewTextHandler(&buf, nil))
+		c := httpclient.New(httpclient.Options{
+			Name:      "twitch.helix",
+			Base:      srv.Client(),
+			Breaker:   newBreaker(),
+			Logger:    log,
+			Responses: true,
+		})
+
+		body = "the answer"
+		resp, err := c.Do(t.Context(), newGetRequest(t.Context(), srv.URL))
+		require.NoError(t, err)
+		data, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, body, string(data), "the caller receives the full body")
+		assert.Contains(t, buf.String(), `msg="response body"`)
+		assert.Contains(t, buf.String(), `body="the answer"`)
+
+		buf.Reset()
+		body = strings.Repeat("x", 100<<10) // beyond the cap of the log
+		resp, err = c.Do(t.Context(), newGetRequest(t.Context(), srv.URL))
+		require.NoError(t, err)
+		data, err = io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Len(t, data, len(body), "the truncation of the log never shortens the answer")
+		assert.Contains(t, buf.String(), `truncated=true`)
+		assert.NotContains(t, buf.String(), body, "the log keeps only the prefix")
+
+		// The answer of a token endpoint is logged, but the tokens are
+		// masked; the caller still receives the full answer.
+		buf.Reset()
+		body = `{"access_token":"tok-secret","refresh_token":"r-secret","scope":["chat:read"]}`
+		resp, err = c.Do(t.Context(), newGetRequest(t.Context(), srv.URL+"/oauth2/token"))
+		require.NoError(t, err)
+		data, err = io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, body, string(data), "the caller receives the full answer")
+		out := buf.String()
+		assert.Contains(t, out, `msg="response body"`)
+		assert.Contains(t, out, `access_token\":\"***`)
+		assert.Contains(t, out, `refresh_token\":\"***`)
+		assert.NotContains(t, out, "tok-secret")
+		assert.NotContains(t, out, "r-secret")
+
+		// The security-relevant query parameters of the URL are masked
+		// in the log, the request itself is unaffected.
+		buf.Reset()
+		body = `{}`
+		resp, err = c.Do(t.Context(), newGetRequest(t.Context(), srv.URL+"?token=tok123&code=abc"))
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Contains(t, buf.String(), `token=***`)
+		assert.Contains(t, buf.String(), `code=***`)
+		assert.NotContains(t, buf.String(), "tok123")
+	})
+}
+
 func TestEvaluator(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

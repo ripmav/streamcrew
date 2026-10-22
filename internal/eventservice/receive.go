@@ -44,6 +44,14 @@ func (s *Service) Message(ctx context.Context, m connector.Incoming) error {
 	if m.Message.Text == "" {
 		return errors.New("chat message: empty text")
 	}
+	// The user messages go to the separate log (WithMessagesLogger):
+	// every message an adapter received, with the full text; the app
+	// opens the gate in the debug log level and in dry run.
+	if s.msgLog != nil {
+		s.msgLog.InfoContext(ctx, "user chat message",
+			"platform", m.Platform, "channel", string(m.Channel),
+			"user", m.Author.Login, "from_bot", m.FromBot, "text", m.Message.Text)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -250,6 +258,15 @@ func (s *Service) Event(ctx context.Context, e connector.Event) error {
 	defer s.mu.Unlock()
 	if s.closed {
 		return fmt.Errorf("event %s: %w", e.Type, ErrStopped)
+	}
+	// The user messages go to the separate log (WithMessagesLogger):
+	// the whispers with the full text, beside the chat messages.
+	if s.msgLog != nil && e.Type == eventtype.ChatWhisper && e.Details.Message != nil {
+		var who string
+		if e.User != nil {
+			who = e.User.Login
+		}
+		s.msgLog.InfoContext(ctx, "user whisper", "platform", e.Platform, "user", who, "text", e.Details.Message.Text)
 	}
 	payload := eventtype.Payload{Platform: e.Platform, Channel: string(e.Channel), Details: e.Details}
 	if payload.User, err = s.resolveOptional(ctx, e.User); err != nil {

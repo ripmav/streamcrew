@@ -247,9 +247,10 @@ func (s *IRCSession) runConnection(ctx context.Context, token string) error {
 	// The capability negotiation (dev.twitch.tv/docs/chat/irc): the
 	// tags capability requires the commands capability in the same
 	// request, and CAP END terminates the negotiation before the login
-	// (IRCv3); without both the server answers the tags with a NAK.
+	// (IRCv3). The server only knows the twitch.tv/* names; the legacy
+	// tmi.tv/* names are answered with a NAK (field test 2026-10-22).
 	if err := s.writeLines(conn,
-		"CAP REQ :tmi.tv/tags tmi.tv/commands",
+		"CAP REQ :twitch.tv/tags twitch.tv/commands",
 		"CAP END",
 		"PASS oauth:"+token,
 		"NICK "+s.login,
@@ -278,9 +279,9 @@ func (s *IRCSession) runConnection(ctx context.Context, token string) error {
 		s.log.DebugContext(ctx, "the irc line", "line", truncateLog(line, 300))
 		if !welcome && strings.Contains(line, " 001 ") {
 			welcome = true
-			if j := joinLine(s.logins); j != "" {
+			if lines := joinLines(s.logins); len(lines) > 0 {
 				s.log.DebugContext(ctx, "the irc session joins", "channels", s.logins)
-				if err := s.writeLine(conn, j); err != nil {
+				if err := s.writeLines(conn, lines...); err != nil {
 					return err
 				}
 			}
@@ -329,17 +330,18 @@ func (s *IRCSession) writeLine(conn net.Conn, line string) error {
 	return err
 }
 
-// joinLine is the JOIN of the channels of the session, in the
-// space-separated form the server takes.
-func joinLine(logins []string) string {
+// joinLines is one JOIN per channel: the server only takes the first
+// channel of a multi-channel JOIN (field test 2026-10-22), so every
+// channel rides its own line.
+func joinLines(logins []string) []string {
 	if len(logins) == 0 {
-		return ""
+		return nil
 	}
-	fields := make([]string, len(logins))
+	lines := make([]string, len(logins))
 	for i, l := range logins {
-		fields[i] = "#" + l
+		lines[i] = "JOIN #" + l
 	}
-	return "JOIN " + strings.Join(fields, " ")
+	return lines
 }
 
 // channelOf is the channel of a server line (the first parameter,

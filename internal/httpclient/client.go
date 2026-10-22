@@ -15,12 +15,14 @@
 package httpclient
 
 import (
+	"bytes"
 	"context"
 	json "encoding/json/v2"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"sync"
 	"time"
 
@@ -46,7 +48,29 @@ const (
 	defaultBudget = 30 * time.Second
 	// requestTimeout is the timeout of a single request.
 	requestTimeout = 10 * time.Second
+	// maxLoggedBody is the maximum number of response bytes the log of
+	// the response bodies keeps (Options.Responses).
+	maxLoggedBody = 64 << 10
 )
+
+// maskedLog replaces the values of security-relevant fields in the
+// logged URLs and response bodies.
+const maskedLog = "***"
+
+// The patterns of the security-relevant fields, in JSON answers
+// ("access_token": "…") and in the query of the URLs (token=…, code=…).
+var (
+	jsonSecretPattern  = regexp.MustCompile(`(?i)("(access_token|refresh_token|client_secret|api_key|secret|password|token)"\s*:\s*")([^"]*)(")`)
+	querySecretPattern = regexp.MustCompile(`(?i)\b((?:access_token|refresh_token|client_secret|api_key|secret|password|token|code)=)([^&\s\"]+)`)
+)
+
+// maskSecrets replaces the values of the security-relevant fields in s
+// with maskedLog: the JSON fields of a response body (access_token,
+// refresh_token, …) and the query parameters of a URL (token=, code=).
+func maskSecrets(s string) string {
+	s = jsonSecretPattern.ReplaceAllString(s, "$1"+maskedLog+"$4")
+	return querySecretPattern.ReplaceAllString(s, "$1"+maskedLog)
+}
 
 // RetryPolicy is the retry behavior of Do (Code-ADR-0014, point 4). A zero
 // value means the standard values.
@@ -82,17 +106,25 @@ type Options struct {
 	// Logger logs the retries (Code-ADR-0003) and is expected to carry
 	// the component attribute; if nil, the log is discarded.
 	Logger *slog.Logger
+	// Responses logs the body of every response (truncated to
+	// maxLoggedBody) at info level, so the answers of the API are
+	// visible in the normal log; the composition root sets it in the
+	// debug log level and in dry run. Security-relevant values (the
+	// values of token=, access_token, refresh_token, … fields in the
+	// URL and the body) are replaced with *** before the log.
+	Responses bool
 }
 
 // Client is a resilient HTTP client for one external API
 // (Code-ADR-0014). A Client is safe for concurrent use.
 type Client struct {
-	name    string
-	base    *http.Client
-	brk     *breaker.Breaker
-	limiter *rate.Limiter
-	retry   RetryPolicy
-	log     *slog.Logger
+	name      string
+	base      *http.Client
+	brk       *breaker.Breaker
+	limiter   *rate.Limiter
+	retry     RetryPolicy
+	log       *slog.Logger
+	responses bool // log the response bodies at info level (Options.Responses)
 	// mu protects limited.
 	mu      sync.Mutex
 	limited time.Time // until which, because of x-ratelimit-remaining = 0, requests wait
@@ -127,12 +159,13 @@ func New(o Options) *Client {
 		p.Budget = defaultBudget
 	}
 	return &Client{
-		name:    o.Name,
-		base:    base,
-		brk:     o.Breaker,
-		limiter: rate.NewLimiter(lim, burst),
-		retry:   p,
-		log:     log,
+		name:      o.Name,
+		base:      base,
+		brk:       o.Breaker,
+		limiter:   rate.NewLimiter(lim, burst),
+		retry:     p,
+		log:       log,
+		responses: o.Responses,
 	}
 }
 
@@ -304,17 +337,29 @@ func (c *Client) send(ctx context.Context, req *http.Request) (*http.Response, e
 	}
 	// The request is logged on its own, the answer beside it: the URL is
 	// the identity of the request, the status and the duration of the
-	// answer (Code-ADR-0003, debug level for the path tracing).
+	// answer (Code-ADR-0003, debug level for the path tracing). The
+	// security-relevant query parameters of the URL are masked.
 	start := time.Now()
-	c.log.DebugContext(ctx, "request", "api", c.name, "method", r.Method, "url", r.URL.String())
+	c.log.DebugContext(ctx, "request", "api", c.name, "method", r.Method, "url", maskSecrets(r.URL.String()))
 	//nolint:gosec // G704: the request targets the URL given by the caller of Do
 	resp, err := c.base.Do(r)
 	if err != nil {
 		cancel()
-		c.log.DebugContext(ctx, "the request failed", "api", c.name, "method", r.Method, "url", r.URL.String(), "took", time.Since(start), "error", err)
+		c.log.DebugContext(ctx, "the request failed", "api", c.name, "method", r.Method, "url", maskSecrets(r.URL.String()), "took", time.Since(start), "error", err)
 		return nil, err
 	}
-	c.log.DebugContext(ctx, "response", "api", c.name, "method", r.Method, "url", r.URL.String(), "status", resp.StatusCode, "took", time.Since(start))
+	c.log.DebugContext(ctx, "response", "api", c.name, "method", r.Method, "url", maskSecrets(r.URL.String()), "status", resp.StatusCode, "took", time.Since(start))
+	// The body is logged at info level (Options.Responses), truncated at
+	// the cap, the security-relevant values masked (maskSecrets). The
+	// body is read for the log and streamed to the caller again: the
+	// logged bytes plus the unread rest are the original stream, so a
+	// truncated log never truncates the answer.
+	if c.responses {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, maxLoggedBody+1))
+		c.log.InfoContext(ctx, "response body", "api", c.name, "method", r.Method, "url", maskSecrets(r.URL.String()),
+			"status", resp.StatusCode, "truncated", len(b) > maxLoggedBody, "body", maskSecrets(string(b[:min(len(b), maxLoggedBody)])))
+		resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(b), resp.Body))
+	}
 	// The request's context must live as long as the response body:
 	// canceling it when the headers arrive makes the transport close
 	// the connection while the caller still reads the body. The 10 s
