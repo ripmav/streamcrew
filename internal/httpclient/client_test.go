@@ -541,17 +541,32 @@ func TestDoLogsResponseBodies(t *testing.T) {
 		assert.Contains(t, buf.String(), `truncated=true`)
 		assert.NotContains(t, buf.String(), body, "the log keeps only the prefix")
 
-		// The answer of a token endpoint carries the tokens themselves:
-		// it is never logged, though the caller still receives it.
+		// The answer of a token endpoint is logged, but the tokens are
+		// masked; the caller still receives the full answer.
 		buf.Reset()
-		body = "access_token=secret"
+		body = `{"access_token":"tok-secret","refresh_token":"r-secret","scope":["chat:read"]}`
 		resp, err = c.Do(t.Context(), newGetRequest(t.Context(), srv.URL+"/oauth2/token"))
 		require.NoError(t, err)
 		data, err = io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.Equal(t, body, string(data))
-		assert.NotContains(t, buf.String(), `msg="response body"`, "a token answer is not logged")
-		assert.NotContains(t, buf.String(), "secret")
+		assert.Equal(t, body, string(data), "the caller receives the full answer")
+		out := buf.String()
+		assert.Contains(t, out, `msg="response body"`)
+		assert.Contains(t, out, `access_token\":\"***`)
+		assert.Contains(t, out, `refresh_token\":\"***`)
+		assert.NotContains(t, out, "tok-secret")
+		assert.NotContains(t, out, "r-secret")
+
+		// The security-relevant query parameters of the URL are masked
+		// in the log, the request itself is unaffected.
+		buf.Reset()
+		body = `{}`
+		resp, err = c.Do(t.Context(), newGetRequest(t.Context(), srv.URL+"?token=tok123&code=abc"))
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Contains(t, buf.String(), `token=***`)
+		assert.Contains(t, buf.String(), `code=***`)
+		assert.NotContains(t, buf.String(), "tok123")
 	})
 }
 

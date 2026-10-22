@@ -22,7 +22,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
+	"regexp"
 	"sync"
 	"time"
 
@@ -52,6 +52,25 @@ const (
 	// the response bodies keeps (Options.Responses).
 	maxLoggedBody = 64 << 10
 )
+
+// maskedLog replaces the values of security-relevant fields in the
+// logged URLs and response bodies.
+const maskedLog = "***"
+
+// The patterns of the security-relevant fields, in JSON answers
+// ("access_token": "…") and in the query of the URLs (token=…, code=…).
+var (
+	jsonSecretPattern  = regexp.MustCompile(`(?i)("(access_token|refresh_token|client_secret|api_key|secret|password|token)"\s*:\s*")([^"]*)(")`)
+	querySecretPattern = regexp.MustCompile(`(?i)\b((?:access_token|refresh_token|client_secret|api_key|secret|password|token|code)=)([^&\s\"]+)`)
+)
+
+// maskSecrets replaces the values of the security-relevant fields in s
+// with maskedLog: the JSON fields of a response body (access_token,
+// refresh_token, …) and the query parameters of a URL (token=, code=).
+func maskSecrets(s string) string {
+	s = jsonSecretPattern.ReplaceAllString(s, "$1"+maskedLog+"$4")
+	return querySecretPattern.ReplaceAllString(s, "$1"+maskedLog)
+}
 
 // RetryPolicy is the retry behavior of Do (Code-ADR-0014, point 4). A zero
 // value means the standard values.
@@ -90,9 +109,9 @@ type Options struct {
 	// Responses logs the body of every response (truncated to
 	// maxLoggedBody) at info level, so the answers of the API are
 	// visible in the normal log; the composition root sets it in the
-	// debug log level and in dry run. The answers of token endpoints
-	// (paths ending in /oauth2/token) carry the tokens themselves and
-	// are never logged.
+	// debug log level and in dry run. Security-relevant values (the
+	// values of token=, access_token, refresh_token, … fields in the
+	// URL and the body) are replaced with *** before the log.
 	Responses bool
 }
 
@@ -318,27 +337,27 @@ func (c *Client) send(ctx context.Context, req *http.Request) (*http.Response, e
 	}
 	// The request is logged on its own, the answer beside it: the URL is
 	// the identity of the request, the status and the duration of the
-	// answer (Code-ADR-0003, debug level for the path tracing).
+	// answer (Code-ADR-0003, debug level for the path tracing). The
+	// security-relevant query parameters of the URL are masked.
 	start := time.Now()
-	c.log.DebugContext(ctx, "request", "api", c.name, "method", r.Method, "url", r.URL.String())
+	c.log.DebugContext(ctx, "request", "api", c.name, "method", r.Method, "url", maskSecrets(r.URL.String()))
 	//nolint:gosec // G704: the request targets the URL given by the caller of Do
 	resp, err := c.base.Do(r)
 	if err != nil {
 		cancel()
-		c.log.DebugContext(ctx, "the request failed", "api", c.name, "method", r.Method, "url", r.URL.String(), "took", time.Since(start), "error", err)
+		c.log.DebugContext(ctx, "the request failed", "api", c.name, "method", r.Method, "url", maskSecrets(r.URL.String()), "took", time.Since(start), "error", err)
 		return nil, err
 	}
-	c.log.DebugContext(ctx, "response", "api", c.name, "method", r.Method, "url", r.URL.String(), "status", resp.StatusCode, "took", time.Since(start))
+	c.log.DebugContext(ctx, "response", "api", c.name, "method", r.Method, "url", maskSecrets(r.URL.String()), "status", resp.StatusCode, "took", time.Since(start))
 	// The body is logged at info level (Options.Responses), truncated at
-	// the cap; the answer of a token endpoint carries the tokens
-	// themselves and is never logged. The body is read for the log and
-	// streamed to the caller again: the logged bytes plus the unread rest
-	// are the original stream, so a truncated log never truncates the
-	// answer.
-	if c.responses && !strings.HasSuffix(r.URL.Path, "/oauth2/token") {
+	// the cap, the security-relevant values masked (maskSecrets). The
+	// body is read for the log and streamed to the caller again: the
+	// logged bytes plus the unread rest are the original stream, so a
+	// truncated log never truncates the answer.
+	if c.responses {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, maxLoggedBody+1))
-		c.log.InfoContext(ctx, "response body", "api", c.name, "method", r.Method, "url", r.URL.String(),
-			"status", resp.StatusCode, "truncated", len(b) > maxLoggedBody, "body", string(b[:min(len(b), maxLoggedBody)]))
+		c.log.InfoContext(ctx, "response body", "api", c.name, "method", r.Method, "url", maskSecrets(r.URL.String()),
+			"status", resp.StatusCode, "truncated", len(b) > maxLoggedBody, "body", maskSecrets(string(b[:min(len(b), maxLoggedBody)])))
 		resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(b), resp.Body))
 	}
 	// The request's context must live as long as the response body:

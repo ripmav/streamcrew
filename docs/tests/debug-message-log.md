@@ -21,7 +21,9 @@ Event-Service, und alle API-Anfragen laufen durch denselben
 | Andere Ereignisse (Follow, Raid, Subs, …) | kein Eintrag in `messages.json` |
 | Gate offen: API-Antwort (Helix, BTTV, FFZ, Auth) | Info-Eintrag `response body` im normalen Log mit `api`, `method`, `url`, `status`, `truncated`, `body` |
 | Antwort-Body > 64 KiB | `truncated: true`, Log hält nur das Präfix; **der Caller bekommt den vollständigen Body** |
-| Antwort eines Token-Endpunkts (Pfad endet auf `/oauth2/token`, z. B. Code-Exchange, Refresh) | **kein** `response body`-Eintrag — die Antwort trägt die Tokens selbst; der Caller bekommt sie ungekürzt |
+| Antwort eines Token-Endpunkts (z. B. Code-Exchange, Refresh) | wird geloggt, aber `access_token`/`refresh_token`/… im Body stehen als `***`; der Caller erhält die Antwort unverändert |
+| Sicherheitsrelevante Werte (Token-, Secret-Felder im Body, `token=`/`code=`/…-Query-Parameter in URLs) | in allen httpclient-Logzeilen (request, response, response body) durch `***` ersetzt |
+| Log-Attribute mit secret-ahnendem Schlüssel (`token`, `secret`, `password`, `api_key`, …) | `[REDACTED]` über die bestehende `redact`-Logik von `internal/logging` |
 | Gate zu: API-Antwort | kein `response body`-Eintrag |
 | Gate-Änderung zur Laufzeit (Hot-Setting) | gilt erst beim nächsten Start (beim Start entschieden, dokumentiert) |
 
@@ -30,7 +32,7 @@ Event-Service, und alle API-Anfragen laufen durch denselben
 | Fall | Test | Datei |
 |---|---|---|
 | Separate Datei: JSON-Zeile mit Attributen, Closer | `TestFileLogger` | `internal/logging/logging_test.go` |
-| Antwort-Body im Client-Log (Info), vollständiger Body beim Caller, Trunkation über 64 KiB, Token-Antwort nie geloggt | `TestDoLogsResponseBodies` | `internal/httpclient/client_test.go` |
+| Antwort-Body im Client-Log (Info), vollständiger Body beim Caller, Trunkation über 64 KiB, Token-Felder und URL-Query-Parameter maskiert (`***`) | `TestDoLogsResponseBodies` | `internal/httpclient/client_test.go` |
 | Chat-Nachricht und Whisper im Messages-Logger, kein anderes Ereignis, ohne Option kein Logger | `TestUserMessagesLog` | `internal/eventservice/service_test.go` |
 
 ## Manuelle Prüfung
