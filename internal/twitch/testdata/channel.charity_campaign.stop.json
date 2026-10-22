@@ -4,13 +4,16 @@
     "version": "1"
   },
   "event": {
-    "id": "charity-1",
-    "charity_name": "Example Fund",
-    "charity_description": "Helping",
-    "charity_logo_url": "https://example.com/logo.png",
-    "charity_id": "ch-1",
-    "current_amount": 1000,
-    "target_amount": 1000,
-    "currency": "USD"
+    "current_amount": {
+      "value": 1000,
+      "decimal_places": 2,
+      "currency": "USD"
+    },
+    "target_amount": {
+      "value": 1000,
+      "decimal_places": 2,
+      "currency": "USD"
+    },
+    "charity_name": "Anonymous Charity"
   }
 }

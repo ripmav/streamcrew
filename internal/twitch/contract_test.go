@@ -85,9 +85,9 @@ func TestEventContract(t *testing.T) {
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchSubscriptionGift,
 			User:     alice,
-			// The platform names the recipient by login only; the login
+			// The platform names the recipient by user data; the login
 			// stands in for the display name (map.go).
-			Target: ident("carol", "carol", "111000444"),
+			Target: ident("carol", "Carol", "111000444"),
 			Details: eventtype.Details{
 				Subscription: &eventtype.Subscription{Plan: "1000"},
 				Gift:         &eventtype.Gift{Count: 1},
@@ -97,11 +97,6 @@ func TestEventContract(t *testing.T) {
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchSubscriptionMassGift,
 			User:     bob,
-			Recipients: []user.Identity{
-				{Platform: platform.Twitch, PlatformUserID: "alice", Login: "alice", DisplayName: "alice"},
-				{Platform: platform.Twitch, PlatformUserID: "carol", Login: "carol", DisplayName: "carol"},
-				{Platform: platform.Twitch, PlatformUserID: "dave", Login: "dave", DisplayName: "dave"},
-			},
 			Details: eventtype.Details{
 				Subscription: &eventtype.Subscription{Plan: "1000"},
 				Gift:         &eventtype.Gift{Count: 3},
@@ -130,7 +125,7 @@ func TestEventContract(t *testing.T) {
 		{name: "channel.shared_chat.begin", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchSharedChatStart,
-			Details:  eventtype.Details{SharedChat: &eventtype.SharedChat{SessionID: "session-1", Title: "Co-op night"}},
+			Details:  eventtype.Details{SharedChat: &eventtype.SharedChat{SessionID: "session-1"}},
 		}},
 		{name: "channel.shared_chat.update", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
@@ -145,22 +140,22 @@ func TestEventContract(t *testing.T) {
 		{name: "channel.hype_train.begin", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchHypeTrainStart,
-			Details:  eventtype.Details{HypeTrain: &eventtype.HypeTrain{Level: 1, Progress: 10, Goal: 100, RewardLevel: 1}},
+			Details:  eventtype.Details{HypeTrain: &eventtype.HypeTrain{Level: 1, Progress: 10, Goal: 100}},
 		}},
 		{name: "channel.hype_train.progress", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchHypeTrainProgress,
-			Details:  eventtype.Details{HypeTrain: &eventtype.HypeTrain{Level: 2, Progress: 25, Goal: 100, RewardLevel: 2}},
+			Details:  eventtype.Details{HypeTrain: &eventtype.HypeTrain{Level: 2, Progress: 25, Goal: 100}},
 		}},
 		{name: "channel.hype_train.end", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchHypeTrainEnd,
-			Details:  eventtype.Details{HypeTrain: &eventtype.HypeTrain{Level: 3, Progress: 100, Goal: 100, RewardLevel: 10, Outcome: "goal_reached"}},
+			Details:  eventtype.Details{HypeTrain: &eventtype.HypeTrain{Level: 3, Progress: 100, Goal: 100}},
 		}},
 		{name: "channel.ad_break.begin", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchAdStart,
-			Details:  eventtype.Details{AdBreak: &eventtype.AdBreak{Duration: 300, Message: "break time"}},
+			Details:  eventtype.Details{AdBreak: &eventtype.AdBreak{Duration: 300}},
 		}},
 		{name: "channel.shoutout.receive", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
@@ -171,17 +166,17 @@ func TestEventContract(t *testing.T) {
 		{name: "channel.goal.begin", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchGoalStart,
-			Details:  eventtype.Details{Goal: &eventtype.Goal{Target: 1000, Currency: "USD"}},
+			Details:  eventtype.Details{Goal: &eventtype.Goal{Target: 1000}},
 		}},
 		{name: "channel.goal.progress", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchGoalProgress,
-			Details:  eventtype.Details{Goal: &eventtype.Goal{Current: 250, Target: 1000, Currency: "USD"}},
+			Details:  eventtype.Details{Goal: &eventtype.Goal{Current: 250, Target: 1000}},
 		}},
 		{name: "channel.goal.end", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchGoalEnd,
-			Details:  eventtype.Details{Goal: &eventtype.Goal{Current: 1000, Target: 1000, Currency: "USD"}},
+			Details:  eventtype.Details{Goal: &eventtype.Goal{Current: 1000, Target: 1000}},
 		}},
 		{name: "channel.charity_campaign.progress", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
@@ -197,7 +192,7 @@ func TestEventContract(t *testing.T) {
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchChannelPointsRedeem,
 			User:     alice,
-			Details:  eventtype.Details{ChannelPoints: &eventtype.ChannelPoints{Amount: 100, Reward: "reward-1"}},
+			Details:  eventtype.Details{ChannelPoints: &eventtype.ChannelPoints{Amount: 100, Reward: "send_message_to_stream_chat"}},
 		}},
 		{name: "channel.channel_points_custom_reward_redemption.add", wantEvent: &connector.Event{
 			Platform: platform.Twitch,

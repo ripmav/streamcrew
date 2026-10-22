@@ -4,9 +4,9 @@
     "version": "2"
   },
   "event": {
-    "id": "msg-100",
-    "user_id": "111000222",
-    "user_login": "alice",
-    "user_display_name": "Alice"
+    "message_id": "msg-100",
+    "target_user_id": "111000222",
+    "target_user_login": "alice",
+    "target_user_name": "Alice"
   }
 }

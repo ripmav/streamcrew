@@ -40,7 +40,41 @@ Token-Besitzers; `channel.goal.*` wird nur für den Home-Kanal abonniert
 
 ## Sektion B — Event-Payloads (F8)
 
-*folgt mit PR 2 (`fix/eventsub-payloads`)*
+Die Mapper bilden die dokumentierten Nutzlasten der EventSub Reference
+(Stand 2026-10-22) auf das Event-Modell ab: strukturierte Chatnachricht
+mit Fragmenten (Emotes sind Fragmente vom Typ „emote“; Anker entfallen),
+Chatter unter `chatter_user_*`, raid `from_broadcaster_*`/`viewers`,
+cheer `user_*`/`bits`, moderate v2 mit Aktionen-Objekten,
+`message_delete` `target_user_*`/`message_id`, whisper `from_*`/
+`whisper.text`, shared chat `session_id`, hype train v2 ohne
+Reward-Intervall/Endgrund, `duration_seconds` (ad), `viewer_count`
+(shoutout), goal ohne Währung, charity als Betragsobjekte, Redemptions
+mit Belohnungs-Objekt.
+
+### Erwartetes Verhalten
+
+| Fall | Erwartet |
+|---|---|
+| Strukturierte Chatnachricht | Emote-Codes in Text-Reihenfolge aus den Fragmenten; Katalog-Fallback über die Emote-ID, wenn das Fragment keinen Text trägt |
+| Massengeschenk | Gesamtzahl und Anonymität; keine Beschenkten in der Nutzlast |
+| Hype train v2 | Stufe, Fortschritt, Ziel; `RewardLevel`/`Outcome` bleiben leer |
+| Ad break | Dauer in Sekunden; keine Nachricht |
+| Goal | aktueller und Zielwert; keine Währung |
+| Charity | Betrag als Objekt mit Währung und Ganzzahlstellen |
+| IRC-Pfad | gleicher Nutzlastaufbau (Fragmente aus dem IRC-Emotes-Tag, Text des Fragments als Code) |
+
+### Abgedeckte Tests
+
+| Fall | Test | Datei |
+|---|---|---|
+| Alle dokumentierten Nutzlasten → Event-Modell (24 Fixturen) | `TestEventContract` | `internal/twitch/contract_test.go`, `internal/twitch/testdata/` |
+| Emote-Fragmente: Code, Reihenfolge, Katalog-Fallback | `TestMapChatMessage`, `TestMapChatMessageResolvesEmotes`, `TestMapEmotesInTextOrder` | `internal/twitch/map_test.go` |
+| Sub/Resub/Geschenk/Massengeschenk aus `channel.chat.notification` | `TestMapNotification` | `internal/twitch/map_test.go` |
+| moderate v2 inkl. Grund | `TestMapModerate`, `TestMapModerationMessage` | `internal/twitch/map_test.go` |
+| Hype train, Ad, Shoutout, Goal, Charity | `TestMapHypeTrain`, `TestMapAdStart`, `TestMapShoutout`, `TestMapGoal`, `TestMapCharity` | `internal/twitch/map_test.go` |
+| Redemptions mit Belohnungs-Objekt | `TestMapChannelPointsRedemption`, `TestMapCustomPowerUpRedemption` | `internal/twitch/map_test.go` |
+| IRC-Nachricht/-Flüsterung auf den neuen Nutzlasten | IRC-Tests | `internal/twitch/irc_test.go` |
+| Event-Fluss über den Mock (Chat, Cheer, Redemption) | Integrationstest | `internal/twitch/integration_test.go` |
 
 ## Sektion C — Session-Lebenszyklus (F9–F12)
 

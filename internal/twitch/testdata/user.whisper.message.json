@@ -4,10 +4,12 @@
     "version": "1"
   },
   "event": {
-    "id": "whisper-1",
-    "user_id": "111000444",
-    "user_login": "carol",
-    "user_display_name": "Carol",
-    "message": "a quiet word"
+    "whisper": {
+      "text": "a quiet word"
+    },
+    "whisper_id": "w-1",
+    "from_user_id": "111000444",
+    "from_user_login": "carol",
+    "from_user_name": "Carol"
   }
 }

@@ -4,15 +4,11 @@
     "version": "1"
   },
   "event": {
-    "id": "cheer-1",
-    "event_time": "2026-10-11T10:00:00.000000Z",
-    "broadcaster_user_id": "222000111",
-    "broadcaster_user_login": "streamer",
-    "broadcaster_user_display_name": "Streamer",
-    "from_user_id": "111000222",
-    "from_user_login": "alice",
-    "from_user_display_name": "Alice",
-    "cumulative_bits": 100,
-    "message": "cheers"
+    "is_anonymous": false,
+    "bits": 100,
+    "message": "cheers",
+    "user_id": "111000222",
+    "user_login": "alice",
+    "user_name": "Alice"
   }
 }

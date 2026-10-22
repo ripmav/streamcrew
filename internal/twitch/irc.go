@@ -468,14 +468,13 @@ func (s *IRCSession) onMessage(ctx context.Context, msg ircMsg, channel, text st
 	}
 	s.log.DebugContext(ctx, "the irc chat message", "channel", channel, "user", msg.prefixName)
 	p := chatMessage{
-		ID:              msg.tags["id"],
-		Message:         text,
-		UserID:          msg.tags["user-id"],
-		UserLogin:       strings.ToLower(msg.prefixName),
-		UserDisplayName: msg.tags["display-name"],
-		Color:           msg.tags["color"],
-		Badges:          badges(msg.tags["badges"]),
-		Emotes:          emotes(msg.tags["emotes"]),
+		MessageID:    msg.tags["id"],
+		Message:      message{Text: text, Fragments: emotes(msg.tags["emotes"], text)},
+		Color:        msg.tags["color"],
+		Badges:       badges(msg.tags["badges"]),
+		ChatterID:    msg.tags["user-id"],
+		ChatterLogin: strings.ToLower(msg.prefixName),
+		ChatterName:  msg.tags["display-name"],
 	}
 	if err := mapper.rec.Message(ctx, mapper.incoming(p)); err != nil {
 		s.log.WarnContext(ctx, "handing over a chat message failed", "channel", channel, "error", err)
@@ -490,17 +489,18 @@ func (s *IRCSession) onWhisper(ctx context.Context, msg ircMsg, text string) {
 	if id := msg.tags["id"]; id != "" && s.whisperDedup != nil && !s.whisperDedup.First(id) {
 		return
 	}
-	p := whisper{
-		Message:         text,
-		UserID:          msg.tags["user-id"],
-		UserLogin:       strings.ToLower(msg.prefixName),
-		UserDisplayName: msg.tags["display-name"],
+	// The IRC whisper tag carries the sender; the text goes under
+	// whisper.text, as in the EventSub payload.
+	u := chatUser{
+		ID:          msg.tags["user-id"],
+		Login:       strings.ToLower(msg.prefixName),
+		DisplayName: msg.tags["display-name"],
 	}
 	ev := connector.Event{
 		Platform: platform.Twitch,
 		Type:     eventtype.ChatWhisper,
-		User:     new(identity(p.user())),
-		Details:  eventtype.Details{Message: &eventtype.Message{Text: p.Message}},
+		User:     new(identity(u)),
+		Details:  eventtype.Details{Message: &eventtype.Message{Text: text}},
 	}
 	if err := s.receiver.Event(ctx, ev); err != nil {
 		s.log.WarnContext(ctx, "handing over a whisper failed", "error", err)
@@ -615,17 +615,25 @@ func parseBadgesTag(raw string) map[string]int {
 
 // emotes is the emotes tag ("id:start-end,...") as the EventSub emote
 // list.
-func emotes(raw string) []emote {
+// emotes parses the IRC emotes tag (id-start-end pairs) into the
+// fragments of the structured chat message; the code is the text the
+// mark spans (IRC names no code), the ID for the catalog fallback.
+func emotes(raw, text string) []fragment {
 	if raw == "" {
 		return nil
 	}
-	var out []emote
+	var out []fragment
 	for e := range strings.SplitSeq(raw, ",") {
 		id, rangeStr, _ := strings.Cut(e, ":")
 		startStr, endStr, _ := strings.Cut(rangeStr, "-")
 		start, _ := strconv.Atoi(startStr)
 		end, _ := strconv.Atoi(endStr)
-		out = append(out, emote{ID: id, Start: start, End: end})
+		f := fragment{Type: "emote"}
+		f.Emote.ID = id
+		if start >= 0 && end > start && end <= len(text) {
+			f.Text = text[start:end]
+		}
+		out = append(out, f)
 	}
 	return out
 }
