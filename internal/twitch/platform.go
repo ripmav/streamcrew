@@ -671,10 +671,20 @@ func (p *Platform) channelSession(ctx context.Context, cs channelSession) error 
 	if !cs.home {
 		specs = ChannelSpecs()
 	}
+	// The moderator_user_id condition of channel.follow and
+	// channel.moderate v2 and the user_id condition of the chat events
+	// name the token owner: the broadcaster for the home channel, the
+	// bot for an additional channel (EventSub Reference "Channel
+	// Follow Condition", plan 2026-10-22-eventsub-reference-fix.md).
+	moderator := cs.accountID
+	if !cs.home {
+		moderator = cs.botID
+	}
 	mgr := NewManager(ManagerOptions{
 		Helix:     hc,
 		Channels:  []string{cs.accountID},
 		Whisper:   cs.whisper,
+		Moderator: moderator,
 		Specs:     specs,
 		Logger:    p.log,
 		SessionID: sessions.current,

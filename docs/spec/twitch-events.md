@@ -40,7 +40,7 @@ Twitch-Actions (Roadmap 4.4, A4 für Umfragen und Vorhersagen).
 
 | ID | Regel | Quellen |
 |---|---|---|
-| B1 | Der Adapter abonniert die EventSub-Ereignisse der Tabelle „Zuordnung“ und übergibt daraus die Ereignisse des Katalogs; jedes plattformspezifische Ereignis wird zusammen mit seiner plattformneutralen Entsprechung veröffentlicht ([`events.md`](events.md), B2). Die Subscription-Manager des Adapters hält diesen Soll-Zustand (4.3). | Q1, Q2, Q3 |
+| B1 | Der Adapter abonniert die EventSub-Ereignisse der Tabelle „Zuordnung“ und übergibt daraus die Ereignisse des Katalogs; jedes plattformspezifische Ereignis wird zusammen mit seiner plattformneutralen Entsprechung veröffentlicht ([`events.md`](events.md), B2). Die Subscription-Manager des Adapters hält diesen Soll-Zustand (4.3). Die Event-Typen-Namen, Versionen und Conditions folgen der [EventSub Reference](https://dev.twitch.tv/docs/eventsub/eventsub-reference/) (Stand 2026-10-22, [Plan](../superpowers/plans/2026-10-22-eventsub-reference-fix.md)): `channel.follow` v2 und `channel.moderate` v2 nennen im Condition den Token-Besitzer als `moderator_user_id`, `channel.raid` den geraideten Kanal als `to_broadcaster_user_id`, die Chat-Events (`channel.chat.message`/`message_delete`/`notification`, v1) den Token-Besitzer als `user_id`. | Q1, Q2, Q3, Q7 |
 | B2 | `channel.chat.message` ist eine Chatnachricht: sie trägt Emotes (Code, Anker, Badges der Emote), Fragmente (Plattformsprache), Badges als Rollen und Bits; sie läuft durch die allgemeine Chat-Reihenfolge von [`events.md`](events.md), B13. | Q1, Q2, Q3 |
 | B3 | `channel.chat.notification` liefert je Bedingung (Sub, Resub, Geschenk, Massengeschenk) das Abo-Event; geschenkte Abos nach [`events.md`](events.md), B5 (Schwelle zwischen Einzel- und Sammelereignis). Der Beschenkte ist der Zielnutzer, der Schenker der Nutzer; bei einem Massengeschenk ist der Initiator der Nutzer. | Q1, Q3 |
 | B4 | `channel.cheer` ist ein Cheer: er trägt die Bits, die Stufe und die Nachricht; er löst auch `bits.cheer` aus. | Q1, Q3 |
@@ -49,11 +49,11 @@ Twitch-Actions (Roadmap 4.4, A4 für Umfragen und Vorhersagen).
 | B7 | Moderationsereignisse: `chat.moderate.ban`/`chat.moderate.unban`, `chat.moderate.timeout`/`chat.moderate.untimeout`, `chat.moderate.add`/`chat.moderate.remove`, `chat.moderate.vip`/`chat.moderate.unvip` tragen den moderierten Nutzer als Nutzer; Ban und Timeout tragen außerdem Dauer und Grund, soweit die Plattform sie nennt. | Q1, Q3 |
 | B8 | `chat.user.whisper` ist eine Flüsternachricht: sie trägt den Absender als Nutzer und die Nachricht mit Emotes und Fragmenten. | Q1, Q3 |
 | B9 | `twitch.shared_chat.opened`/`comment`/`deleted` tragen die Thread-Nachricht (Betreff bei „geöffnet“, Kommentar oder Löschung bei „Kommentar“); sie sind Twitch-spezifisch ohne neutrale Entsprechung. | Q1, Q3 |
-| B10 | `channel.goal.progress`/`complete` tragen den aktuellen und den Zielbetrag mit Währung; `complete` ist zugleich die vollständige Erreichung. | Q1, Q3 |
-| B11 | `channel.hype_train.progress`/`start`/`end` tragen Stufe, Fortschritt, Ziel, erreichte Belohnungsstufen und bei `end` das Ergebnis. | Q1, Q3 |
-| B12 | `channel.ad.started` trägt Dauer und optional die Nachricht der Werbeeinschaltung. | Q1, Q3 |
-| B13 | `channel.shoutout.received` trägt den shoutenden Kanal als Nutzer und dessen Zuschauerzahl. | Q1, Q3 |
-| B14 | `channel.charity.progress`/`complete` tragen den aktuellen und den Zielbetrag der Charity-Sammlung mit Währung. | Q1, Q3 |
+| B10 | `channel.goal.begin`/`progress`/`end` abonnieren den Goal-Lebenszyklus; `progress`/`end` tragen den aktuellen und den Zielwert; `end` ist zugleich die vollständige Erreichung (nur Home-Kanal: das Condition muss den Token-Besitzer nennen, [EventSub Reference: Goals Condition](https://dev.twitch.tv/docs/eventsub/eventsub-reference/#goals-condition)). | Q1, Q3, Q7 |
+| B11 | `channel.hype_train.begin`/`progress`/`end` tragen Stufe, Fortschritt und Ziel; `begin`/`progress`/`end` sind Version 2 der EventSub-Events. | Q1, Q3, Q7 |
+| B12 | `channel.ad_break.begin` trägt die Dauer der Werbeeinschaltung. | Q1, Q3, Q7 |
+| B13 | `channel.shoutout.receive` trägt den shoutenden Kanal als Nutzer und dessen Zuschauerzahl. | Q1, Q3, Q7 |
+| B14 | `channel.charity_campaign.progress`/`stop` tragen den aktuellen und den Zielbetrag der Charity-Sammlung mit Währung. | Q1, Q3, Q7 |
 | B15 | Channel Points: `channel.channel_points_custom_reward.redemption.add` (Custom Power-Up) und `channel.channel_points_automatic_reward.redemption.add` (automatische Belohnung) lösen die Channel-Points-Commands aus (Roadmap 4.4); sie tragen die Belohnung und den einlösenden Nutzer. | Q1, Q3, Q4 |
 | B16 | `channel.channel_update` ist kein Ereignis; der Adapter meldet damit nur den Stream-Zustand ([`events.md`](events.md), B11). | Q1, Q3 |
 
@@ -106,6 +106,7 @@ Twitch-Actions (Roadmap 4.4, A4 für Umfragen und Vorhersagen).
 | Q4 | Roadmap 4.4 (Channel Points, Custom Power-Ups) |
 | Q5 | [`events.md`](events.md), A4: keine Ereignisse für Umfragen und Vorhersagen, nur die Twitch-Action mit Unterliste; Entscheidung des Projektinhabers (2026-10-02) |
 | Q6 | [`template.md`](template.md) (Bedeutung und Zuordnung der Identifier), Plan A.6 |
+| Q7 | [EventSub Reference](https://dev.twitch.tv/docs/eventsub/eventsub-reference/) und [Subscription Types](https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/) (Twitch-Doku, Stand 2026-10-22: Event-Typen-Namen, Versionen, Conditions) |
 
 ## Abweichungen vom Original
 
@@ -120,3 +121,4 @@ Twitch-Actions (Roadmap 4.4, A4 für Umfragen und Vorhersagen).
 | 2026-10-10 | Erstellt für Phase 4.4: Zuordnung (B1–B16), Umfragen/Vorhersagen (B17), Identifier je Ereignis (B18–B19), Verwerfungen (B20–B22). |
 | 2026-10-10 | Identifier an die Implementierung angepasst (Task 4): ein `$moderationmessage` statt Dauer/Grund (die Plattform nennt beides in einem Feld), die Cheer-Nachricht ist das allgemeine `$message`, Shoutout trägt den shoutenden Kanal als Nutzer, kein `$channelpointsrewardname`/`$custompowerupname` (die Nutzlasten nennen nur die ID) und kein `$donationpercent` (die Plattform sendet keinen Prozentsatz). |
 | 2026-10-12 | Querverweis auf [`twitch-multi-channel.md`](twitch-multi-channel.md) (Phase 4.6): jedes Channel-Ereignis trägt seinen Channel; die betriebenen Channels und die Channel-Dimension gehören dorthin. |
+| 2026-10-22 | Event-Typen-Namen/Versionen/Conditions an die aktuelle EventSub Reference angepasst (B1, B10–B14, Q7; [Plan 2026-10-22](../superpowers/plans/2026-10-22-eventsub-reference-fix.md) F1–F7): `channel.hype_train.begin` v2, `channel.ad_break.begin`, `channel.shoutout.receive`, `channel.goal.begin/progress/end` (nur Home-Kanal), `channel.charity_campaign.progress/stop`, `channel.chat.*` v1; Conditions um `moderator_user_id` (follow, moderate v2), `to_broadcaster_user_id` (raid) und `user_id` (Chat-Events). |

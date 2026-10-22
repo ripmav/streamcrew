@@ -1,6 +1,6 @@
 {
   "subscription": {
-    "type": "channel.shoutout.received",
+    "type": "channel.shoutout.receive",
     "version": "1"
   },
   "event": {

@@ -1,6 +1,6 @@
 {
   "subscription": {
-    "type": "channel.ad.started",
+    "type": "channel.ad_break.begin",
     "version": "1"
   },
   "event": {

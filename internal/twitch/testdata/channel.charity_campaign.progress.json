@@ -1,6 +1,6 @@
 {
   "subscription": {
-    "type": "channel.charity.complete",
+    "type": "channel.charity_campaign.progress",
     "version": "1"
   },
   "event": {
@@ -9,7 +9,7 @@
     "charity_description": "Helping",
     "charity_logo_url": "https://example.com/logo.png",
     "charity_id": "ch-1",
-    "current_amount": 1000,
+    "current_amount": 150,
     "target_amount": 1000,
     "currency": "USD"
   }

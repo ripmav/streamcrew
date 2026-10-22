@@ -20,6 +20,15 @@ type SubscriptionCondition struct {
 	GameID string `json:"game_id,omitempty"`
 	// CollectionID is the charity collection the events are about.
 	CollectionID string `json:"collection_id,omitempty"`
+	// ModeratorUserID is the moderator the events are read as
+	// (channel.follow, channel.moderate v2; the broadcaster user ID
+	// when the token is the broadcaster's, EventSub Reference
+	// "Channel Follow Condition").
+	ModeratorUserID string `json:"moderator_user_id,omitempty"`
+	// ToBroadcasterUserID is the raided channel (channel.raid; the
+	// condition must name from_ or to_, not both, EventSub Reference
+	// "Channel Raid Condition").
+	ToBroadcasterUserID string `json:"to_broadcaster_user_id,omitempty"`
 }
 
 // CreateSubscriptionInput is the body of CreateSubscription (Helix

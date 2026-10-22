@@ -390,7 +390,7 @@ func TestMapDropsTheUnknown(t *testing.T) {
 func TestMapHypeTrain(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.hype_train.start", `{"current_level": 1, "progress": 0, "goal": 10000, "reward_interval": 5000}`)
+	handle(t, m, "channel.hype_train.begin", `{"current_level": 1, "progress": 0, "goal": 10000, "reward_interval": 5000}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchHypeTrainStart, ev.Type)
 	assert.Equal(t, &eventtype.HypeTrain{Level: 1, Progress: 0, Goal: 10000}, ev.Details.HypeTrain)
@@ -409,7 +409,7 @@ func TestMapHypeTrain(t *testing.T) {
 func TestMapAdStart(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.ad.started", `{"length": 30, "message": "take a break"}`)
+	handle(t, m, "channel.ad_break.begin", `{"length": 30, "message": "take a break"}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchAdStart, ev.Type)
 	assert.Equal(t, &eventtype.AdBreak{Duration: 30, Message: "take a break"}, ev.Details.AdBreak)
@@ -418,7 +418,7 @@ func TestMapAdStart(t *testing.T) {
 func TestMapShoutout(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.shoutout.received", `{"from_user_id": "5", "from_user_login": "shouter", "from_user_display_name": "Shouter", "from_user_viewers": 7, "to_user_id": "7"}`)
+	handle(t, m, "channel.shoutout.receive", `{"from_user_id": "5", "from_user_login": "shouter", "from_user_display_name": "Shouter", "from_user_viewers": 7, "to_user_id": "7"}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchShoutoutReceive, ev.Type)
 	require.NotNil(t, ev.User)
@@ -429,9 +429,9 @@ func TestMapShoutout(t *testing.T) {
 func TestMapGoal(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.goal.start", `{"current_amount": 0, "target_amount": 100, "currency": "USD"}`)
+	handle(t, m, "channel.goal.begin", `{"current_amount": 0, "target_amount": 100, "currency": "USD"}`)
 	assert.Equal(t, eventtype.TwitchGoalStart, r.lastEvent(t).Type)
-	handle(t, m, "channel.goal.complete", `{"current_amount": 100, "target_amount": 100, "currency": "USD"}`)
+	handle(t, m, "channel.goal.end", `{"current_amount": 100, "target_amount": 100, "currency": "USD"}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchGoalEnd, ev.Type)
 	assert.Equal(t, &eventtype.Goal{Current: 100, Target: 100, Currency: "USD"}, ev.Details.Goal)
@@ -440,7 +440,7 @@ func TestMapGoal(t *testing.T) {
 func TestMapCharity(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.charity.progress", `{"current_amount": 50, "target_amount": 200, "currency": "EUR"}`)
+	handle(t, m, "channel.charity_campaign.progress", `{"current_amount": 50, "target_amount": 200, "currency": "EUR"}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchCharityDonation, ev.Type)
 	assert.Equal(t, &eventtype.Charity{Current: 50, Target: 200, Currency: "EUR"}, ev.Details.Charity)
