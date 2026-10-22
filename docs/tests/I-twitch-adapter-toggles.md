@@ -14,8 +14,8 @@ sind entfernt (Sections-Version 2, Migration). Spec
 
 | Fall | Erwartet |
 |---|---|
-| Beide Adapter an (Default: eventsub on, irc off) | Heimkanal über EventSub, zusätzliche Kanäle über EventSub (heutiges Default) |
-| eventsub on, irc on | Heimkanal über EventSub, zusätzliche Kanäle über IRC (keine doppelten Events) |
+| Default (eventsub on, irc off) | Heimkanal über EventSub, zusätzliche Kanäle über EventSub |
+| Beide Adapter an (eventsub on, irc on) | Heimkanal über EventSub, zusätzliche Kanäle über IRC (keine doppelten Events) |
 | eventsub off, irc on | keine EventSub-Session; IRC-Session joinnt Heimkanal + zusätzliche; Heim-Events ohne Channel-Stempel; Stream-State aus Helix-Poll |
 | eventsub off, irc off | `Resolve` meldet Usage-Fehler; der Core startet nicht |
 | unbekannter Schalter-Wert (z. B. `maybe`) | `Resolve` meldet Usage-Fehler |
