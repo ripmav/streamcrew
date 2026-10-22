@@ -540,6 +540,18 @@ func TestDoLogsResponseBodies(t *testing.T) {
 		assert.Len(t, data, len(body), "the truncation of the log never shortens the answer")
 		assert.Contains(t, buf.String(), `truncated=true`)
 		assert.NotContains(t, buf.String(), body, "the log keeps only the prefix")
+
+		// The answer of a token endpoint carries the tokens themselves:
+		// it is never logged, though the caller still receives it.
+		buf.Reset()
+		body = "access_token=secret"
+		resp, err = c.Do(t.Context(), newGetRequest(t.Context(), srv.URL+"/oauth2/token"))
+		require.NoError(t, err)
+		data, err = io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, body, string(data))
+		assert.NotContains(t, buf.String(), `msg="response body"`, "a token answer is not logged")
+		assert.NotContains(t, buf.String(), "secret")
 	})
 }
 

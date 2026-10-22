@@ -22,6 +22,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -89,7 +90,9 @@ type Options struct {
 	// Responses logs the body of every response (truncated to
 	// maxLoggedBody) at info level, so the answers of the API are
 	// visible in the normal log; the composition root sets it in the
-	// debug log level and in dry run.
+	// debug log level and in dry run. The answers of token endpoints
+	// (paths ending in /oauth2/token) carry the tokens themselves and
+	// are never logged.
 	Responses bool
 }
 
@@ -326,10 +329,13 @@ func (c *Client) send(ctx context.Context, req *http.Request) (*http.Response, e
 		return nil, err
 	}
 	c.log.DebugContext(ctx, "response", "api", c.name, "method", r.Method, "url", r.URL.String(), "status", resp.StatusCode, "took", time.Since(start))
-	if c.responses {
-		// The body is read for the log and streamed to the caller again:
-		// the logged bytes plus the unread rest are the original stream,
-		// so a truncated log never truncates the answer.
+	// The body is logged at info level (Options.Responses), truncated at
+	// the cap; the answer of a token endpoint carries the tokens
+	// themselves and is never logged. The body is read for the log and
+	// streamed to the caller again: the logged bytes plus the unread rest
+	// are the original stream, so a truncated log never truncates the
+	// answer.
+	if c.responses && !strings.HasSuffix(r.URL.Path, "/oauth2/token") {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, maxLoggedBody+1))
 		c.log.InfoContext(ctx, "response body", "api", c.name, "method", r.Method, "url", r.URL.String(),
 			"status", resp.StatusCode, "truncated", len(b) > maxLoggedBody, "body", string(b[:min(len(b), maxLoggedBody)]))

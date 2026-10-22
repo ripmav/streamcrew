@@ -355,7 +355,7 @@ _, err := cl.Status(ctx, connect.NewRequest(&streamcrewv1alpha1.StatusRequest{})
 
 - **Konsole:** `--log-level`, `--log-format text|json`, `--log-component-level COMP=LEVEL`.
 - **Datei:** `--log-file` (`true` → `<data-dir>/logs/streamcrew.log`, `false` → aus, Pfad → diese Datei), JSON-Zeilen, Rotation nach `--log-max-size` MiB auf `--log-max-files` Dateien.
-- **User-Nachrichten und API-Antworten:** Im Debug-Log-Level oder mit `--dry-run` gehen zusätzlich alle User-Nachrichten (Chat, Whispers, mit vollem Text) in eine eigene Datei `<Log-Verzeichnis>/messages.json` (JSON, gleiche Rotation), und alle Antworten der APIs (Twitch/Helix, BetterTTV, FrankerFaceZ) landen mit ihrem Body (ab 64 KiB gekürzt) im normalen Log. Beide werden beim Start entschieden; eine Hot-Änderung von `log_level` oder `dry_run` öffnet/schließt die Datei nicht.
+- **User-Nachrichten und API-Antworten:** Im Debug-Log-Level oder mit `--dry-run` gehen zusätzlich alle User-Nachrichten (Chat, Whispers, mit vollem Text) in eine eigene Datei `<Log-Verzeichnis>/messages.json` (JSON, gleiche Rotation), und alle Antworten der APIs (Twitch/Helix, BetterTTV, FrankerFaceZ) landen mit ihrem Body (ab 64 KiB gekürzt) im normalen Log — ausgenommen die Antworten der Token-Endpunkte, die die Tokens selbst tragen und nie geloggt werden. Beide werden beim Start entschieden; eine Hot-Änderung von `log_level` oder `dry_run` öffnet/schließt die Datei nicht.
 - **Stream:** Log-Zeilen sind zugleich Ereignisse (`log.line`) und laufen in den Event-Stream; TUI und Clients abonnieren sie gefiltert nach Level, Plattform, Channel und Ereignisklasse ([Roadmap 6.6](docs/roadmap.md)).
 
 Alle Log-Einstellungen sind Hot-Settings: Änderungen wirken ohne Neustart.
