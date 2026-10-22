@@ -26,12 +26,12 @@ func (p *Platform) UserPlatformData(ctx context.Context, platformUserID string) 
 		return user.PlatformData{}, err
 	}
 	var data user.PlatformData
-	follows, err := hc.GetFollows(ctx, platformUserID, channelID)
+	followers, err := hc.GetFollowers(ctx, channelID, platformUserID)
 	if err != nil {
 		return user.PlatformData{}, refuse(err)
 	}
-	if len(follows) > 0 {
-		data.FollowedAt = follows[0].FollowedAt
+	if len(followers) > 0 {
+		data.FollowedAt = followers[0].FollowedAt
 	}
 	subs, err := hc.GetChannelSubscriptions(ctx, channelID)
 	if err != nil {

@@ -24,10 +24,10 @@ func TestGetFollowersPaginates(t *testing.T) {
 			calls++
 			switch calls {
 			case 1:
-				_, _ = w.Write([]byte(`{"data":[{"broadcaster_id":"7","broadcaster_login":"alice","broadcaster_name":"Alice","follower_id":"8","follower_login":"fan","follower_name":"Fan","followed_at":"2026-10-01T10:00:00Z"}],"pagination":{"cursor":"CUR"}}`))
+				_, _ = w.Write([]byte(`{"data":[{"user_id":"8","user_login":"fan","user_name":"Fan","followed_at":"2026-10-01T10:00:00Z"}],"pagination":{"cursor":"CUR"}}`))
 			case 2:
 				assert.Equal(t, "CUR", r.URL.Query().Get("after"))
-				_, _ = w.Write([]byte(`{"data":[{"broadcaster_id":"7","broadcaster_login":"alice","broadcaster_name":"Alice","follower_id":"9","follower_login":"fan2","follower_name":"Fan Two","followed_at":"2026-10-02T10:00:00Z"}],"pagination":{"cursor":""}}`))
+				_, _ = w.Write([]byte(`{"data":[{"user_id":"9","user_login":"fan2","user_name":"Fan Two","followed_at":"2026-10-02T10:00:00Z"}],"pagination":{"cursor":""}}`))
 			}
 		}))
 		defer srv.Close()
@@ -35,9 +35,9 @@ func TestGetFollowersPaginates(t *testing.T) {
 		followers, err := c.GetFollowers(t.Context(), "7", "")
 		require.NoError(t, err)
 		require.Len(t, followers, 2)
-		assert.Equal(t, "fan", followers[0].FollowerLogin)
+		assert.Equal(t, "fan", followers[0].UserLogin)
 		assert.Equal(t, time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC), followers[0].FollowedAt)
-		assert.Equal(t, "Fan Two", followers[1].FollowerName)
+		assert.Equal(t, "Fan Two", followers[1].UserName)
 	})
 }
 
@@ -56,38 +56,20 @@ func TestGetFollowersFilterByFollower(t *testing.T) {
 	})
 }
 
-func TestGetFollows(t *testing.T) {
-	t.Parallel()
-	synctest.Test(t, func(t *testing.T) {
-		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "/users/follows", r.URL.Path)
-			assert.Equal(t, "7", r.URL.Query().Get("from_id"))
-			assert.Empty(t, r.URL.Query().Get("to_id"))
-			_, _ = w.Write([]byte(`{"data":[{"from_id":"7","from_login":"alice","from_name":"Alice","to_id":"509658","to_login":"doom","to_name":"Doom","followed_at":"2026-09-30T08:00:00Z"}],"pagination":{}}`))
-		}))
-		defer srv.Close()
-		c := newClient(t, srv, "tok")
-		follows, err := c.GetFollows(t.Context(), "7", "")
-		require.NoError(t, err)
-		require.Len(t, follows, 1)
-		assert.Equal(t, "doom", follows[0].ToLogin)
-	})
-}
-
 func TestGetChannelSubscriptions(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "/subscriptions", r.URL.Path)
 			assert.Equal(t, "7", r.URL.Query().Get("broadcaster_id"))
-			_, _ = w.Write([]byte(`{"data":[{"broadcaster_id":"7","broadcaster_name":"Alice","foreign_id":"f1","foreign_type":"prime","subscriber_id":"8","subscriber_name":"Fan","tier":"1000","gifter_id":"9","gifter_name":"Giftor"}],"pagination":{}}`))
+			_, _ = w.Write([]byte(`{"data":[{"broadcaster_id":"7","broadcaster_name":"Alice","user_id":"8","user_name":"Fan","tier":"1000","gifter_id":"9","gifter_name":"Giftor"}],"pagination":{}}`))
 		}))
 		defer srv.Close()
 		c := newClient(t, srv, "tok")
 		subs, err := c.GetChannelSubscriptions(t.Context(), "7")
 		require.NoError(t, err)
 		require.Len(t, subs, 1)
-		assert.Equal(t, "prime", subs[0].ForeignType)
+		assert.Equal(t, "8", subs[0].SubscriberID)
 		assert.Equal(t, "1000", subs[0].Tier)
 		assert.Equal(t, "Giftor", subs[0].GifterName)
 	})

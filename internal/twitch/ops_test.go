@@ -114,13 +114,13 @@ func (s *opsServer) handler(t *testing.T) http.HandlerFunc {
 			_, _ = w.Write([]byte(`{"data":[{"id":"3","login":"user","display_name":"User"}]}`))
 		case r.URL.Path == "/channels":
 			_, _ = w.Write([]byte(`{"data":[{"id":"7","title":"T","game_name":"G"}]}`))
-		case r.URL.Path == "/users/follows":
-			assert.Equal(t, "3", r.URL.Query().Get("from_id"))
-			assert.Equal(t, "7", r.URL.Query().Get("to_id"))
-			_, _ = w.Write([]byte(`{"data":[{"from_id":"3","to_id":"7","followed_at":"2026-09-14T12:00:00Z"}],"pagination":{}}`))
+		case r.URL.Path == "/channels/followers":
+			assert.Equal(t, "7", r.URL.Query().Get("broadcaster_id"))
+			assert.Equal(t, "3", r.URL.Query().Get("user_id"))
+			_, _ = w.Write([]byte(`{"data":[{"user_id":"3","user_login":"user","user_name":"User","followed_at":"2026-09-14T12:00:00Z"}],"pagination":{}}`))
 		case r.URL.Path == "/subscriptions":
 			assert.Equal(t, "7", r.URL.Query().Get("broadcaster_id"))
-			_, _ = w.Write([]byte(`{"data":[{"broadcaster_id":"7","subscriber_id":"3","tier":"2000"}],"pagination":{}}`))
+			_, _ = w.Write([]byte(`{"data":[{"broadcaster_id":"7","user_id":"3","user_name":"User","tier":"2000"}],"pagination":{}}`))
 		case r.URL.Path == "/streams":
 			if s.offline {
 				_, _ = w.Write([]byte(`{"data":[]}`))
