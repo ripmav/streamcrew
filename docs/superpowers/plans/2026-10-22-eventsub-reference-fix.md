@@ -76,16 +76,16 @@ Ping/Pong (Library).
 
 ### Schritte
 
-- [ ] `internal/helix/eventsub.go`: `SubscriptionCondition` um
+- [x] `internal/helix/eventsub.go`: `SubscriptionCondition` um
   `ModeratorUserID` (`moderator_user_id`) und `ToBroadcasterUserID`
   (`to_broadcaster_user_id`) erweitern.
-- [ ] `internal/twitch/subscriptions.go`: desired-Tabelle auf die
+- [x] `internal/twitch/subscriptions.go`: desired-Tabelle auf die
   aktuellen Namen/Versionen (F1, F2); `Spec` um Flaggs:
   `RaidTo` (raid per `to_broadcaster_user_id`), `ChatAsUser`
   (chat-Events: `user_id` = Token-Besitzer), `Moderator`
   (follow + moderate v2: `moderator_user_id` = Token-Besitzer);
   `channel.goal.*` → `HomeOnly: true` (F7).
-- [ ] `ManagerOptions` um `Moderator string` (ID des Token-Besitzers;
+- [x] `ManagerOptions` um `Moderator string` (ID des Token-Besitzers;
   Home: Streamer-ID, Zusatzkanal: Bot-ID); `platform.go` setzt es pro
   Session. Condition-Aufbau in `Reconcile`:
   - follow: `{BroadcasterUserID: ch, ModeratorUserID: mod}`
@@ -93,22 +93,22 @@ Ping/Pong (Library).
   - raid: `{ToBroadcasterUserID: ch}`
   - chat.message / message_delete / notification: `{BroadcasterUserID: ch, UserID: mod}`
   - goal: `{BroadcasterUserID: ch}` (nur Home)
-- [ ] Reconcile-Reihenfolge: **erst** überflüssige/stale Subscriptions
+- [x] Reconcile-Reihenfolge: **erst** überflüssige/stale Subscriptions
   reviden (409-im-Mock-Vorbereitung, gehört zu C, aber die Reihenfolge
   gehört hierher), **dann** fehlende erstellen.
-- [ ] `internal/twitch/map.go`: dispatch-Case-Namen der umbenannten
+- [x] `internal/twitch/map.go`: dispatch-Case-Namen der umbenannten
   Events mitziehen (F1) — Payloads bleiben Plan B.
-- [ ] Tests: `subscriptions_test.go` (neue Namen/Versionen/Conditions,
+- [x] Tests: `subscriptions_test.go` (neue Namen/Versionen/Conditions,
   `Moderator`-Option, goal nur Home), `map_test.go`/`contract_test.go`/
   `integration_test.go` nur soweit nötig für grünen Build
   (Fixtures selbst in B).
-- [ ] Doku: `docs/spec/twitch-events.md` (B10–B14 + Event-Typ-Tabelle)
+- [x] Doku: `docs/spec/twitch-events.md` (B10–B14 + Event-Typ-Tabelle)
   und ADR-0015-Abschnitt „desired table“ aktualisieren.
-- [ ] Test-Matrix `docs/tests/I-eventsub-reference-fix.md` (Sektion A).
+- [x] Test-Matrix `docs/tests/I-eventsub-reference-fix.md` (Sektion A).
 
 ### Verifikation
 
-- [ ] `go build ./... && go test ./internal/twitch/... ./internal/helix/...`
+- [x] `go build ./... && go test ./internal/twitch/... ./internal/helix/...`
 
 ---
 
