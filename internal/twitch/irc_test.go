@@ -97,7 +97,7 @@ func (s *fakeIRCServer) serve(conn net.Conn) {
 		line = strings.TrimRight(line, "\r\n")
 		switch {
 		case strings.HasPrefix(line, "CAP REQ"):
-			s.write(conn, ":tmi.twitch.tv CAP * ACK :tmi.tv/tags tmi.tv/commands tmi.tv/membership")
+			s.write(conn, ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands")
 		case strings.HasPrefix(line, "PASS "):
 			s.mu.Lock()
 			s.token = strings.TrimPrefix(line, "PASS ")
@@ -114,7 +114,8 @@ func (s *fakeIRCServer) serve(conn net.Conn) {
 			s.mu.Lock()
 			s.joinedCount++
 			s.mu.Unlock()
-			// the client multi-joins in the comma syntax: "JOIN #a,#b".
+			// The client joins one channel per line; the fake also accepts
+			// the multi-channel syntax, so both are parsed here.
 			for group := range strings.FieldsSeq(strings.TrimPrefix(line, "JOIN ")) {
 				for ch := range strings.SplitSeq(group, ",") {
 					ch = strings.TrimPrefix(ch, "#")
