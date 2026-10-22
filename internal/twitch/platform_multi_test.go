@@ -410,6 +410,7 @@ func TestPlatformIRCOnly(t *testing.T) {
 	// The IRC session joins the home channel and the additional
 	// channel; no EventSub session is opened.
 	firc.waitJoin(t)
+	assert.Equal(t, 1, firc.connectionCount(), "the session runs once, with one connection")
 	require.True(t, p.Status().Streamer && p.Status().Bot)
 	assert.Empty(t, ws.tokens(), "the eventsub adapter is off")
 	// The stream state comes from the Helix poll (the fake answers no
@@ -434,6 +435,7 @@ func TestPlatformIRCOnly(t *testing.T) {
 	msgs := r.received()
 	assert.Empty(t, msgs[0].Channel, "the home channel carries no stamp")
 	assert.Equal(t, connector.Channel("other"), msgs[1].Channel)
+	assert.Equal(t, 1, firc.connectionCount(), "no second connection after the messages")
 	cancel()
 	<-done
 	assert.False(t, p.Status().Streamer)

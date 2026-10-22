@@ -543,6 +543,14 @@ func (p *Platform) runIRCSessions(ctx context.Context, st, bot AccountState, can
 		Logger:   p.log,
 	})
 	p.setIRC(s)
+	if includeHome {
+		// The EventSub adapter is off: the caller runs the session
+		// inline (connect), so the account poll sees the connection
+		// and its errors like the home EventSub session. Starting it
+		// here as well would run it twice, with two connections of
+		// the same nick.
+		return s
+	}
 	go func() {
 		if err := s.Run(csCtx); err != nil && csCtx.Err() == nil {
 			p.log.WarnContext(ctx, "the irc session ended", "error", err)
