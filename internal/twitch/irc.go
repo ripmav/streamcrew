@@ -29,12 +29,14 @@ import (
 // defaultIRCBase is the official Twitch IRC server (TLS).
 const defaultIRCBase = "irc.chat.twitch.tv:6697"
 
-// The IRC read deadlines: the login sequence is answered right away,
-// and a silent connection is dead — the server pings within the 240s
-// grace it gives for the answer.
+// The IRC read deadlines: the login sequence is answered right away.
+// The idle deadline must stay above the interval of the server PINGs:
+// the first PING arrives about five minutes after the connection (Twitch
+// does not document the interval), any received data resets the
+// deadline, and a dead connection is dropped after it.
 const (
 	ircWelcomeTimeout = 30 * time.Second
-	ircIdleTimeout    = 4 * time.Minute
+	ircIdleTimeout    = 6 * time.Minute
 )
 
 // The backoff of the reconnects of the IRC session: it starts at the
@@ -242,7 +244,16 @@ func (s *IRCSession) runConnection(ctx context.Context, token string) error {
 		<-ctx.Done()
 		_ = conn.Close()
 	}()
-	if err := s.writeLines(conn, "CAP REQ :tmi.tv/tags", "PASS oauth:"+token, "NICK "+s.login); err != nil {
+	// The capability negotiation (dev.twitch.tv/docs/chat/irc): the
+	// tags capability requires the commands capability in the same
+	// request, and CAP END terminates the negotiation before the login
+	// (IRCv3); without both the server answers the tags with a NAK.
+	if err := s.writeLines(conn,
+		"CAP REQ :tmi.tv/tags tmi.tv/commands",
+		"CAP END",
+		"PASS oauth:"+token,
+		"NICK "+s.login,
+	); err != nil {
 		return err
 	}
 	if err := conn.SetReadDeadline(time.Now().Add(ircWelcomeTimeout)); err != nil {
