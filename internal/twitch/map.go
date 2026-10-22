@@ -4,6 +4,7 @@ package twitch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -584,7 +585,7 @@ func (p chatNotification) event() (connector.Event, error) {
 	switch p.NoticeType {
 	case "sub":
 		if p.Sub == nil {
-			return connector.Event{}, fmt.Errorf("eventsub: the sub notice has no sub object")
+			return connector.Event{}, errors.New("eventsub: the sub notice has no sub object")
 		}
 		return connector.Event{
 			Platform: platform.Twitch,
@@ -594,7 +595,7 @@ func (p chatNotification) event() (connector.Event, error) {
 		}, nil
 	case "resub":
 		if p.Resub == nil {
-			return connector.Event{}, fmt.Errorf("eventsub: the resub notice has no resub object")
+			return connector.Event{}, errors.New("eventsub: the resub notice has no resub object")
 		}
 		ev := connector.Event{
 			Platform: platform.Twitch,
@@ -608,7 +609,7 @@ func (p chatNotification) event() (connector.Event, error) {
 		return ev, nil
 	case "sub_gift":
 		if p.SubGift == nil {
-			return connector.Event{}, fmt.Errorf("eventsub: the sub_gift notice has no sub_gift object")
+			return connector.Event{}, errors.New("eventsub: the sub_gift notice has no sub_gift object")
 		}
 		ev := connector.Event{
 			Platform: platform.Twitch,
@@ -625,7 +626,7 @@ func (p chatNotification) event() (connector.Event, error) {
 		return ev, nil
 	case "community_sub_gift":
 		if p.CommunitySubGift == nil {
-			return connector.Event{}, fmt.Errorf("eventsub: the community_sub_gift notice has no object")
+			return connector.Event{}, errors.New("eventsub: the community_sub_gift notice has no object")
 		}
 		ev := connector.Event{
 			Platform: platform.Twitch,
