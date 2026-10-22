@@ -90,3 +90,51 @@ mit bekanntem `retry-after` bestimmt das Tempo: die Wartezeit ist der
 längere der beiden Werte (10 s oder `retry-after`), damit ein 30 s offener
 Breaker 1–2 Versuche/min statt 286/s sieht. `session_reconnect` bleibt
 unverändert sofort; Token-Verlust (`ErrToken`) endet ohne Wartung.
+
+## Revision 2026-10-22 (Session-Lebenszyklus, EventSub-Reference-Abgleich)
+
+Der Abgleich mit der EventSub Reference (Plan
+`docs/superpowers/plans/2026-10-22-eventsub-reference-fix.md`, Findings
+F9–F12) ändert den Session-Lebenszyklus:
+
+1. **`session_reconnect` (F9):** Die `reconnect_url` wird **unverändert**
+   verwendet (Doku: „Use the reconnect URL as is; do not modify it“) —
+   der `access_token` wird nicht mehr in die Query gemergt (die URL ist
+   selbsttragend, in Produktion wie im Mock). Relative URLs werden gegen
+   die Base absolut aufgelöst (die Query bleibt). Die **alte Session
+   bleibt offen, bis die neue Session ihre `session_welcome`-Message
+   gebracht hat** (Doku: „You should not close the old connection until
+   you receive a Welcome message on the new connection“), damit kein
+   Event verloren geht: die neue Session wird parallel gedialt, die alte
+   liest weiter. Ohne Welcome innerhalb der Reconnect-Frist (30 s) dient
+   die alte Session den Rest der Frist und wird dann am Base-URL neu
+   verbunden. Die `transport.session_id`-Felder der Subscriptions ändern
+   sich bei einem `session_reconnect` nicht — die Subscriptions tragen
+   mit der Session über (Doku), und das Re-pointing (Punkt 3) berührt
+   sie nicht (Status bleibt `enabled`).
+2. **Revocation (F11):** Der `revocation`-Frame kommt als
+   `payload.subscription` mit `id`, `type`, `version` und `status` (nicht
+   `payload.revocation.reason` wie in der Revision 2026-10-11
+   vermutet). Je Status: `authorization_revoked` — das Token ist weg,
+   `OnRevoked` + Session neu mit frischem Token (wie bisher);
+   `user_removed` (der Nutzer existiert nicht mehr) und
+   `version_removed` (Typ und Version werden nicht mehr unterstützt) —
+   nur **eine** Subscription ist weg, die Session bleibt offen;
+   `OnSubscriptionRevoked` meldet sie an den Subscription-Manager, der
+   sie aus der aktuellen Soll-Tabelle ersetzt.
+3. **Re-pointing nach Drop (F10):** Ein Abbruch der Session deaktiviert
+   ihre Subscriptions automatisch (Doku: „If you disconnect from a
+   WebSocket session, all subscriptions associated with that session are
+   automatically disabled“). Der Manager erkennt sie am Status: eine
+   eigene Subscription, die im Soll-Zustand steht, aber nicht mehr den
+   Status `enabled` trägt, wird revokiert und für die aktuelle Session
+   neu erstellt. Der Status ist das Kriterium statt der
+   `transport.session_id`, weil die ID bei einem `session_reconnect` mit
+   den Subscriptions unverändert bleibt (Punkt 1) und sie dort **nicht**
+   neu erstellt werden dürfen.
+4. **10-s-Fenster (F12):** Nach jeder `session_welcome` muss innerhalb
+   des `keepalive_timeout_seconds`-Fensters (Default 10 s, Close 4003
+   „connection unused“) mindestens eine Subscription existieren. Die
+   Plattform meldet daher jede neue Session-ID an den Manager, der
+   **sofort** nach jeder neuen Session reconciliert (die
+   `session_reconnect`-Reconciliation ist ein No-Op, Punkt 1).

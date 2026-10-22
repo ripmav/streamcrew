@@ -27,8 +27,11 @@ import (
 // sessionState hands the EventSub session ID from the WebSocket
 // client to the subscription manager: the client reports the ID of
 // every connection, the manager waits for the first and reads the
-// current one afterwards (the ID changes on every session
-// reconnect, the subscriptions ride along with the session).
+// current one afterwards. The ID changes on every new session (a
+// reconnect and a drop); the subscriptions ride along only with the
+// session_reconnect, a drop disables them and they are re-pointed
+// (F10, EventSub Reference "Which events is my WebSocket subscribed
+// to?").
 type sessionState struct {
 	mu     sync.Mutex
 	id     string
@@ -710,13 +713,34 @@ func (p *Platform) channelSession(ctx context.Context, cs channelSession) error 
 			p.log.ErrorContext(ctx, "the post-revocation reconciliation failed", "error", err)
 		}
 	})
+	// A single subscription is revoked (user_removed, version_removed):
+	// the session stays, the manager replaces the subscription with
+	// the current table (F11).
+	mapper.WithSubscriptionRevoked(func(ctx context.Context, sub RevokedSubscription) {
+		if err := mgr.Reconcile(ctx); err != nil && ctx.Err() == nil {
+			p.log.ErrorContext(ctx, "the post-subscription-revocation reconciliation failed", "error", err)
+		}
+	})
 	client := New(Options{
 		Base:       p.base,
 		Token:      cs.token,
 		HTTPClient: p.dialClient,
 		Logger:     p.log,
-		Session:    sessions.report,
-		Breaker:    p.eventSubBrk,
+		Session: func(id string) {
+			sessions.report(id)
+			// The new session's 10 s window (F12, EventSub Reference
+			// "Welcome message"): a drop disabled the old session's
+			// subscriptions, so they are re-pointed right after every
+			// new session, not at the next 10 min interval. The
+			// session_reconnect keeps its subscriptions (the status
+			// stays enabled) and the reconciliation is a no-op.
+			go func() {
+				if err := mgr.Reconcile(ctx); err != nil && ctx.Err() == nil {
+					p.log.ErrorContext(ctx, "the post-session reconciliation failed", "error", err)
+				}
+			}()
+		},
+		Breaker: p.eventSubBrk,
 	})
 
 	if cs.home {

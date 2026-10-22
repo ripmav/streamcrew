@@ -67,7 +67,7 @@ func (f *fakeHelix) handler(t *testing.T) http.HandlerFunc {
 			id := "id-" + in.EventType
 			f.subs[id] = helix.EventSubSubscription{
 				ID:        id,
-				Status:    "websocket_pending",
+				Status:    "enabled",
 				Condition: in.Condition,
 				EventType: in.EventType,
 				Version:   in.Version,
@@ -110,16 +110,57 @@ func newManager(t *testing.T, f *fakeHelix, interval time.Duration) *twitch.Mana
 // seed puts a subscription into the fake, as if it existed.
 func (f *fakeHelix) seed(t *testing.T, eventType, version string, c helix.SubscriptionCondition) {
 	t.Helper()
+	f.seedStatus(t, eventType, version, c, "enabled")
+}
+
+// seedStatus puts a subscription with the given status into the fake.
+func (f *fakeHelix) seedStatus(t *testing.T, eventType, version string, c helix.SubscriptionCondition, status string) {
+	t.Helper()
 	id := "seed-" + eventType
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.subs[id] = helix.EventSubSubscription{
 		ID:        id,
-		Status:    "websockets_connected",
+		Status:    status,
 		Condition: c,
 		EventType: eventType,
 		Version:   version,
 	}
+}
+
+// TestReconcileRepointsTheStaleSubscriptions covers F10: a drop of the
+// session disables its subscriptions (the status is no longer
+// "enabled"); the reconciliation revokes them and re-creates them for
+// the current session, while the enabled desired state is kept.
+func TestReconcileRepointsTheStaleSubscriptions(t *testing.T) {
+	f := newFakeHelix()
+	m := newManager(t, f, 0)
+	// The session dropped: the own subscriptions are disabled.
+	f.seedStatus(t, "channel.follow", "2", helix.SubscriptionCondition{BroadcasterUserID: "7", ModeratorUserID: "7"}, "websocket_disconnected")
+	f.seedStatus(t, "channel.raid", "1", helix.SubscriptionCondition{ToBroadcasterUserID: "7"}, "websocket_disconnected")
+	// The desired state that the drop left enabled is kept, not
+	// recreated (the session_reconnect carries it over).
+	f.seed(t, "channel.cheer", "1", helix.SubscriptionCondition{BroadcasterUserID: "7"})
+	require.NoError(t, m.Reconcile(t.Context()))
+
+	// The stale ones are revoked.
+	require.Len(t, f.revoked, 2)
+	assert.Contains(t, f.revoked, "seed-channel.follow")
+	assert.Contains(t, f.revoked, "seed-channel.raid")
+	// The stale ones are re-created, the enabled one is not.
+	created := map[string]bool{}
+	for _, in := range f.created {
+		created[in.EventType] = true
+	}
+	assert.True(t, created["channel.follow"])
+	assert.True(t, created["channel.raid"])
+	assert.False(t, created["channel.cheer"])
+	// The second run: nothing to do (the re-created ones answer as
+	// enabled).
+	createdBefore := len(f.created)
+	require.NoError(t, m.Reconcile(t.Context()))
+	assert.Len(t, f.created, createdBefore)
+	assert.Len(t, f.revoked, 2)
 }
 
 func TestReconcileCreatesTheMissingSubscriptions(t *testing.T) {

@@ -93,18 +93,19 @@ func getJSON(t *testing.T, target, clientID, token string) []byte {
 
 // subscriptionTypes is the set of the event types the mock EventSub
 // server has as subscriptions right now.
-func subscriptionTypes(t *testing.T, c *twitchmock.Client) map[string]bool {
+func subscriptionTypes(t *testing.T, c *twitchmock.Client) map[string]string {
 	t.Helper()
 	data := getJSON(t, c.HelixBase+"/eventsub/subscriptions", c.ClientID, c.Token)
 	var body struct {
 		Data []struct {
-			Type string `json:"type"`
+			Type   string `json:"type"`
+			Status string `json:"status"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(data, &body))
-	m := make(map[string]bool, len(body.Data))
+	m := make(map[string]string, len(body.Data))
 	for _, s := range body.Data {
-		m[s.Type] = true
+		m[s.Type] = s.Status
 	}
 	return m
 }
@@ -184,13 +185,13 @@ func TestPlatformAgainstTheMock(t *testing.T) {
 	require.Eventually(t, func() bool {
 		got := subscriptionTypes(t, c)
 		for _, typ := range accepted {
-			if !got[typ] {
+			if got[typ] != "enabled" {
 				return false
 			}
 		}
 		return true
 	}, 10*time.Second, 100*time.Millisecond, "the accepted subscriptions are not in the mock")
-	assert.False(t, subscriptionTypes(t, c)["channel.chat.message"],
+	assert.Empty(t, subscriptionTypes(t, c)["channel.chat.message"],
 		"the mock rejects the chat topic, the manager must skip it")
 
 	// Event flow: stream.online is mapped to the stream state. The

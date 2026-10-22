@@ -215,13 +215,16 @@ func (m *Manager) Run(ctx context.Context) error {
 }
 
 // Reconcile aligns the actual state with the desired state once: it
-// creates the missing subscriptions and revokes the surplus ones. A
-// 400 answer (limit reached, condition occupied) is skipped with a
+// revokes the surplus and the stale subscriptions (a drop disabled
+// them with the old session; the session_reconnect carries them over,
+// they stay enabled and are kept) and creates the missing ones (the
+// new session's 10 s window, EventSub Reference "Welcome message").
+// A 400 answer (limit reached, condition occupied) is skipped with a
 // warning, not an error (roadmap 4.3); every other error is returned.
 // The subscriptions are delivered to the current EventSub session
 // (websocket transport); Run calls it at the start and on the
-// interval; the composition root calls it once more right after a
-// token revocation.
+// interval; the composition root calls it right after every new
+// session and after a revocation.
 func (m *Manager) Reconcile(ctx context.Context) error {
 	// B3: while the channels are not operated, the manager holds no
 	// subscriptions: the own surplus is revoked below, nothing is created.
@@ -245,10 +248,6 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	have := map[specKey]bool{}
-	for _, s := range actual {
-		have[specKeyOf(s.EventType, s.Version, s.Condition)] = true
-	}
 
 	// The desired (spec, condition) pairs: every channel and stream spec
 	// for every channel, plus the whisper spec for its receiver.
@@ -270,12 +269,52 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 			}
 		}
 	}
-
 	want := map[specKey]bool{}
 	for _, w := range wants {
-		k := specKeyOf(w.d.EventType, w.d.Version, w.c)
-		want[k] = true
-		if have[k] {
+		want[specKeyOf(w.d.EventType, w.d.Version, w.c)] = true
+	}
+
+	// The revocation runs before the creation, so a re-created
+	// subscription (stale after a drop, or a migration to the current
+	// event names) does not collide with the one it replaces (the
+	// twitch-cli mock rejects the duplicate per type and version;
+	// production per condition).
+	// The stale subscriptions are the own ones that the drop disabled
+	// (the status is no longer "enabled"): a drop of the session
+	// disables its subscriptions (EventSub Reference "Which events is
+	// my WebSocket subscribed to?"), the session_reconnect carries
+	// them over with the status kept, so it must not touch them. The
+	// surplus are the own subscriptions outside the desired state
+	// (e.g. left over of an older version of the app, e.g. the old
+	// event names of the pre-2026-10-22 table). The managers revoke
+	// their own subscriptions only: the additional channels share the
+	// bot token, whose listing also carries the subscriptions of the
+	// other channels (spec twitch-multi-channel.md, B4).
+	for _, s := range actual {
+		if !m.owns(s) {
+			continue
+		}
+		k := specKeyOf(s.EventType, s.Version, s.Condition)
+		if want[k] && s.Status == "enabled" {
+			continue // the desired state, delivered by the current session
+		}
+		if err := m.helix.RevokeSubscription(ctx, s.ID); err != nil {
+			return err
+		}
+		m.log.InfoContext(ctx, "eventsub subscription revoked", "eventtype", s.EventType, "status", s.Status)
+	}
+
+	// The creation: the desired state that no enabled subscription
+	// carries (the stale and surplus ones are revoked above, the
+	// kept ones do their job).
+	have := map[specKey]bool{}
+	for _, s := range actual {
+		if s.Status == "enabled" {
+			have[specKeyOf(s.EventType, s.Version, s.Condition)] = true
+		}
+	}
+	for _, w := range wants {
+		if have[specKeyOf(w.d.EventType, w.d.Version, w.c)] {
 			continue
 		}
 		if _, err := m.helix.CreateSubscription(ctx, helix.CreateSubscriptionInput{
@@ -292,30 +331,6 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 			return err
 		}
 		m.log.InfoContext(ctx, "eventsub subscription created", "eventtype", w.d.EventType)
-	}
-
-	// The surplus: actual subscriptions outside the desired state
-	// (e.g. left over of an older version of the app, e.g. the old
-	// event names of the pre-2026-10-22 table). The managers
-	// revoke their own subscriptions only: the additional channels
-	// share the bot token, whose listing also carries the subscriptions
-	// of the other channels (spec twitch-multi-channel.md, B4).
-	// The revocation runs before the creation, so a re-created
-	// subscription (same type and version, new condition or session)
-	// does not collide with the one it replaces (the twitch-cli mock
-	// rejects the duplicate per type and version; production per
-	// condition).
-	for _, s := range actual {
-		if want[specKeyOf(s.EventType, s.Version, s.Condition)] {
-			continue
-		}
-		if !m.owns(s) {
-			continue
-		}
-		if err := m.helix.RevokeSubscription(ctx, s.ID); err != nil {
-			return err
-		}
-		m.log.InfoContext(ctx, "eventsub subscription revoked", "eventtype", s.EventType)
 	}
 	return nil
 }
@@ -344,10 +359,14 @@ func (m *Manager) conditionOf(d Spec, broadcaster string) helix.SubscriptionCond
 }
 
 // owns reports whether the subscription belongs to the manager: its
-// broadcaster is one of the manager's channels, or the receiver is the
-// manager's whisper.
+// broadcaster is one of the manager's channels, the raided channel is
+// one of them (channel.raid names the target only), or the receiver
+// is the manager's whisper.
 func (m *Manager) owns(s helix.EventSubSubscription) bool {
 	if slices.Contains(m.channels, s.Condition.BroadcasterUserID) {
+		return true
+	}
+	if slices.Contains(m.channels, s.Condition.ToBroadcasterUserID) {
 		return true
 	}
 	return m.whisper != "" && s.Condition.UserID == m.whisper

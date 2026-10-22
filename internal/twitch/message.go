@@ -44,6 +44,30 @@ type reconnect struct {
 	} `json:"session"`
 }
 
+// revocation is the payload of the revocation frame (EventSub
+// Reference "Revocation message"): the revoked subscription with its
+// ID, type, version and the status naming the reason
+// (authorization_revoked, user_removed, version_removed).
+type revocation struct {
+	Subscription RevokedSubscription `json:"subscription"`
+}
+
+// RevokedSubscription is the subscription a revocation message names;
+// the status names the reason of the revocation (EventSub Reference
+// "Revocation message"): authorization_revoked (the token is gone),
+// user_removed (the user no longer exists) or version_removed (the
+// type and version are no longer supported).
+type RevokedSubscription struct {
+	// ID names the revoked subscription.
+	ID string `json:"id"`
+	// Type names the event type of the subscription.
+	Type string `json:"type"`
+	// Version is the event version of the subscription.
+	Version string `json:"version"`
+	// Status names the reason of the revocation.
+	Status string `json:"status"`
+}
+
 // Event is a received EventSub event: the payload of a notification
 // frame, the EventsubResponse of the subscription. The subscription
 // names the event type and version; the event object carries the

@@ -39,14 +39,16 @@ func wsServer(t *testing.T, handle func(t *testing.T, r *http.Request, conn *web
 
 // testHandler records the events and the revocations.
 type testHandler struct {
-	events  chan twitch.Event
-	revoked chan struct{}
+	events      chan twitch.Event
+	revoked     chan struct{}
+	subsRevoked chan twitch.RevokedSubscription
 }
 
 func newTestHandler() *testHandler {
 	return &testHandler{
-		events:  make(chan twitch.Event, 100),
-		revoked: make(chan struct{}, 10),
+		events:      make(chan twitch.Event, 100),
+		revoked:     make(chan struct{}, 10),
+		subsRevoked: make(chan twitch.RevokedSubscription, 10),
 	}
 }
 
@@ -57,6 +59,13 @@ func (h *testHandler) OnMessage(_ context.Context, e twitch.Event) {
 func (h *testHandler) OnRevoked(_ context.Context) {
 	select {
 	case h.revoked <- struct{}{}:
+	default:
+	}
+}
+
+func (h *testHandler) OnSubscriptionRevoked(_ context.Context, sub twitch.RevokedSubscription) {
+	select {
+	case h.subsRevoked <- sub:
 	default:
 	}
 }
@@ -146,19 +155,26 @@ func TestRunWelcomeKeepaliveAndMessage(t *testing.T) {
 }
 
 func TestRunSessionReconnectAtTheGivenURL(t *testing.T) {
-	var reconnects atomic.Int64
+	var reconnects, oldClosed, dialed atomic.Int64
+	release := make(chan struct{})
 	srv := wsServer(t, func(t *testing.T, r *http.Request, conn *websocket.Conn) {
 		switch r.URL.Path {
 		case "/":
 			writeText(t, conn, welcomeJSON("s1", "10"))
-			// The reconnect URL already carries its own query
-			// (the reconnect identifier); the client must merge the
-			// access token into it, not replace the query.
 			writeText(t, conn, `{"metadata":{"message_id":"m-re","message_type":"session_reconnect"},"payload":{"session":{"id":"s2","status":"reconnecting","keepalive_timeout_seconds":null,"reconnect_url":"/re?reconnect_id=abc","connected_at":"2026-01-01T00:00:00Z"}}}`)
-			hold(conn)
+			// The old session stays open until the client closes it
+			// (after the new session's welcome).
+			_, _, _ = conn.Read(context.Background())
+			oldClosed.Store(1)
 		case "/re":
+			// The reconnect URL is used as is: the reconnect identity
+			// stays, the access token is not merged in.
 			assert.Equal(t, "abc", r.URL.Query().Get("reconnect_id"))
-			assert.Equal(t, "tok", r.URL.Query().Get("access_token"))
+			assert.Empty(t, r.URL.Query().Get("access_token"))
+			dialed.Store(1)
+			// Hold the new session back: while its welcome is missing,
+			// the old session must still be open (no event loss).
+			<-release
 			writeText(t, conn, welcomeJSON("s2", "10"))
 			// The flag goes up only after the handshake, so the test's
 			// cancel() cannot race the reading of the new connection.
@@ -175,7 +191,14 @@ func TestRunSessionReconnectAtTheGivenURL(t *testing.T) {
 		defer close(done)
 		assert.NoError(t, c.Run(ctx, newTestHandler()))
 	}()
+	waitFor(t, 10*time.Second, dialed.Load)
+	// The new session has no welcome yet: the old connection is still
+	// open (the docs: do not close it until the new welcome).
+	assert.Zero(t, oldClosed.Load(), "the old session must stay open until the new welcome")
+	close(release)
 	waitFor(t, 10*time.Second, reconnects.Load)
+	// The old session is closed once the new one has the welcome.
+	waitFor(t, 10*time.Second, oldClosed.Load)
 	cancel()
 	<-done
 }
@@ -197,7 +220,7 @@ func TestRunRevocationReconnectsWithAFreshToken(t *testing.T) {
 			fresh.Store(true)
 		}
 		if n == 1 {
-			writeText(t, conn, `{"metadata":{"message_id":"m-rev","message_type":"revocation"},"payload":{"revocation":{"reason":"token revoked"}}}`)
+			writeText(t, conn, `{"metadata":{"message_id":"m-rev","message_type":"revocation","subscription_type":"channel.follow","subscription_version":"2"},"payload":{"subscription":{"id":"sub-1","status":"authorization_revoked","type":"channel.follow","version":"2"}}}`)
 		}
 		hold(conn)
 	})
@@ -234,6 +257,55 @@ func TestRunRevocationReconnectsWithAFreshToken(t *testing.T) {
 	}
 	cancel()
 	<-done
+}
+
+// A revocation with the status user_removed (the user no longer
+// exists) or version_removed (the type and version are no longer
+// supported) does not tear down the session (the docs): the
+// subscription is reported to the handler, the connection stays and
+// keeps delivering events.
+func TestRunRevocationKeepsTheSession(t *testing.T) {
+	for _, status := range []string{"user_removed", "version_removed"} {
+		t.Run(status, func(t *testing.T) {
+			var dials atomic.Int64
+			srv := wsServer(t, func(t *testing.T, _ *http.Request, conn *websocket.Conn) {
+				dials.Add(1)
+				writeText(t, conn, welcomeJSON("s1", "10"))
+				writeText(t, conn, `{"metadata":{"message_id":"m-rev","message_type":"revocation","subscription_type":"channel.follow","subscription_version":"2"},"payload":{"subscription":{"id":"sub-1","status":"`+status+`","type":"channel.follow","version":"2"}}}`)
+				writeText(t, conn, notificationJSON("channel.follow", "2", `{"user_id":"8"}`))
+				hold(conn)
+			})
+			defer srv.Close()
+
+			h := newTestHandler()
+			c := newClient(t, srv)
+			ctx, cancel := context.WithCancel(t.Context())
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				assert.NoError(t, c.Run(ctx, h))
+			}()
+			select {
+			case sub := <-h.subsRevoked:
+				assert.Equal(t, status, sub.Status)
+				assert.Equal(t, "channel.follow", sub.Type)
+			case <-time.After(10 * time.Second):
+				t.Fatal("the subscription revocation was not reported")
+			}
+			// The token revocation must not fire, and the session keeps
+			// delivering events on the same connection.
+			e := h.nextEvent(t)
+			assert.Equal(t, "channel.follow", e.Subscription.Type)
+			select {
+			case <-h.revoked:
+				t.Fatal("the token revocation must not be reported")
+			default:
+			}
+			cancel()
+			<-done
+			assert.Equal(t, int64(1), dials.Load(), "the session must not reconnect")
+		})
+	}
 }
 
 // The server never sends a frame after the welcome: the client must
