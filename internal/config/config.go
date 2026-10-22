@@ -55,6 +55,9 @@ type Config struct {
 	// Stream configures the sizes of the stream path; both apply only at
 	// the start of the core (roadmap 6.2.6).
 	Stream StreamConfig `embed:"" prefix:"stream-"`
+	// Twitch toggles the chat adapters of the Twitch platform; it
+	// applies only at the start of the core (no hot apply).
+	Twitch TwitchConfig `embed:"" prefix:"twitch-"`
 
 	// Grant, Revoke, FileRoot and OutboundAllow are the rights of
 	// Code-ADR-0019. Changes of them in the configuration file apply
@@ -97,6 +100,40 @@ func (s *StreamConfig) check() []error {
 	}
 	if s.CatchUp <= 0 {
 		errs = append(errs, fmt.Errorf("--stream-catchup: must be positive, got %d", s.CatchUp))
+	}
+	return errs
+}
+
+// TwitchConfig toggles the chat adapters of the Twitch platform. Each
+// switch is "on" or "off" ("on" the default); at least one adapter must
+// be on, without one there is no channel to operate and the core does
+// not start. The values apply only at the start of the core (no hot
+// apply, no API or TUI path).
+type TwitchConfig struct {
+	// EventSub switches the EventSub adapter: the home channel session
+	// and, without the IRC adapter, the sessions of the additional
+	// channels.
+	EventSub string `name:"eventsub" default:"on" enum:"on,off" placeholder:"on|off" help:"The EventSub adapter of the Twitch platform: the home channel and, without the IRC adapter, the additional channels. Default: ${default}."`
+	// IRC switches the IRC adapter: "off" the default, "on" turns it on.
+	// The additional channels run over the IRC session while it is on,
+	// and the home channel while the EventSub adapter is off.
+	IRC string `default:"off" enum:"on,off" placeholder:"on|off" help:"The IRC adapter of the Twitch platform: the additional channels and, without the EventSub adapter, the home channel. Default: ${default}."`
+}
+
+// check validates the adapter switches: each is on or off, and at least
+// one adapter is on (without one the core operates no channel and does
+// not start).
+func (t *TwitchConfig) check() []error {
+	var errs []error
+	for name, v := range map[string]string{"--twitch-eventsub": t.EventSub, "--twitch-irc": t.IRC} {
+		switch v {
+		case "", "on", "off":
+		default:
+			errs = append(errs, fmt.Errorf("%s: unknown switch %q, want on or off", name, v))
+		}
+	}
+	if t.EventSub == "off" && t.IRC == "off" {
+		errs = append(errs, errors.New("--twitch-eventsub and --twitch-irc: at least one chat adapter must be on"))
 	}
 	return errs
 }
@@ -178,6 +215,7 @@ func (c *Config) Resolve() error {
 		errs = append(errs, fmt.Errorf("--shutdown-timeout: must be positive, got %s", c.ShutdownTimeout))
 	}
 	errs = append(errs, c.Stream.check()...)
+	errs = append(errs, c.Twitch.check()...)
 	errs = append(errs, c.Log.check()...)
 	if _, err := c.Rights(); err != nil {
 		errs = append(errs, err)

@@ -140,7 +140,7 @@ func TestSaveAndLoad(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"type":"events","schemaVersion":1,"massGiftThreshold":1000,"streamGracePeriod":"0s"}`, string(doc))
 
-	chans := settings.Channels{Additional: []string{"friend", "Other", strings.Repeat("a", 25)}, ChatAdapter: settings.ChatAdapterIRC}
+	chans := settings.Channels{Additional: []string{"friend", "Other", strings.Repeat("a", 25)}}
 	require.NoError(t, settings.Save(ctx, svc, chans))
 	gotChans, err := settings.Load(ctx, svc, settings.DefaultChannels())
 	require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestSaveAndLoad(t *testing.T) {
 	assert.False(t, gotChans.Contains("home"))
 	doc, _, err = s.Settings(ctx, "channels")
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"type":"channels","schemaVersion":1,"additional":["friend","Other","aaaaaaaaaaaaaaaaaaaaaaaaa"],"chatAdapter":"irc"}`, string(doc))
+	assert.JSONEq(t, `{"type":"channels","schemaVersion":2,"additional":["friend","Other","aaaaaaaaaaaaaaaaaaaaaaaaa"]}`, string(doc))
 
 	gen := settings.General{DefaultPlatform: platform.Mock}
 	require.NoError(t, settings.Save(ctx, svc, gen))
@@ -220,7 +220,6 @@ func TestValidation(t *testing.T) {
 		settings.Channels{Additional: []string{"a", "A"}},
 		settings.Channels{Additional: []string{"has space"}},
 		settings.Channels{Additional: []string{strings.Repeat("a", 26)}},
-		settings.Channels{ChatAdapter: "websocket"},
 		settings.General{DefaultPlatform: ""},
 		settings.General{DefaultPlatform: "Twitch"},
 		settings.General{DefaultPlatform: platform.Name(strings.Repeat("a", 33))},
@@ -395,6 +394,19 @@ func TestUnloadableTimeZoneFallsBackToUTC(t *testing.T) {
 	loc, err := settings.Time{TimeZone: "Mars/Olympus"}.Location()
 	require.Error(t, err)
 	assert.Equal(t, time.UTC, loc)
+}
+
+// TestChannelsVersion1: stored version 1 documents are migrated; the chat
+// adapter is dropped, it is the start configuration now (--twitch-irc,
+// plan 2026-10-22).
+func TestChannelsVersion1(t *testing.T) {
+	t.Parallel()
+	v1 := `{"type":"channels","schemaVersion":1,"additional":["friend"],"chatAdapter":"irc"}`
+	svc, err := settings.New(fakeRepo{doc: []byte(v1)})
+	require.NoError(t, err)
+	got, err := settings.Load(t.Context(), svc, settings.DefaultChannels())
+	require.NoError(t, err)
+	assert.Equal(t, settings.Channels{Additional: []string{"friend"}}, got)
 }
 
 // TestLocaleVersion1: stored version 1 documents are migrated; they get the

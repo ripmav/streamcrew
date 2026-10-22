@@ -147,9 +147,11 @@ tls_cert: ""                # TLS-Zertifikat (PEM), zusammen mit tls_key
 tls_key: ""                 # TLS-Privatschlüssel (PEM)
 stream_buffer: 1024         # Ereignisse, die die Strömungs-Hub der Bus maximal schuldet
 stream_catch_up: 256        # aktuelle Ereignisse für den Catch-up nachverbindeender Clients
+twitch_eventsub: on         # EventSub-Adapter der Twitch-Plattform: an oder aus
+twitch_irc: off             # IRC-Adapter der Twitch-Plattform: an oder aus; mindestens einer muss an sein
 ```
 
-Änderungen der **Hot-Settings** wirken im laufenden Core, ohne Neustart: Der Watcher liest die Datei regelmäßig, wendet die Änderung an und meldet Fehlschläge im Log. Hot sind `listen` (+ `tls_cert`/`tls_key`), `cors_allow`, `dev`, `dry_run`, die `log_*`-Einstellungen, `grant`, `revoke`, `file_root`, `outbound_allow`, `mode` und `shutdown_timeout`; nur `data_dir`, `profile` und `config` brauchen einen Neustart. Dieselben Einstellungen lassen sich über die API setzen (`ConfigService`) — die TUI-Settings-View nutzt das ([Code-ADR-0021](docs/adr/code/0021-on-the-fly-konfiguration.md)).
+Änderungen der **Hot-Settings** wirken im laufenden Core, ohne Neustart: Der Watcher liest die Datei regelmäßig, wendet die Änderung an und meldet Fehlschläge im Log. Hot sind `listen` (+ `tls_cert`/`tls_key`), `cors_allow`, `dev`, `dry_run`, die `log_*`-Einstellungen, `grant`, `revoke`, `file_root`, `outbound_allow`, `mode` und `shutdown_timeout`; `data_dir`, `profile`, `config`, `stream_buffer`, `stream_catch_up`, `twitch_eventsub` und `twitch_irc` brauchen einen Neustart. Dieselben Einstellungen lassen sich über die API setzen (`ConfigService`) — die TUI-Settings-View nutzt das ([Code-ADR-0021](docs/adr/code/0021-on-the-fly-konfiguration.md)).
 
 ### Flags und Umgebungsvariablen
 
@@ -175,6 +177,8 @@ Alle Flags gelten für jeden Befehl; die dazugehörige Umgebungsvariable steht i
 | `--log-max-files N` (`$STREAMCREW_LOG_MAX_FILES`) | Rotationsdateien halten, Standard `5` |
 | `--stream-buffer N` (`$STREAMCREW_STREAM_BUFFER`) | Puffer der Strömungs-Hub, Standard `1024` |
 | `--stream-catch-up N` (`$STREAMCREW_STREAM_CATCH_UP`) | Catch-up-Größe, Standard `256` |
+| `--twitch-eventsub on\|off` (`$STREAMCREW_TWITCH_EVENTSUB`) | EventSub-Adapter: Heimkanal und, ohne IRC-Adapter, die zusätzlichen Kanäle; Standard `on` |
+| `--twitch-irc on\|off` (`$STREAMCREW_TWITCH_IRC`) | IRC-Adapter: zusätzliche Kanäle und, ohne EventSub-Adapter, der Heimkanal; Standard `off`. Mindestens ein Adapter muss an sein, sonst startet der Core nicht |
 | `--grant CAP,...` (`$STREAMCREW_GRANT`) | Capability aktivieren, z. B. `host:fs`, wiederholbar |
 | `--revoke CAP,...` (`$STREAMCREW_REVOKE`) | Capability deaktivieren, wiederholbar |
 | `--file-root NAME=DIR` (`$STREAMCREW_FILE_ROOT`) | Verzeichnis der File-Action unter NAME, wiederholbar |
@@ -361,7 +365,7 @@ Alle Log-Einstellungen sind Hot-Settings: Änderungen wirken ohne Neustart.
 - **App:** eingebauter Twitch-App-Client oder eigene (BYO) ([ADR-0024](docs/adr/0024-eingebaute-twitch-app.md)).
 - **Verbindung:** EventSub-WebSocket mit Keepalive, Session-Reconnect und Deduplizierung; die Subscriptions werden je Channel am Soll-Zustand gehalten.
 - **Funktionen:** Chat (senden, antworten, flüstern, löschen, leeren), Moderation, Titel/Kategorie, Channel Points, Bits, Emote-Katalog (Twitch, BetterTTV, FrankerFaceZ), Clips, Marker, Raid, Shoutout, Umfrage, Vorhersage, Belohnungen.
-- **Zusätzliche Kanäle:** `streamcrew profile channels add <login>` — der Bot arbeitet in jedem Kanal, in dem sein Konto Moderator ist, ohne zweiten Login; jeder Kanal bekommt die eigene WebSocket-Verbindung und Subscriptions. `streamcrew profile channels chat irc` (Neustart nötig) lässt die zusätzlichen Kanäle stattdessen über den Twitch-IRC-Chat des Bot-Kontos laufen — ohne Mod-Voraussetzung, mit Whisper und Senden; der Mod-Status wird dann aus den Chat-Badges erkannt. Details in der [Spezifikation](docs/spec/twitch-multi-channel.md).
+- **Zusätzliche Kanäle:** `streamcrew profile channels add <login>` — der Bot arbeitet in jedem Kanal, in dem sein Konto Moderator ist, ohne zweiten Login; jeder Kanal bekommt die eigene WebSocket-Verbindung und Subscriptions. Die Startkonfiguration `twitch_irc: on` (oder `--twitch-irc on`, Neustart nötig) lässt die zusätzlichen Kanäle stattdessen über den Twitch-IRC-Chat des Bot-Kontos laufen — ohne Mod-Voraussetzung, mit Whisper und Senden; der Mod-Status wird dann aus den Chat-Badges erkannt. Ist EventSub aus (`twitch_eventsub: off`), übernimmt der IRC-Adapter auch den Heimkanal — mindestens ein Adapter muss an sein, sonst startet der Core nicht. Details in der [Spezifikation](docs/spec/twitch-multi-channel.md).
 - **Pro-Channel-Konfiguration:** ein Command trägt einen optionalen Channel-Scope (`channel`, leer = alle betriebenen Kanäle); Counter, Cooldowns, Währungen und Nutzer-Statistiken gelten profiltweit.
 
 ## Sicherheit

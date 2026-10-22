@@ -71,6 +71,11 @@ type Options struct {
 	// apply only at the start of the core (roadmap 6.2.6).
 	StreamBuffer  int
 	StreamCatchUp int
+	// TwitchEventSub and TwitchIRC switch the chat adapters of the
+	// Twitch platform ("on" or "off", empty is "on" the default); at
+	// least one must be on.
+	TwitchEventSub string
+	TwitchIRC      string
 	// SecretKey is the value of STREAMCREW_SECRET_KEY (ADR-0012); it wins
 	// over the environment variable.
 	SecretKey string
@@ -129,6 +134,10 @@ func Run(ctx context.Context, opts Options) error {
 		Stream: config.StreamConfig{
 			Buffer:  opts.StreamBuffer,
 			CatchUp: opts.StreamCatchUp,
+		},
+		Twitch: config.TwitchConfig{
+			EventSub: opts.TwitchEventSub,
+			IRC:      opts.TwitchIRC,
 		},
 		Log: config.LogConfig{
 			Level:          opts.LogLevel,

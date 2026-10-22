@@ -26,15 +26,6 @@ import (
 	emotecat "github.com/ripmav/streamcrew/internal/emote"
 )
 
-// The chat adapters of the additional channels (spec twitch-
-// multi-channel.md, B15); the values mirror the settings section
-// (settings.ChatAdapter*). ChatAdapterEventsub is the default, an
-// empty adapter counts as it.
-const (
-	ChatAdapterEventsub = "eventsub"
-	ChatAdapterIRC      = "irc"
-)
-
 // defaultIRCBase is the official Twitch IRC server (TLS).
 const defaultIRCBase = "irc.chat.twitch.tv:6697"
 
@@ -64,8 +55,14 @@ type IRCOptions struct {
 	// on the next reconnect, like the EventSub client does.
 	Token func(ctx context.Context) (string, error)
 	// Channels are the logins of the channels the session joins; the home
-	// channel must not be listed (spec twitch-multi-channel.md, B16).
+	// channel must not be listed twice (spec twitch-multi-channel.md,
+	// B16).
 	Channels []string
+	// Home is the login of the home channel in Channels (plan
+	// 2026-10-22): its events carry no channel stamp (the home channel,
+	// as in the EventSub path) and its mod status is not checked. Empty
+	// while the session carries only additional channels.
+	Home string
 	// BotID is the user ID of the bot account; its messages are flagged
 	// FromBot (B13). Empty for none.
 	BotID string
@@ -97,6 +94,10 @@ type IRCSession struct {
 	// logins are the lowercase logins the session joins, in the order
 	// they were given.
 	logins []string
+	// home is the lowercase login of the home channel while the session
+	// carries it (the EventSub adapter is off, plan 2026-10-22); its
+	// events carry no channel stamp and its mod status is not checked.
+	home string
 	// mappers is the EventSub mapper per channel (lowercase login); it
 	// stamps the channel, resolves the emotes, dedups and flags the
 	// bot's own messages, like the EventSub path does.
@@ -138,13 +139,17 @@ func NewIRCSession(ctx context.Context, o IRCOptions) *IRCSession {
 			log.ErrorContext(ctx, "the dedup of an irc channel is unavailable", "channel", login, "error", err)
 			continue
 		}
+		ch := connector.Channel(login)
+		if strings.EqualFold(login, o.Home) {
+			ch = "" // the home channel carries no stamp
+		}
 		mappers[key] = NewMapper(MapperOptions{
 			Receiver:     o.Receiver,
 			Dedup:        dedup,
 			Logger:       log,
 			Emotes:       o.Emotes,
 			EmoteChannel: login,
-			Channel:      connector.Channel(login),
+			Channel:      ch,
 			BotID:        o.BotID,
 		})
 	}
@@ -158,6 +163,7 @@ func NewIRCSession(ctx context.Context, o IRCOptions) *IRCSession {
 		login:        o.Login,
 		token:        o.Token,
 		botID:        o.BotID,
+		home:         strings.ToLower(o.Home),
 		base:         o.Base,
 		emotes:       o.Emotes,
 		log:          log,
@@ -255,9 +261,14 @@ func (s *IRCSession) runConnection(ctx context.Context, token string) error {
 		if err := conn.SetReadDeadline(time.Now().Add(ircIdleTimeout)); err != nil {
 			return err
 		}
+		// Every line rides the log (truncated): the tags carry the
+		// message data, the server lines the state of the connection
+		// (Code-ADR-0003, debug level for the path tracing).
+		s.log.DebugContext(ctx, "the irc line", "line", truncateLog(line, 300))
 		if !welcome && strings.Contains(line, " 001 ") {
 			welcome = true
 			if j := joinLine(s.logins); j != "" {
+				s.log.DebugContext(ctx, "the irc session joins", "channels", s.logins)
 				if err := s.writeLine(conn, j); err != nil {
 					return err
 				}
@@ -341,6 +352,7 @@ func (s *IRCSession) Send(ctx context.Context, ch connector.Channel, text string
 	}
 	key := strings.ToLower(string(ch))
 	l := s.limiter(key)
+	s.log.DebugContext(ctx, "the irc send", "channel", key, "runes", len([]rune(text)))
 	for _, part := range splitMessage(text) {
 		if err := l.Wait(ctx); err != nil {
 			return err
@@ -350,6 +362,16 @@ func (s *IRCSession) Send(ctx context.Context, ch connector.Channel, text string
 		}
 	}
 	return nil
+}
+
+// truncateLog cuts the line to n runes for the debug log; a cut line
+// is marked with an ellipsis.
+func truncateLog(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }
 
 // limiter returns the send limiter of the channel key, creating the
@@ -380,6 +402,9 @@ func (s *IRCSession) IsModerator(ch connector.Channel) (mod, seen bool) {
 // sends one after every join, so the status is re-read on reconnects.
 func (s *IRCSession) onUserState(ctx context.Context, msg ircMsg, channel string) {
 	key := strings.ToLower(channel)
+	if key == s.home {
+		return // the home channel is operated without the mod check
+	}
 	if _, ok := s.mappers[key]; !ok {
 		return
 	}
@@ -425,8 +450,10 @@ func (s *IRCSession) onMessage(ctx context.Context, msg ircMsg, channel, text st
 		return
 	}
 	if id := msg.tags["id"]; id != "" && !mapper.dedup.First(id) {
+		s.log.DebugContext(ctx, "drop a repeated irc message", "channel", channel, "id", id)
 		return
 	}
+	s.log.DebugContext(ctx, "the irc chat message", "channel", channel, "user", msg.prefixName)
 	p := chatMessage{
 		ID:              msg.tags["id"],
 		Message:         text,

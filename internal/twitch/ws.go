@@ -150,6 +150,7 @@ func (c *Client) Run(ctx context.Context, h Handler) error {
 		dialURL = next.url
 		if !next.immediately {
 			d := nextWait(c.dropWait, err, time.Now())
+			c.log.DebugContext(ctx, "wait before the eventsub reconnect", "wait", d, "url", next.url)
 			select {
 			case <-ctx.Done():
 				return nil
@@ -224,6 +225,9 @@ func (c *Client) session(ctx context.Context, h Handler, dialURL string) (next, 
 		conn, _, err = websocket.Dial(ctx, u.String(), &websocket.DialOptions{HTTPClient: c.httpc, HTTPHeader: headers}) //nolint:bodyclose // the body is consumed by Dial
 		return err
 	}
+	// The log carries the dial target without the query: the access
+	// token is in it and stays out of the log.
+	c.log.DebugContext(ctx, "dial the eventsub connection", "host", u.Host, "path", u.Path)
 	if c.brk != nil {
 		err = c.brk.Execute(dctx, dial)
 	} else {
@@ -322,6 +326,7 @@ func (c *Client) loop(ctx context.Context, h Handler, conn *websocket.Conn, inte
 				c.log.WarnContext(ctx, "drop an unreadable eventsub frame", "error", err)
 				continue
 			}
+			c.log.DebugContext(ctx, "the eventsub frame", "type", env.Metadata.MessageType)
 			switch env.Metadata.MessageType {
 			case "session_welcome", "session_keepalive":
 				// the connection is alive, nothing to do

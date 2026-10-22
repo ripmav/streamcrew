@@ -34,12 +34,12 @@ var _ connector.Chat = chat{}
 
 // Send implements connector.Chat: it splits a text that is longer than
 // Twitch allows and keeps to the rate limits of the platform through
-// the resilient HTTP client (actions.md B65). The additional channels
-// of the IRC mode run through the IRC session of the bot account
+// the resilient HTTP client (actions.md B65). The channels that run over
+// the IRC adapter run through the IRC session of the bot account
 // (spec twitch-multi-channel.md, B18); there the bot account is the
 // sender, so a message from it is the normal case.
 func (c chat) Send(ctx context.Context, m connector.Message) error {
-	if m.Channel != "" && c.p.chatAdapter == ChatAdapterIRC {
+	if m.Channel != "" && c.p.ircOn {
 		return c.p.ircSend(ctx, m.Channel, m.Text)
 	}
 	if m.From == connector.AccountBot {

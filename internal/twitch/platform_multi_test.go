@@ -192,6 +192,7 @@ func multiPlatform(t *testing.T, r *fakeReceiver, a *botAuth, channels []string)
 		HelixBase:  hlSrv.URL,
 		Poll:       10 * time.Millisecond,
 		Channels:   channels,
+		IRC:        "off", // the EventSub path for the additional channels, the start default
 	}), ws
 }
 
@@ -331,16 +332,16 @@ func TestPlatformIRCMode(t *testing.T) {
 	t.Cleanup(wsSrv.Close)
 	hc := httpclient.New(httpclient.Options{Name: "twitch.helix", Base: hlSrv.Client(), Rate: 100, Burst: 100})
 	p := twitch.NewPlatform(twitch.PlatformOptions{
-		Receiver:    r,
-		Auth:        a,
-		Helix:       hc,
-		DialClient:  wsSrv.Client(),
-		Base:        wsSrv.URL + "/",
-		HelixBase:   hlSrv.URL,
-		Poll:        10 * time.Millisecond,
-		Channels:    []string{"other"},
-		ChatAdapter: twitch.ChatAdapterIRC,
-		IRCBase:     firc.addr,
+		Receiver:   r,
+		Auth:       a,
+		Helix:      hc,
+		DialClient: wsSrv.Client(),
+		Base:       wsSrv.URL + "/",
+		HelixBase:  hlSrv.URL,
+		Poll:       10 * time.Millisecond,
+		Channels:   []string{"other"},
+		IRC:        "on",
+		IRCBase:    firc.addr,
 	})
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
@@ -364,4 +365,117 @@ func TestPlatformIRCMode(t *testing.T) {
 	<-done
 	assert.False(t, p.Status().Streamer)
 	assert.False(t, p.Status().Bot)
+}
+
+// TestPlatformIRCOnly operates every channel over the IRC session
+// (plan 2026-10-22): the EventSub adapter is off, so no EventSub
+// session is opened at all; the IRC session carries the home channel
+// besides the additional channels, the home channel arrives without a
+// channel stamp, and the stream state comes from the Helix poll.
+func TestPlatformIRCOnly(t *testing.T) {
+	t.Parallel()
+	r := &fakeReceiver{}
+	a := &botAuth{fakeAuth: &fakeAuth{token: "tok", ready: true}, botID: "99", botReady: true, botToken: "btok"}
+	firc := newFakeIRCServer(t, map[string]string{"other": "moderator/1"})
+	ws := &eventSubServer{}
+	hl := &multiHelixServer{
+		helixServer: &helixServer{},
+		users:       map[string]string{"other": "100"},
+		mods:        a,
+	}
+	hlSrv := httptest.NewTestServer(t, hl.handler(t))
+	t.Cleanup(hlSrv.Close)
+	wsSrv := httptest.NewTestServer(t, ws.handler(t))
+	t.Cleanup(wsSrv.Close)
+	hc := httpclient.New(httpclient.Options{Name: "twitch.helix", Base: hlSrv.Client(), Rate: 100, Burst: 100})
+	p := twitch.NewPlatform(twitch.PlatformOptions{
+		Receiver:   r,
+		Auth:       a,
+		Helix:      hc,
+		DialClient: wsSrv.Client(),
+		Base:       wsSrv.URL + "/",
+		HelixBase:  hlSrv.URL,
+		Poll:       10 * time.Millisecond,
+		Channels:   []string{"other"},
+		EventSub:   "off",
+		IRC:        "on",
+		IRCBase:    firc.addr,
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		assert.NoError(t, p.Run(ctx))
+	}()
+	// The IRC session joins the home channel and the additional
+	// channel; no EventSub session is opened.
+	firc.waitJoin(t)
+	require.True(t, p.Status().Streamer && p.Status().Bot)
+	assert.Empty(t, ws.tokens(), "the eventsub adapter is off")
+	// The stream state comes from the Helix poll (the fake answers no
+	// stream, the first answer is reported).
+	waitFor(t, 10*time.Second, func() int64 {
+		if len(r.streamStates()) >= 1 {
+			return 1
+		}
+		return 0
+	})
+	assert.Equal(t, []bool{false}, r.streamStates(), "the fake helix has no stream")
+	// The home channel arrives without a channel stamp, the additional
+	// channel with its stamp.
+	firc.push(t, "@display-name=Alice;id=m-home;tmi-sent-ts=1 :alice!alice@alice.tmi.twitch.tv PRIVMSG #streamer :hi home")
+	firc.push(t, "@display-name=Alice;id=m-other;tmi-sent-ts=1 :alice!alice@alice.tmi.twitch.tv PRIVMSG #other :hi other")
+	waitFor(t, 10*time.Second, func() int64 {
+		if len(r.received()) == 2 {
+			return 1
+		}
+		return 0
+	})
+	msgs := r.received()
+	assert.Empty(t, msgs[0].Channel, "the home channel carries no stamp")
+	assert.Equal(t, connector.Channel("other"), msgs[1].Channel)
+	cancel()
+	<-done
+	assert.False(t, p.Status().Streamer)
+	assert.False(t, p.Status().Bot)
+}
+
+// TestPlatformIRCOnlyBotNotReady operates no channel without the bot
+// account while the EventSub adapter is off (plan 2026-10-22): the
+// poll retries quietly, and Run ends with the context.
+func TestPlatformIRCOnlyBotNotReady(t *testing.T) {
+	t.Parallel()
+	r := &fakeReceiver{}
+	a := &botAuth{fakeAuth: &fakeAuth{token: "tok", ready: true}, botID: "99", botReady: false, botToken: "btok"}
+	firc := newFakeIRCServer(t, nil)
+	hl := &multiHelixServer{
+		helixServer: &helixServer{},
+		users:       map[string]string{},
+		mods:        a,
+	}
+	hlSrv := httptest.NewTestServer(t, hl.handler(t))
+	t.Cleanup(hlSrv.Close)
+	hc := httpclient.New(httpclient.Options{Name: "twitch.helix", Base: hlSrv.Client(), Rate: 100, Burst: 100})
+	p := twitch.NewPlatform(twitch.PlatformOptions{
+		Receiver: r,
+		Auth:     a,
+		Helix:    hc,
+		Poll:     10 * time.Millisecond,
+		Channels: []string{"other"},
+		EventSub: "off",
+		IRC:      "on",
+		IRCBase:  firc.addr,
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		assert.NoError(t, p.Run(ctx))
+	}()
+	time.Sleep(100 * time.Millisecond)
+	assert.False(t, p.Status().Streamer, "nothing is connected without the bot account")
+	assert.False(t, p.Status().Bot)
+	assert.Zero(t, firc.joined(), "the irc session never connects")
+	cancel()
+	<-done
 }

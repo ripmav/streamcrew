@@ -302,12 +302,19 @@ func (c *Client) send(ctx context.Context, req *http.Request) (*http.Response, e
 		}
 		r.Body = b
 	}
+	// The request is logged on its own, the answer beside it: the URL is
+	// the identity of the request, the status and the duration of the
+	// answer (Code-ADR-0003, debug level for the path tracing).
+	start := time.Now()
+	c.log.DebugContext(ctx, "request", "api", c.name, "method", r.Method, "url", r.URL.String())
 	//nolint:gosec // G704: the request targets the URL given by the caller of Do
 	resp, err := c.base.Do(r)
 	if err != nil {
 		cancel()
+		c.log.DebugContext(ctx, "the request failed", "api", c.name, "method", r.Method, "url", r.URL.String(), "took", time.Since(start), "error", err)
 		return nil, err
 	}
+	c.log.DebugContext(ctx, "response", "api", c.name, "method", r.Method, "url", r.URL.String(), "status", resp.StatusCode, "took", time.Since(start))
 	// The request's context must live as long as the response body:
 	// canceling it when the headers arrive makes the transport close
 	// the connection while the caller still reads the body. The 10 s

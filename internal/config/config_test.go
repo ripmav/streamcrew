@@ -275,6 +275,18 @@ func TestResolve(t *testing.T) {
 		{name: "shutdown timeout", modify: func(c *config.Config) { c.ShutdownTimeout = 0 }, wantErr: []string{"--shutdown-timeout"}},
 		{name: "stream buffer", modify: func(c *config.Config) { c.Stream.Buffer = 0 }, wantErr: []string{"--stream-buffer"}},
 		{name: "stream catch-up", modify: func(c *config.Config) { c.Stream.CatchUp = -1 }, wantErr: []string{"--stream-catchup"}},
+		{
+			name:    "both chat adapters off",
+			modify:  func(c *config.Config) { c.Twitch = config.TwitchConfig{EventSub: "off", IRC: "off"} },
+			wantErr: []string{"--twitch-eventsub and --twitch-irc", "at least one chat adapter"},
+		},
+		{
+			name:    "unknown chat adapter switch",
+			modify:  func(c *config.Config) { c.Twitch = config.TwitchConfig{EventSub: "maybe"} },
+			wantErr: []string{"--twitch-eventsub"},
+		},
+		{name: "eventsub off, irc on", modify: func(c *config.Config) { c.Twitch = config.TwitchConfig{EventSub: "off", IRC: "on"} }, wantListen: "127.0.0.1:8740"},
+		{name: "irc off, eventsub on", modify: func(c *config.Config) { c.Twitch = config.TwitchConfig{EventSub: "on", IRC: "off"} }, wantListen: "127.0.0.1:8740"},
 		{name: "tls cert without key", modify: func(c *config.Config) { c.TLSCert = "/cert.pem" }, wantErr: []string{"--tls-cert and --tls-key"}},
 		{name: "tls key without cert", modify: func(c *config.Config) { c.TLSKey = "/key.pem" }, wantErr: []string{"--tls-cert and --tls-key"}},
 		{name: "tls cert and key", modify: func(c *config.Config) { c.TLSCert = "/cert.pem"; c.TLSKey = "/key.pem" }, wantListen: "127.0.0.1:8740"},

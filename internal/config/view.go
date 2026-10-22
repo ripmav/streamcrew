@@ -26,6 +26,8 @@ type FileView struct {
 	CorsAllow         []string          `yaml:"cors_allow,omitempty" json:"cors_allow,omitempty"`
 	TLSCert           string            `yaml:"tls_cert,omitempty" json:"tls_cert,omitempty"`
 	TLSKey            string            `yaml:"tls_key,omitempty" json:"tls_key,omitempty"`
+	TwitchEventSub    string            `yaml:"twitch_eventsub,omitempty" json:"twitch_eventsub,omitempty"`
+	TwitchIRC         string            `yaml:"twitch_irc,omitempty" json:"twitch_irc,omitempty"`
 }
 
 // View returns the configuration in the form of the configuration file.
@@ -48,5 +50,7 @@ func (c *Config) View() FileView {
 		Revoke:            c.Revoke,
 		FileRoot:          c.FileRoot,
 		OutboundAllow:     c.OutboundAllow,
+		TwitchEventSub:    c.Twitch.EventSub,
+		TwitchIRC:         c.Twitch.IRC,
 	}
 }

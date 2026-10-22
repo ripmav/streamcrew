@@ -125,6 +125,8 @@ func (serveCmd) Run(ctx context.Context, e *Env) error {
 		ShutdownTimeout:   cfg.ShutdownTimeout,
 		StreamBuffer:      cfg.Stream.Buffer,
 		StreamCatchUp:     cfg.Stream.CatchUp,
+		TwitchEventSub:    cfg.Twitch.EventSub,
+		TwitchIRC:         cfg.Twitch.IRC,
 		SecretKey:         e.SecretKey,
 		LogWriter:         e.Stderr,
 		ConfigFile:        e.File.Path(),

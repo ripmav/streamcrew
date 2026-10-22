@@ -151,6 +151,7 @@ func opsPlatform(t *testing.T, a *fakeAuth, s *opsServer) *twitch.Platform {
 		Auth:      a,
 		Helix:     hc,
 		HelixBase: srv.URL,
+		IRC:       "off", // the Helix send path, the start default
 	})
 }
 

@@ -22,7 +22,6 @@ type channelsCmd struct {
 	List   channelsListCmd   `cmd:"" help:"List the additional channels of the profile. Works while the core runs."`
 	Add    channelsAddCmd    `cmd:"" help:"Add a channel the bot operates in. With the eventsub adapter, the bot account must moderate it. Needs a stopped core."`
 	Remove channelsRemoveCmd `cmd:"" name:"remove" help:"Remove an additional channel. Needs a stopped core."`
-	Chat   channelsChatCmd   `cmd:"" help:"Set the chat adapter of the additional channels (eventsub or irc). Needs a stopped core; the core picks it up on the next start."`
 }
 
 type channelsListCmd struct {
@@ -67,12 +66,7 @@ func (c channelsListCmd) Run(ctx context.Context, e *Env) error {
 			return err
 		}
 	}
-	adapter := chs.ChatAdapter
-	if adapter == "" {
-		adapter = settings.ChatAdapterEventsub
-	}
-	_, err = fmt.Fprintf(e.Stdout, "chat adapter: %s\n", adapter)
-	return err
+	return nil
 }
 
 type channelsAddCmd struct {
@@ -175,54 +169,6 @@ func (c channelsRemoveCmd) Run(ctx context.Context, e *Env) (err error) {
 		return &usageError{err: err}
 	}
 	_, err = fmt.Fprintf(e.Stdout, "removed channel %s\n", c.Login)
-	return err
-}
-
-type channelsChatCmd struct {
-	Adapter string `arg:"" help:"The chat adapter of the additional channels: eventsub or irc."`
-}
-
-// Run sets the chat adapter of the additional channels (spec
-// twitch-multi-channel.md, B15); the running core keeps the adapter of
-// its start, the next start picks the new one up.
-func (c channelsChatCmd) Run(ctx context.Context, e *Env) (err error) {
-	if c.Adapter != settings.ChatAdapterEventsub && c.Adapter != settings.ChatAdapterIRC {
-		return &usageError{err: fmt.Errorf("the chat adapter %q is unknown: want %q or %q", c.Adapter, settings.ChatAdapterEventsub, settings.ChatAdapterIRC)}
-	}
-	cfg, err := e.resolve()
-	if err != nil {
-		return err
-	}
-	id, err := e.profileID(cfg)
-	if err != nil {
-		return err
-	}
-	if !e.profiles(cfg).Exists(id) {
-		return fmt.Errorf("%w: %q", profile.ErrNotFound, id)
-	}
-	l, err := e.lock(cfg)
-	if err != nil {
-		return err
-	}
-	defer release(l, &err)
-	st, err := e.openProfile(ctx, cfg, id)
-	if err != nil {
-		return err
-	}
-	defer func() { err = errors.Join(err, st.Close()) }()
-	svc, err := settings.New(st)
-	if err != nil {
-		return err
-	}
-	chs, err := settings.Load(ctx, svc, settings.DefaultChannels())
-	if err != nil {
-		return &usageError{err: err}
-	}
-	chs.ChatAdapter = c.Adapter
-	if err := settings.Save(ctx, svc, chs); err != nil {
-		return &usageError{err: err}
-	}
-	_, err = fmt.Fprintf(e.Stdout, "chat adapter: %s\n", c.Adapter)
 	return err
 }
 

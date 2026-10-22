@@ -52,6 +52,13 @@ func (r *fakeReceiver) eventList() []connector.Event {
 	return append([]connector.Event(nil), r.events...)
 }
 
+// streamStates is a copy of the reported stream states, in order.
+func (r *fakeReceiver) streamStates() []bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]bool(nil), r.streams...)
+}
+
 func (r *fakeReceiver) Join(_ context.Context, _ platform.Name, _ connector.Channel, _ user.Identity) error {
 	return nil
 }
