@@ -317,17 +317,18 @@ func TestUpdateRedemption(t *testing.T) {
 	assert.JSONEq(t, `{"redemptions":[{"id":"d1","status":"FULFILLED"}]}`, body)
 }
 
-func TestGetEmotes(t *testing.T) {
-	f := &opsFake{answer: `{"data":[{"id":"e1","name":"Kappa","format":"png","tier":"0","image":"https://emotes/e1"}]}`}
+func TestGetChannelEmotes(t *testing.T) {
+	f := &opsFake{answer: `{"data":[{"id":"e1","name":"Kappa","images":{"url_1x":"https://emotes/e1/1x","url_2x":"https://emotes/e1/2x","url_4x":"https://emotes/e1/4x"}}]}`}
 	runOps(t, f, func(c *helix.Client) {
-		emotes, err := c.GetEmotes(context.Background(), "7")
+		emotes, err := c.GetChannelEmotes(context.Background(), "7")
 		require.NoError(t, err)
 		require.Len(t, emotes, 1)
 		assert.Equal(t, "Kappa", emotes[0].Name)
+		assert.Equal(t, "https://emotes/e1/1x", emotes[0].Images.URL1x)
 	})
 	_, path, query, _ := f.last(t)
-	assert.Equal(t, "/emotes", path)
-	assert.Equal(t, "7", query.Get("user_id"))
+	assert.Equal(t, "/chat/emotes", path)
+	assert.Equal(t, "7", query.Get("broadcaster_id"))
 }
 
 func TestGetCheermotes(t *testing.T) {

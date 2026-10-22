@@ -7,30 +7,31 @@ import (
 	"net/url"
 )
 
-// Emote is a Twitch emote (Helix GET /emotes).
+// Emote is a Twitch emote (Helix GET /chat/emotes).
 type Emote struct {
 	// ID is the emote ID.
 	ID string `json:"id"`
-	// Name is the emote code, e.g. "Kappa".
+	// Name is the emote code viewers type in chat, e.g. "Kappa".
 	Name string `json:"name"`
-	// Format is the image format, e.g. "png", "gif" or "webp".
-	Format string `json:"format"`
-	// Tier is "0" (all users) or "1" (subscribers).
-	Tier string `json:"tier"`
-	// Image is the base of the emote image URLs, without the size
-	// suffix.
-	Image string `json:"image"`
+	// Images are the static image URLs per size; the 1x URL is the
+	// image the emote catalog resolves.
+	Images EmoteImages `json:"images"`
 }
 
-// GetEmotes lists the emotes of the channel (Helix GET /emotes),
-// walking all pages. userID narrows to the channel's own emotes;
-// empty for the global set plus the channel's emotes.
-func (c *Client) GetEmotes(ctx context.Context, userID string) ([]Emote, error) {
+// EmoteImages are the image URLs of an emote (Helix GET /chat/emotes).
+type EmoteImages struct {
+	URL1x string `json:"url_1x"`
+	URL2x string `json:"url_2x"`
+	URL4x string `json:"url_4x"`
+}
+
+// GetChannelEmotes lists the custom emotes of the channel (Helix GET
+// /chat/emotes, the successor of the removed GET /emotes), walking all
+// pages. broadcasterID is the channel's account ID.
+func (c *Client) GetChannelEmotes(ctx context.Context, broadcasterID string) ([]Emote, error) {
 	q := url.Values{}
-	if userID != "" {
-		q.Set("user_id", userID)
-	}
-	req, err := c.request(ctx, "GET", "/emotes", q, nil)
+	q.Set("broadcaster_id", broadcasterID)
+	req, err := c.request(ctx, "GET", "/chat/emotes", q, nil)
 	if err != nil {
 		return nil, err
 	}
