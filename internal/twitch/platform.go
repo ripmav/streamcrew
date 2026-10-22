@@ -715,8 +715,9 @@ func (p *Platform) channelSession(ctx context.Context, cs channelSession) error 
 	})
 	// A single subscription is revoked (user_removed, version_removed):
 	// the session stays, the manager replaces the subscription with
-	// the current table (F11).
-	mapper.WithSubscriptionRevoked(func(ctx context.Context, sub RevokedSubscription) {
+	// the current table (F11). The details are already logged by the
+	// client at the revocation frame.
+	mapper.WithSubscriptionRevoked(func(ctx context.Context, _ RevokedSubscription) {
 		if err := mgr.Reconcile(ctx); err != nil && ctx.Err() == nil {
 			p.log.ErrorContext(ctx, "the post-subscription-revocation reconciliation failed", "error", err)
 		}

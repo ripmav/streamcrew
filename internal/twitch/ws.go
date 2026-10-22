@@ -548,7 +548,10 @@ func resolveReconnectURL(base, rel string) (*url.URL, error) {
 		return nil, err
 	}
 	p, err := url.Parse(rel)
-	if err != nil || p.IsAbs() {
+	if err != nil {
+		return nil, err
+	}
+	if p.IsAbs() {
 		return p, nil
 	}
 	b.Path = path.Join(b.Path, p.Path)
