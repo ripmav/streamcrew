@@ -72,11 +72,6 @@ func TestChannelsKong(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "profile channels list", kctx.Command())
 	assert.Equal(t, "json", root.ProfileCmd.Channels.List.Output)
-
-	kctx, err = parser.Parse([]string{"profile", "channels", "chat", "irc"})
-	require.NoError(t, err)
-	assert.Equal(t, "profile channels chat <adapter>", kctx.Command())
-	assert.Equal(t, "irc", root.ProfileCmd.Channels.Chat.Adapter)
 }
 
 // TestChannelsAddRemoveList covers the commands end to end against a real
@@ -117,16 +112,6 @@ func TestChannelsAddRemoveList(t *testing.T) {
 		}
 		return stdout.String(), err
 	}
-	chat := func(t *testing.T, adapter string) error {
-		t.Helper()
-		stdout, stderr := &syncedLog{}, &syncedLog{}
-		env.Stdout, env.Stderr = stdout, stderr
-		err := (channelsChatCmd{Adapter: adapter}).Run(ctx, env)
-		if err != nil {
-			t.Logf("stderr: %s", stderr.String())
-		}
-		return err
-	}
 
 	out, err := list(t)
 	require.NoError(t, err)
@@ -135,7 +120,7 @@ func TestChannelsAddRemoveList(t *testing.T) {
 	require.NoError(t, add(t, "somechannel"), "add the first channel")
 	out, err = list(t)
 	require.NoError(t, err)
-	assert.Equal(t, "somechannel\nchat adapter: eventsub\n", out)
+	assert.Equal(t, "somechannel\n", out)
 	assert.Equal(t, []string{"somechannel"}, channelsIn(ctx, t, dataDir).Additional, "the section is stored")
 
 	require.NoError(t, add(t, "other_channel"), "add a second channel")
@@ -147,18 +132,11 @@ func TestChannelsAddRemoveList(t *testing.T) {
 	require.NoError(t, remove(t, "Somechannel"), "remove by a different case")
 	out, err = list(t)
 	require.NoError(t, err)
-	assert.Equal(t, "other_channel\nchat adapter: eventsub\n", out)
+	assert.Equal(t, "other_channel\n", out)
 	assert.Equal(t, []string{"other_channel"}, channelsIn(ctx, t, dataDir).Additional)
 
 	assert.ErrorAs(t, remove(t, "missing"), &ue, "removing a channel that is not listed is a usage error")
 	assert.Equal(t, []string{"other_channel"}, channelsIn(ctx, t, dataDir).Additional, "a failed remove changes nothing")
-
-	assert.ErrorAs(t, chat(t, "websocket"), &ue, "an unknown adapter is a usage error")
-	require.NoError(t, chat(t, "irc"))
-	out, err = list(t)
-	require.NoError(t, err)
-	assert.Equal(t, "other_channel\nchat adapter: irc\n", out)
-	assert.Equal(t, settings.ChatAdapterIRC, channelsIn(ctx, t, dataDir).ChatAdapter, "the adapter is stored")
 
 	require.NoError(t, remove(t, "other_channel"))
 	out, err = list(t)

@@ -56,25 +56,42 @@ Zusätzliche Kanäle, in denen der Bot wirken soll:
 
 ```bash
 streamcrew profile channels add <login>   # Core gestoppt
-streamcrew profile channels list           # Kanäle und aktiver Adapter
-streamcrew profile channels chat irc       # Chat-Adapter wechseln (Core gestoppt)
+streamcrew profile channels list           # Kanäle auflisten
 ```
 
-Zwei Chat-Adapter betreiben die zusätzlichen Kanäle — der Home-Kanal
-läuft immer über EventSub und ist vom Adapter unbetroffen:
+Zwei Chat-Adapter betreiben die Kanäle — gewählt über die
+Startkonfiguration (`--twitch-eventsub`/`--twitch-irc`, Flag, Env,
+Konfigurationsdatei; **nur zum Start**, Neustart bei Änderung):
 
-| Adapter | Mod-Rechte des Bots im Kanal | Anmerkung |
-|---|---|---|
-| `eventsub` (Standard) | **erforderlich** — ohne Mod-Status wird der Kanal nicht betrieben | eigene EventSub-Verbindung und Subscriptions pro Kanal |
-| `irc` | keine Voraussetzung (ohne Mod wird `mod_missing` gewarnt, der Kanal läuft trotzdem) | der Chat der zusätzlichen Kanäle läuft über den Twitch-IRC-Chat des Bot-Kontos; zusätzlich Whispers an den Bot; Mod-Status aus den Chat-Badges |
+- **EventSub** (`twitch_eventsub: on`, Standard): der Heimkanal läuft
+  über seine EventSub-Session; sind beide Adapter an, laufen die
+  zusätzlichen Kanäle über EventSub und verlangen den Mod-Status des
+  Bots — ohne Mod-Status wird der Kanal nicht betrieben (eigene
+  EventSub-Verbindung und Subscriptions pro Kanal).
+- **IRC** (`twitch_irc: on`): die zusätzlichen Kanäle laufen über den
+  Twitch-IRC-Chat des Bot-Kontos — ohne Mod-Voraussetzung (ohne Mod
+  wird `mod_missing` gewarnt, der Kanal läuft trotzdem), mit Whispers
+  an den Bot und Senden; der Mod-Status wird aus den Chat-Badges
+  erkannt. Ist EventSub aus, übernimmt die IRC-Session zusätzlich den
+  Heimkanal (dessen Events tragen keinen Kanal-Stempel) und der
+  Stream-State kommt aus einem Helix-Poll statt der
+  `stream.online`/`stream.offline`-Events.
 
-Der Adapter wird nur beim Core-Start gelesen — `profile channels chat`
-verlangt einen gestoppten Core und greift beim nächsten Start. Im
-IRC-Modus sendet der Bot in den zusätzlichen Kanälen als Bot-Konto;
+**Mindestens ein Adapter muss an sein** — sind beide aus, startet der
+Core nicht und meldet den Fehler. Sollen alle Kanäle ausschließlich
+über IRC laufen (z. B. weil der EventSub-Endpunkt auf der eigenen IP
+blockiert ist):
+
+```yaml
+twitch_eventsub: off
+twitch_irc: on
+```
+
+Im IRC-Modus sendet der Bot in den zusätzlichen Kanälen als Bot-Konto;
 ist der Chat nur für Follower/Abonnenten offen und der Bot nicht
 entsprechend berechtigt, weist der Twitch-Server die Sendung ab (NOTICE
 in den Logs). Der IRC-Modus braucht das Bot-Konto; ohne Bot-Konto
-bleiben die zusätzlichen Kanäle unbetreut.
+bleiben die Kanäle unbetreut (Warnung im Log).
 
 Hinweis: Der Bot-Login verlangt mit dem IRC-Adapter zusätzlich den
 Scope `chat:edit`; ein älterer Bot-Login zeigt das in
@@ -245,6 +262,17 @@ kein API- oder TUI-Pfad):
 |---|---|---|
 | `stream-buffer` | `1024` | Wie viele Events der Stream-Hub dem Event-Bus gegenüber schulden darf, bevor der Bus für ihn wegwirft (`event.lag`). |
 | `stream-catchup` | `256` | Wie viele der letzten Events ein neu abonnierender Client per `since` nachholen kann. |
+
+**Chat-Adapter der Twitch-Plattform (Startzeit):** `twitch-eventsub`
+und `twitch-irc` (`--twitch-eventsub`/`--twitch-irc`,
+`STREAMCREW_TWITCH_EVENTSUB`/`STREAMCREW_TWITCH_IRC`) schalten die
+zwei Adapter an oder aus; Details oben. Beide gelten **nur zum Start**
+(⟳, Neustart bei Änderung; kein Hot-Apply, kein API- oder TUI-Pfad).
+
+| Schlüssel | Default | Bedeutung |
+|---|---|---|
+| `twitch_eventsub` | `on` | EventSub-Adapter: Heimkanal und, ohne IRC-Adapter, die zusätzlichen Kanäle. |
+| `twitch_irc` | `off` | IRC-Adapter: zusätzliche Kanäle und, ohne EventSub-Adapter, der Heimkanal. |
 
 ## Sicherheitshinweise
 

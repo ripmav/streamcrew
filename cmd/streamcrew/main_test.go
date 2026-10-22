@@ -112,6 +112,8 @@ func TestConfigShow(t *testing.T) {
 		LogFile:         "true",
 		LogMaxSize:      10,
 		LogMaxFiles:     3,
+		TwitchEventSub:  "on",
+		TwitchIRC:       "off",
 	}, view)
 
 	res = runCLI(t.Context(), t, "config", "show", "-o", "json")

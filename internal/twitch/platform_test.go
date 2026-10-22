@@ -211,7 +211,9 @@ func TestPlatformStopsOnTokenLoss(t *testing.T) {
 	a.setTokenFails(true)
 	a.setReady(false)
 	ws.drop.Store(true)
-	waitFor(t, 10*time.Second, func() int64 {
+	// The drop lands on the 10 s drop wait before the token check ends
+	// Run: the horizon must cover the wait.
+	waitFor(t, 15*time.Second, func() int64 {
 		if !p.Status().Streamer {
 			return 1
 		}

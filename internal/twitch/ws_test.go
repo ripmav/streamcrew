@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/coder/websocket"
@@ -212,6 +213,7 @@ func TestRunRevocationReconnectsWithAFreshToken(t *testing.T) {
 			return "tok1", nil
 		},
 		HTTPClient: srv.Client(),
+		DropWait:   100 * time.Millisecond,
 	})
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
@@ -247,7 +249,14 @@ func TestRunNoKeepaliveClosesAndReconnects(t *testing.T) {
 	})
 	defer srv.Close()
 
-	c := newClient(t, srv)
+	// The test asserts the keepalive supervision (the 2 s close), not
+	// the drop wait: the short wait keeps the reconnect fast.
+	c := twitch.New(twitch.Options{
+		Base:       srv.URL + "/",
+		Token:      func(context.Context) (string, error) { return "tok", nil },
+		HTTPClient: srv.Client(),
+		DropWait:   200 * time.Millisecond,
+	})
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	go func() {
@@ -264,53 +273,135 @@ func TestRunNoKeepaliveClosesAndReconnects(t *testing.T) {
 	<-done
 }
 
-// The first dial fails with 500: Run must retry at the same (base) URL,
-// not at an empty one, and the handshake must carry the
-// Twitch-Session-Id header.
+// The first dial fails with 500: Run must wait the fixed 10 s drop
+// wait, then retry at the same (base) URL, and the handshake must
+// carry the Twitch-Session-Id header. The 10 s run in the fake clock's
+// time (synctest bubble, in-memory network).
 func TestRunDialFailureRetriesAtTheBaseURL(t *testing.T) {
-	var dials, up atomic.Int64
-	var mu sync.Mutex
-	sessionIDs := make([]string, 0, 2)
-	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		sessionIDs = append(sessionIDs, r.Header.Get("Twitch-Session-Id"))
-		mu.Unlock()
-		if dials.Add(1) == 1 {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		conn, err := websocket.Accept(w, r, nil)
-		require.NoError(t, err)
-		require.NoError(t, conn.Write(r.Context(), websocket.MessageText, []byte(welcomeJSON("s1", "10"))))
-		// After the handshake, so the test's cancel() cannot race the
-		// reading of the new connection.
-		up.Store(1)
-		_, _, _ = conn.Read(r.Context())
-	}))
-	defer srv.Close()
+	synctest.Test(t, func(t *testing.T) {
+		var dials, up atomic.Int64
+		var mu sync.Mutex
+		sessionIDs := make([]string, 0, 2)
+		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/", r.URL.Path, "the retry must dial the base URL")
+			mu.Lock()
+			sessionIDs = append(sessionIDs, r.Header.Get("Twitch-Session-Id"))
+			mu.Unlock()
+			if dials.Add(1) == 1 {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			conn, err := websocket.Accept(w, r, nil)
+			require.NoError(t, err)
+			require.NoError(t, conn.Write(r.Context(), websocket.MessageText, []byte(welcomeJSON("s1", "10"))))
+			// After the handshake, so the test's cancel() cannot race the
+			// reading of the new connection.
+			up.Store(1)
+			_, _, _ = conn.Read(r.Context())
+		}))
+		defer srv.Close()
 
-	c := twitch.New(twitch.Options{
-		Base:       srv.URL + "/",
-		Token:      func(context.Context) (string, error) { return "tok", nil },
-		HTTPClient: srv.Client(),
+		c := twitch.New(twitch.Options{
+			Base:       srv.URL + "/",
+			Token:      func(context.Context) (string, error) { return "tok", nil },
+			HTTPClient: srv.Client(),
+		})
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		done := make(chan error, 1)
+		go func() { done <- c.Run(ctx, newTestHandler()) }()
+		// Before the 10 s drop wait is over, there must be no second dial.
+		time.Sleep(5 * time.Second)
+		assert.Equal(t, int64(1), dials.Load(), "the client dialed before the drop wait was over")
+		waitFor(t, 30*time.Second, up.Load)
+		cancel()
+		assert.NoError(t, <-done)
+		mu.Lock()
+		ids := append([]string(nil), sessionIDs...)
+		mu.Unlock()
+		assert.GreaterOrEqual(t, dials.Load(), int64(2), "the client did not retry after the failed dial")
+		require.NotEmpty(t, ids)
+		for _, id := range ids {
+			assert.NotEmpty(t, id, "the handshake must carry the Twitch-Session-Id header")
+		}
 	})
-	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		assert.NoError(t, c.Run(ctx, newTestHandler()))
-	}()
-	waitFor(t, 10*time.Second, up.Load)
-	cancel()
-	<-done
-	mu.Lock()
-	ids := append([]string(nil), sessionIDs...)
-	mu.Unlock()
-	assert.GreaterOrEqual(t, dials.Load(), int64(2), "the client did not retry after the failed dial")
-	require.NotEmpty(t, ids)
-	for _, id := range ids {
-		assert.NotEmpty(t, id, "the handshake must carry the Twitch-Session-Id header")
-	}
+}
+
+// Busy-loop regression (log analysis 2026-10-21, F1): the old backoff
+// (base 1 s, full jitter, 30 s lifetime budget) handed back a zero wait
+// with a discarded stop flag once the budget ran out, so Run spun the
+// dial in a tight loop (~286 dials/s) while the breaker was open. With
+// the fixed 10 s drop wait, the dials stay at the 10 s rhythm, and an
+// open breaker with a known retry-after (here +30 s) is probed at its
+// own pace: no dial before the retry-after, the probe after.
+func TestRunBreakerOpenWaitsTheRetryAfter(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var attempts atomic.Int64
+		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			attempts.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer srv.Close()
+		brk := breaker.New("test.eventsub", nil, httpclient.Evaluator)
+		c := twitch.New(twitch.Options{
+			Base:       srv.URL + "/",
+			Token:      func(context.Context) (string, error) { return "tok", nil },
+			HTTPClient: srv.Client(),
+			Breaker:    brk,
+		})
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		done := make(chan error, 1)
+		go func() { done <- c.Run(ctx, newTestHandler()) }()
+		// The dials land every 10 s (the drop wait): t≈0, 10, 20, 30, 40.
+		// After the fifth failure the breaker is open, retry-after t≈70.
+		time.Sleep(55 * time.Second)
+		assert.Equal(t, int64(5), attempts.Load(), "the client must not dial before the breaker's retry-after")
+		// The probe goes out at the retry-after (the breaker's open
+		// timeout, +30 s), not before and not in a loop: exactly one
+		// more attempt once the retry-after has passed.
+		time.Sleep(50 * time.Second)
+		assert.Equal(t, int64(6), attempts.Load(), "the client probed the breaker early or spun")
+		cancel()
+		assert.NoError(t, <-done)
+	})
+}
+
+// The drop wait applies after every drop, also after a previously
+// successful session (there is no lifetime budget to exhaust):
+// welcome, drop, 10 s, dial, drop, 10 s, dial, and so on.
+func TestRunDropWaitAfterASuccessfulSession(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var dials atomic.Int64
+		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			dials.Add(1)
+			conn, err := websocket.Accept(w, r, nil)
+			require.NoError(t, err)
+			require.NoError(t, conn.Write(r.Context(), websocket.MessageText, []byte(welcomeJSON("s1", "10"))))
+			// The session dies right after the welcome; the client must
+			// come back at the fixed 10 s rhythm, not faster.
+			_ = conn.Close(websocket.StatusServiceRestart, "")
+		}))
+		defer srv.Close()
+
+		c := twitch.New(twitch.Options{
+			Base:       srv.URL + "/",
+			Token:      func(context.Context) (string, error) { return "tok", nil },
+			HTTPClient: srv.Client(),
+		})
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		done := make(chan error, 1)
+		go func() { done <- c.Run(ctx, newTestHandler()) }()
+		time.Sleep(5 * time.Second)
+		assert.Equal(t, int64(1), dials.Load(), "the second dial came before the 10 s drop wait")
+		time.Sleep(10 * time.Second)
+		assert.Equal(t, int64(2), dials.Load(), "the 10 s rhythm broke after a successful session")
+		time.Sleep(10 * time.Second)
+		assert.Equal(t, int64(3), dials.Load(), "the drop wait must not accumulate a budget")
+		cancel()
+		assert.NoError(t, <-done)
+	})
 }
 
 func TestRunMissingTokenEndsWithoutBackoff(t *testing.T) {
@@ -374,10 +465,11 @@ func TestClientBreakerOpens(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(&lockedWriter{mu: &bufMu, w: &buf}, nil))
 	brk := breaker.New("test.eventsub", log, httpclient.Evaluator)
 	c := twitch.New(twitch.Options{
-		Base:    "ws://" + addr,
-		Token:   func(context.Context) (string, error) { return "tok", nil },
-		Breaker: brk,
-		Logger:  log,
+		Base:     "ws://" + addr,
+		Token:    func(context.Context) (string, error) { return "tok", nil },
+		Breaker:  brk,
+		Logger:   log,
+		DropWait: 100 * time.Millisecond,
 	})
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

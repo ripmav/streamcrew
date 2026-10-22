@@ -126,8 +126,10 @@ func (m *Mapper) OnRevoked(ctx context.Context) {
 // repeats of the messages (B22) and maps the event.
 func (m *Mapper) OnMessage(ctx context.Context, e Event) {
 	if !m.dedup.First(e.ID) {
+		m.log.DebugContext(ctx, "drop a repeated eventsub event", "eventtype", e.Subscription.Type, "id", e.ID)
 		return
 	}
+	m.log.DebugContext(ctx, "the eventsub event", "eventtype", e.Subscription.Type, "channel", m.channel)
 	if err := m.dispatch(ctx, e); err != nil {
 		m.log.WarnContext(ctx, "drop an unmapped eventsub event", "eventtype", e.Subscription.Type, "error", err)
 	}

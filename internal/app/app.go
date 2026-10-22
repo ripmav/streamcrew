@@ -579,14 +579,14 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if o.platform == nil {
 		o.platform = func(ctx context.Context, b PlatformBuilder) (connector.Platform, error) {
 			// The additional channels of the settings (roadmap 4.6); without
-			// the section, the home channel is operated only.
+			// the section, the home channel is operated only. The chat
+			// adapters are the start configuration (--twitch-eventsub,
+			// --twitch-irc, plan 2026-10-22), not a setting of the profile.
 			var channels []string
-			var chatAdapter string
 			if chs, err := settings.Load(ctx, a.settings, settings.DefaultChannels()); err != nil {
 				logger.WarnContext(ctx, "the channels settings are unknown, the home channel is operated only", "error", err)
 			} else {
 				channels = chs.Additional
-				chatAdapter = chs.ChatAdapter
 			}
 			return twitch.NewPlatform(twitch.PlatformOptions{
 				Receiver:       b.Receiver,
@@ -595,7 +595,8 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 				DialClient:     authClient,
 				Emotes:         a.emotes,
 				Channels:       channels,
-				ChatAdapter:    chatAdapter,
+				EventSub:       cfg.Twitch.EventSub,
+				IRC:            cfg.Twitch.IRC,
 				BTTVSocketBase: emote.BTTVSocketBase,
 				Logger:         component(b.Logger, "twitch"),
 			}), nil

@@ -326,6 +326,7 @@ func (s *Service) Token(ctx context.Context, p platform.Name, r connector.Accoun
 	if err != nil {
 		return "", err
 	}
+	s.logger.DebugContext(ctx, "refresh the access token", "platform", p, "role", r)
 	newTok, err := flow.Refresh(ctx, tok.RefreshToken)
 	if err != nil {
 		if errors.Is(err, ErrTokenExpired) {

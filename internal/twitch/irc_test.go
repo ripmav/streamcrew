@@ -31,6 +31,7 @@ type fakeIRCServer struct {
 
 	mu           sync.Mutex
 	conn         net.Conn
+	conns        int // the number of accepted connections so far
 	token        string
 	nick         string
 	joinedCount  int
@@ -61,9 +62,18 @@ func (s *fakeIRCServer) accept() {
 		}
 		s.mu.Lock()
 		s.conn = conn
+		s.conns++
 		s.mu.Unlock()
 		go s.serve(conn)
 	}
+}
+
+// connectionCount is the number of accepted connections so far; a
+// session that runs once holds exactly one.
+func (s *fakeIRCServer) connectionCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.conns
 }
 
 // serve speaks the protocol the client needs: the capability

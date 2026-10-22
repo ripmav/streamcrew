@@ -88,6 +88,11 @@ const pollInterval = 5 * time.Second
 // (roadmap 4.4, task 9); it matches the catalog's TTL.
 const emoteRefresh = time.Hour
 
+// streamPollInterval is the wait between the polls of the stream state
+// while the home channel runs without the EventSub adapter (plan
+// 2026-10-22); the poll replaces the stream.online/offline events.
+const streamPollInterval = 30 * time.Second
+
 // Auth supplies the data of the accounts of the channel (roadmap 4.3,
 // task 5, 4.6). The composition root adapts the auth service to it.
 type Auth interface {
@@ -144,6 +149,9 @@ type Platform struct {
 	// notReadyLogged announces the not-ready account once (Run polls
 	// every few seconds; the log must not repeat per poll).
 	notReadyLogged bool
+	// ircSkipLogged announces why the IRC session is not running once
+	// (connect runs every poll; the log must not repeat per poll).
+	ircSkipLogged bool
 	// sessions is the session state of the current session (nil
 	// outside of a session).
 	sessions *sessionState
@@ -159,10 +167,12 @@ type Platform struct {
 	// channels are the logins of the additional channels (spec
 	// twitch-multi-channel.md, B1); empty for the home channel only.
 	channels []string
-	// chatAdapter is the chat adapter of the additional channels (spec
-	// twitch-multi-channel.md, B15): ChatAdapterIRC for the IRC session,
-	// otherwise the EventSub sessions.
-	chatAdapter string
+	// eventSubOn and ircOn are the switches of the chat adapters (plan
+	// 2026-10-22): "off" in the options turns the adapter off, the home
+	// channel runs over the adapter that is on. At least one is on (the
+	// start configuration validates it).
+	eventSubOn bool
+	ircOn      bool
 	// ircBase is the IRC server address (tests use the test server);
 	// empty for the official one.
 	ircBase string
@@ -209,11 +219,16 @@ type PlatformOptions struct {
 	// in besides the home channel (spec twitch-multi-channel.md, B1); the
 	// home channel must not be listed (B3).
 	Channels []string
-	// ChatAdapter is the chat adapter of the additional channels (spec
-	// twitch-multi-channel.md, B15): "irc" for the IRC chat adapter,
-	// "" or "eventsub" for the EventSub session. It is read once, when
-	// the platform is built, and not hot-reloaded.
-	ChatAdapter string
+	// EventSub switches the EventSub adapter: "off" turns it off, empty
+	// or "on" keep it on (the default). The home channel runs over
+	// EventSub while it is on, and the additional channels while the IRC
+	// adapter is off.
+	EventSub string
+	// IRC switches the IRC adapter: "off" turns it off, empty or "on"
+	// keep it on (the default). The additional channels run over the IRC
+	// session while it is on, and the home channel while the EventSub
+	// adapter is off.
+	IRC string
 	// IRCBase overrides the IRC server address (tests use the test
 	// server); empty for the official one.
 	IRCBase string
@@ -233,19 +248,20 @@ func NewPlatform(o PlatformOptions) *Platform {
 		dial = &http.Client{}
 	}
 	return &Platform{
-		receiver:    o.Receiver,
-		auth:        o.Auth,
-		helix:       o.Helix,
-		dialClient:  dial,
-		base:        o.Base,
-		helixBase:   o.HelixBase,
-		log:         log,
-		poll:        o.Poll,
-		emotes:      o.Emotes,
-		channels:    o.Channels,
-		chatAdapter: o.ChatAdapter,
-		ircBase:     o.IRCBase,
-		socketBase:  o.BTTVSocketBase,
+		receiver:   o.Receiver,
+		auth:       o.Auth,
+		helix:      o.Helix,
+		dialClient: dial,
+		base:       o.Base,
+		helixBase:  o.HelixBase,
+		log:        log,
+		poll:       o.Poll,
+		emotes:     o.Emotes,
+		channels:   o.Channels,
+		eventSubOn: adapterOn(o.EventSub),
+		ircOn:      adapterOn(o.IRC),
+		ircBase:    o.IRCBase,
+		socketBase: o.BTTVSocketBase,
 		// The circuit breakers of the two external endpoints
 		// (Code-ADR-0007); the handshakes run through them.
 		eventSubBrk: breaker.New("twitch.eventsub", log, httpclient.Evaluator),
@@ -388,8 +404,13 @@ type channelSession struct {
 	ready func(ctx context.Context) (bool, error)
 }
 
-// connect runs the EventSub session of the home channel and the sessions
-// of the additional channels; it returns when the home session ends.
+// connect runs the home channel and the channels over the chat adapters
+// (plan 2026-10-22): the home channel runs over the EventSub session
+// while that adapter is on, and over the IRC session while it is off
+// (the session then carries the home channel besides the additional
+// ones); the additional channels run over the IRC session while that
+// adapter is on, and over the EventSub sessions while it is off. With
+// the EventSub adapter it returns when the home session ends.
 func (p *Platform) connect(ctx context.Context, st AccountState) error {
 	token := func(ctx context.Context) (string, error) { return p.auth.Token(ctx) }
 	bot, botErr := p.auth.Bot(ctx)
@@ -408,51 +429,97 @@ func (p *Platform) connect(ctx context.Context, st AccountState) error {
 		home.botID = bot.AccountID
 	}
 	var cancels []context.CancelFunc
-	if p.chatAdapter == ChatAdapterIRC {
-		// The additional channels run over the IRC session of the bot
-		// account (spec twitch-multi-channel.md, B16); without an EventSub
-		// session there are no additional-channel subscriptions.
-		p.runIRCSessions(ctx, st, bot, &cancels)
-	} else {
-		for _, cs := range p.additionalChannels(ctx, st, bot) {
-			csCtx, cancel := context.WithCancel(ctx)
-			cancels = append(cancels, cancel)
-			go func(cs channelSession) {
-				if err := p.channelSession(csCtx, cs); err != nil && csCtx.Err() == nil {
-					p.log.WarnContext(ctx, "the eventsub session of an additional channel ended", "channel", cs.login, "error", err)
-				}
-			}(cs)
-		}
+	var irc *IRCSession
+	p.log.DebugContext(ctx, "connect the twitch platform", "streamer", st.Login, "eventsub", p.eventSubOn, "irc", p.ircOn, "additional", len(p.channels))
+	if p.ircOn {
+		irc = p.runIRCSessions(ctx, st, bot, &cancels, !p.eventSubOn)
 	}
-	if len(cancels) > 0 {
-		p.setBot(true)
-		defer p.setBot(false)
-		defer p.setIRC(nil)
-		defer func() {
-			for _, cancel := range cancels {
-				cancel()
+	if p.eventSubOn {
+		if irc == nil {
+			// The additional channels run over the EventSub sessions; with
+			// the IRC session there are no additional-channel subscriptions
+			// (no double events).
+			for _, cs := range p.additionalChannels(ctx, st, bot) {
+				csCtx, cancel := context.WithCancel(ctx)
+				cancels = append(cancels, cancel)
+				go func(cs channelSession) {
+					if err := p.channelSession(csCtx, cs); err != nil && csCtx.Err() == nil {
+						p.log.WarnContext(ctx, "the eventsub session of an additional channel ended", "channel", cs.login, "error", err)
+					}
+				}(cs)
 			}
-		}()
+		}
+		if len(cancels) > 0 {
+			p.setBot(true)
+			defer p.setBot(false)
+			defer p.setIRC(nil)
+			defer func() {
+				for _, cancel := range cancels {
+					cancel()
+				}
+			}()
+		}
+		return p.channelSession(ctx, home)
 	}
-	return p.channelSession(ctx, home)
+	// The EventSub adapter is off: the IRC session carries the home
+	// channel and runs inline, so the account poll sees the connection
+	// like the home EventSub session.
+	if irc == nil {
+		// The bot account is not ready (the skip is logged); the poll
+		// retries with a fresh account state.
+		return nil
+	}
+	p.log.DebugContext(ctx, "connect the home channel over irc", "streamer", st.Login, "bot", bot.Login, "channels", irc.logins)
+	p.setBot(true)
+	defer p.setBot(false)
+	defer p.setIRC(nil)
+	defer func() {
+		for _, cancel := range cancels {
+			cancel()
+		}
+	}()
+	p.setConnected(true)
+	defer p.setConnected(false)
+	p.log.InfoContext(ctx, "the twitch platform connected over irc", "streamer", st.Login)
+	defer p.log.InfoContext(ctx, "the twitch platform disconnected")
+	// Without the EventSub session the stream state comes from the
+	// Helix poll instead of the stream.online/offline events.
+	go p.streamStatePoll(ctx, st)
+	return irc.Run(ctx)
 }
 
-// runIRCSessions starts the IRC session of the additional channels (spec
+// adapterOn is the switch of a chat adapter: "off" turns it off,
+// everything else (empty, "on") keeps it on, the default.
+func adapterOn(s string) bool {
+	return !strings.EqualFold(strings.TrimSpace(s), "off")
+}
+
+// runIRCSessions starts the IRC session of the channels (spec
 // twitch-multi-channel.md, B16, B19): it needs the bot account, and the
 // channels — with the home channel left out, as in the EventSub path —
-// plus a warm channel ID cache and the emote refresh of the channels for
-// the emote catalog and the BetterTTV socket.
-func (p *Platform) runIRCSessions(ctx context.Context, st, bot AccountState, cancels *[]context.CancelFunc) {
+// plus, with includeHome, the home channel the EventSub adapter left
+// behind (plan 2026-10-22). It returns the session while it runs, nil
+// while it does not.
+func (p *Platform) runIRCSessions(ctx context.Context, st, bot AccountState, cancels *[]context.CancelFunc, includeHome bool) *IRCSession {
 	logins := p.ircLogins(ctx, st.Login)
+	if includeHome && st.Login != "" {
+		logins = append(logins, st.Login)
+	}
 	if !bot.Ready {
-		if len(logins) > 0 {
-			p.log.InfoContext(ctx, "the additional channels are not operated: the bot account is not ready", "login", bot.Login)
+		if len(logins) > 0 && p.ircSkip() {
+			if includeHome {
+				p.log.InfoContext(ctx, "the channels are not operated over irc: the bot account is not ready", "login", bot.Login)
+			} else {
+				p.log.InfoContext(ctx, "the additional channels are not operated over irc: the bot account is not ready", "login", bot.Login)
+			}
 		}
-		return
+		return nil
 	}
 	if len(logins) == 0 {
-		p.log.InfoContext(ctx, "the additional channels are not operated: no channel is listed")
-		return
+		if p.ircSkip() {
+			p.log.InfoContext(ctx, "the additional channels are not operated over irc: no channel is listed")
+		}
+		return nil
 	}
 	csCtx, cancel := context.WithCancel(ctx)
 	*cancels = append(*cancels, cancel)
@@ -469,18 +536,37 @@ func (p *Platform) runIRCSessions(ctx context.Context, st, bot AccountState, can
 		Login:    bot.Login,
 		Token:    p.auth.BotToken,
 		Channels: logins,
+		Home:     homeLogin(includeHome, st.Login),
 		BotID:    bot.AccountID,
 		Base:     p.ircBase,
 		Emotes:   p.emotes,
 		Logger:   p.log,
 	})
 	p.setIRC(s)
+	if includeHome {
+		// The EventSub adapter is off: the caller runs the session
+		// inline (connect), so the account poll sees the connection
+		// and its errors like the home EventSub session. Starting it
+		// here as well would run it twice, with two connections of
+		// the same nick.
+		return s
+	}
 	go func() {
 		if err := s.Run(csCtx); err != nil && csCtx.Err() == nil {
 			p.log.WarnContext(ctx, "the irc session ended", "error", err)
 			p.setIRC(nil)
 		}
 	}()
+	return s
+}
+
+// homeLogin is the home login for the IRC session while it carries the
+// home channel (the EventSub adapter is off), else empty.
+func homeLogin(includeHome bool, login string) string {
+	if includeHome {
+		return login
+	}
+	return ""
 }
 
 // ircLogins is the additional channels the IRC session joins (spec
@@ -666,6 +752,38 @@ func (p *Platform) streamState(ctx context.Context, hc *helix.Client, accountID 
 	}
 }
 
+// streamStatePoll keeps the stream state fresh while the home channel
+// runs without the EventSub adapter (plan 2026-10-22): the
+// stream.online/offline events are gone, so it polls the stream over
+// Helix and reports every state change, the first included.
+func (p *Platform) streamStatePoll(ctx context.Context, st AccountState) {
+	hc, err := p.ops(ctx)
+	if err != nil {
+		p.log.WarnContext(ctx, "the helix client of the stream poll is unavailable", "error", err)
+		return
+	}
+	last, got := false, false // the first answer is reported, not only a change
+	for ctx.Err() == nil {
+		streams, err := hc.GetStreams(ctx, []string{st.AccountID}, nil)
+		if err != nil {
+			if ctx.Err() == nil {
+				p.log.WarnContext(ctx, "the state of the stream is unknown", "error", err)
+			}
+		} else if live := len(streams) > 0; !got || live != last {
+			last, got = live, true
+			p.log.DebugContext(ctx, "the state of the stream changed over the poll", "live", live)
+			if err := p.receiver.Stream(ctx, platform.Twitch, live); err != nil {
+				p.log.ErrorContext(ctx, "handing over the state of the stream failed", "error", err)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(streamPollInterval):
+		}
+	}
+}
+
 // refreshEmotes keeps the emote catalog of the channel fresh (roadmap
 // 4.4, task 9): it refreshes at once and on every tick until the context
 // ends.
@@ -739,6 +857,9 @@ func (p *Platform) setIRC(s *IRCSession) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.irc = s
+	if s != nil {
+		p.ircSkipLogged = false
+	}
 }
 
 // setConnected sets the status of the home channel session.
@@ -757,10 +878,26 @@ func (p *Platform) setBot(v bool) {
 func (p *Platform) setAccount(st AccountState) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	changed := p.lastAccount.Ready != st.Ready || p.lastAccount.Login != st.Login
 	p.lastAccount = st
 	if st.Ready {
 		p.notReadyLogged = false
 	}
+	if changed {
+		p.log.Debug("the state of the streamer account", "login", st.Login, "ready", st.Ready)
+	}
+}
+
+// ircSkip reports whether the skip of the IRC session may be logged now:
+// once per transition, not per poll (connect runs every poll).
+func (p *Platform) ircSkip() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.ircSkipLogged {
+		return false
+	}
+	p.ircSkipLogged = true
+	return true
 }
 
 // logNotReady announces that the streamer account is not ready — for

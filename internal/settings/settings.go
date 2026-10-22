@@ -58,7 +58,7 @@ func New(repo Repository) (*Service, error) {
 		{Type: sectionLocale, Version: 2, Decode: decode[Locale], Migrations: []polydoc.Migration{migrateLocaleV1}},
 		{Type: sectionEvents, Version: 1, Decode: decode[Events]},
 		{Type: sectionChannelPoints, Version: 1, Decode: decode[ChannelPoints]},
-		{Type: sectionChannels, Version: 1, Decode: decode[Channels]},
+		{Type: sectionChannels, Version: 2, Decode: decode[Channels], Migrations: []polydoc.Migration{migrateChannelsV1}},
 		{Type: sectionGeneral, Version: 1, Decode: decode[General]},
 		{Type: sectionChat, Version: 1, Decode: decode[Chat]},
 		{Type: sectionUsers, Version: 1, Decode: decode[Users]},
@@ -624,20 +624,7 @@ type Channels struct {
 	// Additional is the list of the logins of the additional channels,
 	// in the order they were added; empty for none.
 	Additional []string `json:"additional"`
-	// ChatAdapter is the chat adapter of the additional channels (spec
-	// twitch-multi-channel.md, B15): ChatAdapterEventsub or
-	// ChatAdapterIRC; empty for the default, the EventSub adapter. It is
-	// read only at the core start, there is no hot reload.
-	ChatAdapter string `json:"chatAdapter"`
 }
-
-// The chat adapters of the additional channels (spec
-// twitch-multi-channel.md, B15); ChatAdapterEventsub is the default,
-// an empty ChatAdapter counts as it.
-const (
-	ChatAdapterEventsub = "eventsub"
-	ChatAdapterIRC      = "irc"
-)
 
 // DefaultChannels returns the default of the section: no additional
 // channel, only the home channel is operated.
@@ -654,9 +641,6 @@ func (Channels) DocType() string { return sectionChannels }
 func (c Channels) Validate() error { return c.validate() }
 
 func (c Channels) validate() error {
-	if c.ChatAdapter != "" && c.ChatAdapter != ChatAdapterEventsub && c.ChatAdapter != ChatAdapterIRC {
-		return fmt.Errorf("the chat adapter %q is unknown: want %q or %q", c.ChatAdapter, ChatAdapterEventsub, ChatAdapterIRC)
-	}
 	seen := make(map[string]bool, len(c.Additional))
 	for _, login := range c.Additional {
 		if err := validLogin(login); err != nil {
@@ -694,6 +678,14 @@ func (c Channels) Contains(login string) bool {
 		}
 	}
 	return false
+}
+
+// migrateChannelsV1 drops the chat adapter of version 1: the adapters
+// are the start configuration (--twitch-eventsub, --twitch-irc, plan
+// 2026-10-22), not a setting of the profile.
+func migrateChannelsV1(doc map[string]jsontext.Value) error {
+	delete(doc, "chatAdapter")
+	return nil
 }
 
 // LocaleSystem names the locale of the environment the core runs in, as
