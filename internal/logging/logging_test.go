@@ -147,6 +147,20 @@ func TestFileOutput(t *testing.T) {
 	assert.Equal(t, logging.Redacted, recs[0]["password"])
 }
 
+// TestFileLogger covers NewFileLogger: the records are written as JSON
+// lines to the separate rotating file.
+func TestFileLogger(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "messages.json")
+	l, closer, err := logging.NewFileLogger(path, 1<<20, 3)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, closer.Close()) })
+	l.Info("user chat message", "text", "hello")
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"msg":"user chat message"`)
+	assert.Contains(t, string(data), `"text":"hello"`)
+}
+
 func TestNoOutputs(t *testing.T) {
 	t.Parallel()
 	logger, closer, err := logging.New(logging.Config{})

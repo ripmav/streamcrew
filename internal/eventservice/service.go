@@ -177,11 +177,29 @@ func WithUnknownCommandGate(gate func() bool) Option {
 	}
 }
 
+// WithMessagesLogger sets the separate logger the user messages go to,
+// beside the normal log: every chat message and whisper an adapter
+// received, with the full text. The app opens it as a file beside the
+// log file in the debug log level and in dry run; without the option,
+// no separate log is written.
+func WithMessagesLogger(l *slog.Logger) Option {
+	return func(s *Service) error {
+		if l == nil {
+			return fmt.Errorf("%w: nil messages logger", ErrInvalidOption)
+		}
+		s.msgLog = l
+		return nil
+	}
+}
+
 // Service is the event service. It is safe for concurrent use; it hands
 // over one thing at a time, in the order of the calls.
 type Service struct {
 	ports  Ports
 	logger *slog.Logger
+	// msgLog is the separate log of the user messages (chat messages and
+	// whispers, with the full text, WithMessagesLogger); nil for none.
+	msgLog *slog.Logger
 	// unknownCommandGate is open while an unknown chat command is
 	// logged; nil never logs one (WithUnknownCommandGate).
 	unknownCommandGate func() bool

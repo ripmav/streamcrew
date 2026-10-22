@@ -473,9 +473,12 @@ type fixture struct {
 	cmds     commands
 	service  *eventservice.Service
 	// logs captures the service log when set; gate opens the log of
-	// unknown chat commands when set (WithUnknownCommandGate).
-	logs *records
-	gate func() bool
+	// unknown chat commands when set (WithUnknownCommandGate); msgLogs
+	// captures the separate log of the user messages when set
+	// (WithMessagesLogger).
+	logs    *records
+	gate    func() bool
+	msgLogs *records
 }
 
 func newFixture(t *testing.T, cmds ...command.Command) *fixture {
@@ -516,6 +519,9 @@ func (f *fixture) restart(t *testing.T) *eventservice.Service {
 	if f.gate != nil {
 		opts = append(opts, eventservice.WithUnknownCommandGate(f.gate))
 	}
+	if f.msgLogs != nil {
+		opts = append(opts, eventservice.WithMessagesLogger(slog.New(f.msgLogs)))
+	}
 	svc, err := eventservice.New(t.Context(), eventservice.Ports{
 		Store: f.store, Commands: f.cmds, Engine: f.engine, Publisher: f.pub,
 		Chat: f.chat, Moderation: f.mod, Settings: f.settings.get, ChannelPoints: f.points.get,
@@ -546,6 +552,18 @@ func (r *records) find(msg string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Contains(r.msgs, msg)
+}
+
+func (r *records) count(msg string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, m := range r.msgs {
+		if m == msg {
+			n++
+		}
+	}
+	return n
 }
 
 // run runs svc until the returned function stops it.

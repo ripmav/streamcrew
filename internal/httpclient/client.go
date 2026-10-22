@@ -15,6 +15,7 @@
 package httpclient
 
 import (
+	"bytes"
 	"context"
 	json "encoding/json/v2"
 	"errors"
@@ -46,6 +47,9 @@ const (
 	defaultBudget = 30 * time.Second
 	// requestTimeout is the timeout of a single request.
 	requestTimeout = 10 * time.Second
+	// maxLoggedBody is the maximum number of response bytes the log of
+	// the response bodies keeps (Options.Responses).
+	maxLoggedBody = 64 << 10
 )
 
 // RetryPolicy is the retry behavior of Do (Code-ADR-0014, point 4). A zero
@@ -82,17 +86,23 @@ type Options struct {
 	// Logger logs the retries (Code-ADR-0003) and is expected to carry
 	// the component attribute; if nil, the log is discarded.
 	Logger *slog.Logger
+	// Responses logs the body of every response (truncated to
+	// maxLoggedBody) at info level, so the answers of the API are
+	// visible in the normal log; the composition root sets it in the
+	// debug log level and in dry run.
+	Responses bool
 }
 
 // Client is a resilient HTTP client for one external API
 // (Code-ADR-0014). A Client is safe for concurrent use.
 type Client struct {
-	name    string
-	base    *http.Client
-	brk     *breaker.Breaker
-	limiter *rate.Limiter
-	retry   RetryPolicy
-	log     *slog.Logger
+	name      string
+	base      *http.Client
+	brk       *breaker.Breaker
+	limiter   *rate.Limiter
+	retry     RetryPolicy
+	log       *slog.Logger
+	responses bool // log the response bodies at info level (Options.Responses)
 	// mu protects limited.
 	mu      sync.Mutex
 	limited time.Time // until which, because of x-ratelimit-remaining = 0, requests wait
@@ -127,12 +137,13 @@ func New(o Options) *Client {
 		p.Budget = defaultBudget
 	}
 	return &Client{
-		name:    o.Name,
-		base:    base,
-		brk:     o.Breaker,
-		limiter: rate.NewLimiter(lim, burst),
-		retry:   p,
-		log:     log,
+		name:      o.Name,
+		base:      base,
+		brk:       o.Breaker,
+		limiter:   rate.NewLimiter(lim, burst),
+		retry:     p,
+		log:       log,
+		responses: o.Responses,
 	}
 }
 
@@ -315,6 +326,15 @@ func (c *Client) send(ctx context.Context, req *http.Request) (*http.Response, e
 		return nil, err
 	}
 	c.log.DebugContext(ctx, "response", "api", c.name, "method", r.Method, "url", r.URL.String(), "status", resp.StatusCode, "took", time.Since(start))
+	if c.responses {
+		// The body is read for the log and streamed to the caller again:
+		// the logged bytes plus the unread rest are the original stream,
+		// so a truncated log never truncates the answer.
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, maxLoggedBody+1))
+		c.log.InfoContext(ctx, "response body", "api", c.name, "method", r.Method, "url", r.URL.String(),
+			"status", resp.StatusCode, "truncated", len(b) > maxLoggedBody, "body", string(b[:min(len(b), maxLoggedBody)]))
+		resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(b), resp.Body))
+	}
 	// The request's context must live as long as the response body:
 	// canceling it when the headers arrive makes the transport close
 	// the connection while the caller still reads the body. The 10 s

@@ -722,6 +722,36 @@ func TestUnknownCommandLog(t *testing.T) {
 	assert.False(t, f2.logs.find("unknown chat command"))
 }
 
+// TestUserMessagesLog covers the separate log of the user messages
+// (WithMessagesLogger): the chat messages and the whispers with the full
+// text go to the messages logger, no other event does; without the
+// option, no separate log is written.
+func TestUserMessagesLog(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, on(eventtype.ChatMessage), on(eventtype.ChatWhisper), on(eventtype.ChannelFollow))
+	f.msgLogs = &records{}
+	f.service = f.restart(t)
+	ctx := t.Context()
+	ada := account(platform.Mock, "ada")
+
+	require.NoError(t, f.service.Message(ctx, message(ada, "m1", "hello chat")))
+	assert.Equal(t, 1, f.msgLogs.count("user chat message"))
+
+	whisper := connector.Event{
+		Platform: platform.Mock,
+		Type:     eventtype.ChatWhisper,
+		User:     new(ada),
+		Details:  eventtype.Details{Message: new(eventtype.Message{Text: "a whisper"})},
+	}
+	require.NoError(t, f.service.Event(ctx, whisper))
+	assert.Equal(t, 1, f.msgLogs.count("user whisper"))
+
+	follow := connector.Event{Platform: platform.Mock, Type: eventtype.ChannelFollow, User: new(ada)}
+	require.NoError(t, f.service.Event(ctx, follow))
+	assert.Equal(t, 1, f.msgLogs.count("user chat message"), "a follow does not join the log")
+	assert.Equal(t, 1, f.msgLogs.count("user whisper"))
+}
+
 // TestAmbiguousAndMissing covers B16 of commands.md and a deleted entrance
 // command: an ambiguous message runs no chat command, a missing entrance
 // command is skipped.

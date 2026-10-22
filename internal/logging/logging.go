@@ -69,6 +69,19 @@ func New(cfg Config) (*slog.Logger, io.Closer, error) {
 	return slog.New(h), closer, nil
 }
 
+// NewFileLogger opens the rotating JSON log file at path and returns its
+// logger and the closer; call the closer after the last log call. The
+// records are masked like the main log file, so a separate file never
+// carries secrets.
+func NewFileLogger(path string, maxSize int64, maxFiles int) (*slog.Logger, io.Closer, error) {
+	f, err := OpenRotatingFile(path, maxSize, maxFiles)
+	if err != nil {
+		return nil, nil, err
+	}
+	h := slog.NewJSONHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: redact})
+	return slog.New(h), f, nil
+}
+
 // Dynamic is the mutable part of a logger built by NewDynamic: the levels
 // and the output (console format, log file, rotation). Update applies a new
 // configuration to the whole logger tree; the old log file is closed.
