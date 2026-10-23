@@ -652,6 +652,7 @@ type hypeTrain struct {
 type adBreak struct {
 	DurationSeconds int `json:"duration_seconds"`
 }
+
 // goal is the payload of the channel.goal events (begin/progress/end).
 type goal struct {
 	CurrentAmount int64 `json:"current_amount"`
@@ -678,7 +679,7 @@ type charityMoney struct {
 //	amount display; use decimal output if exact minor units matter.
 func (m charityMoney) Amount() int64 {
 	div := int64(1)
-	for i := 0; i < m.DecimalPlaces; i++ {
+	for range m.DecimalPlaces {
 		div *= 10
 	}
 	return m.Value / div
