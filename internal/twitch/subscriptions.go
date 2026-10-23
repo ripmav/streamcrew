@@ -219,8 +219,10 @@ func (m *Manager) Run(ctx context.Context) error {
 // them with the old session; the session_reconnect carries them over,
 // they stay enabled and are kept) and creates the missing ones (the
 // new session's 10 s window, EventSub Reference "Welcome message").
-// A 400 answer (limit reached, condition occupied) is skipped with a
-// warning, not an error (roadmap 4.3); every other error is returned.
+// A 400 answer (limit reached, condition occupied) and a 409 (the
+// subscription already exists, e.g. right after the session handshake
+// created it) are skipped with a warning, not an error (roadmap 4.3);
+// every other error is returned.
 // The subscriptions are delivered to the current EventSub session
 // (websocket transport); Run calls it at the start and on the
 // interval; the composition root calls it right after every new
@@ -324,7 +326,7 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 			Transport: helix.EventSubTransport{Method: "websocket", SessionID: sessionID},
 		}); err != nil {
 			var se *httpclient.StatusError
-			if errors.As(err, &se) && se.StatusCode == http.StatusBadRequest {
+			if errors.As(err, &se) && (se.StatusCode == http.StatusBadRequest || se.StatusCode == http.StatusConflict) {
 				m.log.WarnContext(ctx, "skip the eventsub subscription", "eventtype", w.d.EventType, "error", err)
 				continue
 			}
