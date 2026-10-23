@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12); Phase 2 abgeschlossen (PR #36); Phase 3 abgeschlossen, M1 erreicht (PR #143) |
-| **Stand** | 2026-10-16 |
+| **Stand** | 2026-10-23 |
 | **Grundlage** | [`plan.md`](plan.md) (Architektur, Prioritäten, Risiken), [`starting.md`](starting.md), [`adr/`](adr/README.md) |
-| **Aktuelle Phase** | Phase 5: Core-Services (in Arbeit; 5.1, 5.2.1, 5.2.2, 5.2.3, 5.2.4, 5.2.5, 5.2.6, 5.3 und 5.4 abgeschlossen) |
+| **Aktuelle Phase** | Phase 6: API, CLI, TUI (in Arbeit; 6.1, 6.5 und 6.7-Doku abgeschlossen, siehe Nachprüfung 2026-10-23) |
 
 > **Name:** Das Projekt heißt vorerst `streamcrew` (Codename, [ADR-0008](adr/0008-codename-streamcrew.md)); Binary `streamcrew`. Der endgültige Name wird vor Gate O geprüft.
 
@@ -95,7 +95,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 3: Engine, Templates, Actions, Mock | abgeschlossen 2026-10-07, M1 erreicht (PR #143, CI grün); vertagt: die Schwelle der Sammelgeschenke (3.4, P1) |
 | Phase 4: Twitch | 4.1 (Authentifizierung), 4.2 (Helix-Client), 4.3 (EventSub), 4.4 (Funktionen) und 4.5 (Tests) abgeschlossen; das Exit-Kriterium des manuellen 4-h-Test-Streams (4.5) ist noch offen |
 | Phase 5: Core-Services | abgeschlossen: 5.1, 5.2.1–5.2.6, 5.3, 5.4, 5.5 und 5.6 (P0 und P1) |
-| Phase 6: API, CLI, TUI | in Arbeit: 6.1–6.4 abgeschlossen; 6.5 und 6.6 code-seitig abgeschlossen (Stack offen); offen: 6.7 Release-Tag |
+| Phase 6: API, CLI, TUI | in Arbeit (Nachprüfung 2026-10-23): 6.1, 6.2–6.3 (bis auf CLI-Reste), 6.4 (Grundgerüst; Ansichten bis auf Login-Flow), 6.5 und 6.6 abgeschlossen; offen: 6.2 Agent-Handler, 6.4 TUI-Tests mit Test-Harness (Plan `superpowers/plans/2026-10-23-tui-teatest-v2.md`), 6.7 ADR-0025-Akzeptanz und erster Release-Tag |
 | Phase 7: Overlays und Medien | offen |
 | Phase 8: Economy, Community, Spiele | offen |
 | Phase 9: Integrationen, Scripting, Agent | offen |
@@ -685,8 +685,8 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 
 - [x] `buf` einrichten (lint, breaking, generate); Code-ADR-0016 zur Codegenerierung schreiben (`buf`, esbuild; übernimmt die sqlc-Konventionen aus [Code-ADR-0008](adr/code/0008-datenbankzugriff.md)) (S), erledigt 2026-10-16 in `buf.yaml`, `buf.gen.yaml` und `api/generate.go` (buf v2, Lint `STANDARD`, Breaking `FILE`; Generierung mit `protoc-gen-go` + `protoc-gen-connect-go` nach `api/gen`, `paths=source_relative`; Versionen im `go:generate` gepinnt; CI: `buf lint` + Regenerierungs-Check; `SystemService` als erster Service generiert) und [Code-ADR-0016](adr/code/0016-codegenerierung.md)
 - [x] Protos `v1alpha1` gemäß Plan §6.14 (L), erledigt 2026-10-16 in `api/proto/streamcrew/v1alpha1/` (generiert nach `api/gen`): `SystemService`, `AuthService`, `StreamService` (Subscribe + AnswerPrompt), `ChatService`, `CommandService` inkl. Typkatalog, `UserService`, `CounterService`, `SettingsService`, `BackupService`; Commands als Code-Dokument + typisiertes `CommandSummary`, Request-/Response-Namen deskriptiv und paket-eindeutig (Code-ADR-0016)
-- [ ] Ereignisstrom (Server-Streaming) mit Filtern und Wiederaufsetzen ab den letzten N Ereignissen (M) (Vertrag in `stream.proto` aus 6.1.2: `Event`, `Subscribe`, `EventFilter`, `since`; die Server-Umsetzung folgt mit 6.2)
-- [ ] Prompt-Mechanismus (Information, Bestätigung, Eingabe) mit Antwort-RPC (S) (Vertrag in `stream.proto` aus 6.1.2: `Prompt`, `AnswerPrompt`; die Server-Umsetzung folgt mit 6.2)
+- [x] Ereignisstrom (Server-Streaming) mit Filtern und Wiederaufsetzen ab den letzten N Ereignissen (M), erledigt (Nachprüfung 2026-10-23; Implementierung kam mit dem Stream-Hub aus 6.2, Checkbox vergessen): `StreamService.Subscribe` als Server-Stream über den Event-Bus mit `EventFilter` (Kinds, Platforms, Channels, MinLevel) und `since`-Puffer für den Reconnect (`internal/api/stream.go`)
+- [x] Prompt-Mechanismus (Information, Bestätigung, Eingabe) mit Antwort-RPC (S), erledigt (Nachprüfung 2026-10-23; Implementierung kam mit 6.2, Checkbox vergessen): `internal/prompt` mit `prompt.ask`-Ereignis und `AnswerPrompt`-RPC (`internal/api/stream.go`)
 - [x] Agent-Schnittstelle skizzieren (nur Vertrag, Umsetzung Phase 9), damit `v1` sie später aufnehmen kann (S), erledigt 2026-10-16 in `api/proto/streamcrew/v1alpha1/agent.proto` (generiert nach `api/gen`): `AgentService` (Register, Unregister, ListAgents, Tasks als Server-Stream, SubmitTaskResult), `AgentCapability`/`AgentInfo`/`AgentTask`; Tasks als opake JSON-Payloads, damit der Vertrag bei neuen Arten stabil bleibt (Plan §6.19); nur Vertrag, keine Umsetzung
 
 ### 6.2 API-Server
@@ -704,25 +704,21 @@ Reihenfolge: erst die Doku als unterster PR des Stacks, dann Mock-Plattform, Tri
 
 ### 6.3 CLI
 
-- [ ] Unterkommandos gemäß Plan §7.2 im MVP-Umfang, `--output json`, Remote-Verbindung (`--server`, `--token`) (M)
+- [ ] Unterkommandos gemäß Plan §7.2 im MVP-Umfang, `--output json`, Remote-Verbindung (`--server`, `--token`) (M); erledigt (Nachprüfung 2026-10-23): die Unterkommandos aus Plan §7.2 ohne `agent`/`quote`/`currency`/`overlay`/`integration`/`import` (P1/P2), `--output json` und `--server`/`--token` (Flags und Env); noch offen: `chat tail`, `event tail`, `user link`, `config validate`, `command create` und `command edit`
 - [x] `chat send --as <nutzer>` und `event simulate` gegen einen laufenden Core mit Mock-Plattform über die API; bis dahin die Mock-Konsole aus 3.6 (S), erledigt 2026-10-17: `chat send` (Bot/Streamer) und `event simulate` sprechen den Core über die API an (globale `--server`/`--token`-Flags, Default `http://127.0.0.1:8740`, Env `STREAMCREW_SERVER`/`STREAMCREW_TOKEN`), `chat send --as <login>` und `event simulate chat.message` simulieren Nutzer-Nachrichten der Mock-Plattform über den neuen `StreamService.Simulate`-RPC (Scope `control`), alle anderen Katalog-Typen laufen über `Platform.Simulate`
 - [x] Shell-Completion (S), erledigt 2026-10-17: `streamcrew completion bash|zsh|fish` gibt statische Skripte aus (Top-Level-Befehle + Subkommandos, aus einer einzigen `commandTree`-Tabelle generiert); Kong selbst hat kein Completion
 - [x] `streamcrew diag bundle`: Diagnose-Paket mit Logs, Versionen und Konfiguration, Secrets maskiert ([ADR-0011](adr/0011-keine-telemetrie.md)) (S), erledigt 2026-10-17: ZIP mit README, `version.txt` (Build-Info), `config.yaml` (effektive Konfiguration ohne Secrets), `paths.txt`, `profiles.txt`, `api-tokens.txt` (Name/Scope/Datum, ohne Hashes), `runtime.json` (wenn ein Core läuft) und `logs/`; Token-Werte, Secret-Key, Plattform-Tokens und TLS-Keys kommen nicht ins Paket, fehlgeschlagenes Bundle wird entfernt
 
 ### 6.4 TUI
 
-- [ ] Grundgerüst mit Bubble Tea v2 (M):
+- [x] Grundgerüst mit Bubble Tea v2 (M), erledigt (Nachprüfung 2026-10-23; Checkbox vergessen): `internal/tui` (Bubble Tea v2, Bubbles und Lip Gloss v2):
   - Layout, Tastenkürzel, Hilfe
   - helles und dunkles Theme
   - Verbindung zu lokalem oder entferntem Core
-- [ ] Ansichten (L):
-  - Dashboard
-  - Chat: lesen, senden, moderieren
-  - Event-Feed
-  - Command-Queue: pausieren, abbrechen, wiederholen
-  - Commands: Liste, Suche, Ausführen, An/Aus, Bearbeiten im `$EDITOR`
-  - Nutzer, Logs, Login-Flow
-- [ ] TUI-Tests mit dem Test-Harness für Bubble Tea v2 (S)
+- [ ] Ansichten (L); Nachprüfung 2026-10-23: alle Ansichten außer dem Login-Flow sind erledigt (Checkbox vergessen):
+  - [x] Dashboard, Chat (lesen, senden, moderieren), Event-Feed, Command-Queue (pausieren, abbrechen, wiederholen), Commands (Liste, Suche, Ausführen, An/Aus, Bearbeiten im `$EDITOR`), Nutzer, Logs und Einstellungen als Ansichten 1–8
+  - [ ] Login-Flow: die TUI kennt noch keinen Auth-Pfad (Plan §7.3: Login-Flows mit Anzeige des Device-Codes)
+- [ ] TUI-Tests mit dem Test-Harness für Bubble Tea v2 (S); Plan: [`superpowers/plans/2026-10-23-tui-teatest-v2.md`](superpowers/plans/2026-10-23-tui-teatest-v2.md) (2026-10-23). Die 20 bestehenden TUI-Tests fahren das Modell per eigener `keyMsg`-Fakes, nicht per Harness (`charm.land/x/exp/teatest/v2`)
 
 ### 6.5 On-the-fly-Konfiguration (Server-Modus)
 
@@ -733,7 +729,7 @@ hot-capablen Einstellungen an. Vom Flag oder der Umgebungsvariablen fixierte Ein
 (ADR-0005). Der TUI ist der einzige Pfad für Laufzeit-Änderungen — es gibt dafür keine neuen CLI-Flags.
 
 - [x] Code-ADR-0021 On-the-fly-Konfiguration: welche Einstellungen sind hot, welche brauchen einen Restart, welche bleiben fix (S), erledigt 2026-10-18: [0021](adr/code/0021-on-the-fly-konfiguration.md)
-- [ ] Hot-Apply-Engine im Core (M):
+- [x] Hot-Apply-Engine im Core (M), erledigt (Nachprüfung 2026-10-23; Checkbox vergessen): `internal/config` (Watcher, `Hot()`/`RestartOnly()`, `ApplyFuncs`-Hooks) + `App.hotApplies()` in `internal/app`, Tests `watch_test.go`/`watch_apply_test.go`:
   - `log-level`, `log-component-level`: sofort gültig für alle Komponenten (gemeinsame Level-Store)
   - `log-format`, `log-file`, `log-max-size`, `log-max-files`: Austausch des Ausgabe-Handlers des Logger-Baums
   - `dry-run`: umschaltbarer Dry-Run-Wrapper (Plattform und Twitch-Operations)
@@ -785,13 +781,13 @@ Konfiguration (6.5) bzw. der Konfigurationsdatei.
 
 ### 6.7 Release MVP
 
-- [ ] ADR-0023 Release und Distribution (S)
-- [ ] Release-Pipeline mit beiden Artefakten am selben Release ([ADR-0007](adr/0007-release-artefakte-des-cores.md)) (M):
+- [ ] ADR-0023 Release und Distribution (S); entstanden als [ADR-0025](adr/0025-release-und-distribution.md) (Umnummerierung, 2026-10-17), Status: Vorgeschlagen — Akzeptanz durch den Projektinhaber ausstehend (Nachprüfung 2026-10-23)
+- [ ] Release-Pipeline mit beiden Artefakten am selben Release ([ADR-0007](adr/0007-release-artefakte-des-cores.md)) (M); Pipeline steht (Nachprüfung 2026-10-23): `.goreleaser.yaml`, `.github/workflows/release.yml` (goreleaser + Modul-Archiv via `scripts/modulezip` + Prüf-Schritt `scripts/modulecheck.sh` + Container-Image-Tar), `packaging/systemd/`; noch offen: erster Lauf mit einem echten Tag `v*.*.*` (es existiert noch kein Tag, ADR-0025 noch nicht akzeptiert):
   - `goreleaser`: Binaries für alle Zielplattformen, Container-Image, Beispiel für eine systemd-Unit
   - Go-Modul als Quellarchiv im Proxy-Layout (`.zip`, `.mod`, `.info`), z. B. mit `golang.org/x/mod/zip`
   - Prüfsummen und SBOM für alle Artefakte
   - Prüfschritt: ein Testprogramm per `GOPROXY=file://…` gegen das Quellarchiv bauen
-- [ ] Nutzerdokumentation (M):
+- [x] Nutzerdokumentation (M), erledigt (Nachprüfung 2026-10-23; Checkbox vergessen): `docs/usage.md` mit:
   - Schnellstart: Twitch-Login, erster Command als YAML
   - Betriebsmodi: Streaming-PC als Standard, Server-Anwendung mit Reverse Proxy, TLS und Token (ADR-0003)
   - Sicherheitshinweise
@@ -1273,6 +1269,7 @@ Eigene Datei seit 2026-10-09: [backlog.md](backlog.md).
 
 | Datum | Änderung |
 |---|---|
+| 2026-10-23 | Roadmap-Nachprüfung Phase 6 gegen den Code (`main` bei `de57571`): Abgehakt, weil code-seitig abgeschlossen, aber vergessen: 6.1 Ereignisstrom und Prompt-Mechanismus (Implementierung kam mit dem Stream-Hub/6.2), 6.4 Grundgerüst (Layout, Tasten, Hilfe, Themes, lokale und remote Verbindung), 6.5 Hot-Apply-Engine (`internal/config/watch.go` + `App.hotApplies`) und 6.7 Nutzerdokumentation (`docs/usage.md`). Vermerkt: 6.3 CLI steht bis auf `chat tail`, `event tail`, `user link`, `config validate`, `command create|edit`; 6.4 Ansichten bis auf den Login-Flow; 6.7 ADR-0023 ist als ADR-0025 (Vorgeschlagen) entstanden, die Release-Pipeline steht, aber kein Tag wurde geschnitten. Neuer Plan: TUI-Tests mit dem Bubble-Tea-v2-Test-Harness (`superpowers/plans/2026-10-23-tui-teatest-v2.md`). |
 | 2026-10-22 | EventSub- und IRC-Adapter per Startkonfiguration an-/ausschaltbar: `twitch-eventsub`/`twitch-irc` (`TwitchConfig`, Präfix `twitch-`, Flag, Env, Konfigurationsdatei; `on`/`off`, Defaults `on`/`off`); Validierung in `Resolve` — beide aus ⇒ Usage-Fehler, der Core startet nicht. Routing: Heimkanal über EventSub, solange es an ist, sonst über die IRC-Session (joinnt dann Heimkanal + zusätzliche; Heim-Events ohne Channel-Stempel, kein Mod-Check, Stream-State aus Helix-Poll 30 s); zusätzliche Kanäle über IRC, solange es an ist, sonst EventSub. Das Settings-Feld `channels.chatAdapter` und der CLI-Befehl `profile channels chat` sind entfernt (`channels` Sections-Version 2, Migration streicht das Feld). `core.Options` spiegelt die Felder (Konvention 6.2.4), `serveCmd` mappt sie weiter. Debug-Logs (Code-Pfade und Request/Response): httpclient je Request/Response (Method, URL, Status, Dauer), EventSub-Dial (ohne Token) + Frame-Typen, jede IRC-Zeile (gekürzt) + Join + Send, Plattform-Pfad im `connect` + Account-Übergänge, jedes eingehende Event nach der Dedup, Token-Refresh; Bot-nicht-bereit als Transition-Warnung statt Poll-Spam. Spec `twitch-multi-channel.md` B15 (revidiert), B16; Test-Matrix `docs/tests/I-twitch-adapter-toggles.md`. Tests: config-Validierung, IRC-only-Plattform (Fake-IRC/Helix), IRC-Mode, EventSub-Modus, Helix-Send, channels-Migration, CLI. |
 | 2026-10-18 | Phase 6.2.6 (Stream-Größen zur Startzeit) code-seitig abgeschlossen: `stream-buffer` (Default 1024) und `stream-catchup` (Default 256) als neue Konfigurationsschlüssel (`StreamConfig`, Präfix `stream-`) — Flag, Env und Konfigurationsdatei; Validierung ≥ 1 in `Resolve` (Usage-Fehler). Die Werte werden in `app.New` per Wertekopie in den `apiStream`/Stream-Hub übernommen und nie aus der Live-Konfiguration neu gelesen (Startzeit-Strenge, auch für den lazy gestarteten Hub); nicht in `Hot()` → TUI zeigt ⟳, der Watcher meldet bei Datei-Änderung „restart“; kein API- oder TUI-Pfad. `core.Options` spiegelt die Felder (Konvention 6.2.4), `serveCmd` mappt sie weiter. Der Per-Client-Fan-out-Kanal (256) und das interne `event.DefaultBuffer` bleiben unverändert. Tests: Validierung/Defaults (config), Catch-up-Größe des Hubs (deterministisch, ohne Sleeps), Bus-Buffer-Wiring. |
 | 2026-10-18 | Phase 6.6 (1/4: Log-Stream im Core) code-seitig abgeschlossen: der dynamische Logger bekommt einen Sink (`Dynamic.SetSink`), der jedes Record der Level-Store neben dem Terminal-/Datei-Ausgang erhält (auch die Komponente-Derivationen, mit ihrer Derivation — der Sink sieht das `component`-Attribut); die App hängt den Sink an den Bus, jedes Record wird zum `log.line`-Event (`level` lower-case, `component`, `message` — die Werte des `LogEntry`), der Stream wandelt es um. Neuer eventtype `log.line` (Anwendungs-Ereignis wie die Auth-Events, nicht in `All()`; Namensregel: `log` allein wäre ungültig). Spec `events.md` dokumentiert die Log-Ereignisse. Read-only: das Core-Log-Level bleibt bei der On-the-fly-Konfiguration (6.5). Tests: Sink-Ebene (Level-Filter, Update, Komponente-Logger) und E2E (Warn-Zeile des Watchers → Bus-Event). |
