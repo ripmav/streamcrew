@@ -28,33 +28,35 @@ bestehenden Tests werden 1:1 migriert, plus die in §4 genannten Lücken.
 
 ## 3. Schritte
 
-- [ ] **3.1 Dependency** `charm.land/x/exp/teatest/v2` (latest) nach
+- [x] **3.1 Dependency** `github.com/charmbracelet/x/exp/teatest/v2` (latest) nach
   `go.mod`/`go.sum` via `go get`; Renovate pflegt sie weiter (Go-Module-Gruppe).
   x/exp-Status in einen Kommentar in der import-Kommentar-Zeile oder im Plan notieren;
   Fallback bei Bruch: bestehendes `keyMsg`-Setup behalten.
-- [ ] **3.2 Test-Helfer** in `internal/tui` (test-only, z. B. `teatest_helper_test.go`):
-  - `newTestModel(t, opts Options, programOpts ...tea.ProgramOption) *teatest.TestModel`:
+  *(Hinweis: die x/exp-Pakete liegen unter `github.com/charmbracelet/x/exp/…`,
+  nicht unter `charm.land/…`; gepinnt: v2.0.0-20261018003744-cb897cb4ed72.)*
+- [x] **3.2 Test-Helfer** in `internal/tui` (test-only, z. B. `teatest_helper_test.go`):
+  - `newTestModel(t, opts Options) *teatest.TestModel`:
     baut das Modell per `newModel` und übergibt es an `teatest.NewTestModel` mit
     `WithInitialTermSize(120, 40)` und `tea.WithoutRenderer()` **nicht** — die
     `FinalOutput`-Assertions brauchen den Renderer.
   - `newTestModelWithCore(t)`: kombiniert den Helfer mit `startMockCore(t)`
     (bestehender Helper aus `views_test.go`), damit Tests einen Core unter sich haben.
-- [ ] **3.3 Migration der Modell-Tests** (`model_test.go`, 9 Tests):
+- [x] **3.3 Migration der Modell-Tests** (`model_test.go`, 9 Tests):
   `keyMsg`-Fakes durch `tm.Send(tea.KeyMsg{...})` / `tm.Type("…")` ersetzen,
   Assertions auf `tm.FinalModel(t).(model)`. `q`-Quit über `tm.Quit()` bzw.
   `WaitFinished` prüfen.
-- [ ] **3.4 Migration der View-Tests** (`views_test.go`, `logfilter_test.go`,
+- [x] **3.4 Migration der View-Tests** (`views_test.go`, `logfilter_test.go`,
   `settings_test.go`): gleiche Umstellung; wo ein Render-Vergleich lohnt
   (Header/Footer, Tab-Reihe, Theme-Schaltung `t`), Assertion auf
   `tm.FinalOutput(t)` statt nur Modell-Feld.
-- [ ] **3.5 Lücken füllen** (je ein Test, gegen Mock-Core):
+- [x] **3.5 Lücken füllen** (je ein Test, gegen Mock-Core):
   - View-Schaltung: `Tab`/`1`–`8` wechselt die aktive Ansicht, `?` zeigt die Hilfe
   - Chat: Eingabe + Enter sendet über die API (Mock-Core erhält die Nachricht),
     `d` löscht die auslösende Nachricht, `c` leert den Chat
   - Queue: `p` pausiert, `x` bricht die gewählte Instanz ab, `r` wiederholt
   - Commands: `/`-Filter, Enter führt aus, `e`/`E` schaltet an/aus
   - Logs: `l` schaltet den Level-Filter, Kopfzeile zeigt den aktiven Filter
-- [ ] **3.6 Cleanup**: `keyMsg`-Type und nur-noch-tot-Code aus den Tests löschen;
+- [x] **3.6 Cleanup**: `keyMsg`-Type und nur-noch-tot-Code aus den Tests löschen;
   `scripts/check.sh` grün (gofmt, vet, lint, race).
 
 ## 4. Hinweise und Grenzen
@@ -80,3 +82,34 @@ bestehenden Tests werden 1:1 migriert, plus die in §4 genannten Lücken.
 - `go test ./internal/tui/... -race` grün, alle 20 alten + die Lücken-Tests von 3.5
 - `scripts/check.sh` grün
 - Roadmap 6.4.3 abhaken, Statusübersicht und Änderungshistorie aktualisieren
+
+## 6. Umsetzung (2026-10-23, abgeschlossen)
+
+Alle Schritte 3.1–3.6 umgesetzt; 32 Test-Funktionen in `internal/tui` (vorher
+20), `go test ./internal/tui/... -race` und `scripts/check.sh`-Prüfungen grün.
+
+Produktionsbugs, die die Migration sichtbar gemacht hat und der PR mitfixt:
+
+1. `applyCommandFilter`/`applyUserFilter` hatten **Value-Receiver**: die
+   Filterung (Tasten `/` + Eingabe) wirkte auf eine Kopie und wurde verworfen —
+   der Filter war eine No-op. Jetzt Pointer-Receiver; `commandsView`/
+   `usersView` halten zusätzlich `all` (volle Liste), damit der geleerte Filter
+   die Gesamtliste wiederherstellt.
+2. `queueLoadedMsg` trug keinen Pause-Zustand und `refreshQueue` warf
+   `resp.GetPaused()` weg: die Queue-View wusste nie, ob die Queue pausiert
+   ist. Jetzt `paused` im Msg, Title zeigt „(paused)“.
+3. `p` schickte immer `PauseQueueRequest{}` (Pause=false = Resume) — „pause
+   or resume“ konnte nie pausieren. Jetzt toggelt das Modell den Zustand und
+   schickt das Ziel (`Pause: next`); die nächste Queue-Abfrage glättet einen
+   fehlgeschlagenen Request.
+4. `tui.go`: `run(opts, extra)` (Test-Backdoor für `tea.ProgramOption`) entfernt
+   — der Harness braucht sie nicht; nur noch `Run`.
+
+Bekannt, aber bewusst **nicht** in diesem PR gefixt (eigene Issues):
+
+- `convertEvent` in `internal/app/api_stream.go` setzt `Event.Type` nie; die
+  TUI routet Live-Ereignisse per `GetType()` und sieht sie deshalb nie. Tests
+  erkennen Log-Ereignisse deshalb über den Message-Content, nicht über den Typ.
+- `commandsView.editing` wird in `editCommand` auf einem Value-Receiver-Copy
+   gesetzt und nirgends zurückgesetzt (der „editing in $EDITOR …“-Status
+   erscheint nie).

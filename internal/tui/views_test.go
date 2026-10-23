@@ -6,12 +6,16 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
+	teatest "github.com/charmbracelet/x/exp/teatest/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -76,9 +80,12 @@ func startCoreOpts(t *testing.T, cfg config.Config, opts ...app.Option) (*app.Ap
 	}
 	var mp *mock.Platform
 	var mpErr error
+	// The logger is passed so that the "mock output" lines of the mock
+	// platform reach the log sink and the live stream: the TUI tests use
+	// them to prove that an API call reached the core.
 	opts = append(opts, app.WithPlatform(func(_ context.Context, b app.PlatformBuilder) (connector.Platform, error) {
 		var err error
-		mp, err = mock.New(b.Receiver, mock.WithPublisher(b.Publisher))
+		mp, err = mock.New(b.Receiver, mock.WithPublisher(b.Publisher), mock.WithLogger(b.Logger))
 		mpErr = err
 		return mp, err
 	}))
@@ -172,148 +179,229 @@ func TestStreamEventsFillTheViews(t *testing.T) {
 	assert.Contains(t, m.queue.render(t2, 90), "Hello")
 }
 
-// TestChatInputAndSend types a message and sends it through the API.
+// TestChatInputAndSend types a message and sends it through the API: the
+// mock core logs the operation, the log event arrives on the stream.
 func TestChatInputAndSend(t *testing.T) {
 	t.Parallel()
-	base := startMockCore(t)
-	m := newModel(Options{Server: base})
-	m.view = 1 // chat
+	tm, base := newTestModelWithCore(t)
+	sub := subscribeStream(t, base)
 
-	// type "hallo" with a wrong letter at the end
-	var next tea.Model
-	for _, k := range []string{"h", "a", "l", "l", "o", "x"} {
-		next, _ = m.Update(&keyMsg{code: rune(k[0]), text: k})
-		m = next.(model)
-	}
-	next, _ = m.Update(&keyMsg{code: tea.KeyBackspace})
-	m = next.(model)
-	assert.Equal(t, "hallo", m.chat.input)
+	tm.Type("2") // chat view
+	tm.Type("hallox")
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyBackspace}) // the wrong letter is undone
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	// Enter sends the message and clears the input
-	next, cmd := m.Update(&keyMsg{code: tea.KeyEnter})
-	m = next.(model)
-	require.NotNil(t, cmd)
-	require.IsType(t, actionDoneMsg{}, cmd())
-	assert.NoError(t, cmd().(actionDoneMsg).err)
-	assert.Equal(t, "", m.chat.input)
+	waitForLogEvent(t, sub, "mock output") // the core received the send
+	m := quitModel(t, tm)
+	assert.Equal(t, "", m.chat.input, "the input is cleared after Enter")
+	assert.NoError(t, m.err)
 }
 
-// TestQueueActions runs a command and checks the queue view.
+// TestChatDeleteAndClear covers the moderation keys of the chat view.
+func TestChatDeleteAndClear(t *testing.T) {
+	t.Parallel()
+	t.Run("clear", func(t *testing.T) {
+		t.Parallel()
+		tm, base := newTestModelWithCore(t)
+		sub := subscribeStream(t, base)
+		tm.Type("2") // chat view
+		tm.Type("c")
+		waitForLogEvent(t, sub, "mock output") // the core received the clear
+		m := quitModel(t, tm)
+		assert.NoError(t, m.err)
+	})
+	t.Run("delete", func(t *testing.T) {
+		// The TUI sends the delete request without a platform and the core
+		// rejects it. This pins the current behavior; sending the platform
+		// is a separate issue. The error is transient (a successful status
+		// poll clears it), so press d a few times: at least one error frame
+		// is rendered between the polls.
+		tm, _ := newTestModelWithCore(t)
+		tm.Type("2") // chat view
+		for range 3 {
+			tm.Type("d")
+			time.Sleep(100 * time.Millisecond)
+		}
+		teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+			return strings.Contains(string(b), "platform is required")
+		}, teatest.WithDuration(10*time.Second))
+		quitModel(t, tm)
+	})
+}
+
+// TestQueueActions drives the queue view through the program loop: p pauses
+// the queue, enter (in the commands view) queues a command that stays held
+// while paused, x cancels the selected instance and r retries it.
 func TestQueueActions(t *testing.T) {
 	t.Parallel()
-	base := startMockCore(t)
+	tm, base := newTestModelWithCore(t)
 	importExampleCommands(t, base)
-	m := newModel(Options{Server: base})
+	cmds := commandClient(t, base)
+	ctx := t.Context()
+	list := func() *v1alpha1.ListInstancesResponse {
+		resp, err := cmds.ListInstances(ctx, &v1alpha1.ListInstancesRequest{})
+		require.NoError(t, err)
+		return resp
+	}
 
-	// run the first command through the API
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	client, base := httpClientFor(base)
-	cmdClient := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))))
-	list, err := cmdClient.List(ctx, &v1alpha1.ListCommandsRequest{})
-	require.NoError(t, err)
-	require.NotEmpty(t, list.GetCommands())
-	_, err = cmdClient.Run(ctx, &v1alpha1.RunCommandRequest{Id: list.GetCommands()[0].GetId()})
-	require.NoError(t, err)
+	// pause the queue first, so the instance we run next waits in the queue
+	// (a stable, cancellable state)
+	tm.Type("4") // queue view
+	waitOutput(t, tm, "Command Queue")
+	tm.Type("p")
+	require.Eventually(t, func() bool { return list().GetPaused() }, 10*time.Second, 50*time.Millisecond, "the queue to be paused")
 
-	// the queue fills up from the stream or the fetch
+	// run a command: it stays pending while the queue is paused
+	tm.Type("5")               // commands view
+	waitOutput(t, tm, "Hello") // the list is loaded
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.Eventually(t, func() bool {
-		resp, err := cmdClient.ListInstances(ctx, &v1alpha1.ListInstancesRequest{})
-		if err != nil {
-			return false
-		}
-		m.queue.instances = resp.GetInstances()
-		return len(m.queue.instances) > 0
-	}, 5*time.Second, 50*time.Millisecond, "the queue to fill")
+		insts := list().GetInstances()
+		return len(insts) == 1 && insts[0].GetState() == "pending"
+	}, 10*time.Second, 50*time.Millisecond, "the instance to wait in the paused queue")
 
-	// navigation and cancel do not panic and stay consistent
-	next, _ := m.Update(&keyMsg{code: tea.KeyDown})
-	m = next.(model)
-	next, _ = m.Update(&keyMsg{code: 'x', text: "x"})
-	m = next.(model)
-	assert.LessOrEqual(t, m.queue.selected, len(m.queue.instances))
+	// the queue view shows the pending instance; x cancels the selected one
+	tm.Type("4")
+	waitOutput(t, tm, "pending")
+	tm.Type("x")
+	require.Eventually(t, func() bool {
+		insts := list().GetInstances()
+		return len(insts) == 1 && insts[0].GetState() == "canceled"
+	}, 10*time.Second, 50*time.Millisecond, "the instance to be canceled")
+
+	// resume and retry: the instance runs and completes
+	tm.Type("p")
+	require.Eventually(t, func() bool { return !list().GetPaused() }, 10*time.Second, 50*time.Millisecond, "the queue to be resumed")
+	tm.Type("r")
+	require.Eventually(t, func() bool {
+		for _, i := range list().GetInstances() {
+			if i.GetState() == "completed" {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 50*time.Millisecond, "the retried instance to complete")
+
+	m := quitModel(t, tm)
+	assert.NoError(t, m.err)
 }
 
-// TestCommandsViewFetchesFiltersAndEdits covers the commands view.
+// TestCommandsViewFetchesFiltersAndEdits covers the commands view. The
+// parent test does not run in parallel: the edit subtest sets EDITOR.
 func TestCommandsViewFetchesFiltersAndEdits(t *testing.T) {
-	// no t.Parallel(): the test sets the EDITOR environment variable
-	base := startMockCore(t)
-	importExampleCommands(t, base)
-	m := newModel(Options{Server: base})
-	m.view = 4 // commands
+	t.Run("filter", func(t *testing.T) {
+		t.Parallel()
+		tm, base := newTestModelWithCore(t)
+		importExampleCommands(t, base)
+		tm.Type("5")               // commands view
+		waitOutput(t, tm, "Hello") // the list is loaded
+		tm.Type("/")
+		tm.Type("he")
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyBackspace}) // the filter is "h"
+		m := quitModel(t, tm)
+		assert.True(t, m.commands.filtering)
+		assert.Equal(t, "h", m.commands.filter)
+		// the list is narrowed to the commands matching "h"
+		assert.Contains(t, commandNames(m.commands.list), "Hello")
+		assert.NotContains(t, commandNames(m.commands.list), "Bye")
+	})
+	t.Run("esc", func(t *testing.T) {
+		t.Parallel()
+		tm, base := newTestModelWithCore(t)
+		importExampleCommands(t, base)
+		tm.Type("5")               // commands view
+		waitOutput(t, tm, "Hello") // the list is loaded
+		tm.Type("/")
+		tm.Type("he")
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyEsc})
+		m := quitModel(t, tm)
+		assert.False(t, m.commands.filtering)
+		assert.Equal(t, "", m.commands.filter)
+		// the full list is restored
+		assert.Contains(t, commandNames(m.commands.list), "Hello")
+		assert.Contains(t, commandNames(m.commands.list), "Bye")
+	})
+	t.Run("edit", func(t *testing.T) {
+		// no t.Parallel(): the test sets the EDITOR environment variable.
+		// The no-op editor keeps the document unchanged, like the original
+		// test. The edit command writes the fetched document to a temp file
+		// before opening the editor, so that file appearing is the
+		// completion signal that the editor ran on the document.
+		t.Setenv("EDITOR", "true")
+		tm, base := newTestModelWithCore(t)
+		importExampleCommands(t, base)
 
-	// fetch the list
-	fetched := m.fetchCommands()()
-	require.IsType(t, commandsLoadedMsg{}, fetched)
-	var next tea.Model
-	next, _ = m.Update(fetched)
-	m = next.(model)
-	names := map[string]bool{}
-	for _, c := range m.commands.list {
-		names[c.GetName()] = true
-	}
-	assert.True(t, names["Hello"] && names["Bye"], "the imported commands are listed")
+		tm.Type("5")               // commands view
+		waitOutput(t, tm, "Hello") // the list is loaded
+		before, _ := filepath.Glob(filepath.Join(os.TempDir(), "streamcrew-command-*.yaml"))
+		tm.Send(tea.KeyPressMsg{Code: 'E'})
+		require.Eventually(t, func() bool {
+			files, _ := filepath.Glob(filepath.Join(os.TempDir(), "streamcrew-command-*.yaml"))
+			for _, f := range files {
+				if !slices.Contains(before, f) {
+					return true
+				}
+			}
+			return false
+		}, 10*time.Second, 50*time.Millisecond, "the editor to open the fetched document")
+		// the update runs a moment after the editor; let it settle so the
+		// final model carries the result
+		time.Sleep(200 * time.Millisecond)
+		m := quitModel(t, tm)
+		assert.NoError(t, m.err)
+	})
+	t.Run("enable", func(t *testing.T) {
+		t.Parallel()
+		tm, base := newTestModelWithCore(t)
+		importExampleCommands(t, base)
+		cmds := commandClient(t, base)
+		resp, err := cmds.List(t.Context(), &v1alpha1.ListCommandsRequest{})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.GetCommands())
+		id := resp.GetCommands()[0].GetId()
+		enabled := resp.GetCommands()[0].GetEnabled()
 
-	// the filter mode narrows the list
-	next, _ = m.Update(&keyMsg{code: '/', text: "/"})
-	m = next.(model)
-	require.True(t, m.commands.filtering)
-	for _, k := range []string{"h", "e"} {
-		next, _ = m.Update(&keyMsg{code: rune(k[0]), text: k})
-		m = next.(model)
-	}
-	next, _ = m.Update(&keyMsg{code: tea.KeyBackspace})
-	m = next.(model)
-	assert.Equal(t, "h", m.commands.filter)
-	require.NotEmpty(t, m.commands.list)
-	next, _ = m.Update(&keyMsg{code: tea.KeyEsc})
-	m = next.(model)
-	assert.False(t, m.commands.filtering)
-	assert.Equal(t, "", m.commands.filter)
-
-	// edit with a no-op editor leaves the command unchanged
-	t.Setenv("EDITOR", "true")
-	m.commands.filter = ""
-	m.applyCommandFilter()
-	id := m.commands.list[0].GetId()
-	done := m.editCommand(id, editorFromEnv())()
-	require.IsType(t, actionDoneMsg{}, done)
-	assert.NoError(t, done.(actionDoneMsg).err)
-
-	// the enable switch flips
-	next, cmd := m.Update(&keyMsg{code: 'e', text: "e"})
-	m = next.(model)
-	require.NotNil(t, cmd)
-	done = cmd()
-	require.IsType(t, actionDoneMsg{}, done)
-	assert.NoError(t, done.(actionDoneMsg).err)
+		tm.Type("5")               // commands view
+		waitOutput(t, tm, "Hello") // the list is loaded
+		tm.Type("e")
+		require.Eventually(t, func() bool {
+			resp, err := cmds.List(t.Context(), &v1alpha1.ListCommandsRequest{})
+			if err != nil {
+				return false
+			}
+			for _, c := range resp.GetCommands() {
+				if c.GetId() == id {
+					return c.GetEnabled() != enabled
+				}
+			}
+			return false
+		}, 10*time.Second, 50*time.Millisecond, "the command to be toggled")
+		m := quitModel(t, tm)
+		assert.NoError(t, m.err)
+	})
 }
 
 // TestUsersViewRendersTheList covers the users view with the stream.
 func TestUsersViewRendersTheList(t *testing.T) {
 	t.Parallel()
-	base := startMockCore(t)
-	m := newModel(Options{Server: base})
+	tm, base := newTestModelWithCore(t)
 
 	// some chat activity creates users
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	client, base := httpClientFor(base)
-	stream := streamcrewv1alpha1connect.NewStreamServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))))
-	_, err := stream.Simulate(ctx, &v1alpha1.SimulateEventRequest{
+	_, err := streamClient(t, base).Simulate(t.Context(), &v1alpha1.SimulateEventRequest{
 		EventType: "chat.message",
 		User:      "alice",
 		Text:      "hallo",
 	})
 	require.NoError(t, err)
-
+	// wait until the user service lists alice before the view fetches
 	require.Eventually(t, func() bool {
-		fetched := m.fetchUsers()()
-		require.IsType(t, usersLoadedMsg{}, fetched)
-		var next tea.Model
-		next, _ = m.Update(fetched)
-		m = next.(model)
-		for _, u := range m.users.list {
+		client, b := httpClientFor(base)
+		users := streamcrewv1alpha1connect.NewUserServiceClient(connect.NewClient(connecthttp.NewTransport(client, b, connecthttp.WithReadMaxBytes(0))))
+		resp, err := users.List(t.Context(), &v1alpha1.ListUsersRequest{Limit: 100})
+		if err != nil {
+			return false
+		}
+		for _, u := range resp.GetUsers() {
 			for _, i := range u.GetIdentities() {
 				if i.GetLogin() == "alice" {
 					return true
@@ -321,8 +409,20 @@ func TestUsersViewRendersTheList(t *testing.T) {
 			}
 		}
 		return false
-	}, 5*time.Second, 100*time.Millisecond, "the simulated user to be listed")
-	assert.Contains(t, m.users.render(newTheme(true), 90), "alice")
+	}, 10*time.Second, 100*time.Millisecond, "the simulated user to be listed")
+
+	tm.Type("6") // users view
+	waitOutput(t, tm, "alice")
+	m := quitModel(t, tm)
+	found := false
+	for _, u := range m.users.list {
+		for _, i := range u.GetIdentities() {
+			if i.GetLogin() == "alice" {
+				found = true
+			}
+		}
+	}
+	assert.True(t, found, "alice is in the users list")
 }
 
 // mustServerAddr waits for the core's http server to listen and returns

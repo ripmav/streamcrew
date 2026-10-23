@@ -8,11 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-
+	teatest "github.com/charmbracelet/x/exp/teatest/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -53,98 +54,75 @@ func startCore(t *testing.T) string {
 	return "http://" + mustServerAddr(t, a)
 }
 
-// sendKey sends a key press to the model and returns the result.
-func sendKey(t *testing.T, m model, s string) (model, tea.Cmd) {
-	t.Helper()
-	msg := &keyMsg{code: rune(s[0]), text: s}
-	next, cmd := m.Update(msg)
-	return next.(model), cmd
-}
-
-// sendTab sends a tab press (no printable text).
-func sendTab(t *testing.T, m model) (model, tea.Cmd) {
-	t.Helper()
-	next, cmd := m.Update(&keyMsg{code: tea.KeyTab})
-	return next.(model), cmd
-}
-
-// keyMsg is a test KeyMsg.
-type keyMsg struct {
-	code rune
-	text string
-}
-
-func (k *keyMsg) String() string { return k.text }
-func (k *keyMsg) Key() tea.Key   { return tea.Key{Code: k.code, Text: k.text} }
-
-// TestKeyBindings covers the framework keys of the model.
+// TestKeyBindings covers the framework keys of the model, driven through
+// the real Bubble Tea program loop of the teatest harness.
 func TestKeyBindings(t *testing.T) {
 	t.Parallel()
-	m := newModel(Options{Server: "http://127.0.0.1:1"})
-
-	// theme toggle
-	m, _ = sendKey(t, m, "t")
-	assert.False(t, m.dark)
-	m, _ = sendKey(t, m, "t")
-	assert.True(t, m.dark)
-
-	// help toggles and eats keys while open
-	m, _ = sendKey(t, m, "?")
-	assert.True(t, m.help)
-	m, _ = sendKey(t, m, "1")
-	assert.Equal(t, 0, m.view, "keys are eaten while the help is open")
-	m, _ = sendKey(t, m, "q")
-	assert.False(t, m.help, "q closes the help")
-
-	// view switching
-	m, _ = sendKey(t, m, "3")
-	assert.Equal(t, 2, m.view)
-	m, _ = sendKey(t, m, strconv.Itoa(len(views)))
-	assert.Equal(t, len(views)-1, m.view)
-	m, _ = sendTab(t, m)
-	assert.Equal(t, 0, m.view, "tab wraps to the first view")
+	t.Run("theme", func(t *testing.T) {
+		t.Parallel()
+		tm := newTestModel(t, Options{Server: "http://127.0.0.1:1"})
+		tm.Type("t")
+		m := quitModel(t, tm)
+		assert.False(t, m.dark, "t switches from the dark start to light")
+	})
+	t.Run("help", func(t *testing.T) {
+		t.Parallel()
+		tm := newTestModel(t, Options{Server: "http://127.0.0.1:1"})
+		tm.Type("?")
+		tm.Type("1")
+		tm.Type("q")
+		m := quitModel(t, tm)
+		assert.False(t, m.help, "q closes the help")
+		assert.Equal(t, 0, m.view, "keys are eaten while the help is open")
+	})
+	t.Run("views", func(t *testing.T) {
+		t.Parallel()
+		tm := newTestModel(t, Options{Server: "http://127.0.0.1:1"})
+		tm.Type("3")
+		tm.Type(strconv.Itoa(len(views)))
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+		m := quitModel(t, tm)
+		assert.Equal(t, 0, m.view, "tab wraps from the last view to the first")
+	})
 }
 
-// TestQuit returns the quit command.
+// TestQuit quits the whole program through the real loop: the q key
+// returns the quit command and the program ends.
 func TestQuit(t *testing.T) {
 	t.Parallel()
-	m := newModel(Options{Server: "http://127.0.0.1:1"})
-	_, cmd := sendKey(t, m, "q")
-	require.NotNil(t, cmd)
-	assert.Equal(t, tea.QuitMsg{}, cmd())
+	tm := newTestModel(t, Options{Server: "http://127.0.0.1:1"})
+	tm.Type("q")
+	tm.WaitFinished(t, teatest.WithFinalTimeout(10*time.Second))
+	_, ok := tm.FinalModel(t).(model)
+	require.True(t, ok, "the program returned its final model")
 }
 
-// TestModelFetchStatus fetches the status of a running core.
+// TestModelFetchStatus fetches the status of a running core and renders it.
 func TestModelFetchStatus(t *testing.T) {
 	t.Parallel()
 	base := startCore(t)
-	m := newModel(Options{Server: base})
-
-	fetched := m.fetchStatus()
-	require.IsType(t, statusMsg{}, fetched)
-	next, cmd := m.Update(fetched)
-	m = next.(model)
-	require.NotNil(t, cmd, "the next poll is scheduled")
-
-	view := m.View()
-	assert.Contains(t, view.Content, "streamcrew")
-	assert.Contains(t, view.Content, base)
-	assert.Contains(t, view.Content, "Demo")
+	tm := newTestModel(t, Options{Server: base})
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "Demo")
+	}, teatest.WithDuration(10*time.Second))
+	m := quitModel(t, tm)
+	require.NotNil(t, m.status)
+	assert.NoError(t, m.err)
+	assert.Contains(t, m.View().Content, "streamcrew")
+	assert.Contains(t, m.View().Content, base)
+	assert.Contains(t, m.View().Content, "Demo")
 }
 
-// TestModelConnectionError shows the error state and schedules a retry.
+// TestModelConnectionError shows the error state of an unreachable core.
 func TestModelConnectionError(t *testing.T) {
 	t.Parallel()
-	m := newModel(Options{Server: "http://127.0.0.1:1"})
-
-	fetched := m.fetchStatus()
-	require.IsType(t, statusErr{}, fetched)
-	next, cmd := m.Update(fetched)
-	m = next.(model)
-	require.NotNil(t, cmd, "a retry is scheduled")
-
-	view := m.View()
-	assert.Contains(t, view.Content, "connection refused")
+	tm := newTestModel(t, Options{Server: "http://127.0.0.1:1"})
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "connection refused")
+	}, teatest.WithDuration(10*time.Second))
+	m := quitModel(t, tm)
+	require.ErrorContains(t, m.err, "connection refused")
+	assert.Contains(t, m.View().Content, "connection refused")
 }
 
 // TestServerResolution resolves the runtime file and the default.
@@ -172,20 +150,41 @@ func TestServerResolution(t *testing.T) {
 // TestViewRendering renders the dashboard and the footer.
 func TestViewRendering(t *testing.T) {
 	t.Parallel()
-	m := newModel(Options{Server: "http://127.0.0.1:1"})
-	m.width, m.height = 100, 30
+	t.Run("initial", func(t *testing.T) {
+		t.Parallel()
+		m := newModel(Options{Server: "http://127.0.0.1:1"})
+		m.width, m.height = 100, 30
 
-	view := m.View()
-	assert.Contains(t, view.Content, "streamcrew")
-	assert.Contains(t, view.Content, "connecting …")
-	assert.Contains(t, view.Content, "q quit · ? help · t theme")
-	assert.True(t, view.AltScreen)
-
-	// the help renders the keys
-	m.help = true
-	help := m.View()
-	assert.Contains(t, help.Content, "Help")
-	assert.Contains(t, help.Content, "toggle theme")
+		view := m.View()
+		assert.Contains(t, view.Content, "streamcrew")
+		assert.Contains(t, view.Content, "connecting …")
+		assert.Contains(t, view.Content, "q quit · ? help · t theme")
+		assert.True(t, view.AltScreen)
+	})
+	t.Run("rendered", func(t *testing.T) {
+		t.Parallel()
+		// the program renders through the real renderer; the final output
+		// contains the header and the key row
+		tm := newTestModel(t, Options{Server: "http://127.0.0.1:1"})
+		_ = tm.Quit()
+		tm.WaitFinished(t, teatest.WithFinalTimeout(10*time.Second))
+		out, err := io.ReadAll(tm.FinalOutput(t))
+		require.NoError(t, err)
+		assert.Contains(t, string(out), "streamcrew")
+		assert.Contains(t, string(out), "q quit · ? help · t theme")
+	})
+	t.Run("help", func(t *testing.T) {
+		t.Parallel()
+		tm := newTestModel(t, Options{Server: "http://127.0.0.1:1"})
+		tm.Type("?")
+		teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+			return strings.Contains(string(b), "toggle theme")
+		}, teatest.WithDuration(10*time.Second))
+		m := quitModel(t, tm)
+		assert.True(t, m.help)
+		assert.Contains(t, m.View().Content, "Help")
+		assert.Contains(t, m.View().Content, "toggle theme")
+	})
 }
 
 // TestClientsBuildsAUnixClient returns the unix dialer for unix sockets.
@@ -207,27 +206,4 @@ func TestThemeToggles(t *testing.T) {
 	m.dark = false
 	light := m.View()
 	assert.NotEqual(t, dark.Content, light.Content)
-}
-
-// TestRunQuits runs the whole program with piped input: a q key quits.
-func TestRunQuits(t *testing.T) {
-	t.Parallel()
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = r.Close() })
-	errc := make(chan error, 1)
-	go func() {
-		errc <- run(Options{Server: "http://127.0.0.1:1"}, []tea.ProgramOption{
-			tea.WithInput(r),
-			tea.WithOutput(io.Discard),
-			tea.WithoutRenderer(),
-		})
-	}()
-	// let the program start, then feed the quit key
-	time.Sleep(200 * time.Millisecond)
-	if _, err := w.Write([]byte("q")); err != nil {
-		t.Log(err)
-	}
-	require.NoError(t, w.Close())
-	require.NoError(t, <-errc)
 }

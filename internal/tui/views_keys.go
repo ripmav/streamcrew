@@ -104,9 +104,13 @@ func (m model) updateQueueKey(key tea.Key) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case 'p':
-		// pause or resume the whole queue
+		// pause or resume the whole queue: the request carries the target
+		// state, and the model toggles it optimistically (a failed request
+		// reports the error; the next queue fetch reconciles the state)
+		next := !m.queue.paused
+		m.queue.paused = next
 		return m, m.request(func(ctx context.Context, c *clients) error {
-			_, err := c.command.PauseQueue(ctx, &v1alpha1.PauseQueueRequest{})
+			_, err := c.command.PauseQueue(ctx, &v1alpha1.PauseQueueRequest{Pause: next})
 			return err
 		})
 	case 'x':
@@ -227,19 +231,22 @@ func (m model) selectedCommand() *v1alpha1.CommandSummary {
 	return nil
 }
 
-// applyCommandFilter filters the command list by the current filter.
-func (m model) applyCommandFilter() {
+// applyCommandFilter narrows the displayed list by the current filter;
+// an empty filter restores the full list. The pointer receiver is required:
+// the caller returns the model it mutates.
+func (m *model) applyCommandFilter() {
 	f := strings.ToLower(m.commands.filter)
 	if f == "" {
-		return
-	}
-	var kept []*v1alpha1.CommandSummary
-	for _, c := range m.commands.list {
-		if strings.Contains(strings.ToLower(c.GetName()), f) {
-			kept = append(kept, c)
+		m.commands.list = m.commands.all
+	} else {
+		var kept []*v1alpha1.CommandSummary
+		for _, c := range m.commands.all {
+			if strings.Contains(strings.ToLower(c.GetName()), f) {
+				kept = append(kept, c)
+			}
 		}
+		m.commands.list = kept
 	}
-	m.commands.list = kept
 	if m.commands.selected >= len(m.commands.list) {
 		m.commands.selected = 0
 	}
@@ -341,22 +348,25 @@ func (m model) updateUsersKey(key tea.Key) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// applyUserFilter filters the user list by the current filter.
-func (m model) applyUserFilter() {
+// applyUserFilter narrows the displayed list by the current filter;
+// an empty filter restores the full list. The pointer receiver is required:
+// the caller returns the model it mutates.
+func (m *model) applyUserFilter() {
 	f := strings.ToLower(m.users.filter)
 	if f == "" {
-		return
-	}
-	var kept []*v1alpha1.UserView
-	for _, u := range m.users.list {
-		for _, i := range u.GetIdentities() {
-			if strings.Contains(strings.ToLower(i.GetLogin()), f) {
-				kept = append(kept, u)
-				break
+		m.users.list = m.users.all
+	} else {
+		var kept []*v1alpha1.UserView
+		for _, u := range m.users.all {
+			for _, i := range u.GetIdentities() {
+				if strings.Contains(strings.ToLower(i.GetLogin()), f) {
+					kept = append(kept, u)
+					break
+				}
 			}
 		}
+		m.users.list = kept
 	}
-	m.users.list = kept
 	if m.users.selected >= len(m.users.list) {
 		m.users.selected = 0
 	}

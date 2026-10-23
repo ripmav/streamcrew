@@ -96,8 +96,9 @@ type usersLoadedMsg struct {
 
 // queueLoadedMsg carries the result of a queue fetch.
 type queueLoadedMsg struct {
-	list []*v1alpha1.CommandInstanceView
-	err  error
+	list   []*v1alpha1.CommandInstanceView
+	paused bool
+	err    error
 }
 
 // actionDoneMsg confirms a queue action (pause, cancel, retry).
@@ -205,17 +206,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commandsLoadedMsg:
 		if msg.list != nil {
+			m.commands.all = msg.list
 			m.commands.list = msg.list
+			if m.commands.filter != "" {
+				m.applyCommandFilter()
+			}
 		}
 		return m, nil
 
 	case usersLoadedMsg:
 		if msg.list != nil {
+			m.users.all = msg.list
 			m.users.list = msg.list
+			if m.users.filter != "" {
+				m.applyUserFilter()
+			}
 		}
 		return m, nil
 
 	case queueLoadedMsg:
+		if msg.err == nil {
+			m.queue.paused = msg.paused
+		}
 		if msg.list != nil {
 			m.queue.instances = msg.list
 			if m.queue.selected >= len(m.queue.instances) {
@@ -347,7 +359,7 @@ func (m model) refreshQueue() tea.Cmd {
 		if err == nil {
 			list = resp.GetInstances()
 		}
-		return queueLoadedMsg{list: list, err: err}
+		return queueLoadedMsg{list: list, paused: resp.GetPaused(), err: err}
 	}
 }
 
