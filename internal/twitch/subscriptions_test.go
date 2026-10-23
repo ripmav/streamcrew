@@ -99,10 +99,11 @@ func newManager(t *testing.T, f *fakeHelix, interval time.Duration) *twitch.Mana
 	hc := httpclient.New(httpclient.Options{Name: "twitch.helix", Base: srv.Client(), Rate: 100, Burst: 100})
 	c := helix.New(hc, helix.Options{ClientID: "test", Token: func(context.Context) (string, error) { return "tok", nil }, BaseURL: srv.URL})
 	return twitch.NewManager(twitch.ManagerOptions{
-		Helix:    c,
-		Channels: []string{"7"},
-		Whisper:  "7",
-		Interval: interval,
+		Helix:     c,
+		Channels:  []string{"7"},
+		Whisper:   "7",
+		Moderator: "7", // the home channel: the token owner is the broadcaster
+		Interval:  interval,
 	})
 }
 
@@ -127,7 +128,8 @@ func TestReconcileCreatesTheMissingSubscriptions(t *testing.T) {
 	require.NoError(t, m.Reconcile(t.Context()))
 
 	require.Len(t, f.created, 25)
-	// The exact table: versions and conditions.
+	// The exact table: versions and conditions (the current ones of the
+	// EventSub Reference, plan 2026-10-22-eventsub-reference-fix.md).
 	got := map[string]struct {
 		version string
 		cond    helix.SubscriptionCondition
@@ -139,12 +141,20 @@ func TestReconcileCreatesTheMissingSubscriptions(t *testing.T) {
 		}{in.Version, in.Condition}
 	}
 	assert.Equal(t, "2", got["channel.follow"].version)
-	assert.Equal(t, "2", got["channel.chat.message"].version)
+	assert.Equal(t, "1", got["channel.chat.message"].version)
 	assert.Equal(t, "1", got["stream.online"].version)
 	assert.Equal(t, "1", got["channel.cheer"].version)
 	assert.Equal(t, "2", got["channel.moderate"].version)
+	assert.Equal(t, "2", got["channel.hype_train.begin"].version)
 	assert.Equal(t, "1", got["channel.shared_chat.begin"].version)
-	assert.Equal(t, helix.SubscriptionCondition{BroadcasterUserID: "7"}, got["channel.follow"].cond)
+	assert.True(t, got["channel.ad_break.begin"].version == "1")
+	assert.True(t, got["channel.goal.begin"].version == "1")
+	assert.True(t, got["channel.charity_campaign.progress"].version == "1")
+	assert.Equal(t, helix.SubscriptionCondition{BroadcasterUserID: "7", ModeratorUserID: "7"}, got["channel.follow"].cond)
+	assert.Equal(t, helix.SubscriptionCondition{ToBroadcasterUserID: "7"}, got["channel.raid"].cond)
+	assert.Equal(t, helix.SubscriptionCondition{BroadcasterUserID: "7", UserID: "7"}, got["channel.chat.message"].cond)
+	assert.Equal(t, helix.SubscriptionCondition{BroadcasterUserID: "7", ModeratorUserID: "7"}, got["channel.moderate"].cond)
+	assert.Equal(t, helix.SubscriptionCondition{BroadcasterUserID: "7"}, got["channel.goal.begin"].cond)
 	assert.Equal(t, helix.SubscriptionCondition{UserID: "7"}, got["user.whisper.message"].cond)
 
 	// The second run: nothing to do.
@@ -161,19 +171,24 @@ func TestReconcileAdditionalChannels(t *testing.T) {
 	hc := httpclient.New(httpclient.Options{Name: "twitch.helix", Base: srv.Client(), Rate: 100, Burst: 100})
 	c := helix.New(hc, helix.Options{ClientID: "test", Token: func(context.Context) (string, error) { return "tok", nil }, BaseURL: srv.URL})
 	m := twitch.NewManager(twitch.ManagerOptions{
-		Helix:    c,
-		Channels: []string{"100", "200"},
-		Whisper:  "999", // the bot account
-		Specs:    twitch.ChannelSpecs(),
+		Helix:     c,
+		Channels:  []string{"100", "200"},
+		Whisper:   "999", // the bot account
+		Moderator: "999", // the additional channels run with the bot token
+		Specs:     twitch.ChannelSpecs(),
 	})
 	require.NoError(t, m.Reconcile(t.Context()))
 
-	// 22 channel specs per channel, 2 channels, plus the one whisper.
-	require.Len(t, f.created, 45)
-	// No stream subscriptions for the additional channels (B10).
+	// 19 channel specs per channel (no stream, no goal — the goal
+	// condition must match the token owner), 2 channels, plus the one
+	// whisper.
+	require.Len(t, f.created, 39)
+	// No stream or goal subscriptions for the additional channels
+	// (B10, plan 2026-10-22-eventsub-reference-fix.md F7).
 	for _, in := range f.created {
 		assert.NotEqual(t, "stream.online", in.EventType)
 		assert.NotEqual(t, "stream.offline", in.EventType)
+		assert.NotEqual(t, "channel.goal.begin", in.EventType)
 	}
 	// The channel events are subscribed per additional channel.
 	var follow []helix.SubscriptionCondition
@@ -183,7 +198,8 @@ func TestReconcileAdditionalChannels(t *testing.T) {
 		}
 	}
 	assert.ElementsMatch(t, []helix.SubscriptionCondition{
-		{BroadcasterUserID: "100"}, {BroadcasterUserID: "200"},
+		{BroadcasterUserID: "100", ModeratorUserID: "999"},
+		{BroadcasterUserID: "200", ModeratorUserID: "999"},
 	}, follow)
 	// The whisper goes to the bot account.
 	found := false
@@ -200,11 +216,15 @@ func TestReconcileRevokesTheSurplus(t *testing.T) {
 	f := newFakeHelix()
 	m := newManager(t, f, 0)
 	f.seed(t, "channel.poll.begin", "1", helix.SubscriptionCondition{BroadcasterUserID: "7"})
-	f.seed(t, "channel.follow", "2", helix.SubscriptionCondition{BroadcasterUserID: "7"})
+	f.seed(t, "channel.follow", "2", helix.SubscriptionCondition{BroadcasterUserID: "7", ModeratorUserID: "7"})
+	// A leftover of the old table (pre 2026-10-22): the old name with
+	// the old condition is surplus and must be revoked.
+	f.seed(t, "channel.hype_train.start", "1", helix.SubscriptionCondition{BroadcasterUserID: "7"})
 	require.NoError(t, m.Reconcile(t.Context()))
 
-	require.Len(t, f.revoked, 1)
-	assert.Equal(t, "seed-channel.poll.begin", f.revoked[0])
+	require.Len(t, f.revoked, 2)
+	assert.Contains(t, f.revoked, "seed-channel.poll.begin")
+	assert.Contains(t, f.revoked, "seed-channel.hype_train.start")
 	// channel.follow is in the desired state: kept, not recreated.
 	created := map[string]bool{}
 	for _, in := range f.created {
@@ -212,6 +232,7 @@ func TestReconcileRevokesTheSurplus(t *testing.T) {
 	}
 	assert.False(t, created["channel.follow"])
 	assert.True(t, created["channel.raid"])
+	assert.True(t, created["channel.hype_train.begin"])
 }
 
 func TestReconcileSkipsThe400(t *testing.T) {

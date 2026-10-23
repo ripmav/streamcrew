@@ -1,7 +1,7 @@
 {
   "subscription": {
-    "type": "channel.hype_train.start",
-    "version": "1"
+    "type": "channel.hype_train.begin",
+    "version": "2"
   },
   "event": {
     "id": "train-1",

@@ -20,7 +20,11 @@ const reconcileInterval = 10 * time.Minute
 
 // Spec is the desired state of one EventSub subscription: the event
 // type with a fixed version and the condition naming the object the
-// events are about.
+// events are about. The event names, versions and conditions follow
+// the EventSub Reference (plan 2026-10-22-eventsub-reference-fix.md,
+// Findings F1–F7): the names are the current ones (e.g.
+// channel.hype_train.begin, channel.ad_break.begin, channel.goal.end,
+// channel.charity_campaign.progress, channel.shoutout.receive).
 type Spec struct {
 	// EventType is the EventSub event type, e.g. "channel.follow".
 	EventType string
@@ -30,43 +34,61 @@ type Spec struct {
 	// account as whisper receiver); all the other events are channel
 	// and stream events (broadcaster_user_id).
 	User bool
-	// HomeOnly is true for the stream state events: they report the
-	// stream of the home channel only (spec twitch-multi-channel.md,
-	// B10), so an additional channel does not subscribe to them.
+	// HomeOnly is true for the events whose condition the token owner
+	// limits: the stream state events (spec twitch-multi-channel.md,
+	// B10) and the goal events, whose broadcaster_user_id must match
+	// the user_id of the access token (EventSub Reference "Goals
+	// Condition").
 	HomeOnly bool
+	// ChatAsUser is true for the chat events (channel.chat.message,
+	// channel.chat.message_delete, channel.chat.notification): their
+	// condition carries the user_id of the token owner ("The User ID
+	// to read chat as", EventSub Reference "Conditions").
+	ChatAsUser bool
+	// Moderator is true for the events whose condition carries the
+	// moderator_user_id of the token owner (channel.follow v2,
+	// channel.moderate v2; the broadcaster user ID when the token is
+	// the broadcaster's, EventSub Reference "Channel Follow
+	// Condition").
+	Moderator bool
+	// RaidTo is true for channel.raid: the condition names the raided
+	// channel as to_broadcaster_user_id (the condition must name
+	// from_ or to_, not both, EventSub Reference "Channel Raid
+	// Condition").
+	RaidTo bool
 }
 
 // desired is the table of the subscriptions of this adapter: exactly
 // the event types that the mapping (map.go) handles, nothing else
 // (plan 2026-10-10-eventsub-websocket.md, open point 3: the manager
-// must not subscribe to events without a handler). The reference is
-// plan appendix A.2 (4.3) and the specification twitch-events.md
-// (4.4, B1, B15).
+// must not subscribe to events without a handler). The names, versions
+// and conditions are the current ones of the EventSub Reference
+// (plan 2026-10-22-eventsub-reference-fix.md, Findings F1–F7).
 //
 //nolint:gochecknoglobals // the static desired state; it carries the account ID nowhere
 var desired = []Spec{
 	{EventType: "stream.online", Version: "1", HomeOnly: true},
 	{EventType: "stream.offline", Version: "1", HomeOnly: true},
-	{EventType: "channel.follow", Version: "2"},
-	{EventType: "channel.raid", Version: "1"},
-	{EventType: "channel.chat.message", Version: "2"},
-	{EventType: "channel.chat.message_delete", Version: "2"},
-	{EventType: "channel.chat.notification", Version: "2"},
+	{EventType: "channel.follow", Version: "2", Moderator: true},
+	{EventType: "channel.raid", Version: "1", RaidTo: true},
+	{EventType: "channel.chat.message", Version: "1", ChatAsUser: true},
+	{EventType: "channel.chat.message_delete", Version: "1", ChatAsUser: true},
+	{EventType: "channel.chat.notification", Version: "1", ChatAsUser: true},
 	{EventType: "channel.cheer", Version: "1"},
-	{EventType: "channel.moderate", Version: "2"},
+	{EventType: "channel.moderate", Version: "2", Moderator: true},
 	{EventType: "channel.shared_chat.begin", Version: "1"},
 	{EventType: "channel.shared_chat.update", Version: "1"},
 	{EventType: "channel.shared_chat.end", Version: "1"},
-	{EventType: "channel.hype_train.start", Version: "1"},
-	{EventType: "channel.hype_train.progress", Version: "1"},
-	{EventType: "channel.hype_train.end", Version: "1"},
-	{EventType: "channel.ad.started", Version: "1"},
-	{EventType: "channel.shoutout.received", Version: "1"},
-	{EventType: "channel.goal.start", Version: "1"},
-	{EventType: "channel.goal.progress", Version: "1"},
-	{EventType: "channel.goal.complete", Version: "1"},
-	{EventType: "channel.charity.progress", Version: "1"},
-	{EventType: "channel.charity.complete", Version: "1"},
+	{EventType: "channel.hype_train.begin", Version: "2"},
+	{EventType: "channel.hype_train.progress", Version: "2"},
+	{EventType: "channel.hype_train.end", Version: "2"},
+	{EventType: "channel.ad_break.begin", Version: "1"},
+	{EventType: "channel.shoutout.receive", Version: "1"},
+	{EventType: "channel.goal.begin", Version: "1", HomeOnly: true},
+	{EventType: "channel.goal.progress", Version: "1", HomeOnly: true},
+	{EventType: "channel.goal.end", Version: "1", HomeOnly: true},
+	{EventType: "channel.charity_campaign.progress", Version: "1"},
+	{EventType: "channel.charity_campaign.stop", Version: "1"},
 	{EventType: "channel.channel_points_automatic_reward_redemption.add", Version: "1"},
 	{EventType: "channel.channel_points_custom_reward_redemption.add", Version: "1"},
 	{EventType: "user.whisper.message", Version: "1", User: true},
@@ -95,6 +117,7 @@ type Manager struct {
 	helix     *helix.Client
 	channels  []string
 	whisper   string
+	moderator string
 	specs     []Spec
 	log       *slog.Logger
 	interval  time.Duration
@@ -114,6 +137,14 @@ type ManagerOptions struct {
 	// Whisper is the user ID that receives user.whisper.message (the
 	// user_id condition); empty to not subscribe to whispers.
 	Whisper string
+	// Moderator is the user ID of the token owner (the broadcaster for
+	// the home channel, the bot for an additional channel): the
+	// moderator_user_id condition of channel.follow and
+	// channel.moderate v2 (the broadcaster user ID when the token is
+	// the broadcaster's, EventSub Reference "Channel Follow
+	// Condition") and the user_id condition of the chat events ("the
+	// user ID to read chat as"); empty falls back to the broadcaster.
+	Moderator string
 	// Specs is the desired table; the caller leaves out the home-only
 	// specs for the additional channels (stream state, spec
 	// twitch-multi-channel.md, B10).
@@ -154,6 +185,7 @@ func NewManager(o ManagerOptions) *Manager {
 		helix:     o.Helix,
 		channels:  o.Channels,
 		whisper:   o.Whisper,
+		moderator: o.Moderator,
 		specs:     specs,
 		log:       log,
 		interval:  interval,
@@ -234,7 +266,7 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 				continue
 			}
 			for _, b := range m.channels {
-				wants = append(wants, wantSpec{d, helix.SubscriptionCondition{BroadcasterUserID: b}})
+				wants = append(wants, wantSpec{d, m.conditionOf(d, b)})
 			}
 		}
 	}
@@ -263,10 +295,16 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 	}
 
 	// The surplus: actual subscriptions outside the desired state
-	// (e.g. left over of an older version of the app). The managers
+	// (e.g. left over of an older version of the app, e.g. the old
+	// event names of the pre-2026-10-22 table). The managers
 	// revoke their own subscriptions only: the additional channels
 	// share the bot token, whose listing also carries the subscriptions
 	// of the other channels (spec twitch-multi-channel.md, B4).
+	// The revocation runs before the creation, so a re-created
+	// subscription (same type and version, new condition or session)
+	// does not collide with the one it replaces (the twitch-cli mock
+	// rejects the duplicate per type and version; production per
+	// condition).
 	for _, s := range actual {
 		if want[specKeyOf(s.EventType, s.Version, s.Condition)] {
 			continue
@@ -280,6 +318,29 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 		m.log.InfoContext(ctx, "eventsub subscription revoked", "eventtype", s.EventType)
 	}
 	return nil
+}
+
+// conditionOf is the EventSub condition of one spec for one channel
+// (EventSub Reference "Conditions", plan
+// 2026-10-22-eventsub-reference-fix.md, F3–F7): most events name the
+// broadcaster only; the chat events read as the token owner, follow and
+// moderate v2 carry the token owner as moderator, and the raid names
+// the raided channel as to_broadcaster_user_id.
+func (m *Manager) conditionOf(d Spec, broadcaster string) helix.SubscriptionCondition {
+	moderator := m.moderator
+	if moderator == "" {
+		moderator = broadcaster
+	}
+	switch {
+	case d.RaidTo:
+		return helix.SubscriptionCondition{ToBroadcasterUserID: broadcaster}
+	case d.ChatAsUser:
+		return helix.SubscriptionCondition{BroadcasterUserID: broadcaster, UserID: moderator}
+	case d.Moderator:
+		return helix.SubscriptionCondition{BroadcasterUserID: broadcaster, ModeratorUserID: moderator}
+	default:
+		return helix.SubscriptionCondition{BroadcasterUserID: broadcaster}
+	}
 }
 
 // owns reports whether the subscription belongs to the manager: its

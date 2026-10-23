@@ -142,7 +142,7 @@ func TestEventContract(t *testing.T) {
 			Type:     eventtype.TwitchSharedChatEnd,
 			Details:  eventtype.Details{SharedChat: &eventtype.SharedChat{SessionID: "session-1"}},
 		}},
-		{name: "channel.hype_train.start", wantEvent: &connector.Event{
+		{name: "channel.hype_train.begin", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchHypeTrainStart,
 			Details:  eventtype.Details{HypeTrain: &eventtype.HypeTrain{Level: 1, Progress: 10, Goal: 100, RewardLevel: 1}},
@@ -157,18 +157,18 @@ func TestEventContract(t *testing.T) {
 			Type:     eventtype.TwitchHypeTrainEnd,
 			Details:  eventtype.Details{HypeTrain: &eventtype.HypeTrain{Level: 3, Progress: 100, Goal: 100, RewardLevel: 10, Outcome: "goal_reached"}},
 		}},
-		{name: "channel.ad.started", wantEvent: &connector.Event{
+		{name: "channel.ad_break.begin", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchAdStart,
 			Details:  eventtype.Details{AdBreak: &eventtype.AdBreak{Duration: 300, Message: "break time"}},
 		}},
-		{name: "channel.shoutout.received", wantEvent: &connector.Event{
+		{name: "channel.shoutout.receive", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchShoutoutReceive,
 			User:     bob,
 			Details:  eventtype.Details{Shoutout: &eventtype.Shoutout{Viewers: 42}},
 		}},
-		{name: "channel.goal.start", wantEvent: &connector.Event{
+		{name: "channel.goal.begin", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchGoalStart,
 			Details:  eventtype.Details{Goal: &eventtype.Goal{Target: 1000, Currency: "USD"}},
@@ -178,17 +178,17 @@ func TestEventContract(t *testing.T) {
 			Type:     eventtype.TwitchGoalProgress,
 			Details:  eventtype.Details{Goal: &eventtype.Goal{Current: 250, Target: 1000, Currency: "USD"}},
 		}},
-		{name: "channel.goal.complete", wantEvent: &connector.Event{
+		{name: "channel.goal.end", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchGoalEnd,
 			Details:  eventtype.Details{Goal: &eventtype.Goal{Current: 1000, Target: 1000, Currency: "USD"}},
 		}},
-		{name: "channel.charity.progress", wantEvent: &connector.Event{
+		{name: "channel.charity_campaign.progress", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchCharityDonation,
 			Details:  eventtype.Details{Charity: &eventtype.Charity{Current: 150, Target: 1000, Currency: "USD"}},
 		}},
-		{name: "channel.charity.complete", wantEvent: &connector.Event{
+		{name: "channel.charity_campaign.stop", wantEvent: &connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchCharityDonation,
 			Details:  eventtype.Details{Charity: &eventtype.Charity{Current: 1000, Target: 1000, Currency: "USD"}},

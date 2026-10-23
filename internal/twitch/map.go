@@ -250,7 +250,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			Type:     typ,
 			Details:  eventtype.Details{SharedChat: &eventtype.SharedChat{SessionID: p.ChatSessionID, Title: p.Title}},
 		})
-	case "channel.hype_train.start", "channel.hype_train.progress", "channel.hype_train.end":
+	case "channel.hype_train.begin", "channel.hype_train.progress", "channel.hype_train.end":
 		var p hypeTrain
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
 			return err
@@ -274,7 +274,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			Type:     typ,
 			Details:  eventtype.Details{HypeTrain: train},
 		})
-	case "channel.ad.started":
+	case "channel.ad_break.begin":
 		var p adStarted
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
 			return err
@@ -284,7 +284,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			Type:     eventtype.TwitchAdStart,
 			Details:  eventtype.Details{AdBreak: &eventtype.AdBreak{Duration: p.Length, Message: p.Message}},
 		})
-	case "channel.shoutout.received":
+	case "channel.shoutout.receive":
 		var p shoutout
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
 			return err
@@ -295,7 +295,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			User:     new(identity(p.user())),
 			Details:  eventtype.Details{Shoutout: &eventtype.Shoutout{Viewers: p.FromUserViewers}},
 		})
-	case "channel.goal.start", "channel.goal.progress", "channel.goal.complete":
+	case "channel.goal.begin", "channel.goal.progress", "channel.goal.end":
 		var p goal
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
 			return err
@@ -304,7 +304,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		switch e.Subscription.Type {
 		case "channel.goal.progress":
 			typ = eventtype.TwitchGoalProgress
-		case "channel.goal.complete":
+		case "channel.goal.end":
 			typ = eventtype.TwitchGoalEnd
 		}
 		return m.rec.Event(ctx, connector.Event{
@@ -312,7 +312,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			Type:     typ,
 			Details:  eventtype.Details{Goal: &eventtype.Goal{Current: p.CurrentAmount, Target: p.TargetAmount, Currency: p.Currency}},
 		})
-	case "channel.charity.progress", "channel.charity.complete":
+	case "channel.charity_campaign.progress", "channel.charity_campaign.stop":
 		var p charity
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
 			return err
