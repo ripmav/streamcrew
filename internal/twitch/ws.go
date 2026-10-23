@@ -290,6 +290,12 @@ func (c *Client) dialAndWelcome(ctx context.Context, dialURL string, asIs bool) 
 		if err == nil {
 			q := u.Query()
 			q.Set("access_token", tok)
+			// The documented keepalive parameter (values 10-600, default
+			// 10): without it, Twitch's CDN WAF answers the handshake
+			// with a CloudFront 403 block page before the token is even
+			// checked, so every fresh start fails (Log-Analyse
+			// 2026-10-23, access_token-only dials 403).
+			q.Set("keepalive_timeout_seconds", "10")
 			u.RawQuery = q.Encode()
 		}
 	}

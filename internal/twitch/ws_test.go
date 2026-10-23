@@ -213,6 +213,7 @@ func TestRunRevocationReconnectsWithAFreshToken(t *testing.T) {
 			want = "tok2"
 		}
 		assert.Equal(t, want, r.URL.Query().Get("access_token"))
+		assert.Equal(t, "10", r.URL.Query().Get("keepalive_timeout_seconds"))
 		writeText(t, conn, welcomeJSON("s1", "10"))
 		if n > 1 {
 			// After the handshake, so the test's cancel() cannot race
