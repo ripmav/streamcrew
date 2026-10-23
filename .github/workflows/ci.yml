@@ -102,14 +102,14 @@ jobs:
       # The API contract must lint and the generated Go code must match the
       # protobuf (ADR-0010, Code-ADR-0016). Versions pinned in api/generate.go.
       - name: buf lint
-        run: go run github.com/bufbuild/buf/cmd/buf@v1.74.0 lint
+        run: go run github.com/bufbuild/buf/cmd/buf@v1.75.0 lint
 
       - name: buf generate diff
         run: |
           export PATH="$PATH:$HOME/go/bin"
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
           go install connectrpc.com/connect/v2/cmd/protoc-gen-connect-go@v2.0.1
-          go run github.com/bufbuild/buf/cmd/buf@v1.74.0 generate
+          go run github.com/bufbuild/buf/cmd/buf@v1.75.0 generate
           git diff --exit-code -- api/gen
 
       - name: golangci-lint
