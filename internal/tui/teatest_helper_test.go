@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -45,11 +46,19 @@ func quitModel(t *testing.T, tm *teatest.TestModel) model {
 	return tm.FinalModel(t).(model)
 }
 
+// ansiEscapeRE matches ANSI escape sequences (CSI sequences and the
+// other two-byte escapes) in the rendered output.
+var ansiEscapeRE = regexp.MustCompile(`\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])`)
+
 // waitOutput waits until the rendered output of the program contains want.
+// The comparison is on the escape-stripped text: the diff renderer may
+// rewrite a line in several chunks (cursor moves and erase sequences can
+// land inside the expected phrase), so matching raw bytes flakes under
+// load.
 func waitOutput(t *testing.T, tm *teatest.TestModel, want string) {
 	t.Helper()
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(string(b), want)
+		return strings.Contains(ansiEscapeRE.ReplaceAllString(string(b), ""), want)
 	}, teatest.WithDuration(10*time.Second))
 }
 
