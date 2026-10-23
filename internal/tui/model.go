@@ -250,6 +250,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case configUpdatedMsg:
 		m.settings.err = msg.err
+		m.settings.editing = false
 		if msg.err == nil {
 			m.settings.document = msg.document
 			m.settings.result = "applied: " + strings.Join(msg.applied, ", ")
@@ -263,6 +264,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.err = msg.err
 		}
+		m.commands.editing = false
 		return m, nil
 
 	case tea.KeyMsg:

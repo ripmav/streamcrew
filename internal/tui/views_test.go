@@ -349,6 +349,25 @@ func TestCommandsViewFetchesFiltersAndEdits(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 		m := quitModel(t, tm)
 		assert.NoError(t, m.err)
+		// the actionDoneMsg cleared the editing flag again
+		assert.False(t, m.commands.editing)
+	})
+	t.Run("edit status", func(t *testing.T) {
+		// no t.Parallel(): the test sets the EDITOR environment variable.
+		// The editor "yes" blocks until the 5s editor context kills it, so
+		// while it is open the view shows the editing status; the flag is
+		// still set when the program quits, which is the state the test
+		// asserts.
+		t.Setenv("EDITOR", "yes")
+		tm, base := newTestModelWithCore(t)
+		importExampleCommands(t, base)
+
+		tm.Type("5")               // commands view
+		waitOutput(t, tm, "Hello") // the list is loaded
+		tm.Send(tea.KeyPressMsg{Code: 'E'})
+		waitOutput(t, tm, "editing in $EDITOR") // the flag renders while editing
+		m := quitModel(t, tm)
+		assert.True(t, m.commands.editing)
 	})
 	t.Run("enable", func(t *testing.T) {
 		t.Parallel()

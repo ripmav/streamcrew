@@ -109,10 +109,12 @@ func waitForLogEvent(t *testing.T, sub streamcrewv1alpha1connect.StreamServiceSu
 		if err != nil {
 			t.Fatalf("waiting for a log event containing %q: %v", want, err)
 		}
-		// the live stream does not set Event.Type (see convertEvent); the
-		// payload identifies the event
-		if l := ev.GetLog(); l != nil && strings.Contains(l.GetMessage(), want) {
-			return
+		// the stream carries the protocol type (see convertEvent); a log
+		// event is the proof that the TUI's API call reached the core
+		if ev.GetType() == "log" {
+			if l := ev.GetLog(); l != nil && strings.Contains(l.GetMessage(), want) {
+				return
+			}
 		}
 	}
 }

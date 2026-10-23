@@ -180,7 +180,9 @@ func (x *apiStream) AnswerPrompt(_ context.Context, id, value string, confirmed 
 }
 
 // convertEvent turns a bus event into its protocol form; it returns nil for
-// the types the stream does not deliver.
+// the types the stream does not deliver. Each converter sets Event.Type to
+// its protocol name (stream.proto) — the stream clients (TUI, filters)
+// route on it.
 func convertEvent(e event.Envelope) *v1alpha1.Event {
 	base := &v1alpha1.Event{OccurredAt: timestamppb.New(e.Time)}
 	switch {
@@ -206,6 +208,7 @@ func logEvent(e event.Envelope, base *v1alpha1.Event) *v1alpha1.Event {
 	if !ok {
 		return nil
 	}
+	base.Type = "log"
 	base.Payload = &v1alpha1.Event_Log{Log: &v1alpha1.LogEntry{
 		Level:     p.Level,
 		Component: p.Component,
@@ -247,6 +250,7 @@ func chatEvent(e event.Envelope, base *v1alpha1.Event) *v1alpha1.Event {
 		return nil
 	}
 	m := p.Details.Message
+	base.Type = "chat.message"
 	base.Platform = string(p.Platform)
 	base.Channel = p.Channel
 	login, display := userName(p)
@@ -265,6 +269,7 @@ func instanceEvent(e event.Envelope, base *v1alpha1.Event) *v1alpha1.Event {
 	if !ok {
 		return nil
 	}
+	base.Type = "command.instance"
 	base.Platform = string(ins.Platform)
 	errText := ""
 	if len(ins.Errors) > 0 {
@@ -286,6 +291,7 @@ func promptEvent(e event.Envelope, base *v1alpha1.Event) *v1alpha1.Event {
 	if !ok {
 		return nil
 	}
+	base.Type = "prompt"
 	base.Payload = &v1alpha1.Event_Prompt{Prompt: &v1alpha1.Prompt{Id: p.ID, Kind: p.Kind, Text: p.Text, Options: p.Options}}
 	return base
 }
@@ -295,6 +301,7 @@ func feedEvent(e event.Envelope, base *v1alpha1.Event) *v1alpha1.Event {
 	if !ok {
 		return nil
 	}
+	base.Type = "feed"
 	base.Platform = string(p.Platform)
 	base.Channel = p.Channel
 	login, display := userName(p)
