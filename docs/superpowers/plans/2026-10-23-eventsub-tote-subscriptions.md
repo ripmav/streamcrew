@@ -1,6 +1,6 @@
 # Plan: EventSub — die 12 toten Subscriptionen (Log-20261023, Gruppe 2)
 
-**Status:** abgeschlossen (Implementierung + Tests grün, 2026-10-23)
+**Status:** PR #322 (Implementierung + Tests grün, 2026-10-23)
 **Stand:** 2026-10-23, Branch `fix/eventsub-current-types` (von `main` bei `f86920e`)
 **Scope:** nur die Event-Typen, die Twitch mit HTTP 400
 `invalid subscription type and version` ablehnt (Log
