@@ -90,10 +90,15 @@ func (f feedView) render(t *Theme, title string, width int) string {
 type queueView struct {
 	instances []*v1alpha1.CommandInstanceView
 	selected  int
+	paused    bool // the queue is paused (key p toggles it)
 }
 
 // render draws the queue lines for a width.
 func (q queueView) render(t *Theme, width int) string {
+	title := "Command Queue"
+	if q.paused {
+		title += " (paused)"
+	}
 	var lines []string
 	for i, inst := range q.instances {
 		mark := "  "
@@ -120,12 +125,13 @@ func (q queueView) render(t *Theme, width int) string {
 		body = lipgloss.JoinVertical(lipgloss.Left, lines...)
 	}
 	help := t.dim.Render("↑↓ select · p pause queue · x cancel · r retry")
-	return t.border.Width(width).Render(t.title.Render("Command Queue") + "\n" + body + "\n" + help)
+	return t.border.Width(width).Render(t.title.Render(title) + "\n" + body + "\n" + help)
 }
 
 // commandsView is the state of the commands view.
 type commandsView struct {
-	list      []*v1alpha1.CommandSummary
+	all       []*v1alpha1.CommandSummary // the full list from the API
+	list      []*v1alpha1.CommandSummary // the displayed (filtered) list
 	filter    string
 	filtering bool
 	selected  int
@@ -156,7 +162,8 @@ func (c commandsView) render(t *Theme, width int) string {
 
 // usersView is the state of the users view.
 type usersView struct {
-	list      []*v1alpha1.UserView
+	all       []*v1alpha1.UserView // the full list from the API
+	list      []*v1alpha1.UserView // the displayed (filtered) list
 	filter    string
 	filtering bool
 	selected  int

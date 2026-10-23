@@ -10,12 +10,7 @@ import (
 
 // Run starts the TUI and blocks until it quits.
 func Run(opts Options) error {
-	return run(opts, nil)
-}
-
-// run starts the program with additional options (the tests use them).
-func run(opts Options, extra []tea.ProgramOption) error {
-	p := tea.NewProgram(newModel(opts), extra...)
+	p := tea.NewProgram(newModel(opts))
 	_, err := p.Run()
 	return err
 }
