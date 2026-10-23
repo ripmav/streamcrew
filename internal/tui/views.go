@@ -156,6 +156,14 @@ func (c commandsView) render(t *Theme, width int) string {
 	if len(lines) > 0 {
 		body = lipgloss.JoinVertical(lipgloss.Left, lines...)
 	}
+	if c.editing {
+		line := t.dim.Render("editing in $EDITOR …")
+		if body == "" {
+			body = line
+		} else {
+			body += "\n" + line
+		}
+	}
 	help := t.dim.Render("/ filter · enter run · e enable/disable · E edit in $EDITOR")
 	return t.border.Width(width).Render(t.title.Render("Commands") + "\n" + body + "\n" + help)
 }

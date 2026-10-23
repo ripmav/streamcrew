@@ -105,7 +105,8 @@ Produktionsbugs, die die Migration sichtbar gemacht hat und der PR mitfixt:
 4. `tui.go`: `run(opts, extra)` (Test-Backdoor für `tea.ProgramOption`) entfernt
    — der Harness braucht sie nicht; nur noch `Run`.
 
-Bekannt, aber bewusst **nicht** in diesem PR gefixt (eigene Issues):
+Bekannt, aber bewusst **nicht** in diesem PR gefixt (beide im Folge-PR
+auf diesem Stack gefixt, 2026-10-23):
 
 - `convertEvent` in `internal/app/api_stream.go` setzt `Event.Type` nie; die
   TUI routet Live-Ereignisse per `GetType()` und sieht sie deshalb nie. Tests

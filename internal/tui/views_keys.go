@@ -252,8 +252,10 @@ func (m *model) applyCommandFilter() {
 	}
 }
 
-// editCommand opens the document of the command in $EDITOR.
-func (m model) editCommand(id string, editor string) tea.Cmd {
+// editCommand opens the document of the command in $EDITOR. The pointer
+// receiver is required: it marks the model editing, and the caller returns
+// the model it mutates (the flag is cleared by the actionDoneMsg).
+func (m *model) editCommand(id string, editor string) tea.Cmd {
 	if editor == "" {
 		return func() tea.Msg { return actionDoneMsg{err: os.ErrNotExist} }
 	}
@@ -388,8 +390,10 @@ func (m model) updateSettingsKey(key tea.Key) (tea.Model, tea.Cmd) {
 }
 
 // editConfig opens the configuration document in $EDITOR and stores the
-// edited document with UpdateConfig.
-func (m model) editConfig(editor string) tea.Cmd {
+// edited document with UpdateConfig. The pointer receiver is required: it
+// marks the model editing, and the caller returns the model it mutates (the
+// flag is cleared by the configUpdatedMsg).
+func (m *model) editConfig(editor string) tea.Cmd {
 	if editor == "" {
 		return func() tea.Msg { return configUpdatedMsg{err: os.ErrNotExist} }
 	}
