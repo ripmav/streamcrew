@@ -61,3 +61,6 @@ release:
     owner: ripmav
     name: streamcrew
   mode: replace
+  # tags with a prerelease part (e.g. v0.0.0-alpha1) are GitHub
+  # prereleases, not "Latest" releases
+  prerelease: auto
