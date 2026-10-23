@@ -224,8 +224,8 @@ func TestPlatformAgainstTheMock(t *testing.T) {
 			`"user_id":%q,"user_login":%q,"user_display_name":"Alice"}`,
 		c.BroadcasterID, c.BroadcasterLogin, c.BroadcasterLogin, alice.id, alice.login)
 	before = r.msgCount()
-	require.NoError(t, c.FireEvent("channel.chat.message", "2", json.RawMessage(msg)))
-	require.NoError(t, c.FireEvent("channel.chat.message", "2", json.RawMessage(msg))) // the repeat
+	require.NoError(t, c.FireEvent("channel.chat.message", "1", json.RawMessage(msg)))
+	require.NoError(t, c.FireEvent("channel.chat.message", "1", json.RawMessage(msg))) // the repeat
 	require.Eventually(t, func() bool { return r.msgCount() == before+1 },
 		10*time.Second, 50*time.Millisecond)
 	m := r.lastMessage(t)

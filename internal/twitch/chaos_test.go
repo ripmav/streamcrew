@@ -41,7 +41,7 @@ func freshSession(t *testing.T, p *twitch.Platform, old string) string {
 	return id
 }
 
-// fireChat fires a chat message (channel.chat.message v2) with the
+// fireChat fires a chat message (channel.chat.message v1) with the
 // given message ID and text; the body is identical for identical
 // arguments, so the B22 dedup key is identical.
 func fireChat(t *testing.T, c *twitchmock.Client, id, text string) {
@@ -53,7 +53,7 @@ func fireChat(t *testing.T, c *twitchmock.Client, id, text string) {
 			`"user_id":%q,"user_login":%q,"user_display_name":"MockViewer"}`,
 		id, c.BroadcasterID, c.BroadcasterLogin, c.BroadcasterLogin,
 		text, c.BroadcasterID, c.BroadcasterLogin)
-	require.NoError(t, c.FireEvent("channel.chat.message", "2", json.RawMessage(body)))
+	require.NoError(t, c.FireEvent("channel.chat.message", "1", json.RawMessage(body)))
 }
 
 // TestChaosAgainstTheMock runs the reconnect paths of the EventSub

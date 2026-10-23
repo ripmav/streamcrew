@@ -1,0 +1,12 @@
+{
+  "subscription": {
+    "type": "channel.ad_break.begin",
+    "version": "1"
+  },
+  "event": {
+    "id": "ad-1",
+    "duration_seconds": 300,
+    "started_at": "2026-10-11T10:00:00.000000Z",
+    "is_automatic": true
+  }
+}

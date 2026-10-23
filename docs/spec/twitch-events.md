@@ -49,11 +49,11 @@ Twitch-Actions (Roadmap 4.4, A4 für Umfragen und Vorhersagen).
 | B7 | Moderationsereignisse: `chat.moderate.ban`/`chat.moderate.unban`, `chat.moderate.timeout`/`chat.moderate.untimeout`, `chat.moderate.add`/`chat.moderate.remove`, `chat.moderate.vip`/`chat.moderate.unvip` tragen den moderierten Nutzer als Nutzer; Ban und Timeout tragen außerdem Dauer und Grund, soweit die Plattform sie nennt. | Q1, Q3 |
 | B8 | `chat.user.whisper` ist eine Flüsternachricht: sie trägt den Absender als Nutzer und die Nachricht mit Emotes und Fragmenten. | Q1, Q3 |
 | B9 | `twitch.shared_chat.opened`/`comment`/`deleted` tragen die Thread-Nachricht (Betreff bei „geöffnet“, Kommentar oder Löschung bei „Kommentar“); sie sind Twitch-spezifisch ohne neutrale Entsprechung. | Q1, Q3 |
-| B10 | `channel.goal.progress`/`complete` tragen den aktuellen und den Zielbetrag mit Währung; `complete` ist zugleich die vollständige Erreichung. | Q1, Q3 |
-| B11 | `channel.hype_train.progress`/`start`/`end` tragen Stufe, Fortschritt, Ziel, erreichte Belohnungsstufen und bei `end` das Ergebnis. | Q1, Q3 |
-| B12 | `channel.ad.started` trägt Dauer und optional die Nachricht der Werbeeinschaltung. | Q1, Q3 |
-| B13 | `channel.shoutout.received` trägt den shoutenden Kanal als Nutzer und dessen Zuschauerzahl. | Q1, Q3 |
-| B14 | `channel.charity.progress`/`complete` tragen den aktuellen und den Zielbetrag der Charity-Sammlung mit Währung. | Q1, Q3 |
+| B10 | `channel.goal.begin`/`progress`/`end` tragen den aktuellen und den Zielbetrag; `end` ist zugleich die vollständige Erreichung. Das umbenannte v1-Payload nennt keine Währung. | Q1, Q3 |
+| B11 | `channel.hype_train.begin`/`progress`/`end` (v2) tragen Stufe, Fortschritt und Ziel; Belohnungsstufe und Ergebnis entfielen mit v2. | Q1, Q3 |
+| B12 | `channel.ad_break.begin` trägt die Dauer der Werbeeinschaltung. | Q1, Q3 |
+| B13 | `channel.shoutout.receive` wird nicht abonniert: es verlangt seit 2026 zwingend `moderator_user_id` (Gruppe 1, fehlender Mod-Status). Der Katalog-Eintrag `twitch.shoutout.receive` kann dadurch nicht feuern. | Q1, Q3 |
+| B14 | `channel.charity_campaign.progress`/`stop` tragen den aktuellen und den Zielbetrag der Charity-Sammlung mit Währung. | Q1, Q3 |
 | B15 | Channel Points: `channel.channel_points_custom_reward.redemption.add` (Custom Power-Up) und `channel.channel_points_automatic_reward.redemption.add` (automatische Belohnung) lösen die Channel-Points-Commands aus (Roadmap 4.4); sie tragen die Belohnung und den einlösenden Nutzer. | Q1, Q3, Q4 |
 | B16 | `channel.channel_update` ist kein Ereignis; der Adapter meldet damit nur den Stream-Zustand ([`events.md`](events.md), B11). | Q1, Q3 |
 
@@ -80,10 +80,10 @@ Twitch-Actions (Roadmap 4.4, A4 für Umfragen und Vorhersagen).
 | `channel.subscription.gift.mass` | Initiator | — | `$usersubplan`, `$usersubplanname`, `$subsgiftedamount` |
 | `bits.cheer` | Cheerer | Streamer | `$cheerbits` (B4); die Nachricht ist `$message` |
 | `chat.user.moderate.timeout`/`.ban` | Moderierter | Streamer | `$moderationmessage` (B7) |
-| `twitch.goal.progress`/`.complete` | — | Streamer | `$goalcurrentamount`, `$goaltargetamount`, `$goalcurrency` (B10) |
-| `twitch.hype_train.start`/`.progress`/`.end` | — | Streamer | `$hypetrainlevel`, `$hypetrainprogress`, `$hypetraingoal`, `$hypetrainrewardlevel`, `$hypetrainoutcome` (B11) |
-| `twitch.ad.started` | — | Streamer | `$adbreakduration`, `$adbreakmessage` (B12) |
-| `twitch.shoutout.received` | shoutender Kanal | — | `$shoutoutviewers` (B13) |
+| `twitch.goal.progress`/`.complete` | — | Streamer | `$goalcurrentamount`, `$goaltargetamount` (B10) |
+| `twitch.hype_train.start`/`.progress`/`.end` | — | Streamer | `$hypetrainlevel`, `$hypetrainprogress`, `$hypetraingoal` (B11) |
+| `twitch.ad.started` | — | Streamer | `$adbreakduration` (B12) |
+| `twitch.shoutout.received` | shoutender Kanal | — | `$shoutoutviewers` (B13) — kann nicht feuern |
 | `twitch.charity.progress`/`.complete` | — | Streamer | `$donationcurrentamount`, `$donationtargetamount`, `$donationcurrency` (B14) |
 | Channel-Points-Command (B15) | Einlösender | Streamer | `$channelpointsamount`, `$channelpointsreward` |
 | Custom Power-Up-Command (B15) | Einlösender | Streamer | `$custompowerup`; die Nachricht des Einlösenden ist `$message` |

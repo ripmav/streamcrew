@@ -126,7 +126,7 @@ func TestReconcileCreatesTheMissingSubscriptions(t *testing.T) {
 	m := newManager(t, f, 0)
 	require.NoError(t, m.Reconcile(t.Context()))
 
-	require.Len(t, f.created, 25)
+	require.Len(t, f.created, 24)
 	// The exact table: versions and conditions.
 	got := map[string]struct {
 		version string
@@ -139,7 +139,7 @@ func TestReconcileCreatesTheMissingSubscriptions(t *testing.T) {
 		}{in.Version, in.Condition}
 	}
 	assert.Equal(t, "2", got["channel.follow"].version)
-	assert.Equal(t, "2", got["channel.chat.message"].version)
+	assert.Equal(t, "1", got["channel.chat.message"].version)
 	assert.Equal(t, "1", got["stream.online"].version)
 	assert.Equal(t, "1", got["channel.cheer"].version)
 	assert.Equal(t, "2", got["channel.moderate"].version)
@@ -149,7 +149,7 @@ func TestReconcileCreatesTheMissingSubscriptions(t *testing.T) {
 
 	// The second run: nothing to do.
 	require.NoError(t, m.Reconcile(t.Context()))
-	assert.Len(t, f.created, 25)
+	assert.Len(t, f.created, 24)
 	assert.Empty(t, f.revoked)
 }
 
@@ -168,8 +168,8 @@ func TestReconcileAdditionalChannels(t *testing.T) {
 	})
 	require.NoError(t, m.Reconcile(t.Context()))
 
-	// 22 channel specs per channel, 2 channels, plus the one whisper.
-	require.Len(t, f.created, 45)
+	// 21 channel specs per channel, 2 channels, plus the one whisper.
+	require.Len(t, f.created, 43)
 	// No stream subscriptions for the additional channels (B10).
 	for _, in := range f.created {
 		assert.NotEqual(t, "stream.online", in.EventType)
@@ -231,7 +231,7 @@ func TestReconcileSkipsThe400(t *testing.T) {
 	_, hasCheer := f.subs["id-channel.cheer"]
 	f.mu.Unlock()
 	assert.False(t, hasCheer)
-	assert.Len(t, f.created, 25)
+	assert.Len(t, f.created, 24)
 }
 
 func TestRunReconcilesAtTheStartAndOnTheInterval(t *testing.T) {

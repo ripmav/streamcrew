@@ -250,7 +250,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			Type:     typ,
 			Details:  eventtype.Details{SharedChat: &eventtype.SharedChat{SessionID: p.ChatSessionID, Title: p.Title}},
 		})
-	case "channel.hype_train.start", "channel.hype_train.progress", "channel.hype_train.end":
+	case "channel.hype_train.begin", "channel.hype_train.progress", "channel.hype_train.end":
 		var p hypeTrain
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
 			return err
@@ -262,40 +262,24 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		case "channel.hype_train.end":
 			typ = eventtype.TwitchHypeTrainEnd
 		}
-		train := &eventtype.HypeTrain{Level: p.CurrentLevel, Progress: p.Progress, Goal: p.Goal}
-		if p.RewardInterval > 0 {
-			train.RewardLevel = int(p.Progress / p.RewardInterval)
-		}
-		if e.Subscription.Type == "channel.hype_train.end" {
-			train.Outcome = p.EndReason
-		}
+		// The v2 payload carries no reward interval and no end reason;
+		// the reward level and the outcome stay empty.
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     typ,
-			Details:  eventtype.Details{HypeTrain: train},
+			Details:  eventtype.Details{HypeTrain: &eventtype.HypeTrain{Level: p.Level, Progress: p.Progress, Goal: p.Goal}},
 		})
-	case "channel.ad.started":
-		var p adStarted
+	case "channel.ad_break.begin":
+		var p adBreak
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
 			return err
 		}
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchAdStart,
-			Details:  eventtype.Details{AdBreak: &eventtype.AdBreak{Duration: p.Length, Message: p.Message}},
+			Details:  eventtype.Details{AdBreak: &eventtype.AdBreak{Duration: p.DurationSeconds}},
 		})
-	case "channel.shoutout.received":
-		var p shoutout
-		if err := jsonv2.Unmarshal(body, &p); err != nil {
-			return err
-		}
-		return m.rec.Event(ctx, connector.Event{
-			Platform: platform.Twitch,
-			Type:     eventtype.TwitchShoutoutReceive,
-			User:     new(identity(p.user())),
-			Details:  eventtype.Details{Shoutout: &eventtype.Shoutout{Viewers: p.FromUserViewers}},
-		})
-	case "channel.goal.start", "channel.goal.progress", "channel.goal.complete":
+	case "channel.goal.begin", "channel.goal.progress", "channel.goal.end":
 		var p goal
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
 			return err
@@ -304,15 +288,16 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		switch e.Subscription.Type {
 		case "channel.goal.progress":
 			typ = eventtype.TwitchGoalProgress
-		case "channel.goal.complete":
+		case "channel.goal.end":
 			typ = eventtype.TwitchGoalEnd
 		}
+		// The renamed goal payload has no currency field; it stays empty.
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     typ,
-			Details:  eventtype.Details{Goal: &eventtype.Goal{Current: p.CurrentAmount, Target: p.TargetAmount, Currency: p.Currency}},
+			Details:  eventtype.Details{Goal: &eventtype.Goal{Current: p.CurrentAmount, Target: p.TargetAmount}},
 		})
-	case "channel.charity.progress", "channel.charity.complete":
+	case "channel.charity_campaign.progress", "channel.charity_campaign.stop":
 		var p charity
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
 			return err
@@ -320,7 +305,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchCharityDonation,
-			Details:  eventtype.Details{Charity: &eventtype.Charity{Current: p.CurrentAmount, Target: p.TargetAmount, Currency: p.Currency}},
+			Details:  eventtype.Details{Charity: &eventtype.Charity{Current: p.CurrentAmount.Amount(), Target: p.TargetAmount.Amount(), Currency: p.CurrentAmount.Currency}},
 		})
 	case "channel.channel_points_automatic_reward_redemption.add":
 		var p autoRedemption
@@ -656,45 +641,47 @@ type sharedChat struct {
 	Title         string `json:"title"`
 }
 
-// hypeTrain is the payload of the channel.hype_train events.
+// hypeTrain is the payload of the channel.hype_train events (v2).
 type hypeTrain struct {
-	CurrentLevel   int    `json:"current_level"`
-	Progress       int64  `json:"progress"`
-	Goal           int64  `json:"goal"`
-	RewardInterval int64  `json:"reward_interval"`
-	EndReason      string `json:"end_reason"`
+	Level    int   `json:"level"`
+	Progress int64 `json:"progress"`
+	Goal     int64 `json:"goal"`
 }
 
-// adStarted is the payload of channel.ad.started.
-type adStarted struct {
-	Length  int    `json:"length"`
-	Message string `json:"message"`
+// adBreak is the payload of channel.ad_break.begin.
+type adBreak struct {
+	DurationSeconds int `json:"duration_seconds"`
 }
-
-// shoutout is the payload of channel.shoutout.received.
-type shoutout struct {
-	FromUserID          string `json:"from_user_id"`
-	FromUserLogin       string `json:"from_user_login"`
-	FromUserDisplayName string `json:"from_user_display_name"`
-	FromUserViewers     int64  `json:"from_user_viewers"`
-}
-
-func (p shoutout) user() chatUser {
-	return chatUser{ID: p.FromUserID, Login: p.FromUserLogin, DisplayName: p.FromUserDisplayName}
-}
-
-// goal is the payload of the channel.goal events.
+// goal is the payload of the channel.goal events (begin/progress/end).
 type goal struct {
-	CurrentAmount int64  `json:"current_amount"`
-	TargetAmount  int64  `json:"target_amount"`
+	CurrentAmount int64 `json:"current_amount"`
+	TargetAmount  int64 `json:"target_amount"`
+}
+
+// charity is the payload of the channel.charity_campaign events; the
+// amounts are money objects with the value in smallest units.
+type charity struct {
+	CurrentAmount charityMoney `json:"current_amount"`
+	TargetAmount  charityMoney `json:"target_amount"`
+}
+
+// charityMoney is the money object of the charity_campaign events.
+type charityMoney struct {
+	Value         int64  `json:"value"`
+	DecimalPlaces int    `json:"decimal_places"`
 	Currency      string `json:"currency"`
 }
 
-// charity is the payload of the channel.charity events.
-type charity struct {
-	CurrentAmount int64  `json:"current_amount"`
-	TargetAmount  int64  `json:"target_amount"`
-	Currency      string `json:"currency"`
+// Amount is the integer amount in major units.
+//
+//	shortcut: the decimal part is truncated, fine for the template's
+//	amount display; use decimal output if exact minor units matter.
+func (m charityMoney) Amount() int64 {
+	div := int64(1)
+	for i := 0; i < m.DecimalPlaces; i++ {
+		div *= 10
+	}
+	return m.Value / div
 }
 
 // autoRedemption is the payload of
