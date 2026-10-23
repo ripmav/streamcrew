@@ -28,12 +28,14 @@ type fakeHelix struct {
 	created       []helix.CreateSubscriptionInput
 	revoked       []string
 	failCreate400 map[string]bool
+	failCreate409 map[string]bool
 }
 
 func newFakeHelix() *fakeHelix {
 	return &fakeHelix{
 		subs:          map[string]helix.EventSubSubscription{},
 		failCreate400: map[string]bool{},
+		failCreate409: map[string]bool{},
 	}
 }
 
@@ -62,6 +64,11 @@ func (f *fakeHelix) handler(t *testing.T) http.HandlerFunc {
 			if f.failCreate400[in.EventType] {
 				w.WriteHeader(http.StatusBadRequest)
 				_, _ = w.Write([]byte(`{"error":"limit"}`))
+				return
+			}
+			if f.failCreate409[in.EventType] {
+				w.WriteHeader(http.StatusConflict)
+				_, _ = w.Write([]byte(`{"error":"Conflict","message":"subscription already exists"}`))
 				return
 			}
 			id := "id-" + in.EventType
@@ -280,6 +287,26 @@ func TestReconcileSkipsThe400(t *testing.T) {
 	f := newFakeHelix()
 	m := newManager(t, f, 0)
 	f.failCreate400["channel.cheer"] = true
+	require.NoError(t, m.Reconcile(t.Context()))
+
+	// channel.cheer was attempted but not created; the rest is created.
+	created := map[string]bool{}
+	for _, in := range f.created {
+		created[in.EventType] = true
+	}
+	assert.True(t, created["channel.cheer"])
+	assert.True(t, created["channel.follow"])
+	f.mu.Lock()
+	_, hasCheer := f.subs["id-channel.cheer"]
+	f.mu.Unlock()
+	assert.False(t, hasCheer)
+	assert.Len(t, f.created, 25)
+}
+
+func TestReconcileSkipsThe409(t *testing.T) {
+	f := newFakeHelix()
+	m := newManager(t, f, 0)
+	f.failCreate409["channel.cheer"] = true
 	require.NoError(t, m.Reconcile(t.Context()))
 
 	// channel.cheer was attempted but not created; the rest is created.
