@@ -46,6 +46,9 @@ jobs:
       - name: Verify the module archive
         run: scripts/modulecheck.sh "dist/streamcrew-$(git describe --tags --exact-match | sed 's/^v//')-src.zip"
 
+      - name: Install syft
+        run: curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | BINARY_FORMAT=bash sh
+
       - name: goreleaser
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
         with:
@@ -67,7 +70,6 @@ jobs:
       - name: Image SBOM (CycloneDX)
         run: |
           tag=$(git describe --tags --exact-match)
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | BINARY_FORMAT=bash sh
           syft pkg "dist/streamcrew-image-${tag}.tar" -o cyclonedx-json="dist/streamcrew-image-${tag}.sbom.json"
 
       - name: Upload image artifacts
