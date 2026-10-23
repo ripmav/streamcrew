@@ -211,11 +211,13 @@ Ping/Pong (Library).
 - [x] `internal/twitch/message.go`: Revocation-Payload
   (`subscription{status, type, …}`) ergänzen.
 - [x] `internal/twitch/subscriptions.go` — Re-pointing: `Reconcile`
-  behandelt jede owned-Subscription mit
-  `transport.session_id != aktuelle Session` als stale → revoke +
-  neu erstellen (F10, F12). `platform.go`: `sessionState` meldet
-  jede neue Session-ID (auch nach Reconnect) an den Manager →
-  sofortiger Reconcile (10-s-Fenster).
+  behandelt jede owned-Subscription mit Status != `enabled` (der
+  Drop hat sie deaktiviert) als stale → revoke + neu erstellen
+  (F10, F12). Status statt `transport.session_id`: die ID bleibt bei
+  einem `session_reconnect` mit den Subscriptions unverändert (die
+  tragen dort über und müssen nicht neu erstellt werden), im Mock wie
+  in Produktion. `platform.go`: der Session-Callback meldet jede neue
+  Session-ID an den Manager → sofortiger Reconcile (10-s-Fenster).
 - [x] `internal/twitch/platform.go`: `Mapper.WithSubscriptionRevoked`
   an den Manager anbinden; falsche Kommentare korrigieren
   („subscriptions ride along with the session“ gilt nur für

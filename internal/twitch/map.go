@@ -29,7 +29,11 @@ type Mapper struct {
 	dedup     *connector.Dedup
 	botID     string
 	onRevoked func(context.Context)
-	log       *slog.Logger
+	// onSubscriptionRevoked is called when a single subscription is
+	// revoked (user_removed, version_removed); the composition root
+	// replaces it.
+	onSubscriptionRevoked func(context.Context, RevokedSubscription)
+	log                   *slog.Logger
 	// emotes resolves the emote IDs of a chat message to their code
 	// (roadmap 4.4, task 9); nil without a catalog, then the code is
 	// read from the marked text.
@@ -115,10 +119,25 @@ func (m *Mapper) WithRevoked(f func(context.Context)) {
 	m.onRevoked = f
 }
 
+// WithSubscriptionRevoked sets the callback for the revocation of a
+// single subscription (status user_removed or version_removed); the
+// composition root uses it to replace the subscription. The session
+// stays open.
+func (m *Mapper) WithSubscriptionRevoked(f func(context.Context, RevokedSubscription)) {
+	m.onSubscriptionRevoked = f
+}
+
 // OnRevoked is the Handler of the WebSocket client.
 func (m *Mapper) OnRevoked(ctx context.Context) {
 	if m.onRevoked != nil {
 		m.onRevoked(ctx)
+	}
+}
+
+// OnSubscriptionRevoked is the Handler of the WebSocket client.
+func (m *Mapper) OnSubscriptionRevoked(ctx context.Context, sub RevokedSubscription) {
+	if m.onSubscriptionRevoked != nil {
+		m.onSubscriptionRevoked(ctx, sub)
 	}
 }
 

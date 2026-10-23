@@ -105,7 +105,7 @@ func TestChaosAgainstTheMock(t *testing.T) {
 	// right after the connect.
 	require.Eventually(t, func() bool {
 		got := subscriptionTypes(t, c)
-		return got["stream.online"] && got["channel.cheer"] && got["channel.raid"]
+		return got["stream.online"] == "enabled" && got["channel.cheer"] == "enabled" && got["channel.raid"] == "enabled"
 	}, 15*time.Second, 200*time.Millisecond, "the subscriptions must be registered in the mock")
 
 	// Baseline: an event of the current session arrives.
@@ -124,7 +124,7 @@ func TestChaosAgainstTheMock(t *testing.T) {
 	sid = freshSession(t, p, sid)
 	got := subscriptionTypes(t, c)
 	for _, want := range []string{"stream.online", "channel.cheer", "channel.raid"} {
-		assert.True(t, got[want], "the subscription %s must carry over to the new session", want)
+		assert.Equal(t, "enabled", got[want], "the subscription %s must carry over to the new session", want)
 	}
 	fireChat(t, c, "chaos-a", "hello baseline") // the repeat of the baseline payload
 	// limit is immutable: testify's Never polls the condition in a
@@ -146,6 +146,13 @@ func TestChaosAgainstTheMock(t *testing.T) {
 		return c.CloseClient(sid, 4006) == nil
 	}, 45*time.Second, time.Second, "the mock must accept the close")
 	sid = freshSession(t, p, sid)
+	// The drop disabled the old session's subscriptions (F10); the
+	// re-pointed subscriptions must be enabled in the new session
+	// again (the manager reconciles right after the new session).
+	require.Eventually(t, func() bool {
+		got := subscriptionTypes(t, c)
+		return got["stream.online"] == "enabled" && got["channel.cheer"] == "enabled" && got["channel.raid"] == "enabled"
+	}, 30*time.Second, 500*time.Millisecond, "the subscriptions must be re-pointed to the new session")
 	before = r.msgCount()
 	fireChat(t, c, "chaos-b", "hello after the drop")
 	require.Eventually(t, func() bool { return r.msgCount() == before+1 },

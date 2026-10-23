@@ -78,4 +78,22 @@ mit Belohnungs-Objekt.
 
 ## Sektion C — Session-Lebenszyklus (F9–F12)
 
-*folgt mit PR 3 (`fix/eventsub-session-lifecycle`)*
+### Erwartetes Verhalten
+
+| Fall | Erwartet |
+|---|---|
+| `session_reconnect` | Neue Session wird parallel an der gegebenen URL gedialt (**ohne** angehängten `access_token`, die URL bleibt unverändert); die alte Session bleibt offen, bis die neue Session die Welcome-Message gebracht hat (kein Event-Verlust); danach schließt die alte Session. Ohne Welcome in der 30-s-Frist dient die alte Session den Rest der Frist und es wird am Base-URL neu verbunden. |
+| Revocation `authorization_revoked` | `OnRevoked` + Session neu mit frischem Token (wie bisher). |
+| Revocation `user_removed` / `version_removed` | Nur die eine Subscription ist weg: `OnSubscriptionRevoked` an den Manager, die Session bleibt offen und liefert weiter Events; der Manager ersetzt die Subscription aus der aktuellen Soll-Tabelle. |
+| Drop (z. B. Close 4006) | Die Subscriptions der alten Session sind deaktiviert (Status != `enabled`); nach der neuen Session (Base-URL) revokiert der Manager die stillen Einträge und erstellt die Soll-Tabelle neu — **sofort** nach der Welcome (10-s-Fenster, Close 4003), nicht erst am 10-min-Intervall. |
+| `session_reconnect` + Reconciliation | Die mitgetragenen Subscriptions behalten den Status `enabled` und werden nicht neu erstellt (kein Churn). |
+
+### Abgedeckte Tests
+
+| Fall | Test | Datei |
+|---|---|---|
+| Reconnect: keine `access_token` in der Reconnect-URL, Reconnect-Identität bleibt; alte Connection offen bis zur neuen Welcome, danach zu | `TestRunSessionReconnectAtTheGivenURL` | `internal/twitch/ws_test.go` |
+| Revocation `user_removed`/`version_removed`: Session bleibt (keines zweiten Dial), `OnSubscriptionRevoked` gemeldet, Events laufen weiter | `TestRunRevocationKeepsTheSession` | `internal/twitch/ws_test.go` |
+| Revocation `authorization_revoked`: frisches Token, Session neu | `TestRunRevocationReconnectsWithAFreshToken` | `internal/twitch/ws_test.go` |
+| Stale Re-pointing: deaktivierte Soll-Subscriptions werden revokiert und neu erstellt, `enabled`-Subscriptions bleiben | `TestReconcileRepointsTheStaleSubscriptions` | `internal/twitch/subscriptions_test.go` |
+| Mock: nach dem `session_reconnect` tragen die Subscriptions mit (Status `enabled`); nach dem Forced Drop (4006) stehen sie in der neuen Session wieder `enabled` (Re-pointing in der Frist) | `TestChaosAgainstTheMock` (CI; lokal ohne twitch-cli-Binary skipped) | `internal/twitch/chaos_test.go` |
