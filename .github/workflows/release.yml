@@ -34,13 +34,17 @@ jobs:
 
       - name: Module source archive
         run: |
+          # goreleaser's {{ .Version }} template drops the tag's v prefix,
+          # so the archive name must not contain it (extra_files in
+          # .goreleaser.yaml); -version keeps it for the Go proxy layout.
+          tag=$(git describe --tags --exact-match)
           mkdir -p dist
           go run ./scripts/modulezip \
-            -version "${GORELEASER_VERSION:-$(git describe --tags --exact-match)}" \
-            -out "dist/streamcrew-$(git describe --tags --exact-match)-src.zip"
+            -version "${GORELEASER_VERSION:-$tag}" \
+            -out "dist/streamcrew-${tag#v}-src.zip"
 
       - name: Verify the module archive
-        run: scripts/modulecheck.sh "dist/streamcrew-$(git describe --tags --exact-match)-src.zip"
+        run: scripts/modulecheck.sh "dist/streamcrew-$(git describe --tags --exact-match | sed 's/^v//')-src.zip"
 
       - name: goreleaser
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
