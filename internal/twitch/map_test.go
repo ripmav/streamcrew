@@ -466,8 +466,8 @@ func TestMapCharity(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
 	handle(t, m, "channel.charity_campaign.progress", `{
-		"current_amount": {"value": 50, "decimal_places": 2, "currency": "EUR"},
-		"target_amount":  {"value": 200, "decimal_places": 2, "currency": "EUR"},
+		"current_amount": {"value": 5000, "decimal_places": 2, "currency": "EUR"},
+		"target_amount":  {"value": 20000, "decimal_places": 2, "currency": "EUR"},
 		"charity_name": "Anonymous Charity"
 	}`)
 	ev := r.lastEvent(t)

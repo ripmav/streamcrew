@@ -5,12 +5,12 @@
   },
   "event": {
     "current_amount": {
-      "value": 150,
+      "value": 15000,
       "decimal_places": 2,
       "currency": "USD"
     },
     "target_amount": {
-      "value": 1000,
+      "value": 100000,
       "decimal_places": 2,
       "currency": "USD"
     },
