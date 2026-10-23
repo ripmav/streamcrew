@@ -127,19 +127,25 @@ func TestMapChatMessage(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "9")
 	handle(t, m, "channel.chat.message", `{
-		"id": "m-1",
-		"message": "hi :Kappa: there",
-		"emotes": [{"id": "25", "start": 3, "end": 9}],
-		"user_id": "8",
-		"user_login": "alice",
-		"user_display_name": "Alice",
-		"badges": [{"set_id": "moderator/1"}, {"set_id": "premium/1"}]
+		"message_id": "m-1",
+		"message": {
+			"text": "hi :Kappa: there",
+			"fragments": [
+				{"type": "text", "text": "hi "},
+				{"type": "emote", "text": ":Kappa:", "emote": {"id": "25", "emote_set_id": "1"}},
+				{"type": "text", "text": " there"}
+			]
+		},
+		"badges": [{"set_id": "moderator/1"}, {"set_id": "premium/1"}],
+		"chatter_user_id": "8",
+		"chatter_user_login": "alice",
+		"chatter_user_name": "Alice"
 	}`)
 
 	msg := r.lastMessage(t)
 	assert.Equal(t, "m-1", msg.Message.ID)
 	assert.Equal(t, "hi :Kappa: there", msg.Message.Text)
-	assert.Equal(t, []string{":Kappa"}, msg.Message.Emotes)
+	assert.Equal(t, []string{":Kappa:"}, msg.Message.Emotes)
 	assert.Equal(t, "8", msg.Author.PlatformUserID)
 	assert.Equal(t, "alice", msg.Author.Login)
 	assert.Equal(t, "Alice", msg.Author.DisplayName)
@@ -156,18 +162,24 @@ func TestMapChatMessageResolvesEmotes(t *testing.T) {
 	require.NoError(t, err)
 	m := twitch.NewMapper(twitch.MapperOptions{Receiver: r, Dedup: dedup, BotID: "9", Emotes: catalog, EmoteChannel: "chan"})
 	handle(t, m, "channel.chat.message", `{
-		"id": "m-1",
-		"message": "hi :Kappa: there",
-		"emotes": [{"id": "25", "start": 3, "end": 9}],
-		"user_id": "8",
-		"user_login": "alice",
-		"user_display_name": "Alice",
-		"badges": [{"set_id": "moderator/1"}]
+		"message_id": "m-1",
+		"message": {
+			"text": "hi ? there",
+			"fragments": [
+				{"type": "text", "text": "hi "},
+				{"type": "emote", "emote": {"id": "25", "emote_set_id": "1"}},
+				{"type": "text", "text": " there"}
+			]
+		},
+		"badges": [{"set_id": "moderator/1"}],
+		"chatter_user_id": "8",
+		"chatter_user_login": "alice",
+		"chatter_user_name": "Alice"
 	}`)
 
 	msg := r.lastMessage(t)
-	// The catalog resolves the ID to its canonical code, overriding the
-	// code marked in the text.
+	// The fragment marks no code, so the catalog resolves the ID to its
+	// canonical code.
 	assert.Equal(t, []string{"Kappa"}, msg.Message.Emotes)
 }
 
@@ -183,7 +195,7 @@ func (f fixedSource) Emotes(context.Context, string) ([]emote.Emote, error) { re
 func TestMapChatMessageFromBot(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "9")
-	handle(t, m, "channel.chat.message", `{"id":"m-1","message":"hi","user_id":"9","user_login":"bot"}`)
+	handle(t, m, "channel.chat.message", `{"message_id":"m-1","message":{"text":"hi"},"chatter_user_id":"9","chatter_user_login":"bot"}`)
 	assert.True(t, r.lastMessage(t).FromBot)
 }
 
@@ -191,10 +203,17 @@ func TestMapEmotesInTextOrder(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
 	handle(t, m, "channel.chat.message", `{
-		"id": "m-1",
-		"message": "x",
-		"emotes": [{"id": "a", "start": 10}, {"id": "b", "start": 2}],
-		"emoji":  [{"id": "c", "start": 0}]
+		"message_id": "m-1",
+		"message": {
+			"text": "x",
+			"fragments": [
+				{"type": "emote", "text": "c", "emote": {"id": "c"}},
+				{"type": "emote", "text": "b", "emote": {"id": "b"}},
+				{"type": "emote", "text": "a", "emote": {"id": "a"}}
+			]
+		},
+		"chatter_user_id": "8",
+		"chatter_user_login": "a"
 	}`)
 	assert.Equal(t, []string{"c", "b", "a"}, r.lastMessage(t).Message.Emotes)
 }
@@ -212,7 +231,7 @@ func TestMapStream(t *testing.T) {
 func TestMapFollow(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.follow", `{"user_id": "8", "user_login": "alice"}`)
+	handle(t, m, "channel.follow", `{"user_id": "8", "user_login": "alice", "user_name": "Alice"}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchChannelFollow, ev.Type)
 	require.NotNil(t, ev.User)
@@ -222,7 +241,7 @@ func TestMapFollow(t *testing.T) {
 func TestMapRaid(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.raid", `{"from_user_id": "8", "from_user_login": "bob", "viewer_count": 42}`)
+	handle(t, m, "channel.raid", `{"viewers": 42, "from_broadcaster_user_id": "8", "from_broadcaster_user_login": "bob", "from_broadcaster_user_name": "Bob", "to_broadcaster_user_id": "7"}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchChannelRaid, ev.Type)
 	assert.Equal(t, int64(42), ev.Details.Raid.Viewers)
@@ -234,9 +253,10 @@ func TestMapNotification(t *testing.T) {
 
 	// A subscription.
 	handle(t, m, "channel.chat.notification", `{
-		"type": "subscription",
-		"user_id": "8", "user_login": "alice",
-		"plan_name": "1000", "cumulative_month_count": 3
+		"notice_type": "sub",
+		"chatter_user_id": "8", "chatter_user_login": "alice",
+		"chatter_is_anonymous": false,
+		"sub": {"sub_tier": "1000"}
 	}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchChannelSubscribe, ev.Type)
@@ -245,9 +265,11 @@ func TestMapNotification(t *testing.T) {
 
 	// A resubscription with a message.
 	handle(t, m, "channel.chat.notification", `{
-		"type": "resubscription",
-		"user_id": "8", "user_login": "alice",
-		"plan_name": "2000", "gift_message": "thanks"
+		"notice_type": "resub",
+		"chatter_user_id": "8", "chatter_user_login": "alice",
+		"chatter_is_anonymous": false,
+		"resub": {"cumulative_months": 3, "streak_months": 2, "sub_tier": "2000"},
+		"message": {"text": "thanks"}
 	}`)
 	ev = r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchChannelResubscribe, ev.Type)
@@ -256,10 +278,10 @@ func TestMapNotification(t *testing.T) {
 
 	// A gift.
 	handle(t, m, "channel.chat.notification", `{
-		"type": "gift",
-		"user_id": "8", "user_login": "alice",
-		"to_user_id": "10", "to_user_login": "carol",
-		"plan_name": "1000"
+		"notice_type": "sub_gift",
+		"chatter_user_id": "8", "chatter_user_login": "alice",
+		"chatter_is_anonymous": false,
+		"sub_gift": {"sub_tier": "1000", "recipient_user_id": "10", "recipient_user_login": "carol", "recipient_user_name": "Carol"}
 	}`)
 	ev = r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchSubscriptionGift, ev.Type)
@@ -270,30 +292,29 @@ func TestMapNotification(t *testing.T) {
 	assert.False(t, ev.Details.Gift.Anonymous)
 	assert.Equal(t, 1, ev.Details.Gift.Count)
 
-	// An anonymous mass gift: no user, the recipients by login.
+	// An anonymous mass gift: no user, no recipient list (the payload
+	// names the total only).
 	handle(t, m, "channel.chat.notification", `{
-		"type": "mass_gift",
-		"anonymous": true,
-		"total": 2,
-		"to_user_logins": ["carol", "dave"],
-		"plan_name": "1000"
+		"notice_type": "community_sub_gift",
+		"chatter_user_id": "8", "chatter_user_login": "bob",
+		"chatter_is_anonymous": true,
+		"community_sub_gift": {"id": "cg-1", "total": 2, "sub_tier": "1000"}
 	}`)
 	ev = r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchSubscriptionMassGift, ev.Type)
 	assert.Nil(t, ev.User)
 	assert.True(t, ev.Details.Gift.Anonymous)
 	assert.Equal(t, 2, ev.Details.Gift.Count)
-	require.Len(t, ev.Recipients, 2)
-	assert.Equal(t, "carol", ev.Recipients[0].Login)
-	assert.Equal(t, "dave", ev.Recipients[1].Login)
+	assert.Empty(t, ev.Recipients)
 }
 
 func TestMapCheer(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
 	handle(t, m, "channel.cheer", `{
-		"from_user_id": "8", "from_user_login": "alice",
-		"cumulative_bits": 100, "message": "cheers"
+		"is_anonymous": false,
+		"bits": 100, "message": "cheers",
+		"user_id": "8", "user_login": "alice", "user_name": "Alice"
 	}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchBitsCheer, ev.Type)
@@ -307,13 +328,13 @@ func TestMapModerate(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
 	handle(t, m, "channel.moderate", `{
-		"moderation_action": "timeout",
-		"target_user_id": "8", "target_user_login": "alice"
+		"action": "timeout",
+		"timeout": {"user_id": "8", "user_login": "alice", "user_name": "Alice"}
 	}`)
 	assert.Equal(t, eventtype.ChatUserTimeout, r.lastEvent(t).Type)
 	handle(t, m, "channel.moderate", `{
-		"moderation_action": "ban",
-		"target_user_id": "8", "target_user_login": "alice"
+		"action": "ban",
+		"ban": {"user_id": "8", "user_login": "alice", "user_name": "Alice"}
 	}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.ChatUserBan, ev.Type)
@@ -325,8 +346,8 @@ func TestMapMessageDelete(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
 	handle(t, m, "channel.chat.message_delete", `{
-		"id": "m-9",
-		"user_id": "8", "user_login": "alice"
+		"message_id": "m-9",
+		"target_user_id": "8", "target_user_login": "alice", "target_user_name": "Alice"
 	}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.ChatMessageDelete, ev.Type)
@@ -338,8 +359,9 @@ func TestMapWhisper(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
 	handle(t, m, "user.whisper.message", `{
-		"user_id": "8", "user_login": "alice",
-		"message": "secret"
+		"whisper": {"text": "secret"},
+		"whisper_id": "w-1",
+		"from_user_id": "8", "from_user_login": "alice", "from_user_name": "Alice"
 	}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.ChatWhisper, ev.Type)
@@ -349,26 +371,25 @@ func TestMapWhisper(t *testing.T) {
 func TestMapSharedChat(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.shared_chat.begin", `{"chat_session_id": "s1", "title": "t"}`)
+	handle(t, m, "channel.shared_chat.begin", `{"session_id": "s1"}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchSharedChatStart, ev.Type)
 	assert.Equal(t, "s1", ev.Details.SharedChat.SessionID)
-	handle(t, m, "channel.shared_chat.update", `{"chat_session_id": "s1", "title": "t2"}`)
+	handle(t, m, "channel.shared_chat.update", `{"session_id": "s1"}`)
 	assert.Equal(t, eventtype.TwitchSharedChatUpdate, r.lastEvent(t).Type)
-	handle(t, m, "channel.shared_chat.end", `{"chat_session_id": "s1"}`)
+	handle(t, m, "channel.shared_chat.end", `{"session_id": "s1"}`)
 	ev = r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchSharedChatEnd, ev.Type)
-	assert.Empty(t, ev.Details.SharedChat.Title)
 }
 
 func TestMapDropsTheRepeats(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	msg := `{"id": "m-1", "message": "hi", "user_id": "8", "user_login": "a"}`
+	msg := `{"message_id": "m-1", "message": {"text": "hi"}, "chatter_user_id": "8", "chatter_user_login": "a"}`
 	handle(t, m, "channel.chat.message", msg)
 	// The repeat: the same message arrives twice (B22).
 	handle(t, m, "channel.chat.message", msg)
-	handle(t, m, "channel.chat.message", `{"id": "m-2", "message": "next", "user_id": "8", "user_login": "a"}`)
+	handle(t, m, "channel.chat.message", `{"message_id": "m-2", "message": {"text": "next"}, "chatter_user_id": "8", "chatter_user_login": "a"}`)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	require.Len(t, r.messages, 2)
@@ -390,35 +411,37 @@ func TestMapDropsTheUnknown(t *testing.T) {
 func TestMapHypeTrain(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.hype_train.begin", `{"current_level": 1, "progress": 0, "goal": 10000, "reward_interval": 5000}`)
+	handle(t, m, "channel.hype_train.begin", `{"level": 1, "progress": 0, "goal": 10000}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchHypeTrainStart, ev.Type)
 	assert.Equal(t, &eventtype.HypeTrain{Level: 1, Progress: 0, Goal: 10000}, ev.Details.HypeTrain)
 
-	handle(t, m, "channel.hype_train.progress", `{"current_level": 2, "progress": 6000, "goal": 10000, "reward_interval": 5000}`)
+	handle(t, m, "channel.hype_train.progress", `{"level": 2, "progress": 6000, "goal": 10000}`)
 	ev = r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchHypeTrainProgress, ev.Type)
-	assert.Equal(t, 1, ev.Details.HypeTrain.RewardLevel)
+	assert.Equal(t, int64(6000), ev.Details.HypeTrain.Progress)
 
-	handle(t, m, "channel.hype_train.end", `{"current_level": 3, "progress": 12000, "goal": 10000, "reward_interval": 5000, "end_reason": "goal_reached"}`)
+	// The payload names no reward interval and no end reason any more
+	// (hype_train v2); the model keeps the fields empty.
+	handle(t, m, "channel.hype_train.end", `{"level": 3, "progress": 12000, "goal": 10000}`)
 	ev = r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchHypeTrainEnd, ev.Type)
-	assert.Equal(t, "goal_reached", ev.Details.HypeTrain.Outcome)
+	assert.Empty(t, ev.Details.HypeTrain.Outcome)
 }
 
 func TestMapAdStart(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.ad_break.begin", `{"length": 30, "message": "take a break"}`)
+	handle(t, m, "channel.ad_break.begin", `{"duration_seconds": 30, "is_automatic": false}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchAdStart, ev.Type)
-	assert.Equal(t, &eventtype.AdBreak{Duration: 30, Message: "take a break"}, ev.Details.AdBreak)
+	assert.Equal(t, &eventtype.AdBreak{Duration: 30}, ev.Details.AdBreak)
 }
 
 func TestMapShoutout(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.shoutout.receive", `{"from_user_id": "5", "from_user_login": "shouter", "from_user_display_name": "Shouter", "from_user_viewers": 7, "to_user_id": "7"}`)
+	handle(t, m, "channel.shoutout.receive", `{"viewer_count": 7, "from_broadcaster_user_id": "5", "from_broadcaster_user_login": "shouter", "from_broadcaster_user_name": "Shouter", "to_broadcaster_user_id": "7"}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchShoutoutReceive, ev.Type)
 	require.NotNil(t, ev.User)
@@ -429,18 +452,24 @@ func TestMapShoutout(t *testing.T) {
 func TestMapGoal(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.goal.begin", `{"current_amount": 0, "target_amount": 100, "currency": "USD"}`)
+	handle(t, m, "channel.goal.begin", `{"current_amount": 0, "target_amount": 100}`)
 	assert.Equal(t, eventtype.TwitchGoalStart, r.lastEvent(t).Type)
-	handle(t, m, "channel.goal.end", `{"current_amount": 100, "target_amount": 100, "currency": "USD"}`)
+	handle(t, m, "channel.goal.end", `{"current_amount": 100, "target_amount": 100, "is_achieved": true}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchGoalEnd, ev.Type)
-	assert.Equal(t, &eventtype.Goal{Current: 100, Target: 100, Currency: "USD"}, ev.Details.Goal)
+	// The payload names no currency any more; the model field stays
+	// empty.
+	assert.Equal(t, &eventtype.Goal{Current: 100, Target: 100}, ev.Details.Goal)
 }
 
 func TestMapCharity(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.charity_campaign.progress", `{"current_amount": 50, "target_amount": 200, "currency": "EUR"}`)
+	handle(t, m, "channel.charity_campaign.progress", `{
+		"current_amount": {"value": 50, "decimal_places": 2, "currency": "EUR"},
+		"target_amount":  {"value": 200, "decimal_places": 2, "currency": "EUR"},
+		"charity_name": "Anonymous Charity"
+	}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchCharityDonation, ev.Type)
 	assert.Equal(t, &eventtype.Charity{Current: 50, Target: 200, Currency: "EUR"}, ev.Details.Charity)
@@ -449,18 +478,28 @@ func TestMapCharity(t *testing.T) {
 func TestMapChannelPointsRedemption(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.channel_points_automatic_reward_redemption.add", `{"automatic_reward_id": "r1", "automatic_reward_cost": 100, "user_id": "8", "user_name": "alice"}`)
+	handle(t, m, "channel.channel_points_automatic_reward_redemption.add", `{
+		"id": "red-1",
+		"reward": {"type": "send_message_to_stream_chat", "cost": 100},
+		"user_id": "8", "user_login": "alice", "user_name": "Alice"
+	}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchChannelPointsRedeem, ev.Type)
 	require.NotNil(t, ev.User)
 	assert.Equal(t, "alice", ev.User.Login)
-	assert.Equal(t, &eventtype.ChannelPoints{Amount: 100, Reward: "r1"}, ev.Details.ChannelPoints)
+	assert.Equal(t, &eventtype.ChannelPoints{Amount: 100, Reward: "send_message_to_stream_chat"}, ev.Details.ChannelPoints)
 }
 
 func TestMapCustomPowerUpRedemption(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.channel_points_custom_reward_redemption.add", `{"custom_reward_id": "p1", "custom_reward_cost": 50, "user_input": "a hug", "user_id": "8", "user_name": "alice"}`)
+	handle(t, m, "channel.channel_points_custom_reward_redemption.add", `{
+		"id": "red-2",
+		"reward": {"id": "p1", "cost": 50},
+		"user_input": "a hug",
+		"status": "unfulfilled",
+		"user_id": "8", "user_login": "alice", "user_name": "Alice"
+	}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.TwitchCustomPowerUpRedeem, ev.Type)
 	assert.Equal(t, &eventtype.CustomPowerUp{Reward: "p1"}, ev.Details.CustomPowerUp)
@@ -470,7 +509,7 @@ func TestMapCustomPowerUpRedemption(t *testing.T) {
 func TestMapModerationMessage(t *testing.T) {
 	r := &fakeReceiver{}
 	m := mapperFor(t, r, "")
-	handle(t, m, "channel.moderate", `{"moderation_action": "ban", "moderation_message": "no spam", "target_user_id": "8", "target_user_login": "alice"}`)
+	handle(t, m, "channel.moderate", `{"action": "ban", "ban": {"user_id": "8", "user_login": "alice", "user_name": "Alice", "reason": "no spam"}}`)
 	ev := r.lastEvent(t)
 	assert.Equal(t, eventtype.ChatUserBan, ev.Type)
 	assert.Equal(t, &eventtype.Moderation{Message: "no spam"}, ev.Details.Moderation)

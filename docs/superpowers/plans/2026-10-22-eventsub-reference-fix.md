@@ -120,7 +120,7 @@ Ping/Pong (Library).
 
 ### Schritte
 
-- [ ] `internal/twitch/map.go`: Payload-Strukturen auf die aktuellen
+- [x] `internal/twitch/map.go`: Payload-Strukturen auf die aktuellen
   Felder umstellen:
   - `channel.chat.message`: `chatter_user_id/name/login`, `message_id`,
     `message{text, fragments[]}` (Emotes aus `fragments[type=emote]`
@@ -164,24 +164,24 @@ Ping/Pong (Library).
   - `channel.channel_points_custom_reward_redemption.add`:
     `user_login`/`user_name`, `reward{id, cost, title}`, `user_input`,
     `status`, `id`.
-- [ ] `internal/twitch/testdata/*.json`: alle Fixtures auf die
+- [x] `internal/twitch/testdata/*.json`: alle Fixtures auf die
   dokumentierten Felder neu bauen (anonymisiert, aus den Doku-Beispielen
   abgeleitet); umbenannte Dateien (`channel.ad_break.begin.json`,
   `channel.hype_train.begin.json`, `channel.goal.begin.json`,
   `channel.goal.end.json`, `channel.charity_campaign.progress.json`,
   `channel.charity_campaign.stop.json`, `channel.shoutout.receive.json`).
-- [ ] Tests: `map_test.go`, `contract_test.go`, `integration_test.go`
+- [x] Tests: `map_test.go`, `contract_test.go`, `integration_test.go`
   (FireEvent-Payloads) + `chaos_test.go` (fireChat) auf die neuen
   Formate.
-- [ ] `eventtype`-Model prüfen: `Goal`/`Charity`-Currency und `AdBreak`
+- [x] `eventtype`-Model prüfen: `Goal`/`Charity`-Currency und `AdBreak`
   ohne Message — Felder, die wegfallen, leeren (kein Schema-Change in
   `core/`, es sei denn ein Feld wird zwingend leer).
-- [ ] Doku: `docs/spec/twitch-events.md` B10–B14.
-- [ ] Test-Matrix (Sektion B).
+- [x] Doku: `docs/spec/twitch-events.md` B10–B14.
+- [x] Test-Matrix (Sektion B).
 
 ### Verifikation
 
-- [ ] `go test ./internal/twitch/...` (Contract-Tests = Feld-für-Feld
+- [x] `go test ./internal/twitch/...` (Contract-Tests = Feld-für-Feld
   gegen die Fixtures)
 
 ---
@@ -194,7 +194,7 @@ Ping/Pong (Library).
 
 ### Schritte
 
-- [ ] `internal/twitch/ws.go` — `session_reconnect`: alte Connection
+- [x] `internal/twitch/ws.go` — `session_reconnect`: alte Connection
   **nicht** vor der Welcome-Message der neuen Connection schließen
   (Doku: „You should not close the old connection until you receive a
   Welcome message on the new connection“); die `next`-Struktur trägt
@@ -203,37 +203,37 @@ Ping/Pong (Library).
   **unverändert** verwenden: kein `access_token` anhängen (Doku: „Use
   the reconnect URL as is; do not modify it“); relative
   Mock-URLs weiter absolut gegen die Base auflösen.
-- [ ] `internal/twitch/ws.go` — `revocation`: `subscription.status`
+- [x] `internal/twitch/ws.go` — `revocation`: `subscription.status`
   parsen; `authorization_revoked` → wie heute `OnRevoked` + Session
   neu (frisches Token); `user_removed`/`version_removed` → **neuer**
   Handler-Hook (z. B. `OnSubscriptionRevoked`), Session bleibt, der
   Manager revidet/erzeugt die Subscription neu.
-- [ ] `internal/twitch/message.go`: Revocation-Payload
+- [x] `internal/twitch/message.go`: Revocation-Payload
   (`subscription{status, type, …}`) ergänzen.
-- [ ] `internal/twitch/subscriptions.go` — Re-pointing: `Reconcile`
+- [x] `internal/twitch/subscriptions.go` — Re-pointing: `Reconcile`
   behandelt jede owned-Subscription mit
   `transport.session_id != aktuelle Session` als stale → revoke +
   neu erstellen (F10, F12). `platform.go`: `sessionState` meldet
   jede neue Session-ID (auch nach Reconnect) an den Manager →
   sofortiger Reconcile (10-s-Fenster).
-- [ ] `internal/twitch/platform.go`: `Mapper.WithSubscriptionRevoked`
+- [x] `internal/twitch/platform.go`: `Mapper.WithSubscriptionRevoked`
   an den Manager anbinden; falsche Kommentare korrigieren
   („subscriptions ride along with the session“ gilt nur für
   `session_reconnect`, nicht für Drops).
-- [ ] Tests: `ws_test.go` (Reconnect hält die alte Connection bis zur
+- [x] Tests: `ws_test.go` (Reconnect hält die alte Connection bis zur
   neuen Welcome; keine `access_token` in der Reconnect-URL;
   Revocation-Varianten), `subscriptions_test.go` (stale Re-pointing,
   sofortiger Reconcile auf Session-Change), `chaos_test.go`: nach dem
   Forced Drop müssen die Subscriptions in der neuen Session
   neu stehen (Assertion nach `freshSession`).
-- [ ] Doku: ADR-0015 (Lebenszyklus-Abschnitt) +
+- [x] Doku: ADR-0015 (Lebenszyklus-Abschnitt) +
   `docs/adr/0014` bleibt unangetastet.
-- [ ] Test-Matrix (Sektion C).
+- [x] Test-Matrix (Sektion C).
 
 ### Verifikation
 
-- [ ] `go build ./... && go test ./internal/twitch/...`
-- [ ] Chaos-Test gegen den twitch-cli-Mock (CI; lokal ohne Binary
+- [x] `go build ./... && go test ./internal/twitch/...`
+- [x] Chaos-Test gegen den twitch-cli-Mock (CI; lokal ohne Binary
   skipped)
 
 ---

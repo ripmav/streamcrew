@@ -4,17 +4,18 @@
     "version": "2"
   },
   "event": {
-    "type": "resubscription",
-    "anonymous": false,
-    "total": 0,
-    "user_id": "111000222",
-    "user_login": "alice",
-    "user_display_name": "Alice",
-    "to_user_id": "222000111",
-    "to_user_login": "streamer",
-    "to_user_logins": [],
-    "plan_name": "1000",
-    "cumulative_month_count": 2,
-    "gift_message": "thanks!"
+    "notice_type": "resub",
+    "chatter_user_id": "111000222",
+    "chatter_user_login": "alice",
+    "chatter_user_name": "Alice",
+    "chatter_is_anonymous": false,
+    "resub": {
+      "cumulative_months": 5,
+      "streak_months": 3,
+      "sub_tier": "1000"
+    },
+    "message": {
+      "text": "thanks!"
+    }
   }
 }

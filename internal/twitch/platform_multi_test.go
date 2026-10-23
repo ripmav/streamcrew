@@ -291,13 +291,13 @@ func TestPlatformChannelInTheEvent(t *testing.T) {
 		Channel:  connector.Channel("other"),
 		BotID:    "99",
 	})
-	handle(t, m, "channel.chat.message", `{"id":"m-1","message":"hi","user_id":"5","user_login":"alice","user_display_name":"Alice"}`)
+	handle(t, m, "channel.chat.message", `{"message_id":"m-1","message":{"text":"hi"},"chatter_user_id":"5","chatter_user_login":"alice","chatter_user_name":"Alice"}`)
 	msgs := r.received()
 	require.Len(t, msgs, 1)
 	assert.Equal(t, connector.Channel("other"), msgs[0].Channel)
 	assert.False(t, msgs[0].FromBot)
 	// The bot's message is flagged FromBot (B13).
-	handle(t, m, "channel.chat.message", `{"id":"m-2","message":"hi","user_id":"99","user_login":"bot","user_display_name":"Bot"}`)
+	handle(t, m, "channel.chat.message", `{"message_id":"m-2","message":{"text":"hi"},"chatter_user_id":"99","chatter_user_login":"bot","chatter_user_name":"Bot"}`)
 	msgs = r.received()
 	require.Len(t, msgs, 2)
 	assert.Equal(t, connector.Channel("other"), msgs[1].Channel)

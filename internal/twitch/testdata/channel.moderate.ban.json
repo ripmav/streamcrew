@@ -4,10 +4,11 @@
     "version": "2"
   },
   "event": {
-    "moderation_action": "ban",
-    "moderation_message": "",
-    "target_user_id": "111000444",
-    "target_user_login": "carol",
-    "target_user_display_name": "Carol"
+    "action": "ban",
+    "ban": {
+      "user_id": "111000444",
+      "user_login": "carol",
+      "user_name": "Carol"
+    }
   }
 }

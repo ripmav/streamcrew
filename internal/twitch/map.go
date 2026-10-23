@@ -4,9 +4,9 @@ package twitch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
 	"strings"
 
 	jsonv2 "encoding/json/v2"
@@ -167,7 +167,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchChannelRaid,
 			User:     new(identity(p.user())),
-			Details:  eventtype.Details{Raid: &eventtype.Raid{Viewers: p.ViewerCount}},
+			Details:  eventtype.Details{Raid: &eventtype.Raid{Viewers: p.Viewers}},
 		})
 	case "channel.chat.notification":
 		var p chatNotification
@@ -198,6 +198,15 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
 			return err
 		}
+		// channel.moderate v2 names the target per action object
+		// (EventSub Reference "Channel Moderate Event V2").
+		target := p.Ban
+		if target == nil {
+			target = p.Timeout
+		}
+		if target == nil {
+			return fmt.Errorf("eventsub: the moderate action %q has no target", p.Action)
+		}
 		typ := eventtype.ChatUserTimeout
 		if p.Action == "ban" {
 			typ = eventtype.ChatUserBan
@@ -205,10 +214,10 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		ev := connector.Event{
 			Platform: platform.Twitch,
 			Type:     typ,
-			User:     new(identity(p.user())),
+			User:     new(identity(target.user())),
 		}
-		if p.Message != "" {
-			ev.Details = eventtype.Details{Moderation: &eventtype.Moderation{Message: p.Message}}
+		if target.Reason != "" {
+			ev.Details = eventtype.Details{Moderation: &eventtype.Moderation{Message: target.Reason}}
 		}
 		return m.rec.Event(ctx, ev)
 	case "channel.chat.message_delete":
@@ -220,7 +229,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			Platform: platform.Twitch,
 			Type:     eventtype.ChatMessageDelete,
 			User:     new(identity(p.user())),
-			Details:  eventtype.Details{Message: &eventtype.Message{ID: p.ID}},
+			Details:  eventtype.Details{Message: &eventtype.Message{ID: p.MessageID}},
 		})
 	case "user.whisper.message":
 		var p whisper
@@ -231,7 +240,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			Platform: platform.Twitch,
 			Type:     eventtype.ChatWhisper,
 			User:     new(identity(p.user())),
-			Details:  eventtype.Details{Message: &eventtype.Message{Text: p.Message}},
+			Details:  eventtype.Details{Message: &eventtype.Message{Text: p.Whisper.Text}},
 		})
 	case "channel.shared_chat.begin", "channel.shared_chat.update", "channel.shared_chat.end":
 		var p sharedChat
@@ -248,7 +257,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     typ,
-			Details:  eventtype.Details{SharedChat: &eventtype.SharedChat{SessionID: p.ChatSessionID, Title: p.Title}},
+			Details:  eventtype.Details{SharedChat: &eventtype.SharedChat{SessionID: p.SessionID}},
 		})
 	case "channel.hype_train.begin", "channel.hype_train.progress", "channel.hype_train.end":
 		var p hypeTrain
@@ -262,13 +271,10 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		case "channel.hype_train.end":
 			typ = eventtype.TwitchHypeTrainEnd
 		}
-		train := &eventtype.HypeTrain{Level: p.CurrentLevel, Progress: p.Progress, Goal: p.Goal}
-		if p.RewardInterval > 0 {
-			train.RewardLevel = int(p.Progress / p.RewardInterval)
-		}
-		if e.Subscription.Type == "channel.hype_train.end" {
-			train.Outcome = p.EndReason
-		}
+		// The v2 payload names no reward interval and no end reason
+		// (EventSub Reference "Hype Train" events), so RewardLevel and
+		// Outcome stay empty.
+		train := &eventtype.HypeTrain{Level: p.Level, Progress: p.Progress, Goal: p.Goal}
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     typ,
@@ -282,7 +288,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchAdStart,
-			Details:  eventtype.Details{AdBreak: &eventtype.AdBreak{Duration: p.Length, Message: p.Message}},
+			Details:  eventtype.Details{AdBreak: &eventtype.AdBreak{Duration: p.DurationSeconds}},
 		})
 	case "channel.shoutout.receive":
 		var p shoutout
@@ -293,7 +299,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchShoutoutReceive,
 			User:     new(identity(p.user())),
-			Details:  eventtype.Details{Shoutout: &eventtype.Shoutout{Viewers: p.FromUserViewers}},
+			Details:  eventtype.Details{Shoutout: &eventtype.Shoutout{Viewers: p.ViewerCount}},
 		})
 	case "channel.goal.begin", "channel.goal.progress", "channel.goal.end":
 		var p goal
@@ -307,10 +313,12 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		case "channel.goal.end":
 			typ = eventtype.TwitchGoalEnd
 		}
+		// The goal payload names no currency (EventSub Reference "Goals
+		// Event"), so Currency stays empty.
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     typ,
-			Details:  eventtype.Details{Goal: &eventtype.Goal{Current: p.CurrentAmount, Target: p.TargetAmount, Currency: p.Currency}},
+			Details:  eventtype.Details{Goal: &eventtype.Goal{Current: p.CurrentAmount, Target: p.TargetAmount}},
 		})
 	case "channel.charity_campaign.progress", "channel.charity_campaign.stop":
 		var p charity
@@ -320,7 +328,11 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		return m.rec.Event(ctx, connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchCharityDonation,
-			Details:  eventtype.Details{Charity: &eventtype.Charity{Current: p.CurrentAmount, Target: p.TargetAmount, Currency: p.Currency}},
+			Details: eventtype.Details{Charity: &eventtype.Charity{
+				Current:  p.CurrentAmount.Value,
+				Target:   p.TargetAmount.Value,
+				Currency: p.CurrentAmount.Currency,
+			}},
 		})
 	case "channel.channel_points_automatic_reward_redemption.add":
 		var p autoRedemption
@@ -331,7 +343,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchChannelPointsRedeem,
 			User:     new(identity(p.user())),
-			Details:  eventtype.Details{ChannelPoints: &eventtype.ChannelPoints{Amount: p.Cost, Reward: p.RewardID}},
+			Details:  eventtype.Details{ChannelPoints: &eventtype.ChannelPoints{Amount: p.Reward.Cost, Reward: p.Reward.Type}},
 		})
 	case "channel.channel_points_custom_reward_redemption.add":
 		var p customRedemption
@@ -342,7 +354,7 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchCustomPowerUpRedeem,
 			User:     new(identity(p.user())),
-			Details:  eventtype.Details{CustomPowerUp: &eventtype.CustomPowerUp{Reward: p.RewardID}},
+			Details:  eventtype.Details{CustomPowerUp: &eventtype.CustomPowerUp{Reward: p.Reward.ID}},
 		}
 		if p.UserInput != "" {
 			ev.Details.Message = &eventtype.Message{Text: p.UserInput}
@@ -360,8 +372,8 @@ func (m *Mapper) incoming(p chatMessage) connector.Incoming {
 	return connector.Incoming{
 		Platform: platform.Twitch,
 		Author:   author,
-		FromBot:  p.UserID != "" && p.UserID == m.botID,
-		Message:  eventtype.Message{ID: p.ID, Text: p.Message, Emotes: m.emoteCodes(p)},
+		FromBot:  p.ChatterID != "" && p.ChatterID == m.botID,
+		Message:  eventtype.Message{ID: p.MessageID, Text: p.Message.Text, Emotes: m.emoteCodes(p)},
 	}
 }
 
@@ -372,7 +384,6 @@ type chatUser struct {
 	Login       string
 	DisplayName string
 	Color       string
-	Avatar      string
 	Badges      []badge
 }
 
@@ -409,321 +420,413 @@ func identity(u chatUser) user.Identity {
 		Login:          u.Login,
 		DisplayName:    name,
 		Color:          u.Color,
-		AvatarURL:      u.Avatar,
 		Roles:          roles,
 	}
 }
 
-// emote is a marked emote in a chat message.
-type emote struct {
-	ID    string `json:"id"`
-	Start int    `json:"start"`
-	End   int    `json:"end"`
-}
-
-// emoteCodes are the emote codes in the order of the text; each ID is
-// resolved to its code with the catalog (roadmap 4.4, task 9), falling
-// back to the code marked in the text. The cheer motes stay text, the
-// amount of the bits is carried by the separate channel.cheer event.
-func (m *Mapper) emoteCodes(p chatMessage) []string {
-	all := append(append([]emote{}, p.Emotes...), p.Emoji...)
-	sort.Slice(all, func(i, j int) bool { return all[i].Start < all[j].Start })
-	codes := make([]string, 0, len(all))
-	for _, e := range all {
-		codes = append(codes, m.emoteCode(p, e))
-	}
-	return codes
-}
-
-// emoteCode is the code of one marked emote: from the catalog if it
-// resolves, else the code marked in the text.
-func (m *Mapper) emoteCode(p chatMessage, e emote) string {
-	if m.emotes != nil {
-		if got, ok := m.emotes.Resolve(m.emoteChannel, e.ID); ok && got.Code != "" {
-			return got.Code
-		}
-	}
-	if e.Start >= 0 && e.End > e.Start && e.End <= len(p.Message) {
-		return p.Message[e.Start:e.End]
-	}
-	return e.ID
-}
-
-// chatMessage is the payload of channel.chat.message.
+// chatMessage is the payload of channel.chat.message (EventSub
+// Reference "Channel Chat Message Event"): the chatter under
+// chatter_user_*, the message as an object with the text and the
+// fragments (the emotes are the fragments of type "emote"; the platform
+// names no profile image and no start and end marks any more).
 type chatMessage struct {
-	ID      string  `json:"id"`
-	Message string  `json:"message"`
-	Emotes  []emote `json:"emotes"`
-	Emoji   []emote `json:"emoji"`
+	MessageID string  `json:"message_id"`
+	Message   message `json:"message"`
+	Color     string  `json:"color"`
+	Badges    []badge `json:"badges"`
 
-	UserID          string  `json:"user_id"`
-	UserLogin       string  `json:"user_login"`
-	UserDisplayName string  `json:"user_display_name"`
-	Color           string  `json:"color"`
-	Avatar          string  `json:"profile_image_url"`
-	Badges          []badge `json:"badges"`
+	ChatterID    string `json:"chatter_user_id"`
+	ChatterLogin string `json:"chatter_user_login"`
+	ChatterName  string `json:"chatter_user_name"`
 }
 
 func (p chatMessage) user() chatUser {
 	return chatUser{
-		ID:          p.UserID,
-		Login:       p.UserLogin,
-		DisplayName: p.UserDisplayName,
+		ID:          p.ChatterID,
+		Login:       p.ChatterLogin,
+		DisplayName: p.ChatterName,
 		Color:       p.Color,
-		Avatar:      p.Avatar,
 		Badges:      p.Badges,
 	}
 }
 
+// message is the structured chat message of channel.chat.message and
+// channel.chat.notification (EventSub Reference "Message").
+type message struct {
+	Text      string     `json:"text"`
+	Fragments []fragment `json:"fragments"`
+}
+
+// fragment is one ordered piece of a structured chat message (EventSub
+// Reference "Channel Chat Message Event"); the emote fragments carry
+// the emote ID and the code as their text.
+type fragment struct {
+	Type  string `json:"type"`
+	Text  string `json:"text"`
+	Emote struct {
+		ID         string `json:"id"`
+		EmoteSetID string `json:"emote_set_id"`
+	} `json:"emote"`
+}
+
+// emoteCodes are the emote codes in the order of the text: the
+// fragments are ordered, so the emote fragments in their order give
+// the codes; the code of a fragment is its text, resolved to the code
+// with the catalog when the platform names none (roadmap 4.4, task 9).
+// The cheermote fragments stay text, the amount of the bits is carried
+// by the separate channel.cheer event.
+func (m *Mapper) emoteCodes(p chatMessage) []string {
+	codes := make([]string, 0, len(p.Message.Fragments))
+	for _, f := range p.Message.Fragments {
+		if f.Type != "emote" {
+			continue
+		}
+		codes = append(codes, m.emoteCode(f))
+	}
+	return codes
+}
+
+// emoteCode is the code of one emote fragment: the text the platform
+// marks, from the catalog if the text is empty.
+func (m *Mapper) emoteCode(f fragment) string {
+	if f.Text != "" {
+		return f.Text
+	}
+	if m.emotes != nil && f.Emote.ID != "" {
+		if got, ok := m.emotes.Resolve(m.emoteChannel, f.Emote.ID); ok && got.Code != "" {
+			return got.Code
+		}
+	}
+	return f.Emote.ID
+}
+
 // follow is the payload of channel.follow.
 type follow struct {
-	UserID          string `json:"user_id"`
-	UserLogin       string `json:"user_login"`
-	UserDisplayName string `json:"user_display_name"`
+	UserID    string `json:"user_id"`
+	UserLogin string `json:"user_login"`
+	UserName  string `json:"user_name"`
 }
 
 func (p follow) user() chatUser {
-	return chatUser{ID: p.UserID, Login: p.UserLogin, DisplayName: p.UserDisplayName}
+	return chatUser{ID: p.UserID, Login: p.UserLogin, DisplayName: p.UserName}
 }
 
-// raid is the payload of channel.raid.
+// raid is the payload of channel.raid: the raiding and the raided
+// broadcaster under from_ and to_broadcaster_*.
 type raid struct {
-	ViewerCount int64 `json:"viewer_count"`
+	Viewers int64 `json:"viewers"`
 
-	FromUserID          string `json:"from_user_id"`
-	FromUserLogin       string `json:"from_user_login"`
-	FromUserDisplayName string `json:"from_user_display_name"`
+	FromBroadcasterUserID    string `json:"from_broadcaster_user_id"`
+	FromBroadcasterUserLogin string `json:"from_broadcaster_user_login"`
+	FromBroadcasterUserName  string `json:"from_broadcaster_user_name"`
 }
 
 func (p raid) user() chatUser {
-	return chatUser{ID: p.FromUserID, Login: p.FromUserLogin, DisplayName: p.FromUserDisplayName}
+	return chatUser{
+		ID:          p.FromBroadcasterUserID,
+		Login:       p.FromBroadcasterUserLogin,
+		DisplayName: p.FromBroadcasterUserName,
+	}
 }
 
-// chatNotification is the payload of channel.chat.notification: the
-// subscriptions, the resubscriptions and the gifts of the channel
-// (plan appendix A.2: the separate subscribe subscriptions are
-// commented out in the original, so all of them come from here).
+// chatNotification is the payload of channel.chat.notification (EventSub
+// Reference "Channel Chat Notification Event"): the notice_type names
+// the notice, the chatter is the actor, the type objects carry the
+// details (null for a notice that does not fill them). The
+// subscriptions, the resubscriptions and the gifts all come from here
+// (the separate subscribe subscriptions are not subscribed).
 type chatNotification struct {
-	Type      string `json:"type"`
-	Anonymous bool   `json:"anonymous"`
-	Total     int    `json:"total"`
+	NoticeType    string  `json:"notice_type"`
+	SystemMessage string  `json:"system_message"`
+	Message       message `json:"message"`
 
-	UserID          string   `json:"user_id"`
-	UserLogin       string   `json:"user_login"`
-	UserDisplayName string   `json:"user_display_name"`
-	ToUserID        string   `json:"to_user_id"`
-	ToUserLogin     string   `json:"to_user_login"`
-	ToUserLogins    []string `json:"to_user_logins"`
-	PlanName        string   `json:"plan_name"`
-	Months          int      `json:"cumulative_month_count"`
-	GiftMessage     string   `json:"gift_message"`
+	ChatterID        string `json:"chatter_user_id"`
+	ChatterLogin     string `json:"chatter_user_login"`
+	ChatterName      string `json:"chatter_user_name"`
+	ChatterAnonymous bool   `json:"chatter_is_anonymous"`
+
+	Sub              *subNotice           `json:"sub"`
+	Resub            *resubNotice         `json:"resub"`
+	SubGift          *subGiftNotice       `json:"sub_gift"`
+	CommunitySubGift *communityGiftNotice `json:"community_sub_gift"`
+}
+
+// subNotice is the sub object of a "sub" notice.
+type subNotice struct {
+	SubTier string `json:"sub_tier"`
+}
+
+// resubNotice is the resub object of a "resub" notice.
+type resubNotice struct {
+	CumulativeMonths int    `json:"cumulative_months"`
+	StreakMonths     int    `json:"streak_months"`
+	SubTier          string `json:"sub_tier"`
+}
+
+// subGiftNotice is the sub_gift object of a "sub_gift" notice.
+type subGiftNotice struct {
+	SubTier        string `json:"sub_tier"`
+	RecipientID    string `json:"recipient_user_id"`
+	RecipientLogin string `json:"recipient_user_login"`
+	RecipientName  string `json:"recipient_user_name"`
+}
+
+// communityGiftNotice is the community_sub_gift object of a
+// "community_sub_gift" notice (the mass gift).
+type communityGiftNotice struct {
+	ID      string `json:"id"`
+	Total   int    `json:"total"`
+	SubTier string `json:"sub_tier"`
 }
 
 // event is the mapped event of the notification; the error is for a
-// type the platform does not send.
+// notice type the platform does not send for the subscribed events.
 func (p chatNotification) event() (connector.Event, error) {
-	sub := &eventtype.Subscription{Plan: p.PlanName}
-	switch p.Type {
-	case "subscription":
+	switch p.NoticeType {
+	case "sub":
+		if p.Sub == nil {
+			return connector.Event{}, errors.New("eventsub: the sub notice has no sub object")
+		}
 		return connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchChannelSubscribe,
-			User:     new(identity(p.giver())),
-			Details:  eventtype.Details{Subscription: sub},
+			User:     new(identity(p.chatter())),
+			Details:  eventtype.Details{Subscription: &eventtype.Subscription{Plan: p.Sub.SubTier}},
 		}, nil
-	case "resubscription":
+	case "resub":
+		if p.Resub == nil {
+			return connector.Event{}, errors.New("eventsub: the resub notice has no resub object")
+		}
 		ev := connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchChannelResubscribe,
-			User:     new(identity(p.giver())),
-			Details:  eventtype.Details{Subscription: sub},
+			User:     new(identity(p.chatter())),
+			Details:  eventtype.Details{Subscription: &eventtype.Subscription{Plan: p.Resub.SubTier}},
 		}
-		if p.GiftMessage != "" {
-			ev.Details.Message = &eventtype.Message{Text: p.GiftMessage}
+		if p.Message.Text != "" {
+			ev.Details.Message = &eventtype.Message{Text: p.Message.Text}
 		}
 		return ev, nil
-	case "gift":
+	case "sub_gift":
+		if p.SubGift == nil {
+			return connector.Event{}, errors.New("eventsub: the sub_gift notice has no sub_gift object")
+		}
 		ev := connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchSubscriptionGift,
-			Target:   new(identity(chatUser{ID: p.ToUserID, Login: p.ToUserLogin, DisplayName: p.ToUserLogin})),
+			Target:   new(identity(chatUser{ID: p.SubGift.RecipientID, Login: p.SubGift.RecipientLogin, DisplayName: p.SubGift.RecipientName})),
 			Details: eventtype.Details{
-				Subscription: sub,
-				Gift:         &eventtype.Gift{Anonymous: p.Anonymous, Count: 1},
+				Subscription: &eventtype.Subscription{Plan: p.SubGift.SubTier},
+				Gift:         &eventtype.Gift{Anonymous: p.ChatterAnonymous, Count: 1},
 			},
 		}
-		if !p.Anonymous {
-			ev.User = new(identity(p.giver()))
+		if !p.ChatterAnonymous {
+			ev.User = new(identity(p.chatter()))
 		}
 		return ev, nil
-	case "mass_gift":
+	case "community_sub_gift":
+		if p.CommunitySubGift == nil {
+			return connector.Event{}, errors.New("eventsub: the community_sub_gift notice has no object")
+		}
 		ev := connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchSubscriptionMassGift,
 			Details: eventtype.Details{
-				Subscription: sub,
-				Gift:         &eventtype.Gift{Anonymous: p.Anonymous, Count: p.Total},
+				Subscription: &eventtype.Subscription{Plan: p.CommunitySubGift.SubTier},
+				Gift:         &eventtype.Gift{Anonymous: p.ChatterAnonymous, Count: p.CommunitySubGift.Total},
 			},
 		}
-		if !p.Anonymous {
-			ev.User = new(identity(p.giver()))
-		}
-		// The platform names the recipients by login only; the login
-		// stands in for the platform user ID until the user service
-		// resolves it (shortcut: no recipient ID, resolve by the Helix
-		// users endpoint when the mass gifts prove it necessary).
-		for _, login := range p.ToUserLogins {
-			ev.Recipients = append(ev.Recipients,
-				user.Identity{Platform: platform.Twitch, PlatformUserID: login, Login: login, DisplayName: login})
+		if !p.ChatterAnonymous {
+			ev.User = new(identity(p.chatter()))
 		}
 		return ev, nil
 	default:
-		return connector.Event{}, fmt.Errorf("eventsub: unknown chat notification %q", p.Type)
+		return connector.Event{}, fmt.Errorf("eventsub: unknown chat notification %q", p.NoticeType)
 	}
 }
 
-func (p chatNotification) giver() chatUser {
-	return chatUser{ID: p.UserID, Login: p.UserLogin, DisplayName: p.UserDisplayName}
+func (p chatNotification) chatter() chatUser {
+	return chatUser{ID: p.ChatterID, Login: p.ChatterLogin, DisplayName: p.ChatterName}
 }
 
-// cheer is the payload of channel.cheer (the field names of the
-// production EventSub event: the cheering user is under from_*).
+// cheer is the payload of channel.cheer (the cheering user is under
+// user_*; it is null when the cheer is anonymous).
 type cheer struct {
-	Bits    int64  `json:"cumulative_bits"`
-	Message string `json:"message"`
+	IsAnonymous bool   `json:"is_anonymous"`
+	Bits        int64  `json:"bits"`
+	Message     string `json:"message"`
 
-	UserID          string `json:"from_user_id"`
-	UserLogin       string `json:"from_user_login"`
-	UserDisplayName string `json:"from_user_display_name"`
+	UserID    string `json:"user_id"`
+	UserLogin string `json:"user_login"`
+	UserName  string `json:"user_name"`
 }
 
 func (p cheer) user() chatUser {
 	return chatUser{
 		ID:          p.UserID,
 		Login:       p.UserLogin,
-		DisplayName: p.UserDisplayName,
+		DisplayName: p.UserName,
 	}
 }
 
-// moderate is the payload of channel.moderate.
+// modTarget is the per-action target object of channel.moderate v2
+// (ban, timeout, …; the object is null for the actions without a
+// target).
+type modTarget struct {
+	UserID    string `json:"user_id"`
+	UserLogin string `json:"user_login"`
+	UserName  string `json:"user_name"`
+	Reason    string `json:"reason"`
+}
+
+func (t modTarget) user() chatUser {
+	return chatUser{ID: t.UserID, Login: t.UserLogin, DisplayName: t.UserName}
+}
+
+// moderate is the payload of channel.moderate v2 (EventSub Reference
+// "Channel Moderate Event V2"): the action under "action", the target
+// in the per-action object.
 type moderate struct {
-	Action  string `json:"moderation_action"`
-	Message string `json:"moderation_message"`
-
-	TargetUserID          string `json:"target_user_id"`
-	TargetUserLogin       string `json:"target_user_login"`
-	TargetUserDisplayName string `json:"target_user_display_name"`
+	Action  string     `json:"action"`
+	Ban     *modTarget `json:"ban"`
+	Timeout *modTarget `json:"timeout"`
 }
 
-func (p moderate) user() chatUser {
-	return chatUser{
-		ID:          p.TargetUserID,
-		Login:       p.TargetUserLogin,
-		DisplayName: p.TargetUserDisplayName,
-	}
-}
-
-// messageDelete is the payload of channel.chat.message_delete.
+// messageDelete is the payload of channel.chat.message_delete: the
+// deleted message's author under target_user_*.
 type messageDelete struct {
-	ID string `json:"id"`
+	MessageID string `json:"message_id"`
 
-	UserID          string `json:"user_id"`
-	UserLogin       string `json:"user_login"`
-	UserDisplayName string `json:"user_display_name"`
+	TargetUserID    string `json:"target_user_id"`
+	TargetUserLogin string `json:"target_user_login"`
+	TargetUserName  string `json:"target_user_name"`
 }
 
 func (p messageDelete) user() chatUser {
-	return chatUser{ID: p.UserID, Login: p.UserLogin, DisplayName: p.UserDisplayName}
+	return chatUser{ID: p.TargetUserID, Login: p.TargetUserLogin, DisplayName: p.TargetUserName}
 }
 
-// whisper is the payload of user.whisper.message.
+// whisper is the payload of user.whisper.message (EventSub Reference
+// "Whisper Received Event"): the sender under from_*, the text under
+// whisper.text.
 type whisper struct {
-	Message string `json:"message"`
+	Whisper struct {
+		Text string `json:"text"`
+	} `json:"whisper"`
+	WhisperID string `json:"whisper_id"`
 
-	UserID          string `json:"user_id"`
-	UserLogin       string `json:"user_login"`
-	UserDisplayName string `json:"user_display_name"`
+	FromUserID    string `json:"from_user_id"`
+	FromUserLogin string `json:"from_user_login"`
+	FromUserName  string `json:"from_user_name"`
 }
 
 func (p whisper) user() chatUser {
-	return chatUser{ID: p.UserID, Login: p.UserLogin, DisplayName: p.UserDisplayName}
+	return chatUser{ID: p.FromUserID, Login: p.FromUserLogin, DisplayName: p.FromUserName}
 }
 
-// sharedChat is the payload of the channel.shared_chat events; the
-// payload is formalized by the 4.4 specification twitch-events.md.
+// sharedChat is the payload of the channel.shared_chat events (EventSub
+// Reference "Channel Shared Chat Session" events); the session is named
+// by session_id, the payload names no title.
 type sharedChat struct {
-	ChatSessionID string `json:"chat_session_id"`
-	Title         string `json:"title"`
+	SessionID string `json:"session_id"`
 }
 
-// hypeTrain is the payload of the channel.hype_train events.
+// hypeTrain is the payload of the channel.hype_train v2 events (EventSub
+// Reference "Hype Train" events): the level under "level"; the payload
+// names no reward interval and no end reason.
 type hypeTrain struct {
-	CurrentLevel   int    `json:"current_level"`
-	Progress       int64  `json:"progress"`
-	Goal           int64  `json:"goal"`
-	RewardInterval int64  `json:"reward_interval"`
-	EndReason      string `json:"end_reason"`
+	Level    int   `json:"level"`
+	Progress int64 `json:"progress"`
+	Goal     int64 `json:"goal"`
+	Total    int64 `json:"total"`
 }
 
-// adStarted is the payload of channel.ad.started.
+// adStarted is the payload of channel.ad_break.begin.
 type adStarted struct {
-	Length  int    `json:"length"`
-	Message string `json:"message"`
+	DurationSeconds int  `json:"duration_seconds"`
+	IsAutomatic     bool `json:"is_automatic"`
 }
 
-// shoutout is the payload of channel.shoutout.received.
+// shoutout is the payload of channel.shoutout.receive: the shouting
+// channel under from_broadcaster_*.
 type shoutout struct {
-	FromUserID          string `json:"from_user_id"`
-	FromUserLogin       string `json:"from_user_login"`
-	FromUserDisplayName string `json:"from_user_display_name"`
-	FromUserViewers     int64  `json:"from_user_viewers"`
+	ViewerCount int64 `json:"viewer_count"`
+
+	FromBroadcasterUserID    string `json:"from_broadcaster_user_id"`
+	FromBroadcasterUserLogin string `json:"from_broadcaster_user_login"`
+	FromBroadcasterUserName  string `json:"from_broadcaster_user_name"`
 }
 
 func (p shoutout) user() chatUser {
-	return chatUser{ID: p.FromUserID, Login: p.FromUserLogin, DisplayName: p.FromUserDisplayName}
+	return chatUser{
+		ID:          p.FromBroadcasterUserID,
+		Login:       p.FromBroadcasterUserLogin,
+		DisplayName: p.FromBroadcasterUserName,
+	}
 }
 
-// goal is the payload of the channel.goal events.
+// goal is the payload of the channel.goal events (EventSub Reference
+// "Goals Event"); the payload names no currency.
 type goal struct {
-	CurrentAmount int64  `json:"current_amount"`
-	TargetAmount  int64  `json:"target_amount"`
-	Currency      string `json:"currency"`
+	CurrentAmount int64 `json:"current_amount"`
+	TargetAmount  int64 `json:"target_amount"`
+	IsAchieved    bool  `json:"is_achieved"`
 }
 
-// charity is the payload of the channel.charity events.
+// charity is the payload of the channel.charity_campaign events
+// (EventSub Reference "Charity Campaign" events): the amounts are
+// objects with the value in the currency's minor unit.
 type charity struct {
-	CurrentAmount int64  `json:"current_amount"`
-	TargetAmount  int64  `json:"target_amount"`
+	CurrentAmount charityAmount `json:"current_amount"`
+	TargetAmount  charityAmount `json:"target_amount"`
+	CharityName   string        `json:"charity_name"`
+}
+
+// charityAmount is the amount object of the charity events.
+type charityAmount struct {
+	Value         int64  `json:"value"`
+	DecimalPlaces int    `json:"decimal_places"`
 	Currency      string `json:"currency"`
 }
 
 // autoRedemption is the payload of
-// channel.channel_points_automatic_reward_redemption.add.
+// channel.channel_points_automatic_reward_redemption.add: the reward
+// (type and cost) is an object; the payload names no reward ID, so the
+// reward type stands in for it (shortcut: type instead of ID, name the
+// reward by the Helix endpoint when the commands need it).
 type autoRedemption struct {
-	Cost     int64  `json:"automatic_reward_cost"`
-	RewardID string `json:"automatic_reward_id"`
+	Reward struct {
+		Type string `json:"type"`
+		Cost int64  `json:"cost"`
+	} `json:"reward"`
+	ID string `json:"id"`
 
-	UserID      string `json:"user_id"`
-	UserLogin   string `json:"user_name"`
-	UserDisplay string `json:"user_display_name"`
+	UserID    string `json:"user_id"`
+	UserLogin string `json:"user_login"`
+	UserName  string `json:"user_name"`
 }
 
 func (p autoRedemption) user() chatUser {
-	return chatUser{ID: p.UserID, Login: p.UserLogin, DisplayName: p.UserDisplay}
+	return chatUser{ID: p.UserID, Login: p.UserLogin, DisplayName: p.UserName}
 }
 
 // customRedemption is the payload of
-// channel.channel_points_custom_reward_redemption.add.
+// channel.channel_points_custom_reward_redemption.add: the reward (id,
+// cost, title) is an object.
 type customRedemption struct {
-	Cost      int64  `json:"custom_reward_cost"`
-	RewardID  string `json:"custom_reward_id"`
+	Reward struct {
+		ID   string `json:"id"`
+		Cost int64  `json:"cost"`
+	} `json:"reward"`
+	ID        string `json:"id"`
 	UserInput string `json:"user_input"`
+	Status    string `json:"status"`
 
 	UserID    string `json:"user_id"`
-	UserLogin string `json:"user_name"`
-	UserDisp  string `json:"user_display_name"`
+	UserLogin string `json:"user_login"`
+	UserName  string `json:"user_name"`
 }
 
 func (p customRedemption) user() chatUser {
-	return chatUser{ID: p.UserID, Login: p.UserLogin, DisplayName: p.UserDisp}
+	return chatUser{ID: p.UserID, Login: p.UserLogin, DisplayName: p.UserName}
 }

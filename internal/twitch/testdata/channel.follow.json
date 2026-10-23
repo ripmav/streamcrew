@@ -6,6 +6,6 @@
   "event": {
     "user_id": "111000222",
     "user_login": "alice",
-    "user_display_name": "Alice"
+    "user_name": "Alice"
   }
 }

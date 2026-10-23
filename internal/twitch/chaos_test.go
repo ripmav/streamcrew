@@ -47,12 +47,10 @@ func freshSession(t *testing.T, p *twitch.Platform, old string) string {
 func fireChat(t *testing.T, c *twitchmock.Client, id, text string) {
 	t.Helper()
 	body := fmt.Sprintf(
-		`{"id":%q,"badges":[],"badge_info":{},`+
-			`"channel_id":%q,"channel_login":%q,"channel_display_name":%q,`+
-			`"message":%q,`+
-			`"user_id":%q,"user_login":%q,"user_display_name":"MockViewer"}`,
-		id, c.BroadcasterID, c.BroadcasterLogin, c.BroadcasterLogin,
-		text, c.BroadcasterID, c.BroadcasterLogin)
+		`{"message_id":%q,"badges":[],`+
+			`"message":{"text":%q},`+
+			`"chatter_user_id":%q,"chatter_user_login":%q,"chatter_user_name":"MockViewer"}`,
+		id, text, c.BroadcasterID, c.BroadcasterLogin)
 	require.NoError(t, c.FireEvent("channel.chat.message", "2", json.RawMessage(body)))
 }
 

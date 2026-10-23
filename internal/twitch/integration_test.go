@@ -218,11 +218,12 @@ func TestPlatformAgainstTheMock(t *testing.T) {
 	// with the author and the emote code; the repeated delivery of
 	// the same message is dropped (B22).
 	msg := fmt.Sprintf(
-		`{"id":"msg-int-1","badges":[],"badge_info":{},`+
-			`"channel_id":%q,"channel_login":%q,"channel_display_name":%q,`+
-			`"message":"!hello :Kappa:","emotes":[{"id":"25","start":7,"end":13}],`+
-			`"user_id":%q,"user_login":%q,"user_display_name":"Alice"}`,
-		c.BroadcasterID, c.BroadcasterLogin, c.BroadcasterLogin, alice.id, alice.login)
+		`{"message_id":"msg-int-1","badges":[],`+
+			`"message":{"text":"!hello :Kappa:","fragments":[`+
+			`{"type":"text","text":"!hello "},`+
+			`{"type":"emote","text":":Kappa:","emote":{"id":"25"}}]},`+
+			`"chatter_user_id":%q,"chatter_user_login":%q,"chatter_user_name":"Alice"}`,
+		alice.id, alice.login)
 	before = r.msgCount()
 	require.NoError(t, c.FireEvent("channel.chat.message", "2", json.RawMessage(msg)))
 	require.NoError(t, c.FireEvent("channel.chat.message", "2", json.RawMessage(msg))) // the repeat
@@ -231,17 +232,16 @@ func TestPlatformAgainstTheMock(t *testing.T) {
 	m := r.lastMessage(t)
 	assert.Equal(t, "msg-int-1", m.Message.ID)
 	assert.Equal(t, "!hello :Kappa:", m.Message.Text)
-	assert.Equal(t, []string{":Kappa"}, m.Message.Emotes)
+	assert.Equal(t, []string{":Kappa:"}, m.Message.Emotes)
 	assert.Equal(t, alice.id, m.Author.PlatformUserID)
 	assert.Equal(t, alice.login, m.Author.Login)
 
 	// Event flow: a cheer is mapped to the bits event with the user
 	// and the amount.
 	cheer := fmt.Sprintf(
-		`{"id":"cheer-int-1","broadcaster_user_id":%q,"broadcaster_user_login":%q,`+
-			`"broadcaster_user_display_name":%q,"from_user_id":%q,"from_user_login":%q,`+
-			`"from_user_display_name":"Alice","cumulative_bits":100,"message":"cheer"}`,
-		c.BroadcasterID, c.BroadcasterLogin, c.BroadcasterLogin, alice.id, alice.login)
+		`{"is_anonymous":false,"bits":100,"message":"cheer",`+
+			`"user_id":%q,"user_login":%q,"user_name":"Alice"}`,
+		alice.id, alice.login)
 	require.NoError(t, c.FireEvent("channel.cheer", "1", json.RawMessage(cheer)))
 	require.Eventually(t, func() bool {
 		r.mu.Lock()
@@ -262,13 +262,11 @@ func TestPlatformAgainstTheMock(t *testing.T) {
 	// Event flow: a channel points redemption is mapped to the
 	// custom power-up event with the reward and the user input.
 	redeem := fmt.Sprintf(
-		`{"id":"redemption-int-1","redemption_status":"unstarted",`+
-			`"reward":{"id":"reward-int","title":"Shoutout","prompt":"Your shoutout",`+
-			`"cost":100,"is_enabled":true,"is_user_input_required":true,"channel_id":%q},`+
+		`{"id":"redemption-int-1","status":"unfulfilled",`+
+			`"reward":{"id":"reward-int","cost":100},`+
 			`"user_input":"hello from the integration test",`+
-			`"user_id":%q,"user_name":%q,"user_display_name":"Alice",`+
-			`"custom_reward_cost":100,"custom_reward_id":"reward-int","stream_id":"1"}`,
-		c.BroadcasterID, alice.id, alice.login)
+			`"user_id":%q,"user_login":%q,"user_name":"Alice"}`,
+		alice.id, alice.login)
 	require.NoError(t, c.FireEvent("channel.channel_points_custom_reward_redemption.add", "1", json.RawMessage(redeem)))
 	require.Eventually(t, func() bool {
 		r.mu.Lock()

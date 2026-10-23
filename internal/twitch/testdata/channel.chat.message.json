@@ -4,37 +4,39 @@
     "version": "2"
   },
   "event": {
-    "id": "msg-100",
+    "message_id": "msg-100",
+    "message": {
+      "text": "hi :Kappa: hey",
+      "fragments": [
+        {
+          "type": "text",
+          "text": "hi "
+        },
+        {
+          "type": "emote",
+          "text": ":Kappa:",
+          "emote": {
+            "id": "25",
+            "emote_set_id": "1"
+          }
+        },
+        {
+          "type": "text",
+          "text": " hey"
+        }
+      ]
+    },
+    "color": "#FF0000",
     "badges": [
       {
         "set_id": "moderator/1"
       },
       {
-        "set_id": "subscriber/1000"
+        "set_id": "sub/1"
       }
     ],
-    "badge_info": {
-      "subscriber": {
-        "tier": "1000"
-      }
-    },
-    "channel_id": "222000111",
-    "channel_login": "streamer",
-    "channel_display_name": "Streamer",
-    "message": "hi :Kappa: hey",
-    "emotes": [
-      {
-        "id": "25",
-        "start": 3,
-        "end": 10,
-        "zero": false
-      }
-    ],
-    "emoji": [],
-    "flags": {},
-    "color": "#FF0000",
-    "user_id": "111000222",
-    "user_login": "alice",
-    "user_display_name": "Alice"
+    "chatter_user_id": "111000222",
+    "chatter_user_login": "alice",
+    "chatter_user_name": "Alice"
   }
 }

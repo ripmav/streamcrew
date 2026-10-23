@@ -4,8 +4,7 @@
     "version": "1"
   },
   "event": {
-    "id": "ad-1",
-    "length": 300,
-    "message": "break time"
+    "duration_seconds": 300,
+    "is_automatic": false
   }
 }
