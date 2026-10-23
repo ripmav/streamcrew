@@ -150,6 +150,7 @@ func TestRunSessionReconnectAtTheGivenURL(t *testing.T) {
 	srv := wsServer(t, func(t *testing.T, r *http.Request, conn *websocket.Conn) {
 		switch r.URL.Path {
 		case "/":
+			assert.Equal(t, "10", r.URL.Query().Get("keepalive_timeout_seconds"))
 			writeText(t, conn, welcomeJSON("s1", "10"))
 			// The reconnect URL already carries its own query
 			// (the reconnect identifier); the client must merge the

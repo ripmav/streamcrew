@@ -213,6 +213,13 @@ func (c *Client) session(ctx context.Context, h Handler, dialURL string) (next, 
 	}
 	q := u.Query()
 	q.Set("access_token", tok)
+	// The documented keepalive parameter (EventSub Reference
+	// "Handling WebSocket Events", values 10-600, default 10): without
+	// a valid keepalive_timeout_seconds in the query, Twitch's CDN WAF
+	// answers the handshake with a CloudFront 403 block page before the
+	// token is even checked, so every fresh start from a blocked IP
+	// would fail (Log-Analyse 2026-10-23, access_token-only dials 403).
+	q.Set("keepalive_timeout_seconds", "10")
 	u.RawQuery = q.Encode()
 
 	dctx, cancel := context.WithTimeout(ctx, dialTimeout)

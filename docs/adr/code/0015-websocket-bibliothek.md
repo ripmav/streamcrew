@@ -90,3 +90,23 @@ mit bekanntem `retry-after` bestimmt das Tempo: die Wartezeit ist der
 längere der beiden Werte (10 s oder `retry-after`), damit ein 30 s offener
 Breaker 1–2 Versuche/min statt 286/s sieht. `session_reconnect` bleibt
 unverändert sofort; Token-Verlust (`ErrToken`) endet ohne Wartung.
+
+## Revision 2026-10-23 (WAF-403 am Handshake)
+
+Der frische Handshake dialt ab sofort
+`wss://eventsub.wss.twitch.tv/ws?access_token=…&keepalive_timeout_seconds=10`
+— das dokumentierte `keepalive_timeout_seconds`-Parameter
+(EventSub Reference „Handling WebSocket Events“, Werte 10–600, Default 10,
+deshalb 10: das Server-Verhalten bleibt exakt das Standard-Verhalten).
+
+**Begründung:** Twitchs CDN-WAF (CloudFront) beantwortet Requests unter
+`/ws`, deren Query-String ein unbekanntes Parameter-Paar trägt und kein
+gültiges `keepalive_timeout_seconds` enthält, mit einer 403-Blockseite
+*vor* der Token-Prüfung — der Client hat seit 2026-10-22 jedes
+`access_token`-Dial mit 403 („Request blocked“/CloudFront) beantwortet
+bekommen, während dieselbe URL ohne Query vom selben PC durchkam. Mit dem
+Parameter (auch Wert 10) kommt der `session_welcome` zuverlässig
+(Feldtest 2026-10-23 mit echtem Token). Der Reconnect-Pfad bleibt
+unberührt: `session_reconnect` trägt den eigenen Query-String, der
+laut Reference „as is“ zu verwenden ist; sollte die WAF auch Reconnect-URLs
+blockieren, ist das ein eigener Befund.
