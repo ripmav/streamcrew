@@ -348,8 +348,8 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchCharityDonation,
 			Details: eventtype.Details{Charity: &eventtype.Charity{
-				Current:  p.CurrentAmount.Value,
-				Target:   p.TargetAmount.Value,
+				Current:  p.CurrentAmount.Amount(),
+				Target:   p.TargetAmount.Amount(),
 				Currency: p.CurrentAmount.Currency,
 			}},
 		})
@@ -801,11 +801,25 @@ type charity struct {
 	CharityName   string        `json:"charity_name"`
 }
 
-// charityAmount is the amount object of the charity events.
+// charityAmount is the amount object of the charity events: the value
+// is in the currency's minor unit (EventSub Reference "Charity
+// Campaign" events).
 type charityAmount struct {
 	Value         int64  `json:"value"`
 	DecimalPlaces int    `json:"decimal_places"`
 	Currency      string `json:"currency"`
+}
+
+// Amount is the integer amount in major units (value / 10^decimal_places).
+//
+//	shortcut: the decimal part is truncated, fine for the template's
+//	amount display; use decimal output if exact minor units matter.
+func (a charityAmount) Amount() int64 {
+	div := int64(1)
+	for range a.DecimalPlaces {
+		div *= 10
+	}
+	return a.Value / div
 }
 
 // autoRedemption is the payload of
