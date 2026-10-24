@@ -5,7 +5,7 @@
 | **Status** | Phase 0 abgeschlossen (Gate bestanden am 2026-09-29); Phase 1 abgeschlossen, M0 erreicht (PR #12); Phase 2 abgeschlossen (PR #36); Phase 3 abgeschlossen, M1 erreicht (PR #143) |
 | **Stand** | 2026-10-23 |
 | **Grundlage** | [`plan.md`](plan.md) (Architektur, Prioritäten, Risiken), [`starting.md`](starting.md), [`adr/`](adr/README.md) |
-| **Aktuelle Phase** | Phase 6: API, CLI, TUI (in Arbeit; 6.1, 6.5 und 6.7-Doku abgeschlossen, siehe Nachprüfung 2026-10-23) |
+| **Aktuelle Phase** | Phase 6: API, CLI, TUI (in Arbeit; 6.1 und 6.7-Doku abgeschlossen, 6.5 bis auf die Nacharbeit aus dem Code-Review 2026-10-24, siehe Nachprüfung 2026-10-23) |
 
 > **Name:** Das Projekt heißt vorerst `streamcrew` (Codename, [ADR-0008](adr/0008-codename-streamcrew.md)); Binary `streamcrew`. Der endgültige Name wird vor Gate O geprüft.
 
@@ -95,7 +95,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 3: Engine, Templates, Actions, Mock | abgeschlossen 2026-10-07, M1 erreicht (PR #143, CI grün); vertagt: die Schwelle der Sammelgeschenke (3.4, P1) |
 | Phase 4: Twitch | 4.1 (Authentifizierung), 4.2 (Helix-Client), 4.3 (EventSub), 4.4 (Funktionen) und 4.5 (Tests) abgeschlossen; das Exit-Kriterium des manuellen 4-h-Test-Streams (4.5) ist noch offen |
 | Phase 5: Core-Services | abgeschlossen: 5.1, 5.2.1–5.2.6, 5.3, 5.4, 5.5 und 5.6 (P0 und P1) |
-| Phase 6: API, CLI, TUI | in Arbeit (Nachprüfung 2026-10-23): 6.1, 6.2–6.3 (bis auf CLI-Reste), 6.4 (Grundgerüst; Ansichten bis auf Login-Flow; TUI-Tests mit Test-Harness), 6.5 und 6.6 abgeschlossen; offen: 6.2 Agent-Handler, 6.4 Login-Flow, 6.7 ADR-0025-Akzeptanz und erster Release-Tag |
+| Phase 6: API, CLI, TUI | in Arbeit (Nachprüfung 2026-10-23): 6.1, 6.2–6.3 (bis auf CLI-Reste), 6.4 (Grundgerüst; Ansichten bis auf Login-Flow; TUI-Tests mit Test-Harness), 6.6 abgeschlossen, 6.5 bis auf die Nacharbeit aus dem Code-Review 2026-10-24; offen: 6.2 Agent-Handler, 6.5 Config-API nur einschränkend und `serve`-Verdrahtung, 6.4 Login-Flow, 6.7 ADR-0025-Akzeptanz und erster Release-Tag |
 | Phase 7: Overlays und Medien | offen |
 | Phase 8: Economy, Community, Spiele | offen |
 | Phase 9: Integrationen, Scripting, Agent | offen |
@@ -731,7 +731,7 @@ hot-capablen Einstellungen an. Vom Flag oder der Umgebungsvariablen fixierte Ein
 - [x] Code-ADR-0021 On-the-fly-Konfiguration: welche Einstellungen sind hot, welche brauchen einen Restart, welche bleiben fix (S), erledigt 2026-10-18: [0021](adr/code/0021-on-the-fly-konfiguration.md)
 - [x] Hot-Apply-Engine im Core (M), erledigt (Nachprüfung 2026-10-23; Checkbox vergessen): `internal/config` (Watcher, `Hot()`/`RestartOnly()`, `ApplyFuncs`-Hooks) + `App.hotApplies()` in `internal/app`, Tests `watch_test.go`/`watch_apply_test.go`:
   - `log-level`, `log-component-level`: sofort gültig für alle Komponenten (gemeinsame Level-Store)
-  - `log-format`, `log-file`, `log-max-size`, `log-max-files`: Austausch des Ausgabe-Handlers des Logger-Baums
+  - `log-format`, `log-file`, `log-max-size`, `log-max-files`: Austausch des Ausgabe-Handlers des Logger-Baums (`log-file` wird restart, siehe den offenen Punkt unten)
   - `dry-run`: umschaltbarer Dry-Run-Wrapper (Plattform und Twitch-Operations)
   - `dev`: umschaltbare pprof-Routen
   - `cors-allow`: austauschbare CORS-Allowlist
@@ -749,6 +749,11 @@ hot-capablen Einstellungen an. Vom Flag oder der Umgebungsvariablen fixierte Ein
   - `e`: im `$EDITOR` bearbeiten, anwenden über die API, `r`: neu laden
   - zeigt das Anwenden-Ergebnis; in Nicht-Server-Modi read-only
 - [x] Dokumentation (S), erledigt 2026-10-18: Abschnitt „On-the-fly-Konfiguration (Server-Modus)“ in `docs/usage.md`
+- [ ] Die Config-API erweitert keine Rechte (M), aus dem Code-Review 2026-10-24 (V3), entschieden im [Nachtrag 2026-10-24 zu Code-ADR-0021](adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte):
+  - `Watcher.Update` lehnt jede Erweiterung gegenüber den aktuell wirksamen Werten ab, betroffen sind Rechte, `file-root`, `outbound-allow`, `mode`, `cors-allow`, `listen`, TLS und `dev`
+  - Tests, auch für den Wechsel von `mode` server → daemon
+- [ ] `log-file` gilt nur beim Start (S), aus dem Code-Review 2026-10-24, [Nachtrag zu Code-ADR-0021](adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte), Punkt 6: von `Hot()` nach `RestartOnly()` verschieben, für die Datei wie für die API
+- [ ] `serve` verdrahtet den File-Resolver (S), aus dem Code-Review 2026-10-24 (C14): `core.Run` ruft `Load` auf, damit Watcher und `ConfigService/Update` die Datei kennen. Erst nach dem vorigen Punkt umsetzen.
 
 ### 6.6 Log-Stream (read-only)
 
@@ -1270,6 +1275,7 @@ Eigene Datei seit 2026-10-09: [backlog.md](backlog.md).
 
 | Datum | Änderung |
 |---|---|
+| 2026-10-24 | Code-Review 2026-10-24, V3/C14: Der Projektinhaber hat den Widerspruch zwischen ADR-0013, Punkt 3, und Code-ADR-0021 entschieden ([Nachtrag 2026-10-24](adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte)). `ConfigService/Update` darf Rechte und sicherheitsrelevante Einstellungen nur einschränken, gemessen am aktuell wirksamen Stand; lokal in der Datei bleibt Erweitern möglich. `log-file` gilt nur noch beim Start (restart statt hot), weil ein Admin-Token sonst Log-Zeilen in beliebige Dateien schreiben ließe. 6.5 bekommt drei offene Punkte: die Prüfung in `Watcher.Update`, `log-file` als restart und danach die Verdrahtung des File-Resolvers in `serve`. |
 | 2026-10-23 | Zwei Produkt-Bugs aus der TUI-Test-Migration (6.4.3, PR #326) gefixt (Folge-PR im selben Stack): (1) `convertEvent` (`internal/app/api_stream.go`) setzte `Event.Type` nie — die TUI routet Live-Stream-Events per `GetType()` und sah sie deshalb nie, und der Kind-Filter des Streams (`EventFilter.Kinds`) matchte auf die leeren Typen nichts. Jetzt trägt jedes konvertierte Event seinen Protokolltypen (stream.proto: `chat.message`, `feed`, `command.instance`, `prompt`, `log`); Test `TestConvertEventCarriesTheProtocolType`. (2) Die `editing`-Flags der TUI (Commands und Settings, gleicher Fehler) wurden in `editCommand`/`editConfig` auf einem Value-Receiver-Copy gesetzt und nie zurückgesetzt — der „editing in $EDITOR …“-Status erschien nie. Jetzt Pointer-Receiver (wie `applyCommandFilter`), Reset im `actionDoneMsg`/`configUpdatedMsg`, und die Commands-View rendert die Status-Zeile (die Settings-View renderte sie schon); Tests: Edit-Subtests mit no-op- und blockierendem Editor. Test-Matrix `docs/tests/fix-event-type-and-editing-flag.md`. |
 | 2026-10-23 | Phase 6.4.3 (TUI-Tests mit dem Bubble-Tea-v2-Test-Harness) code-seitig abgeschlossen: alle `internal/tui`-Tests (vorher 20, jetzt 32 Test-Funktionen) fahren das Modell per `teatest/v2` (`github.com/charmbracelet/x/exp/teatest/v2`, gepinnt; x/exp-Status im Plan vermerkt) durch den echten Programm-Loop — `Type`/`Send` statt `keyMsg`-Fakes, Assertions auf `FinalModel` und gerendertem `FinalOutput`; `keyMsg`-Fake und die Test-Backdoor `run(opts, extra)` in `tui.go` entfernt. Mock-Core jetzt mit befüllten Commands/Users/Chat/Queue/Log-Events und wartbaren Stream-Signaturen. Mitgefixte Produktionsbugs: Command- und User-Filter waren No-ops (Value-Receiver; jetzt Pointer-Receiver, `all`/`list` trennt volle von gefilterter Liste), Queue-View kannte den Pause-Zustand nicht (`queueLoadedMsg.paused`, Title „(paused)“) und `p` konnte nie pausieren (`PauseQueueRequest{Pause: next}` statt immer Resume). Bewusst offen (eigene Issues): `convertEvent` setzt `Event.Type` nie (TUI sieht Live-Stream-Events nie), `commandsView.editing` wird auf einem Copy gesetzt und nie zurückgesetzt. Plan `superpowers/plans/2026-10-23-tui-teatest-v2.md` abgehakt (Umsetzung + Bug-Liste in §6), Test-Matrix `docs/tests/I-6.4-tui-teatest.md`. |
 | 2026-10-23 | Roadmap-Nachprüfung Phase 6 gegen den Code (`main` bei `de57571`): Abgehakt, weil code-seitig abgeschlossen, aber vergessen: 6.1 Ereignisstrom und Prompt-Mechanismus (Implementierung kam mit dem Stream-Hub/6.2), 6.4 Grundgerüst (Layout, Tasten, Hilfe, Themes, lokale und remote Verbindung), 6.5 Hot-Apply-Engine (`internal/config/watch.go` + `App.hotApplies`) und 6.7 Nutzerdokumentation (`docs/usage.md`). Vermerkt: 6.3 CLI steht bis auf `chat tail`, `event tail`, `user link`, `config validate`, `command create|edit`; 6.4 Ansichten bis auf den Login-Flow; 6.7 ADR-0023 ist als ADR-0025 (Vorgeschlagen) entstanden, die Release-Pipeline steht, aber kein Tag wurde geschnitten. Neuer Plan: TUI-Tests mit dem Bubble-Tea-v2-Test-Harness (`superpowers/plans/2026-10-23-tui-teatest-v2.md`). |

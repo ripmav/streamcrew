@@ -118,7 +118,7 @@
      - Das Log nennt jede übernommene Änderung mit altem und neuem Wert (Info).
    - **Vorrang:** Er bleibt wie in Code-ADR-0005 und gilt je Einstellung. Was per Flag oder Umgebungsvariable gesetzt ist, gilt fest für die Laufzeit; Änderungen dieses Schlüssels in der Datei wirken dann nicht, und der Core sagt das beim Start einmal im Log.
    - **Übrige Einstellungen:** Für die Einstellungen aus Code-ADR-0005, etwa Modus, Datenverzeichnis, Profil, Adresse und Logging, bleibt es beim Neustart. Geänderte Schlüssel davon nennt das Log mit dem Hinweis, dass sie erst nach einem Neustart gelten.
-   - **Sicherheit:** Die Datei liegt lokal. Wer sie ändern kann, hat lokalen Zugriff, wie ADR-0013, Punkt 3, es für das Erweitern von Rechten verlangt. Über die API lassen sich diese Einstellungen nicht ändern.
+   - **Sicherheit:** Die Datei liegt lokal. Wer sie ändern kann, hat lokalen Zugriff, wie ADR-0013, Punkt 3, es für das Erweitern von Rechten verlangt. Über die API lassen sich diese Einstellungen nicht erweitern. Seit Code-ADR-0021 schreibt `ConfigService/Update` die Datei; nach deren [Nachtrag 2026-10-24](0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte) darf die API sie nur einschränken.
    - **Umsetzung:**
      - ein Runnable unter dem Supervisor ([Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md)) in `internal/config`
      - Es vergleicht den Inhalt der Datei, nicht ihre Änderungszeit.
