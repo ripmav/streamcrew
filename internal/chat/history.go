@@ -4,7 +4,7 @@ package chat
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -49,7 +49,7 @@ type Entry struct {
 	// Text is the text as written.
 	Text string `json:"text"`
 	// FromBot reports whether the bot account of the channel wrote it.
-	FromBot bool `json:"fromBot,omitempty"`
+	FromBot bool `json:"fromBot,omitzero"`
 	// MessageID is the platform's ID of the message; empty if there is
 	// none.
 	MessageID string `json:"messageId,omitempty"`

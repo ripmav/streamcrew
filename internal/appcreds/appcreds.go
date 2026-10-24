@@ -17,7 +17,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"sync"
 
 	"github.com/ripmav/streamcrew/internal/domain/platform"

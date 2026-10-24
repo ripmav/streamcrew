@@ -5,7 +5,7 @@ package appcreds
 import (
 	"crypto/mlkem"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"sync"
 	"testing"
 

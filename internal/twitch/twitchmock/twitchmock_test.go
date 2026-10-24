@@ -3,8 +3,10 @@
 package twitchmock_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -55,7 +57,8 @@ func TestClientLifecycle(t *testing.T) {
 			Login string `json:"login"`
 		} `json:"data"`
 	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&users))
+	data, _ := io.ReadAll(resp.Body)
+	require.NoError(t, json.Unmarshal(data, &users))
 	require.NoError(t, resp.Body.Close())
 	require.Len(t, users.Data, 1)
 	assert.Equal(t, c.BroadcasterLogin, users.Data[0].Login)
@@ -104,7 +107,7 @@ func TestClientLifecycle(t *testing.T) {
 			`"game_id":"1","game_name":"Test","stream_type":"live",`+
 			`"started_at":"2026-01-01T00:00:00Z"}`,
 		c.BroadcasterID, c.BroadcasterID, c.BroadcasterLogin, c.BroadcasterLogin)
-	require.NoError(t, c.FireEvent("stream.online", "1", json.RawMessage(event)))
+	require.NoError(t, c.FireEvent("stream.online", "1", jsontext.Value(event)))
 
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -132,6 +135,6 @@ type wsMessage struct {
 		Session struct {
 			ID string `json:"id"`
 		} `json:"session"`
-		Event json.RawMessage `json:"event"`
+		Event jsontext.Value `json:"event"`
 	} `json:"payload"`
 }

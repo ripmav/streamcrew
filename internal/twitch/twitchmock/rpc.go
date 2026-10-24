@@ -3,7 +3,8 @@
 package twitchmock
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/rpc"
@@ -75,7 +76,7 @@ func (c *Client) Fire(body, session string) error {
 // structure and forwards it to all clients, with the partner user as
 // broadcaster. The server fills the session ID and the created-at
 // timestamp per client, so the subscription shell here is enough.
-func (c *Client) FireEvent(subType, version string, event json.RawMessage) error {
+func (c *Client) FireEvent(subType, version string, event jsontext.Value) error {
 	body := fmt.Sprintf(
 		`{"subscription":{"id":"twitchmock","status":"enabled","type":%q,"version":%q,`+
 			`"condition":{"broadcaster_user_id":%q},"transport":{"method":"websocket"},`+
@@ -118,5 +119,9 @@ func (c *Client) SetKeepalive(session string, enabled bool) error {
 
 // jsonDecode decodes a JSON body (also used in twitchmock.go).
 func jsonDecode(r io.Reader, v any) error {
-	return json.NewDecoder(r).Decode(v)
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, v)
 }
