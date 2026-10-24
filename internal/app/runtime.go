@@ -3,13 +3,16 @@
 package app
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ripmav/streamcrew/internal/apitoken"
+	"github.com/ripmav/streamcrew/internal/config"
 )
 
 // RuntimeInfo is the runtime file of the core (ADR-0005): the address the
@@ -41,7 +44,7 @@ func (a *App) writeRuntimeFile() {
 		Profile:   a.profile.Name,
 		StartedAt: a.startedAt,
 	}
-	data, err := json.MarshalIndent(info, "", "  ")
+	data, err := json.Marshal(info, jsontext.WithIndent("  "))
 	if err != nil {
 		a.logger.Error("marshal runtime file", "error", err)
 		return
@@ -56,6 +59,82 @@ func (a *App) removeRuntimeFile() {
 	if err := os.Remove(a.cfg.RuntimePath()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		a.logger.Error("remove runtime file", "path", a.cfg.RuntimePath(), "error", err)
 	}
+}
+
+// ensureAPIToken guarantees that the api has at least one admin token, so
+// the fail-closed tokenAuth never starts with an open API (ADR-0013 §5):
+// desktop mode writes the desktop token file, daemon mode the local admin
+// token in <data-dir>/api.token that the CLI and TUI read. Server mode
+// creates a token only from STREAMCREW_TOKEN; without one the api stays
+// closed until the operator creates the first token on the server.
+// An existing token is never replaced, so the clients are not cut off from
+// a running core.
+func (a *App) ensureAPIToken() error {
+	if a.cfg.Mode == config.ModeDesktop {
+		return a.ensureDesktopToken()
+	}
+	store := apitoken.Open(a.cfg.DataDir)
+	switch a.cfg.Mode {
+	case config.ModeDaemon:
+		return a.ensureLocalToken(store, a.cfg.APITokenPath())
+	default: // ModeServer
+		not, err := store.List()
+		if err != nil {
+			return fmt.Errorf("list api tokens: %w", err)
+		}
+		if len(not) > 0 {
+			return nil
+		}
+		if a.cfg.BootstrapToken != "" {
+			return a.registerToken(store, "bootstrap", a.cfg.BootstrapToken)
+		}
+		a.logger.Warn("the api has no tokens and is closed until the first one is created",
+			"hint", "run 'streamcrew token create <name> --scope admin' on the server, or set STREAMCREW_TOKEN before the core starts")
+		return nil
+	}
+}
+
+// ensureLocalToken guarantees the local admin token of daemon mode: the
+// file with the value (0600) and the hash in the token store (ADR-0013 §5).
+func (a *App) ensureLocalToken(store *apitoken.Store, path string) error {
+	data, err := os.ReadFile(path)
+	var value string
+	if err == nil {
+		value = strings.TrimSpace(string(data))
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read api token: %w", err)
+	}
+	if value != "" {
+		if _, ok := store.Validate(value); ok {
+			return nil // file and store are in sync
+		}
+		// The store was wiped or predates the file: register the value again.
+		return a.registerToken(store, "admin", value)
+	}
+	if a.cfg.BootstrapToken != "" {
+		value = a.cfg.BootstrapToken
+	} else {
+		v, _, err := apitoken.NewValue()
+		if err != nil {
+			return fmt.Errorf("generate api token: %w", err)
+		}
+		value = v
+	}
+	if err := os.WriteFile(path, []byte(value+"\n"), 0o600); err != nil {
+		return fmt.Errorf("write api token: %w", err)
+	}
+	a.logger.Info("created the local admin token", "path", path)
+	return a.registerToken(store, "admin", value)
+}
+
+// registerToken stores a token with the given value in the token store.
+func (a *App) registerToken(store *apitoken.Store, name, value string) error {
+	tok, err := store.CreateWith(name, []apitoken.Scope{apitoken.Admin}, value)
+	if err != nil {
+		return fmt.Errorf("register api token: %w", err)
+	}
+	a.logger.Info("registered the bootstrap admin token from STREAMCREW_TOKEN", "token", tok.ID)
+	return nil
 }
 
 // ensureDesktopToken creates the desktop API token in the data directory

@@ -137,7 +137,7 @@ func (s *Server) Handler() http.Handler {
 	// WithReadMaxBytes(0) instead of the v2 default of 4 MiB.
 	connecthttp.Mount(mux, server, connecthttp.WithReadMaxBytes(0))
 	if t := s.cfg.Tokens; t != nil {
-		return tokenAuth(t, mux)
+		return tokenAuth(t, newAuthLimiter(10, time.Minute), mux)
 	}
 	return mux
 }

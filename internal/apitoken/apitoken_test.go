@@ -18,7 +18,9 @@ func TestStoreRoundtrip(t *testing.T) {
 	dir := t.TempDir()
 	s := Open(dir)
 
-	assert.False(t, s.Enabled(), "a new store has no tokens")
+	enabled, err := s.Enabled()
+	require.NoError(t, err)
+	assert.False(t, enabled, "a new store has no tokens")
 
 	tok, value, err := s.Create("tui", []Scope{Admin})
 	require.NoError(t, err)
@@ -54,7 +56,9 @@ func TestStoreRoundtrip(t *testing.T) {
 	require.Len(t, tokens, 2)
 	assert.Equal(t, []Scope{Read, Overlay}, tokens[1].Scopes, "scopes are de-duplicated in a stable order")
 
-	assert.True(t, s.Enabled())
+	enabled, err = s.Enabled()
+	require.NoError(t, err)
+	assert.True(t, enabled)
 
 	ok, err = s.Revoke("overlay")
 	require.NoError(t, err)
@@ -62,6 +66,43 @@ func TestStoreRoundtrip(t *testing.T) {
 	ok, err = s.Revoke("overlay")
 	require.NoError(t, err)
 	require.False(t, ok, "a revoked token is gone")
+}
+
+// TestEnabledFailsClosed covers the fail-closed contract: a corrupt token
+// file is an error, not an empty store (code review 2026-10-24, S1/V1).
+func TestEnabledFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	s := Open(dir)
+
+	enabled, err := s.Enabled()
+	require.NoError(t, err)
+	assert.False(t, enabled)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, FileName), []byte("{corrupt"), 0o600))
+	enabled, err = s.Enabled()
+	require.Error(t, err)
+	assert.False(t, enabled)
+}
+
+// TestCreateWith covers the bootstrap token from a known value
+// (STREAMCREW_TOKEN, code review 2026-10-24, S2).
+func TestCreateWith(t *testing.T) {
+	t.Parallel()
+	s := Open(t.TempDir())
+
+	_, err := s.CreateWith("bootstrap", []Scope{Admin}, "")
+	require.Error(t, err)
+
+	tok, err := s.CreateWith("bootstrap", []Scope{Admin}, "sc_fixed-value")
+	require.NoError(t, err)
+	assert.Equal(t, "bootstrap", tok.Name)
+
+	_, ok := s.Validate("sc_fixed-value")
+	require.True(t, ok, "the fixed value validates")
+
+	enabled, err := s.Enabled()
+	require.NoError(t, err)
+	assert.True(t, enabled)
 }
 
 // TestCreateValidatesChecks the input validation of Create.

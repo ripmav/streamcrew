@@ -28,6 +28,10 @@ import (
 	"github.com/ripmav/streamcrew/internal/profile"
 )
 
+// testToken is the admin token the in-process test cores start with
+// (bootstrap token, ADR-0013 §5); the test clients send it as bearer.
+const testToken = "tui-test-token"
+
 // startMockCore starts an in-process core with the mock platform and
 // returns its base URL.
 func startMockCore(t *testing.T) string {
@@ -52,6 +56,7 @@ func startMockCoreWithConfigFile(t *testing.T, cfgFile string, mode config.Mode)
 		Mode:            mode,
 		Listen:          "127.0.0.1:0",
 		ShutdownTimeout: 5 * time.Second,
+		BootstrapToken:  testToken,
 		Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},
 		Log:             config.LogConfig{Level: "info", Format: "text", MaxSize: 1, MaxFiles: 1},
 	}
@@ -115,7 +120,7 @@ const mockConsoleExampleCommands = "apiVersion: streamcrew/v1alpha1\nkind: ChatC
 func importExampleCommands(t *testing.T, base string) {
 	t.Helper()
 	client, base := httpClientFor(base)
-	cmdClient := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))))
+	cmdClient := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0)), bearerInterceptor(testToken)))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := cmdClient.Import(ctx, &v1alpha1.ImportCommandsRequest{
@@ -415,7 +420,7 @@ func TestUsersViewRendersTheList(t *testing.T) {
 	// wait until the user service lists alice before the view fetches
 	require.Eventually(t, func() bool {
 		client, b := httpClientFor(base)
-		users := streamcrewv1alpha1connect.NewUserServiceClient(connect.NewClient(connecthttp.NewTransport(client, b, connecthttp.WithReadMaxBytes(0))))
+		users := streamcrewv1alpha1connect.NewUserServiceClient(connect.NewClient(connecthttp.NewTransport(client, b, connecthttp.WithReadMaxBytes(0)), bearerInterceptor(testToken)))
 		resp, err := users.List(t.Context(), &v1alpha1.ListUsersRequest{Limit: 100})
 		if err != nil {
 			return false

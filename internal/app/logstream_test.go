@@ -19,7 +19,7 @@ import (
 // level, the component and the message. The test provokes a warn line of
 // the configuration watcher (an invalid file) and expects it on the bus.
 func TestRunPublishesLogEvents(t *testing.T) {
-	a, path := hotCore(t, &outPub{})
+	a, path, _ := hotCore(t, &outPub{})
 
 	sub := a.Bus().Subscribe(t.Context(), event.WithFilter(func(e event.Envelope) bool {
 		return e.Type == eventtype.Log

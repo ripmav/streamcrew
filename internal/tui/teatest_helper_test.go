@@ -35,7 +35,7 @@ func newTestModel(t *testing.T, opts Options) *teatest.TestModel {
 func newTestModelWithCore(t *testing.T) (*teatest.TestModel, string) {
 	t.Helper()
 	base := startMockCore(t)
-	return newTestModel(t, Options{Server: base}), base
+	return newTestModel(t, Options{Server: base, Token: testToken}), base
 }
 
 // quitModel ends the program of the test and returns its final model.
@@ -67,7 +67,7 @@ func commandClient(t *testing.T, base string) streamcrewv1alpha1connect.CommandS
 	t.Helper()
 	client, base := httpClientFor(base)
 	return streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(
-		connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))))
+		connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0)), bearerInterceptor(testToken)))
 }
 
 // streamClient returns the stream service client of the core at base.
@@ -75,7 +75,7 @@ func streamClient(t *testing.T, base string) streamcrewv1alpha1connect.StreamSer
 	t.Helper()
 	client, base := httpClientFor(base)
 	return streamcrewv1alpha1connect.NewStreamServiceClient(connect.NewClient(
-		connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))))
+		connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0)), bearerInterceptor(testToken)))
 }
 
 // commandNames returns the command names of the list (for assertions).

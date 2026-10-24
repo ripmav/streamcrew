@@ -128,8 +128,15 @@ tls_cert: /etc/streamcrew/tls/cert.pem
 tls_key: /etc/streamcrew/tls/key.pem
 ```
 
-**Access Control:** Die API verlangt einen Bearer-Token
-(`streamcrew token create --scope <scope>` erzeugt ihn (Scopes: read, control, admin, overlay; Default admin); der Wert wird genau einmal gezeigt). Jeder Client setzt ihn:
+**Access Control:** Die API ist fail-closed (ADR-0013 §5): ohne Token lehnt
+jede Anfrage mit 401 ab. Im Server-Modus entsteht der erste Token mit
+`streamcrew token create --scope <scope>` (Scopes: read, control, admin,
+overlay; Default admin; der Wert wird genau einmal gezeigt) — oder beim
+Erststart aus `STREAMCREW_TOKEN` (Umgebungsvariable oder
+`--bootstrap-token`), die dann als Admin-Token gespeichert wird und danach
+ignoriert wird. Im Daemon-Modus legt der Core beim ersten Start einen
+lokalen Admin-Token in `<data-dir>/api.token` an, den CLI und TUI ohne
+zusätzliches `--token` lesen. Jeder Client setzt den Token:
 
 ```bash
 streamcrew --server https://meinstream.example:8740 --token <TOKEN> counter list

@@ -12,7 +12,8 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"os"
@@ -87,6 +88,13 @@ type file struct {
 type Store struct {
 	path string
 	mu   sync.Mutex
+
+	// cached is the last parsed file, keyed by its mtime and size, so the
+	// per-request validation of the api does not re-read and re-parse the
+	// file on every request.
+	cached   file
+	cacheM   time.Time
+	cacheLen int64
 }
 
 // Open returns the store of the data directory; the file is created on the
@@ -109,22 +117,39 @@ func NewValue() (value, hash string, err error) {
 // Create adds a token with name and scopes and returns it with its value,
 // which is shown once.
 func (s *Store) Create(name string, scopes []Scope) (Token, string, error) {
-	if name == "" {
-		return Token{}, "", errors.New("name is required")
-	}
-	clean, err := normalizeScopes(scopes)
-	if err != nil {
-		return Token{}, "", err
-	}
 	value, hash, err := NewValue()
 	if err != nil {
 		return Token{}, "", err
+	}
+	tok, err := s.create(name, scopes, hash)
+	return tok, value, err
+}
+
+// CreateWith adds a token with name, scopes and the given value; the store
+// hashes the value and never stores it. It backs the bootstrap token the
+// core creates from the value of STREAMCREW_TOKEN.
+func (s *Store) CreateWith(name string, scopes []Scope, value string) (Token, error) {
+	if value == "" {
+		return Token{}, errors.New("the token value is required")
+	}
+	sum := sha256.Sum256([]byte(value))
+	return s.create(name, scopes, hex.EncodeToString(sum[:]))
+}
+
+// create stores the token under the store lock.
+func (s *Store) create(name string, scopes []Scope, hash string) (Token, error) {
+	if name == "" {
+		return Token{}, errors.New("name is required")
+	}
+	clean, err := normalizeScopes(scopes)
+	if err != nil {
+		return Token{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	f, err := s.read()
 	if err != nil {
-		return Token{}, "", err
+		return Token{}, err
 	}
 	tok := Token{
 		ID:        uuid.NewV7().String(),
@@ -135,18 +160,25 @@ func (s *Store) Create(name string, scopes []Scope) (Token, string, error) {
 	}
 	f.Tokens = append(f.Tokens, tok)
 	if err := s.write(f); err != nil {
-		return Token{}, "", err
+		return Token{}, err
 	}
-	return tok, value, nil
+	return tok, nil
 }
 
 // List returns the stored tokens.
 func (s *Store) List() ([]Token, error) {
-	f, err := s.read()
+	f, err := s.snapshot()
 	if err != nil {
 		return nil, err
 	}
 	return f.Tokens, nil
+}
+
+// snapshot returns the parsed token file, locking the store.
+func (s *Store) snapshot() (file, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.read()
 }
 
 // Revoke removes the token with the ID or name; it reports whether the
@@ -179,13 +211,13 @@ func (s *Store) Revoke(idOrName string) (bool, error) {
 
 // Validate checks a token value and returns the stored token.
 func (s *Store) Validate(value string) (Token, bool) {
-	tokens, err := s.List()
+	f, err := s.snapshot()
 	if err != nil {
 		return Token{}, false
 	}
 	sum := sha256.Sum256([]byte(value))
 	hash := hex.EncodeToString(sum[:])
-	for _, t := range tokens {
+	for _, t := range f.Tokens {
 		if subtle.ConstantTimeCompare([]byte(t.SHA256), []byte(hash)) == 1 {
 			return t, true
 		}
@@ -193,10 +225,12 @@ func (s *Store) Validate(value string) (Token, bool) {
 	return Token{}, false
 }
 
-// Enabled reports whether at least one token is stored.
-func (s *Store) Enabled() bool {
+// Enabled reports whether at least one token is stored. The error is
+// non-nil when the token file exists but is unreadable or corrupt: the
+// caller must fail closed, not treat the store as empty.
+func (s *Store) Enabled() (bool, error) {
 	tokens, err := s.List()
-	return err == nil && len(tokens) > 0
+	return len(tokens) > 0, err
 }
 
 // normalizeScopes validates and de-duplicates the scopes in a stable order.
@@ -220,8 +254,19 @@ func normalizeScopes(scopes []Scope) ([]Scope, error) {
 	return clean, nil
 }
 
-// read loads the token file; a missing file is an empty store.
+// read loads the token file; the caller holds s.mu. A missing file is an
+// empty store. The parsed file is cached and re-read only when the mtime or
+// the size changed, so the per-request path is one stat.
 func (s *Store) read() (file, error) {
+	info, statErr := os.Stat(s.path)
+	switch {
+	case statErr == nil:
+		if info.ModTime().Equal(s.cacheM) && info.Size() == s.cacheLen {
+			return s.cached, nil
+		}
+	case !errors.Is(statErr, os.ErrNotExist):
+		return file{}, fmt.Errorf("read tokens: %w", statErr)
+	}
 	data, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return file{Version: 1}, nil
@@ -236,12 +281,18 @@ func (s *Store) read() (file, error) {
 	if f.Version != 1 {
 		return file{}, fmt.Errorf("read tokens: unsupported version %d", f.Version)
 	}
+	s.cached = f
+	if statErr == nil {
+		s.cacheM, s.cacheLen = info.ModTime(), info.Size()
+	} else {
+		s.cacheM, s.cacheLen = time.Time{}, 0
+	}
 	return f, nil
 }
 
 // write stores the token file atomically with mode 0600.
 func (s *Store) write(f file) error {
-	data, err := json.MarshalIndent(f, "", "  ")
+	data, err := json.Marshal(f, jsontext.WithIndent("  "))
 	if err != nil {
 		return fmt.Errorf("write tokens: %w", err)
 	}
@@ -258,5 +309,6 @@ func (s *Store) write(f file) error {
 		_ = os.Remove(tmp.Name())
 		return fmt.Errorf("write tokens: %w", werr)
 	}
+	s.cached, s.cacheM, s.cacheLen = file{}, time.Time{}, 0
 	return nil
 }

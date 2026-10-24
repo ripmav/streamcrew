@@ -56,11 +56,11 @@ func TestCommandUserKong(t *testing.T) {
 // (roadmap 6.3) against a running core with the mock platform.
 func TestCommandUserAPICommands(t *testing.T) {
 	t.Parallel()
-	base := startMockCore(t)
+	base, dir := startMockCore(t)
 	ctx := t.Context()
 
 	// A command the commands work on.
-	cc := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	cc := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0)), bearerInterceptor(apiToken(t, dir))))
 	_, err := cc.Import(ctx, &v1alpha1.ImportCommandsRequest{
 		Document: mockConsoleExampleCommands,
 		Format:   "yaml",
@@ -68,7 +68,7 @@ func TestCommandUserAPICommands(t *testing.T) {
 	require.NoError(t, err)
 
 	var out bytes.Buffer
-	env := &Env{Stdout: &out, Stderr: io.Discard, Config: &config.Config{}, Server: base}
+	env := &Env{Stdout: &out, Stderr: io.Discard, Config: &config.Config{DataDir: dir}, Server: base}
 
 	// command list shows the imported command.
 	require.NoError(t, commandListCmd{}.Run(ctx, env))

@@ -218,6 +218,24 @@ func nextWait(drop time.Duration, err error, now time.Time) time.Duration {
 	return drop
 }
 
+// redactDialError strips the access token from a dial error: the
+// *url.Error of the websocket handshake carries the full dial URL with
+// the token query, and the log redactor only masks by attribute key,
+// so the token would otherwise land in the log (code review 2026-10-24).
+func redactDialError(err error) error {
+	ue, ok := errors.AsType[*url.Error](err)
+	if !ok || ue.URL == "" {
+		return err
+	}
+	u, perr := url.Parse(ue.URL)
+	if perr != nil {
+		return err
+	}
+	u.RawQuery = "redacted"
+	u.Fragment = ""
+	return &url.Error{Op: ue.Op, URL: u.String(), Err: ue.Err}
+}
+
 // sessionID returns a random UUID for the Twitch-Session-Id header the
 // EventSub WebSocket handshake requires; without it Twitch answers 403.
 func sessionID() string {
@@ -322,7 +340,7 @@ func (c *Client) dialAndWelcome(ctx context.Context, dialURL string, asIs bool) 
 		err = dial(dctx)
 	}
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, redactDialError(err)
 	}
 	c.log.InfoContext(ctx, "the eventsub connection is up")
 

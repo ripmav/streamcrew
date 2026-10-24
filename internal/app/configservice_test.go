@@ -23,16 +23,16 @@ const tTimeout = 5 * time.Second
 
 // hotCoreServer returns a running core in the server mode with the mock
 // platform, a configuration file and the HTTP API.
-func hotCoreServer(t *testing.T, pub *outPub) (*app.App, string) {
+func hotCoreServer(t *testing.T, pub *outPub) (*app.App, string, string) {
 	t.Helper()
 	return hotCoreArgs(t, pub, config.ModeServer)
 }
 
 // configClient returns the ConfigService client of the core.
-func configClient(t *testing.T, a *app.App) streamcrewv1alpha1connect.ConfigServiceClient {
+func configClient(t *testing.T, a *app.App, token string) streamcrewv1alpha1connect.ConfigServiceClient {
 	t.Helper()
 	base := "http://" + mustServerAddr(t, a)
-	return streamcrewv1alpha1connect.NewConfigServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	return streamcrewv1alpha1connect.NewConfigServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0)), withAuth(token)))
 }
 
 // TestConfigServiceUpdatesTheLiveDocument runs the core in the server mode
@@ -41,10 +41,10 @@ func configClient(t *testing.T, a *app.App) streamcrewv1alpha1connect.ConfigServ
 func TestConfigServiceUpdatesTheLiveDocument(t *testing.T) {
 	t.Parallel()
 	pub := &outPub{}
-	a, path := hotCoreServer(t, pub)
+	a, path, token := hotCoreServer(t, pub)
 	base := "http://" + mustServerAddr(t, a)
-	cfg := configClient(t, a)
-	chat := chatClient(t, base)
+	cfg := configClient(t, a, token)
+	chat := chatClient(t, base, token)
 
 	// The document is live and shows the current settings.
 	g, err := cfg.Get(t.Context(), &v1alpha1.GetConfigRequest{})
@@ -81,8 +81,8 @@ func TestConfigServiceUpdatesTheLiveDocument(t *testing.T) {
 // the document as read-only (roadmap 6.5.2).
 func TestConfigServiceReadOnlyInDaemonMode(t *testing.T) {
 	t.Parallel()
-	a, _ := hotCore(t, &outPub{})
-	cfg := configClient(t, a)
+	a, _, token := hotCore(t, &outPub{})
+	cfg := configClient(t, a, token)
 
 	g, err := cfg.Get(t.Context(), &v1alpha1.GetConfigRequest{})
 	require.NoError(t, err)

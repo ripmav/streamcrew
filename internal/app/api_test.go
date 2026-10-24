@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"context"
 	"net/http"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,8 +52,8 @@ func TestAPIServesTheCounterAndSettings(t *testing.T) {
 	}
 
 	base := "http://" + mustServerAddr(t, a)
-	counterClient := streamcrewv1alpha1connect.NewCounterServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
-	settingsClient := streamcrewv1alpha1connect.NewSettingsServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	counterClient := streamcrewv1alpha1connect.NewCounterServiceClient(localAPIClient(t, cfg, base))
+	settingsClient := streamcrewv1alpha1connect.NewSettingsServiceClient(localAPIClient(t, cfg, base))
 	name := "apiTestCounter"
 
 	// Counter: create, read, change, delete.
@@ -135,7 +137,7 @@ func TestAPIServesTheCore(t *testing.T) {
 		t.Fatalf("Run returned early: %v", err)
 	}
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewSystemServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	client := streamcrewv1alpha1connect.NewSystemServiceClient(localAPIClient(t, cfg, base))
 
 	st, err := client.Status(t.Context(), &v1alpha1.StatusRequest{})
 	require.NoError(t, err)
@@ -184,7 +186,7 @@ func TestAPIServesTheUserService(t *testing.T) {
 	require.NoError(t, st.AddStats(ctx, []user.StatsDelta{{UserID: alice.ID, Messages: 5}, {UserID: bob.ID, Messages: 2}}))
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewUserServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	client := streamcrewv1alpha1connect.NewUserServiceClient(localAPIClient(t, cfg, base))
 
 	l, err := client.List(ctx, &v1alpha1.ListUsersRequest{})
 	require.NoError(t, err)
@@ -241,7 +243,7 @@ func TestAPIServesTheChatService(t *testing.T) {
 	ctx := t.Context()
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewChatServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	client := streamcrewv1alpha1connect.NewChatServiceClient(localAPIClient(t, cfg, base))
 
 	// A message with a known platform ID lands in the history.
 	_, err := mp.SayWithID(ctx, "alice", "hi there", "msg-1")
@@ -343,7 +345,7 @@ func TestAPIServesTheBackupService(t *testing.T) {
 	}
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewBackupServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	client := streamcrewv1alpha1connect.NewBackupServiceClient(localAPIClient(t, cfg, base))
 
 	// Create a manual backup.
 	c, err := client.Create(ctx, &v1alpha1.CreateBackupRequest{})
@@ -390,7 +392,7 @@ func TestAPIServesTheAuthService(t *testing.T) {
 	}
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewAuthServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	client := streamcrewv1alpha1connect.NewAuthServiceClient(localAPIClient(t, cfg, base))
 
 	// ListAccounts succeeds (the fresh profile has no logged-in account).
 	l, err := client.ListAccounts(ctx, &v1alpha1.ListAccountsRequest{})
@@ -416,7 +418,7 @@ func TestAPIServesTheCommandService(t *testing.T) {
 	ctx := t.Context()
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	client := streamcrewv1alpha1connect.NewCommandServiceClient(localAPIClient(t, cfg, base))
 
 	// The fresh profile comes with the preset commands.
 	l0, err := client.List(ctx, &v1alpha1.ListCommandsRequest{})
@@ -497,7 +499,7 @@ func TestAPIServesTheStreamService(t *testing.T) {
 	ctx := t.Context()
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewStreamServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	client := streamcrewv1alpha1connect.NewStreamServiceClient(localAPIClient(t, cfg, base))
 
 	subCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -542,7 +544,7 @@ func TestAPIServesSetEnabled(t *testing.T) {
 	ctx := t.Context()
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	client := streamcrewv1alpha1connect.NewCommandServiceClient(localAPIClient(t, cfg, base))
 
 	l0, err := client.List(ctx, &v1alpha1.ListCommandsRequest{})
 	require.NoError(t, err)
@@ -567,8 +569,8 @@ func TestAPIServesSimulate(t *testing.T) {
 	ctx := t.Context()
 
 	base := "http://" + mustServerAddr(t, a)
-	client := streamcrewv1alpha1connect.NewStreamServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
-	chat := streamcrewv1alpha1connect.NewChatServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	client := streamcrewv1alpha1connect.NewStreamServiceClient(localAPIClient(t, cfg, base))
+	chat := streamcrewv1alpha1connect.NewChatServiceClient(localAPIClient(t, cfg, base))
 	follows := a.Bus().Subscribe(ctx, event.WithPrefixes("channel."))
 
 	// A chat message of a user appears in the chat history.
@@ -626,9 +628,20 @@ func withAuth(value string) connect.ClientInterceptor {
 	}
 }
 
+// localAPIClient returns a Connect client authenticated with the local
+// admin token (api.token) the core writes on start (ADR-0013 §5), so the
+// api tests do not pass a token by hand.
+func localAPIClient(t *testing.T, cfg config.Config, base string) *connect.Client {
+	t.Helper()
+	data, err := os.ReadFile(cfg.APITokenPath())
+	require.NoError(t, err)
+	return connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0)), withAuth(strings.TrimSpace(string(data))))
+}
+
 // TestAPITokensProtectTheAPI covers the token access control (roadmap
-// 6.2.2): without tokens the API is open; with tokens a valid bearer token
-// with the required scope is mandatory.
+// 6.2.2): the api fails closed — every request needs a valid bearer token
+// with the required scope, and the local admin token of daemon mode
+// protects it too (ADR-0013 §5).
 func TestAPITokensProtectTheAPI(t *testing.T) {
 	t.Parallel()
 	cfg := testConfig(t)
@@ -637,12 +650,22 @@ func TestAPITokensProtectTheAPI(t *testing.T) {
 
 	base := "http://" + mustServerAddr(t, a)
 
-	// Without tokens the API is open.
 	open := streamcrewv1alpha1connect.NewCounterServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+
+	// Without a token: unauthenticated (the core registered the local admin
+	// token on start, so the api is closed).
 	_, err := open.List(ctx, &v1alpha1.ListCountersRequest{})
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+
+	// The local admin token of daemon mode (api.token) works.
+	local, err := os.ReadFile(cfg.APITokenPath())
+	require.NoError(t, err)
+	localClient := streamcrewv1alpha1connect.NewCounterServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0)), withAuth(strings.TrimSpace(string(local)))))
+	_, err = localClient.List(ctx, &v1alpha1.ListCountersRequest{})
 	require.NoError(t, err)
 
-	// With tokens the API is protected.
+	// With more tokens the api stays protected.
 	s := apitoken.Open(cfg.DataDir)
 	_, readValue, err := s.Create("read", []apitoken.Scope{apitoken.Read})
 	require.NoError(t, err)

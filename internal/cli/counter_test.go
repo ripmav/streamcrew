@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -26,8 +27,9 @@ import (
 )
 
 // startCore starts a core without a platform in the process and returns
-// the base URL of its API.
-func startCore(t *testing.T) string {
+// the base URL of its API and the data directory (with the local admin
+// token the api requires).
+func startCore(t *testing.T) (base, dataDir string) {
 	t.Helper()
 	ctx := t.Context()
 	dir := t.TempDir()
@@ -55,7 +57,15 @@ func startCore(t *testing.T) string {
 		cancel()
 		require.NoError(t, <-errc)
 	})
-	return "http://" + mustServerAddr(t, a)
+	return "http://" + mustServerAddr(t, a), dir
+}
+
+// apiToken returns the local admin token of the core's data directory.
+func apiToken(t *testing.T, dataDir string) string {
+	t.Helper()
+	data, err := os.ReadFile(config.APITokenPath(dataDir))
+	require.NoError(t, err)
+	return strings.TrimSpace(string(data))
 }
 
 // TestCounterKong covers the kong structure of the counter commands.
@@ -91,16 +101,16 @@ func TestCounterKong(t *testing.T) {
 // against a running core, in text and in JSON.
 func TestCounterCommands(t *testing.T) {
 	t.Parallel()
-	base := startCore(t)
+	base, dir := startCore(t)
 	ctx := t.Context()
 
 	// A counter the commands work on.
-	cc := streamcrewv1alpha1connect.NewCounterServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	cc := streamcrewv1alpha1connect.NewCounterServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0)), bearerInterceptor(apiToken(t, dir))))
 	_, err := cc.Create(ctx, &v1alpha1.CreateCounterRequest{Name: "hello", Value: "10", Step: "2"})
 	require.NoError(t, err)
 
 	var out bytes.Buffer
-	env := &Env{Stdout: &out, Stderr: io.Discard, Config: &config.Config{}, Server: base}
+	env := &Env{Stdout: &out, Stderr: io.Discard, Config: &config.Config{DataDir: dir}, Server: base}
 
 	require.NoError(t, counterListCmd{}.Run(ctx, env))
 	assert.Contains(t, out.String(), "hello")

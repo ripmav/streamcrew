@@ -585,10 +585,15 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	})
 	a.http.SetAPI(a.api.Handler())
 
-	if cfg.Mode == config.ModeDesktop {
-		if err := a.ensureDesktopToken(); err != nil {
-			return a, fmt.Errorf("desktop token: %w", err)
-		}
+	// The api fails closed without a token, so guarantee one (ADR-0013 §5):
+	// the desktop token file in desktop mode, the bootstrap token otherwise.
+	if err := a.ensureAPIToken(); err != nil {
+		return a, fmt.Errorf("api token: %w", err)
+	}
+	if cfg.PublicInsecure() {
+		logger.WarnContext(ctx, "the api listens on a public address without tls",
+			"listen", cfg.Listen,
+			"hint", "put a reverse proxy with tls in front, or set --tls-cert and --tls-key")
 	}
 
 	err = errors.Join(

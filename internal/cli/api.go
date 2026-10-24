@@ -5,12 +5,15 @@ package cli
 import (
 	"context"
 	"net/http"
+	"os"
 	"strings"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
 
 	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
+
+	"github.com/ripmav/streamcrew/internal/config"
 )
 
 // defaultServer is the local core the API commands talk to when --server is
@@ -29,11 +32,39 @@ func (e *Env) server() string {
 // Bearer header when a token is set.
 func (e *Env) connectClient() *connect.Client {
 	interceptors := []connect.ClientInterceptor{}
-	if e.APIToken != "" {
-		interceptors = append(interceptors, bearerInterceptor(e.APIToken))
+	if token := e.token(); token != "" {
+		interceptors = append(interceptors, bearerInterceptor(token))
 	}
 	transport := connecthttp.NewTransport(http.DefaultClient, e.server(), connecthttp.WithReadMaxBytes(0))
 	return connect.NewClient(transport, interceptors...)
+}
+
+// token returns the API token of the local core: the value of --token or
+// STREAMCREW_TOKEN, else the local token file of the data directory
+// (desktop-token in desktop mode, api.token in daemon mode, ADR-0013 §5).
+// Without a running core or a token file it is empty.
+func (e *Env) token() string {
+	if e.APIToken != "" {
+		return e.APIToken
+	}
+	dataDir := ""
+	if e.Config != nil {
+		dataDir = e.Config.DataDir
+	}
+	if dataDir == "" {
+		dataDir = e.Defaults.DataDir
+	}
+	if dataDir == "" {
+		return ""
+	}
+	for _, path := range []string{config.DesktopTokenPath(dataDir), config.APITokenPath(dataDir)} {
+		if data, err := os.ReadFile(path); err == nil {
+			if v := strings.TrimSpace(string(data)); v != "" {
+				return v
+			}
+		}
+	}
+	return ""
 }
 
 // join joins the strings with the separator.

@@ -3,9 +3,6 @@
 package cli
 
 import (
-	"os"
-	"strings"
-
 	"github.com/ripmav/streamcrew/internal/tui"
 )
 
@@ -16,23 +13,17 @@ type tuiCmd struct {
 }
 
 // Run starts the TUI. Server and token come from the global flags
-// (--server, --token) or the environment.
+// (--server, --token) or the environment; without a token the local token
+// file of the data directory is used (ADR-0013 §5).
 func (t tuiCmd) Run(e *Env) error {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
 	}
-	token := e.APIToken
-	if token == "" {
-		// try the desktop token file in the data directory
-		if data, err := os.ReadFile(cfg.DesktopTokenPath()); err == nil {
-			token = strings.TrimSpace(string(data))
-		}
-	}
 	return tui.Run(tui.Options{
 		Server:  e.Server,
 		DataDir: cfg.DataDir,
-		Token:   token,
+		Token:   e.token(),
 		Theme:   t.Theme,
 	})
 }
