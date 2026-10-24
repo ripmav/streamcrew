@@ -13,7 +13,7 @@ Phase 6 (Agent-Plattform) ist fast vollständig umgesetzt, M2 (Headless-MVP) ist
 - **Event-Stream** (6.1): Der Core streamt Ereignisse (Chat, Channel, Stream, App, Log) als Server-Streaming-ConnectRPC-Call an die Frontends, mit Catch-up für nachverbindende Clients.
 - **Strömungsgrößen** (6.2): Die Puffer- und Catch-up-Größen sind konfigurierbar (`--stream-buffer`, `--stream-catch-up`); überschuldete Abonnenten werden fair abgeworfen.
 - **TUI** (6.3/6.4): `streamcrew tui` zeigt Dashboard, Chat, Events, Warteschlange, Commands, Nutzer und Logs live aus dem Event-Stream — lokal oder gegen einen entfernten Core (`--server`).
-- **On-the-fly-Konfiguration** (6.5): Einstellungen wie `listen`, `log_level` und `log_file` wirken im laufenden Core ohne Neustart, per Konfigurationsdatei (Watcher) oder über die API (`ConfigService`, TUI-Settings-View).
+- **On-the-fly-Konfiguration** (6.5): Einstellungen wie `listen` und `log_level` wirken im laufenden Core ohne Neustart, per Konfigurationsdatei (Watcher) oder über die API (`ConfigService`, TUI-Settings-View).
 - **Log-Stream** (6.6): Log-Zeilen sind Ereignisse; Clients abonnieren sie gefiltert nach Level, Plattform, Channel und Ereignisklasse über den Event-Stream.
 - **Release MVP** (6.7): Auslieferung und Nutzerdokumentation sind offen.
 
@@ -151,7 +151,7 @@ twitch_eventsub: on         # EventSub-Adapter der Twitch-Plattform: an oder aus
 twitch_irc: off             # IRC-Adapter der Twitch-Plattform: an oder aus; mindestens einer muss an sein
 ```
 
-Änderungen der **Hot-Settings** wirken im laufenden Core, ohne Neustart: Der Watcher liest die Datei regelmäßig, wendet die Änderung an und meldet Fehlschläge im Log. Hot sind `listen` (+ `tls_cert`/`tls_key`), `cors_allow`, `dev`, `dry_run`, die `log_*`-Einstellungen, `grant`, `revoke`, `file_root`, `outbound_allow`, `mode` und `shutdown_timeout`; `data_dir`, `profile`, `config`, `stream_buffer`, `stream_catch_up`, `twitch_eventsub` und `twitch_irc` brauchen einen Neustart. Dieselben Einstellungen lassen sich über die API setzen (`ConfigService`) — die TUI-Settings-View nutzt das ([Code-ADR-0021](docs/adr/code/0021-on-the-fly-konfiguration.md)). Rechte und sicherheitsrelevante Einstellungen (`grant`, `revoke`, `file_root`, `outbound_allow`, `mode`, `cors_allow`, `listen`, TLS, `dev`) darf die API nur einschränken, erweitern geht nur lokal in der Datei ([Nachtrag 2026-10-24](docs/adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte); die Umsetzung ist offen).
+Änderungen der **Hot-Settings** wirken im laufenden Core, ohne Neustart: Der Watcher liest die Datei regelmäßig, wendet die Änderung an und meldet Fehlschläge im Log. Hot sind `listen` (+ `tls_cert`/`tls_key`), `cors_allow`, `dev`, `dry_run`, die `log_*`-Einstellungen (außer `log_file`, das nach dem Nachtrag 2026-10-24 nur beim Start gilt), `grant`, `revoke`, `file_root`, `outbound_allow`, `mode` und `shutdown_timeout`; `data_dir`, `profile`, `config`, `stream_buffer`, `stream_catch_up`, `twitch_eventsub` und `twitch_irc` brauchen einen Neustart. Dieselben Einstellungen lassen sich über die API setzen (`ConfigService`) — die TUI-Settings-View nutzt das ([Code-ADR-0021](docs/adr/code/0021-on-the-fly-konfiguration.md)). Rechte und sicherheitsrelevante Einstellungen (`grant`, `revoke`, `file_root`, `outbound_allow`, `mode`, `cors_allow`, `listen`, TLS, `dev`) darf die API nur einschränken, erweitern geht nur lokal in der Datei ([Nachtrag 2026-10-24](docs/adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte); die Umsetzung ist offen).
 
 ### Flags und Umgebungsvariablen
 
@@ -358,7 +358,7 @@ _, err := cl.Status(ctx, connect.NewRequest(&streamcrewv1alpha1.StatusRequest{})
 - **User-Nachrichten und API-Antworten:** Im Debug-Log-Level oder mit `--dry-run` gehen zusätzlich alle User-Nachrichten (Chat, Whispers, mit vollem Text) in eine eigene Datei `<Log-Verzeichnis>/messages.json` (JSON, gleiche Rotation), und alle Antworten der APIs (Twitch/Helix, BetterTTV, FrankerFaceZ) landen mit ihrem Body (ab 64 KiB gekürzt) im normalen Log. Sicherheitsrelevante Werte — Token- und Secret-Felder im Body (`access_token`, `refresh_token`, …) und in URLs (`token=`, `code=`, …) — werden dabei durch `***` ersetzt; dieselbe Maskierung gilt für alle Log-Attribute mit secret-ahnendem Schlüssel (existierende `redact`-Logik). Beide werden beim Start entschieden; eine Hot-Änderung von `log_level` oder `dry_run` öffnet/schließt die Datei nicht.
 - **Stream:** Log-Zeilen sind zugleich Ereignisse (`log.line`) und laufen in den Event-Stream; TUI und Clients abonnieren sie gefiltert nach Level, Plattform, Channel und Ereignisklasse ([Roadmap 6.6](docs/roadmap.md)).
 
-Alle Log-Einstellungen sind Hot-Settings: Änderungen wirken ohne Neustart.
+Alle Log-Einstellungen sind Hot-Settings: Änderungen wirken ohne Neustart. Ausnahme: `log_file` gilt nach dem [Nachtrag 2026-10-24 zu Code-ADR-0021](docs/adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte) nur beim Start (die Umsetzung ist offen).
 
 ## Plattform: Twitch
 

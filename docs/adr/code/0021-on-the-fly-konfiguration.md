@@ -34,6 +34,8 @@ Jede Starteinstellung ist genau eines von dreien:
     jeder level-Handler pro Record liest; die Änderung wirkt sofort in allen
     Komponenten.
   - `log-format`, `log-file`, `log-max-size`, `log-max-files`: das `logging.Dynamic`
+    (`log-file` ist seit dem [Nachtrag 2026-10-24](#nachtrag-2026-10-24-die-api-erweitert-keine-rechte),
+    Punkt 6, restart)
     baut die Ausgabe-Handler (Konsole, Rotationsdatei) neu und stellt den
     geteilten Slot des Logger-Baums um; die alte Datei wird geschlossen.
   - `dry-run`: die Plattform läuft immer hinter dem schaltbaren
@@ -61,6 +63,7 @@ Jede Starteinstellung ist genau eines von dreien:
   - `profile`: offene Profil-Datenbank, Commands, Timer und Plattform sind an
     das laufende Profil gebunden.
   - `config`: der Pfade der Datei selbst.
+  - `log-file`: seit dem Nachtrag 2026-10-24, Punkt 6.
 - **fix** — vom Flag oder der Umgebungsvariablen gesetzt; die Datei darf den
   Wert nicht ändern (Präzedenz von Code-ADR-0005 bleibt): Der Watcher wendet
   für sie keine Datei-Werte an und meldet das beim Start.
@@ -156,6 +159,13 @@ unverändert; diese Entscheidung passt sich an:
 5. **Reihenfolge der Umsetzung.** Zuerst kommt die Prüfung mit Tests, auch für
    `mode` server → daemon. Erst danach wird `serve` verdrahtet (C14:
    `core.Run` lädt den File-Resolver), damit die Lücke nie offen ist.
+6. **`log-file` gilt nur beim Start.** Wäre `log-file` über die API änderbar,
+   könnte ein Admin-Token den Core Log-Zeilen in jede Datei schreiben lassen,
+   auf die das Konto des Cores Schreibrechte hat. Darin stehen auch Inhalte,
+   die Angreifer steuern, etwa Chat-Texte. Deshalb wechselt `log-file` von
+   **hot** zu **restart**, für die Datei wie für die API: Pfad und Ein/Aus
+   gelten erst nach einem Neustart, und der Watcher meldet eine Änderung als
+   Restart. `log-format`, `log-max-size` und `log-max-files` bleiben hot.
 
 Für die übrigen Einstellungen ändert dieser Nachtrag nichts.
 

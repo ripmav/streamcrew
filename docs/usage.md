@@ -195,8 +195,8 @@ wurde und was einen Restart braucht). `r` lädt neu. Im Daemon- und
 Desktop-Modus ist die Ansicht read-only.
 
 **Hot:** `grant`, `revoke`, `file-root`, `outbound-allow`,
-`log-level`, `log-component-level`, `log-format`, `log-file`,
-`log-max-size`, `log-max-files`, `dry-run`, `dev`, `cors-allow`,
+`log-level`, `log-component-level`, `log-format`, `log-file` (wird
+restart, siehe unten), `log-max-size`, `log-max-files`, `dry-run`, `dev`, `cors-allow`,
 `listen` (Rebind), `tls-cert`, `tls-key`, `mode`, `shutdown-timeout`.
 
 **Nur einschränken:** Rechte und sicherheitsrelevante Einstellungen
@@ -206,6 +206,11 @@ API nur einschränken. Ein Dokument, das sie erweitert, wird ganz
 abgelehnt. Erweitern geht nur lokal in der Konfigurationsdatei
 ([Code-ADR-0021, Nachtrag 2026-10-24](adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte);
 die Umsetzung ist offen).
+
+**Nur beim Start:** `log-file` (Pfad und Ein/Aus) gilt nach demselben
+Nachtrag nur nach einem Neustart, auch bei einer Änderung in der Datei.
+Sonst könnte ein Admin-Token Log-Zeilen in beliebige Dateien schreiben
+lassen (die Umsetzung ist offen).
 
 **Restart:** `data-dir`, `profile`, `config` (offene Dateien und
 Datenbanken des laufenden Prozesses).
