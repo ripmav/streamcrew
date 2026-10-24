@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -231,47 +230,6 @@ func (s *Service) UpdateUser(ctx context.Context, userID id.ID, fn func(*user.Us
 // ResetStrikes sets the strikes of every user to 0 (actions.md, B84).
 func (s *Service) ResetStrikes(ctx context.Context) error {
 	return s.ports.Store.ResetStrikes(ctx)
-}
-
-// accountUserIDs returns the IDs of the users of the channel's accounts
-// (streamer, bot) on every platform of the profile, for the exclusion from
-// the rankings (roadmap 5.2.5); an account the core has not seen yet is
-// skipped, as is a platform without the capability.
-func (s *Service) accountUserIDs(ctx context.Context) ([]id.ID, error) {
-	adapters := s.ports.Platforms.All()
-	var out []id.ID
-	seen := map[id.ID]bool{}
-	for _, adapter := range adapters {
-		idents, ok := adapter.(connector.Identities)
-		if !ok {
-			continue
-		}
-		for _, a := range connector.Accounts() {
-			ident, ok := idents.Identity(a)
-			if !ok {
-				continue
-			}
-			u, err := s.userByPlatformIDErr(ctx, adapter.Name(), ident.PlatformUserID)
-			if err != nil {
-				return nil, fmt.Errorf("account users: %s %s: %w", adapter.Name(), a, err)
-			}
-			if u != nil && !seen[u.ID] {
-				seen[u.ID] = true
-				out = append(out, u.ID)
-			}
-		}
-	}
-	slices.SortFunc(out, func(a, b id.ID) int { return a.Compare(b) })
-	return out, nil
-}
-
-// userByPlatformID is the store lookup with not-found as nil.
-func (s *Service) userByPlatformIDErr(ctx context.Context, p platform.Name, platformUserID string) (*user.User, error) {
-	u, ok, err := s.ports.Store.UserByPlatformID(ctx, p, platformUserID)
-	if err != nil || !ok {
-		return nil, err
-	}
-	return &u, nil
 }
 
 // connectorAccount returns the account of the platform the account of the

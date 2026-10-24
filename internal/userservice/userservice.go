@@ -249,46 +249,6 @@ func (s *Service) Active(p platform.Name) []Active {
 	return out
 }
 
-// Rankings returns up to n users ranked by stat, from the highest value
-// down (roadmap 5.2.5). Excluded users are never ranked (users-and-roles.md,
-// B7, in the store); the channel's accounts (streamer, bot) are excluded
-// here, so the result has at most n entries and is refilled with the next
-// users.
-func (s *Service) Rankings(ctx context.Context, stat user.Stat, n int) ([]user.Ranked, error) {
-	if !stat.Valid() {
-		return nil, fmt.Errorf("rankings: %w: %s", user.ErrInvalid, stat)
-	}
-	if n < 1 {
-		return nil, fmt.Errorf("rankings: %w: n = %d", user.ErrInvalid, n)
-	}
-	var exclude map[id.ID]bool
-	if s.ports.Platforms != nil {
-		ids, err := s.accountUserIDs(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("rankings: %w", err)
-		}
-		exclude = make(map[id.ID]bool, len(ids))
-		for _, account := range ids {
-			exclude[account] = true
-		}
-	}
-	rows, err := s.ports.Store.TopUsers(ctx, stat, n+len(exclude))
-	if err != nil {
-		return nil, fmt.Errorf("rankings: %w", err)
-	}
-	var out []user.Ranked
-	for _, r := range rows {
-		if exclude[r.User.ID] {
-			continue
-		}
-		out = append(out, r)
-		if len(out) == n {
-			break
-		}
-	}
-	return out, nil
-}
-
 // handle applies one event to the statistics.
 func (s *Service) handle(ctx context.Context, env event.Envelope) {
 	switch env.Type {

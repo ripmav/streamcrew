@@ -622,6 +622,7 @@ func emotes(raw, text string) []fragment {
 	if raw == "" {
 		return nil
 	}
+	r := []rune(text)
 	out := make([]fragment, 0, 2)
 	for e := range strings.SplitSeq(raw, ",") {
 		id, rangeStr, _ := strings.Cut(e, ":")
@@ -630,8 +631,7 @@ func emotes(raw, text string) []fragment {
 		end, _ := strconv.Atoi(endStr)
 		f := fragment{Type: "emote"}
 		f.Emote.ID = id
-		r := []rune(text)
-		if start >= 0 && end > start && end < len(r) {
+		if start >= 0 && end >= start && end < len(r) {
 			f.Text = string(r[start : end+1])
 		}
 		out = append(out, f)

@@ -8,6 +8,7 @@ package doctor
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -206,9 +207,9 @@ func isPublicHost(host string) bool {
 
 // probeCore reports whether a streamcrew core answers /healthz on addr,
 // over https when it runs with TLS, otherwise over http.
-func probeCore(ctx context.Context, addr string, tls bool) bool {
+func probeCore(ctx context.Context, addr string, withTLS bool) bool {
 	schemes := []string{"http"}
-	if tls {
+	if withTLS {
 		schemes = append(schemes, "https")
 	}
 	host, port, err := net.SplitHostPort(addr)
@@ -222,7 +223,17 @@ func probeCore(ctx context.Context, addr string, tls bool) bool {
 		ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, scheme+"://"+net.JoinHostPort(host, port)+"/healthz", nil)
 		if err == nil {
-			if resp, err := http.DefaultClient.Do(req); err == nil {
+			client := http.DefaultClient
+			if scheme == "https" {
+				// The probe only asks whether the core answers at all; the
+				// certificate is local and unknown to the checker, so the
+				// verification is off for the probe (Nachprüfung 2026-10-24,
+				// N4). Nothing of the core reaches out through it.
+				client = &http.Client{Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // probe only, see above
+				}}
+			}
+			if resp, err := client.Do(req); err == nil {
 				_ = resp.Body.Close()
 				if resp.StatusCode == http.StatusOK {
 					cancel()

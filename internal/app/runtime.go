@@ -86,7 +86,7 @@ func (a *App) ensureAPIToken() error {
 			return nil
 		}
 		if a.cfg.BootstrapToken != "" {
-			return a.registerToken(store, "bootstrap", a.cfg.BootstrapToken)
+			return a.registerToken(store, "bootstrap", a.cfg.BootstrapToken, true)
 		}
 		a.logger.Warn("the api has no tokens and is closed until the first one is created",
 			"hint", "run 'streamcrew token create <name> --scope admin' on the server, or set STREAMCREW_TOKEN before the core starts")
@@ -108,8 +108,11 @@ func (a *App) ensureLocalToken(store *apitoken.Store, path string) error {
 		if _, ok := store.Validate(value); ok {
 			return nil // file and store are in sync
 		}
-		// The store was wiped or predates the file: register the value again.
-		return a.registerToken(store, "admin", value)
+		// The token was revoked: the store is the truth, and a revoked
+		// token stays revoked across restarts (Nachprüfung 2026-10-24,
+		// N2). The file keeps the value for a new token create.
+		a.logger.Warn("the local admin token was revoked; it stays revoked until a new one is created", "path", path)
+		return nil
 	}
 	if a.cfg.BootstrapToken != "" {
 		value = a.cfg.BootstrapToken
@@ -124,16 +127,22 @@ func (a *App) ensureLocalToken(store *apitoken.Store, path string) error {
 		return fmt.Errorf("write api token: %w", err)
 	}
 	a.logger.Info("created the local admin token", "path", path)
-	return a.registerToken(store, "admin", value)
+	return a.registerToken(store, "admin", value, false)
 }
 
-// registerToken stores a token with the given value in the token store.
-func (a *App) registerToken(store *apitoken.Store, name, value string) error {
+// registerToken stores a token with the given value in the token store;
+// bootstrap says the value came from STREAMCREW_TOKEN, which the log names
+// (the self-generated local token does not, Nachprüfung 2026-10-24, N3).
+func (a *App) registerToken(store *apitoken.Store, name, value string, bootstrap bool) error {
 	tok, err := store.CreateWith(name, []apitoken.Scope{apitoken.Admin}, value)
 	if err != nil {
 		return fmt.Errorf("register api token: %w", err)
 	}
-	a.logger.Info("registered the bootstrap admin token from STREAMCREW_TOKEN", "token", tok.ID)
+	if bootstrap {
+		a.logger.Info("registered the bootstrap admin token from STREAMCREW_TOKEN", "token", tok.ID)
+	} else {
+		a.logger.Info("registered the local admin token", "token", tok.ID)
+	}
 	return nil
 }
 

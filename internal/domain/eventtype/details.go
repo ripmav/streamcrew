@@ -164,4 +164,8 @@ type Gift struct {
 	// Count is the number of subscriptions gifted with the event: 1 for a
 	// gift to one user, at least 1 for a mass gift.
 	Count int `json:"count"`
+	// CommunityGiftID is the ID of the mass-gift action the gift belongs to;
+	// empty for a gift outside of one. The core uses it to suppress the
+	// single gifts of a fired mass gift (events.md B5).
+	CommunityGiftID string `json:"communityGiftId,omitempty"`
 }

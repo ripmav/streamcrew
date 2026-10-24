@@ -4,6 +4,7 @@ package api
 
 import (
 	"encoding/json/v2"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -35,16 +36,13 @@ func newAuthLimiter(limit int, window time.Duration) *authLimiter {
 	return &authLimiter{limit: limit, window: window, fails: make(map[string][]time.Time)}
 }
 
-// record stores one failed attempt and reports whether the address is
-// throttled now.
-func (l *authLimiter) record(addr string) bool {
+// record stores one failed attempt of the source IP and reports whether
+// the address is throttled now. Only failures within the window count.
+func (l *authLimiter) record(ip string) bool {
 	now := time.Now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if len(l.fails) > 1024 {
-		l.fails = make(map[string][]time.Time) // a fresh map prunes every stale address
-	}
-	rec := l.fails[addr]
+	rec := l.fails[ip]
 	kept := rec[:0]
 	for _, t := range rec {
 		if now.Sub(t) < l.window {
@@ -52,11 +50,42 @@ func (l *authLimiter) record(addr string) bool {
 		}
 	}
 	if len(kept) >= l.limit {
-		l.fails[addr] = kept
+		l.fails[ip] = kept
 		return true
 	}
-	l.fails[addr] = append(kept, now)
+	if len(l.fails) > 1024 {
+		l.prune(now)
+	}
+	l.fails[ip] = append(kept, now)
 	return false
+}
+
+// prune removes the addresses without a recent failure, so the map does
+// not grow unboundedly.
+func (l *authLimiter) prune(now time.Time) {
+	for addr, rec := range l.fails {
+		fresh := false
+		for _, t := range rec {
+			if now.Sub(t) < l.window {
+				fresh = true
+				break
+			}
+		}
+		if !fresh {
+			delete(l.fails, addr)
+		}
+	}
+}
+
+// sourceIP is the IP part of the remote address: a changing port must not
+// reset the failure count (the Nachprüfung of the code review
+// 2026-10-24, S3).
+func sourceIP(remote string) string {
+	host, _, err := net.SplitHostPort(remote)
+	if err != nil {
+		return remote
+	}
+	return host
 }
 
 // tokenAuth protects the API with the stored tokens (ADR-0013 §5: every
@@ -77,7 +106,7 @@ func tokenAuth(tokens Tokens, limiter *authLimiter, next http.Handler) http.Hand
 		}
 		tok, ok := tokens.Validate(bearerToken(r))
 		if !ok {
-			if limiter.record(r.RemoteAddr) {
+			if limiter.record(sourceIP(r.RemoteAddr)) {
 				writeConnectError(w, http.StatusTooManyRequests, "resource_exhausted", "too many failed authentications, slow down")
 				return
 			}

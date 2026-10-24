@@ -4,6 +4,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"text/tabwriter"
 
@@ -93,11 +94,15 @@ type userSetCmd struct {
 	Platform string `required:"" help:"The platform of the login, e.g. twitch." placeholder:"PLATFORM"`
 	// Role is the new role, e.g. "moderator"; empty keeps it.
 	Role string `help:"The new role." placeholder:"ROLE"`
-	// Title is the new title; empty keeps it.
-	Title string `help:"The new title." placeholder:"TITLE"`
-	// Strikes is the new strike count; 0 keeps it.
-	Strikes uint32 `help:"The new strike count." placeholder:"N"`
-	// Excluded and NoExcluded set the excluded switch.
+	// Title is the new title; unset keeps it. Use --clear-title to
+	// remove the current title.
+	Title      string `help:"The new title." placeholder:"TITLE"`
+	ClearTitle bool   `help:"Remove the current title."`
+	// Strikes is the new strike count; 0 clears the counter, unset keeps
+	// it (kong leaves a nil pointer flag at its zero value).
+	Strikes *uint32 `help:"The new strike count, 0 clears it." placeholder:"N"`
+	// Excluded sets the excluded switch; NoExcluded includes the user
+	// again.
 	Excluded   bool `help:"Exclude the user from rankings and random selection."`
 	NoExcluded bool `help:"Include the user again."`
 }
@@ -112,11 +117,16 @@ func (c userSetCmd) Run(ctx context.Context, e *Env) error {
 		Id:   got.User.Id,
 		Role: c.Role,
 	}
-	if c.Title != "" {
+	switch {
+	case c.ClearTitle && c.Title != "":
+		return errors.New("--title and --clear-title are mutually exclusive")
+	case c.ClearTitle:
+		req.Title = new(string)
+	case c.Title != "":
 		req.Title = &c.Title
 	}
-	if c.Strikes > 0 {
-		req.Strikes = &c.Strikes
+	if c.Strikes != nil {
+		req.Strikes = c.Strikes
 	}
 	if c.Excluded != c.NoExcluded {
 		req.Excluded = &c.Excluded

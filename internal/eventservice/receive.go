@@ -256,6 +256,16 @@ func (s *Service) Event(ctx context.Context, e connector.Event) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// The single gifts of a fired mass gift never run (B5, "nie beide");
+	// the platform delivers them seconds after the action, and the ID
+	// stays until it reappears, so the map holds at most the actions of
+	// the recent minutes.
+	if g := e.Details.Gift; g != nil && g.CommunityGiftID != "" {
+		if _, fired := s.firedGifts[g.CommunityGiftID]; fired {
+			s.logger.DebugContext(ctx, "drop the single gift of a fired mass gift", "gift", g.CommunityGiftID)
+			return nil
+		}
+	}
 	if s.closed {
 		return fmt.Errorf("event %s: %w", e.Type, ErrStopped)
 	}
@@ -347,7 +357,7 @@ func (s *Service) checkEvent(e connector.Event) (eventtype.Descriptor, error) {
 	// count.
 	case mass && len(e.Recipients) > 0 && len(e.Recipients) != e.Details.Gift.Count:
 		return d, fmt.Errorf("%w: %d recipients of %d gifts", eventtype.ErrShape, len(e.Recipients), e.Details.Gift.Count)
-	case !mass && len(e.Recipients) > 0:
+	case !mass && len(e.Recipients) > 0 && e.Details.Gift == nil:
 		return d, fmt.Errorf("%w: recipients without a mass gift", eventtype.ErrShape)
 	}
 	return d, nil
@@ -356,7 +366,9 @@ func (s *Service) checkEvent(e connector.Event) (eventtype.Descriptor, error) {
 // massGiftLocked fires a mass gift: from the threshold of the profile on
 // the mass gift alone, below it one gift per recipient, never both (B5).
 // The count is the number of named recipients, or the total of the payload
-// when the platform names none (Twitch, twitch-events.md B21). s.mu is held.
+// when the platform names none (Twitch, twitch-events.md B21). The IDs of
+// the fired actions stay until their last single gift arrives (Twitch
+// delivers the single gifts seconds after the action). s.mu is held.
 func (s *Service) massGiftLocked(ctx context.Context, e connector.Event, single event.Type, payload eventtype.Payload) error {
 	s.recordFeed(ctx, e.Type, payload)
 	cfg, err := s.settings(ctx)
@@ -368,6 +380,11 @@ func (s *Service) massGiftLocked(ctx context.Context, e connector.Event, single 
 		count = len(e.Recipients)
 	}
 	if count >= cfg.MassGiftThreshold {
+		// The action fired: its single gifts are dropped while they
+		// arrive (B5, "nie beide").
+		if id := e.Details.Gift.CommunityGiftID; id != "" {
+			s.firedGifts[id] = struct{}{}
+		}
 		s.fire(ctx, e.Platform, e.Type, payload)
 		return nil
 	}

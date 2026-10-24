@@ -110,6 +110,9 @@ func TestCounterCommands(t *testing.T) {
 	require.NoError(t, err)
 
 	var out bytes.Buffer
+	// The server is the local core, and the local admin token of the data
+	// directory applies (Nachprüfung 2026-10-24, N1); a remote --server
+	// would not get it.
 	env := &Env{Stdout: &out, Stderr: io.Discard, Config: &config.Config{DataDir: dir}, Server: base}
 
 	require.NoError(t, counterListCmd{}.Run(ctx, env))

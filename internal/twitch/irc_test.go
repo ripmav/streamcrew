@@ -265,6 +265,19 @@ func TestIRCSessionMessage(t *testing.T) {
 	assert.Equal(t, "msg-2", m.Message.ID)
 	assert.Equal(t, "😀hi", m.Message.Text)
 	assert.Equal(t, []string{"hi"}, m.Message.Emotes, "the range is counted in code points")
+
+	// A single-code-point emote: the range start-end with equal values
+	// spans it (Nachprüfung 2026-10-24, T4).
+	srv.push(t, "@display-name=Alice;emotes=44:0-0;id=msg-3;user-id=42;tmi-sent-ts=1 :alice!alice@alice.tmi.twitch.tv PRIVMSG #testchan :😀xy")
+	waitFor(t, 5*time.Second, func() int64 {
+		if len(r.received()) == 3 {
+			return 3
+		}
+		return 0
+	})
+	m = r.lastMessage(t)
+	assert.Equal(t, "msg-3", m.Message.ID)
+	assert.Equal(t, []string{"😀"}, m.Message.Emotes, "the single code point is the emote")
 }
 
 // TestIRCSessionMessageFromBot flags the messages of the bot account

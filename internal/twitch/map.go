@@ -652,7 +652,7 @@ func (p chatNotification) event() (connector.Event, error) {
 			Type:     eventtype.TwitchSubscriptionMassGift,
 			Details: eventtype.Details{
 				Subscription: &eventtype.Subscription{Plan: p.CommunitySubGift.SubTier},
-				Gift:         &eventtype.Gift{Anonymous: p.ChatterAnonymous, Count: p.CommunitySubGift.Total},
+				Gift:         &eventtype.Gift{Anonymous: p.ChatterAnonymous, Count: p.CommunitySubGift.Total, CommunityGiftID: p.CommunitySubGift.ID},
 			},
 		}
 		if !p.ChatterAnonymous {

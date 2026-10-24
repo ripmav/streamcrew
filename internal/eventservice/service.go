@@ -210,6 +210,10 @@ type Service struct {
 	closed  bool
 	// sessions are the stream sessions by platform.
 	sessions map[platform.Name]*session
+	// firedGifts are the IDs of the mass-gift actions that fired; their
+	// single gifts are dropped while they arrive (events.md B5, "never
+	// both"). The ID stays until the last single gift arrives.
+	firedGifts map[string]struct{}
 }
 
 // session is the stream session of a platform with what only the running
@@ -231,7 +235,7 @@ func New(ctx context.Context, p Ports, opts ...Option) (*Service, error) {
 	case p.Store == nil, p.Commands == nil, p.Engine == nil, p.Publisher == nil, p.Chat == nil, p.Moderation == nil, p.Settings == nil:
 		return nil, fmt.Errorf("new event service: %w: missing port", ErrInvalidOption)
 	}
-	s := &Service{ports: p, logger: slog.New(slog.DiscardHandler), sessions: make(map[platform.Name]*session)}
+	s := &Service{ports: p, logger: slog.New(slog.DiscardHandler), sessions: make(map[platform.Name]*session), firedGifts: make(map[string]struct{})}
 	var errs []error
 	for _, opt := range opts {
 		errs = append(errs, opt(s))
@@ -275,6 +279,7 @@ func (s *Service) Run(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.closed = true
+	s.firedGifts = make(map[string]struct{})
 	now := time.Now()
 	var errs []error
 	for _, ses := range s.sessions {

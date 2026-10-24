@@ -99,7 +99,7 @@ func TestEventContract(t *testing.T) {
 			User:     bob,
 			Details: eventtype.Details{
 				Subscription: &eventtype.Subscription{Plan: "1000"},
-				Gift:         &eventtype.Gift{Count: 3},
+				Gift:         &eventtype.Gift{Count: 3, CommunityGiftID: "cg-1"},
 			},
 		}},
 		{name: "channel.cheer", wantEvent: &connector.Event{
