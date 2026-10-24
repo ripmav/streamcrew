@@ -208,10 +208,21 @@ func TestAPIServesTheUserService(t *testing.T) {
 	assert.Equal(t, aliceID, gi.User.Id)
 
 	three := uint32(3)
-	up, err := client.Update(ctx, &v1alpha1.UpdateUserRequest{Id: aliceID, Title: "Queen", Strikes: &three})
+	queen := "Queen"
+	up, err := client.Update(ctx, &v1alpha1.UpdateUserRequest{Id: aliceID, Title: &queen, Strikes: &three})
 	require.NoError(t, err)
 	assert.Equal(t, "Queen", up.User.Title)
 	assert.Equal(t, uint32(3), up.User.Strikes)
+
+	// An update without a title keeps the current one (code review
+	// 2026-10-24, U3); an empty title clears it.
+	up, err = client.Update(ctx, &v1alpha1.UpdateUserRequest{Id: aliceID})
+	require.NoError(t, err)
+	assert.Equal(t, "Queen", up.User.Title, "no title field keeps it")
+	empty := ""
+	up, err = client.Update(ctx, &v1alpha1.UpdateUserRequest{Id: aliceID, Title: &empty})
+	require.NoError(t, err)
+	assert.Empty(t, up.User.Title, "the empty title clears it")
 
 	r, err := client.Rankings(ctx, &v1alpha1.RankingsRequest{})
 	require.NoError(t, err)

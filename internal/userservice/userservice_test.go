@@ -594,6 +594,50 @@ func TestWatchTime(t *testing.T) {
 	})
 }
 
+// TestWatchTimeSilenceAndEnd covers the code review 2026-10-24, U1: a
+// silent user stops counting after the inactivity window, and the active
+// set ends with the stream session.
+func TestWatchTimeSilenceAndEnd(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		stop := f.run(t)
+		defer stop()
+		synctest.Wait()
+		// The events carry the real clock so that the inactivity window
+		// (real time in the tick) compares against them.
+		at := time.Now().UTC().Truncate(time.Second)
+		f.store.setSession(stream.Session{Platform: platform.Mock, State: stream.StateLive, StartedAt: at})
+		ada := mockUser("ada")
+		f.publish(t, eventtype.ChatUserJoin, &ada, eventtype.Details{}, at)
+
+		// After the silence window, Ada is no longer counted although she
+		// never left and the stream is live.
+		time.Sleep(6 * time.Minute)
+		settle(t)
+		time.Sleep(time.Minute)
+		settle(t)
+		assert.Less(t, f.store.stat(ada.ID).WatchMinutes, int64(7), "the silent user stops counting")
+
+		// A new message reactivates her; the next minute counts again.
+		f.publish(t, eventtype.ChatMessage, &ada, eventtype.Details{}, at.Add(7*time.Minute))
+		time.Sleep(time.Minute)
+		settle(t)
+		assert.GreaterOrEqual(t, f.store.stat(ada.ID).WatchMinutes, int64(1), "the message reactivates her")
+
+		// The stream ends: the active set is cleared, and no minute counts
+		// any more although the user stays in the chat.
+		f.store.setSession(stream.Session{Platform: platform.Mock, State: stream.StateOffline, StartedAt: at})
+		time.Sleep(time.Minute)
+		settle(t)
+		last := f.store.stat(ada.ID).WatchMinutes
+		time.Sleep(time.Minute)
+		settle(t)
+		assert.Equal(t, last, f.store.stat(ada.ID).WatchMinutes, "an ended session counts no watch time")
+		assert.Empty(t, f.activeLogins(t), "the active set ends with the session")
+	})
+}
+
 // TestJoinOffline covers that a join while the stream is not live makes
 // the user active but does not count a watched stream (B9).
 func TestJoinOffline(t *testing.T) {

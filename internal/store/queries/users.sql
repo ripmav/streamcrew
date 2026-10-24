@@ -21,13 +21,15 @@ JOIN user_stats s ON s.user_id = u.id
 ORDER BY u.id;
 
 -- One top list per statistic (roadmap 5.2.5): excluded users are never
--- ranked (users-and-roles.md, B7), neither are users whose value is 0; ties
--- are ordered by user ID.
+-- ranked (users-and-roles.md, B7), neither are users whose value is 0, nor
+-- the streamer and the bot of a connected account (B12); ties are ordered
+-- by user ID.
 -- name: TopUsersWatchMinutes :many
 SELECT u.id AS id, s.watch_minutes AS val
 FROM user_stats s
 JOIN users u ON u.id = s.user_id
 WHERE u.excluded = 0 AND s.watch_minutes > 0
+  AND u.id NOT IN (SELECT user_id FROM user_identities WHERE (platform, platform_user_id) IN (SELECT platform, user_id FROM accounts))
 ORDER BY s.watch_minutes DESC, u.id
 LIMIT ?;
 
@@ -36,6 +38,7 @@ SELECT u.id AS id, s.messages AS val
 FROM user_stats s
 JOIN users u ON u.id = s.user_id
 WHERE u.excluded = 0 AND s.messages > 0
+  AND u.id NOT IN (SELECT user_id FROM user_identities WHERE (platform, platform_user_id) IN (SELECT platform, user_id FROM accounts))
 ORDER BY s.messages DESC, u.id
 LIMIT ?;
 
@@ -44,6 +47,7 @@ SELECT u.id AS id, s.commands_run AS val
 FROM user_stats s
 JOIN users u ON u.id = s.user_id
 WHERE u.excluded = 0 AND s.commands_run > 0
+  AND u.id NOT IN (SELECT user_id FROM user_identities WHERE (platform, platform_user_id) IN (SELECT platform, user_id FROM accounts))
 ORDER BY s.commands_run DESC, u.id
 LIMIT ?;
 
@@ -52,6 +56,7 @@ SELECT u.id AS id, s.mentions AS val
 FROM user_stats s
 JOIN users u ON u.id = s.user_id
 WHERE u.excluded = 0 AND s.mentions > 0
+  AND u.id NOT IN (SELECT user_id FROM user_identities WHERE (platform, platform_user_id) IN (SELECT platform, user_id FROM accounts))
 ORDER BY s.mentions DESC, u.id
 LIMIT ?;
 
@@ -60,6 +65,7 @@ SELECT u.id AS id, s.streams_watched AS val
 FROM user_stats s
 JOIN users u ON u.id = s.user_id
 WHERE u.excluded = 0 AND s.streams_watched > 0
+  AND u.id NOT IN (SELECT user_id FROM user_identities WHERE (platform, platform_user_id) IN (SELECT platform, user_id FROM accounts))
 ORDER BY s.streams_watched DESC, u.id
 LIMIT ?;
 

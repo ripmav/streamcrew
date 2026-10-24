@@ -400,22 +400,30 @@ func TestTopUsers(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Top 3 by watch minutes: bob and ada (125, tie by ID), then carol (60);
-	// excl (999, but B7) and dan (0) never appear.
+	// The streamer and the bot of a connected account are never ranked
+	// (B12): carol's identity matches the connected streamer account,
+	// dan's matches the bot.
+	require.NoError(t, s.UpsertAccount(ctx, store.Account{Platform: string(platform.Twitch), Role: "streamer", Login: "carol", UserID: "1003", Flow: "device_code"}))
+	require.NoError(t, s.UpsertAccount(ctx, store.Account{Platform: string(platform.Twitch), Role: "bot", Login: "dan", UserID: "1005", Flow: "device_code"}))
+
+	// Top 3 by watch minutes: bob and ada (125, tie by ID); excl (999, but
+	// B7), carol (connected streamer, B12) and dan (0, and the bot) never
+	// appear.
 	top, err := s.TopUsers(ctx, user.StatWatchMinutes, 3)
 	require.NoError(t, err)
-	assert.Equal(t, []id.ID{ada.ID, bob.ID, carol.ID}, ids(top))
-	assert.Equal(t, []int64{125, 125, 60}, vals(top))
+	assert.Equal(t, []id.ID{ada.ID, bob.ID}, ids(top))
+	assert.Equal(t, []int64{125, 125}, vals(top))
 
 	// Limit 2: the two 125s.
 	top, err = s.TopUsers(ctx, user.StatWatchMinutes, 2)
 	require.NoError(t, err)
 	assert.Equal(t, []id.ID{ada.ID, bob.ID}, ids(top))
 
-	// Top 2 by messages: bob and carol (30, tie by ID); ada (3) third, dan 0.
+	// Top 2 by messages: only bob (30); carol (30, but the streamer) and
+	// ada (3) are not in, dan is the bot.
 	top, err = s.TopUsers(ctx, user.StatMessages, 2)
 	require.NoError(t, err)
-	assert.Equal(t, []id.ID{bob.ID, carol.ID}, ids(top))
+	assert.Equal(t, []id.ID{bob.ID, ada.ID}, ids(top))
 
 	// A statistic nobody has: empty, not an error.
 	top, err = s.TopUsers(ctx, user.StatCommandsRun, 5)

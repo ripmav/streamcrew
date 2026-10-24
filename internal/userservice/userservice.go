@@ -49,6 +49,12 @@ var ErrAlreadyRunning = errors.New("the user service runs already")
 // Minuten").
 const watchTickDefault = time.Minute
 
+// activeWindow is how long a silent user still counts as watching: its
+// last activity (join or chat message) must be within it (code review
+// 2026-10-24, U1). The Twitch platform names no leave, so without the
+// window a one-message chatter would count every minute of the stream.
+const activeWindow = 5 * time.Minute
+
 // dataTTL is how long the cached platform data of an identity stays fresh
 // (users-and-roles.md, B10); older data is refetched on the next contact.
 const dataTTL = time.Hour
@@ -394,21 +400,34 @@ func (s *Service) instance(ctx context.Context, env event.Envelope) {
 
 // watchTick adds one minute of watch time to every active user of a live
 // platform (B9, "Watchtime (nur während live)"), and evaluates the
-// regular role of all users (users-and-roles.md, B26).
+// regular role of all users (users-and-roles.md, B26). An active user is
+// silent for at most activeWindow, and the active set ends with the
+// stream session (code review 2026-10-24, U1).
 func (s *Service) watchTick(ctx context.Context) {
 	sessions, err := s.ports.Store.StreamSessions(ctx)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "reading the stream sessions failed", "error", err)
 		return
 	}
+	now := time.Now().UTC()
 	var deltas []user.StatsDelta
 	s.mu.Lock()
 	for _, se := range sessions {
-		if se.State != stream.StateLive {
+		switch {
+		case se.State == stream.StateOffline:
+			// The session ended: the active users of it are gone.
+			delete(s.active, se.Platform)
+			continue
+		case se.State != stream.StateLive:
+			// Grace: the session goes on, the minute does not count.
 			continue
 		}
-		for _, a := range s.active[se.Platform] {
-			deltas = append(deltas, user.StatsDelta{UserID: a.User.ID, WatchMinutes: 1})
+		for uID, a := range s.active[se.Platform] {
+			if now.Sub(a.Last) > activeWindow {
+				delete(s.active[se.Platform], uID)
+				continue
+			}
+			deltas = append(deltas, user.StatsDelta{UserID: uID, WatchMinutes: 1})
 		}
 	}
 	s.mu.Unlock()

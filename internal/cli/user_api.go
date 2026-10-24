@@ -109,9 +109,11 @@ func (c userSetCmd) Run(ctx context.Context, e *Env) error {
 		return err
 	}
 	req := &v1alpha1.UpdateUserRequest{
-		Id:    got.User.Id,
-		Role:  c.Role,
-		Title: c.Title,
+		Id:   got.User.Id,
+		Role: c.Role,
+	}
+	if c.Title != "" {
+		req.Title = &c.Title
 	}
 	if c.Strikes > 0 {
 		req.Strikes = &c.Strikes
