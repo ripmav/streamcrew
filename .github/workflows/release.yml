@@ -47,7 +47,9 @@ jobs:
         run: scripts/modulecheck.sh "dist/streamcrew-$(git describe --tags --exact-match | sed 's/^v//')-src.zip"
 
       - name: Install syft
-        run: curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | BINARY_FORMAT=bash sh
+        # -b: keep the binary out of the checkout, goreleaser refuses a
+        # dirty workdir (untracked bin/)
+        run: curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | BINARY_FORMAT=bash sh -s -- -b /usr/local/bin
 
       - name: goreleaser
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
