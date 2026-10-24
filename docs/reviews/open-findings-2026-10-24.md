@@ -35,7 +35,7 @@ neuen Befund mitgebracht.
 | # | Stand |
 |---|---|
 | V3/C14 | Am 2026-10-24 entschieden, festgehalten im Branch `docs/config-api-rechte-nur-einschraenken` (Nachtrag zu Code-ADR-0021). `ConfigService/Update` darf Rechte, `file-root`, `outbound-allow`, `mode`, `cors-allow`, `listen`, TLS und `dev` nur einschränken, gemessen am aktuell wirksamen Stand. Danach wird `serve` verdrahtet. Die Umsetzung ist offen (Roadmap 6.5). |
-| V3, Rückfrage | Ebenfalls offen: Soll `log-file` über die API änderbar bleiben? Ein Admin-Token könnte damit Log-Zeilen an einen beliebigen Pfad schreiben, auf den der Core Schreibrechte hat. Darin stehen auch Inhalte, die Angreifer steuern, etwa Chat-Texte. |
+| `log-file` | Am 2026-10-24 entschieden, festgehalten im selben Nachtrag (Punkt 6): `log-file` gilt nur beim Start. Die Einstellung wechselt von hot zu restart, für die Datei wie für die API, weil ein Admin-Token sonst Log-Zeilen in beliebige Dateien schreiben ließe. Die Umsetzung ist offen (Roadmap 6.5). |
 
 ## 4. Nicht angegangen (laut Fix-Plan bewusst außerhalb der Prioritäten)
 
