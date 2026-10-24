@@ -26,15 +26,15 @@ import (
 
 // opsServer is a fake Helix for the platform operations (roadmap 4.4).
 type opsServer struct {
-	mu            sync.Mutex
-	chat          []string // the sent chat texts, in order
-	sender        string   // the sender ID the last chat send carried
-	moderator     string   // the moderator ID the last moderation op carried
-	bans404       bool     // make DELETE /moderation/bans answer 404
-	offline       bool     // /streams and /users answer no data
-	timeout       int      // the timeout duration the last POST carried
-	broadcaster   string   // the broadcaster ID the last chat send carried
-	userLookups   int      // the GET /users calls so far
+	mu          sync.Mutex
+	chat        []string // the sent chat texts, in order
+	sender      string   // the sender ID the last chat send carried
+	moderator   string   // the moderator ID the last moderation op carried
+	bans404     bool     // make DELETE /moderation/bans answer 404
+	offline     bool     // /streams and /users answer no data
+	timeout     int      // the timeout duration the last POST carried
+	broadcaster string   // the broadcaster ID the last chat send carried
+	userLookups int      // the GET /users calls so far
 }
 
 func (s *opsServer) handler(t *testing.T) http.HandlerFunc {
@@ -62,10 +62,10 @@ func (s *opsServer) handler(t *testing.T) http.HandlerFunc {
 			w.WriteHeader(http.StatusNoContent)
 		case r.URL.Path == "/moderation/timeouts" && r.Method == http.MethodPost:
 			var in struct {
-				FromID     string `json:"from_id"`
+				FromID      string `json:"from_id"`
 				ModeratorID string `json:"moderator_id"`
-				Duration   int    `json:"duration"`
-				Reason     string `json:"reason"`
+				Duration    int    `json:"duration"`
+				Reason      string `json:"reason"`
 			}
 			require.NoError(t, jsonv2.Unmarshal(body, &in))
 			assert.Equal(t, "3", in.FromID)
