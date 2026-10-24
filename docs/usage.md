@@ -199,6 +199,14 @@ Desktop-Modus ist die Ansicht read-only.
 `log-max-size`, `log-max-files`, `dry-run`, `dev`, `cors-allow`,
 `listen` (Rebind), `tls-cert`, `tls-key`, `mode`, `shutdown-timeout`.
 
+**Nur einschränken:** Rechte und sicherheitsrelevante Einstellungen
+(`grant`, `revoke`, `file-root`, `outbound-allow`, `mode`, `cors-allow`,
+`listen`, `tls-cert`/`tls-key`, `dev`) lassen sich über die TUI bzw. die
+API nur einschränken. Ein Dokument, das sie erweitert, wird ganz
+abgelehnt. Erweitern geht nur lokal in der Konfigurationsdatei
+([Code-ADR-0021, Nachtrag 2026-10-24](adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte);
+die Umsetzung ist offen).
+
 **Restart:** `data-dir`, `profile`, `config` (offene Dateien und
 Datenbanken des laufenden Prozesses).
 
