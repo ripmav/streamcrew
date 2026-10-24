@@ -34,17 +34,20 @@ jobs:
 
       - name: Module source archive
         run: |
+          # module-src/, not dist/: goreleaser requires an empty dist/ (or
+          # --clean, which would wipe a pre-built archive before the
+          # extra_files glob runs).
           # goreleaser's {{ .Version }} template drops the tag's v prefix,
           # so the archive name must not contain it (extra_files in
           # .goreleaser.yaml); -version keeps it for the Go proxy layout.
           tag=$(git describe --tags --exact-match)
-          mkdir -p dist
+          mkdir -p module-src
           go run ./scripts/modulezip \
             -version "${GORELEASER_VERSION:-$tag}" \
-            -out "dist/streamcrew-${tag#v}-src.zip"
+            -out "module-src/streamcrew-${tag#v}-src.zip"
 
       - name: Verify the module archive
-        run: scripts/modulecheck.sh "dist/streamcrew-$(git describe --tags --exact-match | sed 's/^v//')-src.zip"
+        run: scripts/modulecheck.sh "module-src/streamcrew-$(git describe --tags --exact-match | sed 's/^v//')-src.zip"
 
       - name: Install syft
         # -b: keep the binary out of the checkout, goreleaser refuses a
