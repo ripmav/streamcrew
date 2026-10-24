@@ -7,6 +7,9 @@
 # Release and build output
 /dist/
 
+# module source archive for the release (goreleaser extra_file input)
+/module-src/
+
 # Test and profiling output
 *.test
 *.out

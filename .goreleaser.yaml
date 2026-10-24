@@ -65,4 +65,7 @@ release:
   extra_files:
     - glob: packaging/systemd/streamcrew.service
     - glob: packaging/systemd/streamcrew.env.example
-    - glob: "dist/streamcrew-{{ .Version }}-src.zip"
+    # built by the workflow into module-src/ (goreleaser's --clean wipes
+    # dist/, so the pre-built input lives outside it)
+    - glob: "module-src/streamcrew-{{ .Version }}-src.zip"
+      name_template: "streamcrew-{{ .Version }}-src.zip"
