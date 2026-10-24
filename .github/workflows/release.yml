@@ -68,14 +68,16 @@ jobs:
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             -t "ghcr.io/ripmav/streamcrew:${tag}" \
-            --output "type=docker,dest=dist/streamcrew-image-${tag}.tar" \
+            --output "type=oci,dest=dist/streamcrew-image-${tag}.tar" \
             .
           ls -lh dist/streamcrew-image-${tag}.tar
 
       - name: Image SBOM (CycloneDX)
         run: |
           tag=$(git describe --tags --exact-match)
-          syft pkg "dist/streamcrew-image-${tag}.tar" -o cyclonedx-json="dist/streamcrew-image-${tag}.sbom.json"
+          # oci-archive: the tar is an OCI image layout (multi-platform);
+          # syft selects the current platform (runner is amd64)
+          syft pkg "oci-archive:dist/streamcrew-image-${tag}.tar" -o cyclonedx-json="dist/streamcrew-image-${tag}.sbom.json"
 
       - name: Upload image artifacts
         env:
