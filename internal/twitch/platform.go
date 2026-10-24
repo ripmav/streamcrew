@@ -904,6 +904,15 @@ func (p *Platform) setConnected(v bool) {
 	p.connected = v
 }
 
+// botState reports whether a bot session runs (an additional-channel or
+// IRC session); while it does, the bot account is the sender for chat
+// (actions.md B61).
+func (p *Platform) botState() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.botConnected
+}
+
 func (p *Platform) setBot(v bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

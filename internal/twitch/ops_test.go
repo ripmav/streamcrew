@@ -26,13 +26,15 @@ import (
 
 // opsServer is a fake Helix for the platform operations (roadmap 4.4).
 type opsServer struct {
-	mu          sync.Mutex
-	chat        []string // the sent chat texts, in order
-	bans404     bool     // make DELETE /moderation/bans answer 404
-	offline     bool     // /streams and /users answer no data
-	timeout     int      // the timeout duration the last POST carried
-	broadcaster string   // the broadcaster ID the last chat send carried
-	userLookups int      // the GET /users calls so far
+	mu            sync.Mutex
+	chat          []string // the sent chat texts, in order
+	sender        string   // the sender ID the last chat send carried
+	moderator     string   // the moderator ID the last moderation op carried
+	bans404       bool     // make DELETE /moderation/bans answer 404
+	offline       bool     // /streams and /users answer no data
+	timeout       int      // the timeout duration the last POST carried
+	broadcaster   string   // the broadcaster ID the last chat send carried
+	userLookups   int      // the GET /users calls so far
 }
 
 func (s *opsServer) handler(t *testing.T) http.HandlerFunc {
@@ -47,10 +49,10 @@ func (s *opsServer) handler(t *testing.T) http.HandlerFunc {
 				Message       string `json:"message"`
 			}
 			require.NoError(t, jsonv2.Unmarshal(body, &in))
-			assert.Equal(t, "7", in.SenderID)
 			s.mu.Lock()
 			s.chat = append(s.chat, in.Message)
 			s.broadcaster = in.BroadcasterID
+			s.sender = in.SenderID
 			s.mu.Unlock()
 			_, _ = w.Write([]byte(`{"message":{"id":"m1","message":""}}`))
 		case r.URL.Path == "/chat/messages" && r.Method == http.MethodDelete:
@@ -60,25 +62,31 @@ func (s *opsServer) handler(t *testing.T) http.HandlerFunc {
 			w.WriteHeader(http.StatusNoContent)
 		case r.URL.Path == "/moderation/timeouts" && r.Method == http.MethodPost:
 			var in struct {
-				FromID   string `json:"from_id"`
-				Duration int    `json:"duration"`
-				Reason   string `json:"reason"`
+				FromID     string `json:"from_id"`
+				ModeratorID string `json:"moderator_id"`
+				Duration   int    `json:"duration"`
+				Reason     string `json:"reason"`
 			}
 			require.NoError(t, jsonv2.Unmarshal(body, &in))
 			assert.Equal(t, "3", in.FromID)
 			assert.Equal(t, "r", in.Reason)
 			s.mu.Lock()
 			s.timeout = in.Duration
+			s.moderator = in.ModeratorID
 			s.mu.Unlock()
 			_, _ = w.Write([]byte(`{"from_id":"3"}`))
 		case r.URL.Path == "/moderation/bans" && r.Method == http.MethodPost:
 			var in struct {
-				FromID string `json:"from_id"`
-				Reason string `json:"reason"`
+				FromID      string `json:"from_id"`
+				ModeratorID string `json:"moderator_id"`
+				Reason      string `json:"reason"`
 			}
 			require.NoError(t, jsonv2.Unmarshal(body, &in))
 			assert.Equal(t, "3", in.FromID)
 			assert.Equal(t, "b", in.Reason)
+			s.mu.Lock()
+			s.moderator = in.ModeratorID
+			s.mu.Unlock()
 			_, _ = w.Write([]byte(`{"from_id":"3"}`))
 		case r.URL.Path == "/moderation/bans" && r.Method == http.MethodDelete:
 			if s.bans404 {
@@ -163,6 +171,15 @@ func readyAuth() *fakeAuth {
 	return a
 }
 
+// readyAuthWithBot is a readyAuth that also has a bot account (ID 8).
+func readyAuthWithBot() *fakeAuth {
+	a := &fakeAuth{}
+	a.setReady(true)
+	a.token = "t"
+	a.bot = true
+	return a
+}
+
 // target returns the moderated or looked up user of the tests.
 func target() user.Identity {
 	return user.Identity{Platform: platform.Twitch, PlatformUserID: "3", Login: "user", DisplayName: "User"}
@@ -206,6 +223,33 @@ func TestChatSendBotIsRefused(t *testing.T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	assert.Empty(t, s.chat)
+}
+
+// TestChatSendAsBotInAdditionalChannel covers the code review 2026-10-24
+// T2/T3: a bot message in an additional channel goes over Helix with the
+// bot account, and the moderation of an additional channel runs as the
+// bot, which moderates it there (spec twitch-multi-channel.md B4).
+func TestChatSendAsBotInAdditionalChannel(t *testing.T) {
+	t.Parallel()
+	s := &opsServer{}
+	p := opsPlatform(t, readyAuthWithBot(), s)
+
+	require.NoError(t, p.Chat().Send(context.Background(), connector.Message{Channel: "other", Text: "x", From: connector.AccountBot}))
+	s.mu.Lock()
+	require.Len(t, s.chat, 1)
+	assert.Equal(t, "42", s.broadcaster, "the additional channel is the broadcaster")
+	assert.Equal(t, "8", s.sender, "the bot account sends")
+	s.mu.Unlock()
+
+	require.NoError(t, p.Moderation().Timeout(context.Background(), "other", target(), time.Minute, "r"))
+	s.mu.Lock()
+	assert.Equal(t, "8", s.moderator, "the bot moderates the additional channel")
+	s.mu.Unlock()
+
+	require.NoError(t, p.Moderation().Ban(context.Background(), "other", target(), "b"))
+	s.mu.Lock()
+	assert.Equal(t, "8", s.moderator)
+	s.mu.Unlock()
 }
 
 func TestChatSendWithoutToken(t *testing.T) {

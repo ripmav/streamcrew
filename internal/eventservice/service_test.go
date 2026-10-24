@@ -313,6 +313,31 @@ func TestMassGift(t *testing.T) {
 	bad := gift(false, "ada", "bob")
 	bad.Details.Gift.Count = 2
 	require.ErrorIs(t, f.service.Event(ctx, bad), eventtype.ErrShape, "recipients and count differ")
+
+	// Twitch names only the total of a mass gift, no recipients
+	// (twitch-events.md B21): from the threshold on the mass gift fires,
+	// below it nothing does (the single gifts arrive on their own).
+	noRecipients := func(total int) connector.Event {
+		e := connector.Event{
+			Platform: platform.Twitch, Type: eventtype.TwitchSubscriptionMassGift,
+			Details: eventtype.Details{
+				Subscription: &eventtype.Subscription{Plan: "1000"},
+				Gift:         &eventtype.Gift{Count: total},
+			},
+		}
+		who := account(platform.Twitch, "ada")
+		e.User = &who
+		return e
+	}
+	require.NoError(t, f.service.Event(ctx, noRecipients(3)))
+	assert.Empty(t, f.engine.take(), "below the threshold of 5 nothing fires")
+
+	f.settings.set(func(e *settings.Events) { e.MassGiftThreshold = 2 })
+	require.NoError(t, f.service.Event(ctx, noRecipients(3)))
+	reqs = f.engine.take()
+	require.Len(t, reqs, 1, "at the threshold of 2 the mass gift fires")
+	assert.Equal(t, eventtype.ChannelSubscriptionMassGift, reqs[0].Event, "the event command is the neutral one")
+	assert.Equal(t, template.NumberValue(decimal.New(3)), reqs[0].Params.Values[template.EventGiftedSubs])
 }
 
 // TestEventData covers B7 and B9: values of the events, and data that do

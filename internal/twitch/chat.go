@@ -25,9 +25,9 @@ const (
 )
 
 // chat is the connector.Chat of the twitch platform (roadmap 4.4): it
-// sends and deletes messages of the channel through Helix. The bot
-// account is not connected in phase 4, so a message from it is
-// refused.
+// sends and deletes messages of the channel through Helix. The home
+// channel is operated with the streamer account, the additional channels
+// with the bot account (spec twitch-multi-channel.md, B4).
 type chat struct{ p *Platform }
 
 var _ connector.Chat = chat{}
@@ -43,28 +43,65 @@ func (c chat) Send(ctx context.Context, m connector.Message) error {
 		return c.p.ircSend(ctx, m.Channel, m.Text)
 	}
 	if m.From == connector.AccountBot {
+		return c.p.botSend(ctx, m)
+	}
+	return c.p.streamerSend(ctx, m)
+}
+
+// botSend sends the message with the bot account (spec
+// twitch-multi-channel.md, B4): to an additional channel, or to the home
+// channel while a bot session runs. Without a connected bot account it
+// is refused.
+func (p *Platform) botSend(ctx context.Context, m connector.Message) error {
+	if m.Channel == "" && !p.botState() {
 		return errors.Join(connector.ErrNotConnected, errors.New("the bot account is not connected"))
 	}
-	st, err := c.p.account(ctx)
+	bot, err := p.auth.Bot(ctx)
 	if err != nil {
 		return err
 	}
-	broadcaster, err := c.p.channelID(ctx, m.Channel)
+	if !bot.Ready {
+		return errors.Join(connector.ErrNotConnected, errors.New("the bot account has no valid token"))
+	}
+	broadcaster, err := p.channelID(ctx, m.Channel)
 	if err != nil {
 		return err
 	}
-	hc, err := c.p.ops(ctx)
+	hc, err := p.opsToken(ctx, p.auth.BotToken)
 	if err != nil {
 		return err
 	}
-	limiter := c.p.chatLimiter(m.Channel)
+	return p.sendParts(ctx, hc, broadcaster, bot.AccountID, m)
+}
+
+// streamerSend sends the message with the streamer account.
+func (p *Platform) streamerSend(ctx context.Context, m connector.Message) error {
+	st, err := p.account(ctx)
+	if err != nil {
+		return err
+	}
+	broadcaster, err := p.channelID(ctx, m.Channel)
+	if err != nil {
+		return err
+	}
+	hc, err := p.ops(ctx)
+	if err != nil {
+		return err
+	}
+	return p.sendParts(ctx, hc, broadcaster, st.AccountID, m)
+}
+
+// sendParts splits the text to the Twitch limit and sends the parts as
+// the sender, through the rate limit of the channel.
+func (p *Platform) sendParts(ctx context.Context, hc *helix.Client, broadcaster, sender string, m connector.Message) error {
+	limiter := p.chatLimiter(m.Channel)
 	for _, part := range splitMessage(m.Text) {
 		if err := limiter.Wait(ctx); err != nil {
 			return err
 		}
 		_, err := hc.SendChatMessage(ctx, helix.SendChatMessageInput{
 			BroadcasterID: broadcaster,
-			SenderID:      st.AccountID,
+			SenderID:      sender,
 			Message:       part,
 		})
 		if err != nil {
@@ -74,17 +111,15 @@ func (c chat) Send(ctx context.Context, m connector.Message) error {
 	return nil
 }
 
-// Delete implements connector.Chat; it deletes from the channel ch.
+// Delete implements connector.Chat; it deletes from the channel ch, with
+// the account that operates it (streamer for the home channel, bot for an
+// additional one, spec twitch-multi-channel.md B4).
 func (c chat) Delete(ctx context.Context, ch connector.Channel, messageID string) error {
-	st, err := c.p.account(ctx)
+	st, hc, err := c.p.accountFor(ctx, ch)
 	if err != nil {
 		return err
 	}
 	broadcaster, err := c.p.channelID(ctx, ch)
-	if err != nil {
-		return err
-	}
-	hc, err := c.p.ops(ctx)
 	if err != nil {
 		return err
 	}

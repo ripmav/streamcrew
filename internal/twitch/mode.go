@@ -13,8 +13,10 @@ import (
 )
 
 // moderation is the connector.Moderation of the twitch platform
-// (roadmap 4.4): the operations go through Helix as the streamer
-// account. Purge does not exist on Twitch and is refused.
+// (roadmap 4.4): the home channel runs through Helix as the streamer
+// account, the additional channels as the bot account, which moderates
+// them (spec twitch-multi-channel.md, B4). Purge does not exist on Twitch
+// and is refused.
 type moderation struct{ p *Platform }
 
 var _ connector.Moderation = moderation{}
@@ -27,17 +29,13 @@ const (
 
 // Timeout implements connector.Moderation; the duration is clamped to
 // the range Twitch takes (60 seconds to 24 hours). It acts on the
-// channel ch; the operation itself runs as the streamer account.
+// channel ch, with the account that operates it.
 func (m moderation) Timeout(ctx context.Context, ch connector.Channel, target user.Identity, d time.Duration, reason string) error {
-	st, err := m.p.account(ctx)
+	st, hc, err := m.p.accountFor(ctx, ch)
 	if err != nil {
 		return err
 	}
 	broadcaster, err := m.p.channelID(ctx, ch)
-	if err != nil {
-		return err
-	}
-	hc, err := m.p.ops(ctx)
 	if err != nil {
 		return err
 	}
@@ -65,34 +63,27 @@ func (m moderation) Purge(context.Context, connector.Channel, user.Identity) err
 }
 
 // ClearChat implements connector.Moderation; it clears the chat of the
-// channel ch.
+// channel ch, with the account that operates it.
 func (m moderation) ClearChat(ctx context.Context, ch connector.Channel) error {
-	st, err := m.p.account(ctx)
+	st, hc, err := m.p.accountFor(ctx, ch)
 	if err != nil {
 		return err
 	}
 	broadcaster, err := m.p.channelID(ctx, ch)
-	if err != nil {
-		return err
-	}
-	hc, err := m.p.ops(ctx)
 	if err != nil {
 		return err
 	}
 	return refuse(hc.ClearChat(ctx, broadcaster, st.AccountID))
 }
 
-// Ban implements connector.Moderation; it bans from the channel ch.
+// Ban implements connector.Moderation; it bans from the channel ch,
+// with the account that operates it.
 func (m moderation) Ban(ctx context.Context, ch connector.Channel, target user.Identity, reason string) error {
-	st, err := m.p.account(ctx)
+	st, hc, err := m.p.accountFor(ctx, ch)
 	if err != nil {
 		return err
 	}
 	broadcaster, err := m.p.channelID(ctx, ch)
-	if err != nil {
-		return err
-	}
-	hc, err := m.p.ops(ctx)
 	if err != nil {
 		return err
 	}
@@ -106,17 +97,14 @@ func (m moderation) Ban(ctx context.Context, ch connector.Channel, target user.I
 }
 
 // Unban implements connector.Moderation: it lifts the ban in the channel
-// ch, and if the user is not banned, the timeout.
+// ch, with the account that operates it, and if the user is not banned,
+// the timeout.
 func (m moderation) Unban(ctx context.Context, ch connector.Channel, target user.Identity) error {
-	st, err := m.p.account(ctx)
+	st, hc, err := m.p.accountFor(ctx, ch)
 	if err != nil {
 		return err
 	}
 	broadcaster, err := m.p.channelID(ctx, ch)
-	if err != nil {
-		return err
-	}
-	hc, err := m.p.ops(ctx)
 	if err != nil {
 		return err
 	}
@@ -128,17 +116,13 @@ func (m moderation) Unban(ctx context.Context, ch connector.Channel, target user
 }
 
 // Mod implements connector.Moderation; it adds the moderator to the
-// channel ch.
+// channel ch, with the account that operates it.
 func (m moderation) Mod(ctx context.Context, ch connector.Channel, target user.Identity) error {
-	st, err := m.p.account(ctx)
+	st, hc, err := m.p.accountFor(ctx, ch)
 	if err != nil {
 		return err
 	}
 	broadcaster, err := m.p.channelID(ctx, ch)
-	if err != nil {
-		return err
-	}
-	hc, err := m.p.ops(ctx)
 	if err != nil {
 		return err
 	}
@@ -146,17 +130,13 @@ func (m moderation) Mod(ctx context.Context, ch connector.Channel, target user.I
 }
 
 // Unmod implements connector.Moderation; it removes the moderator from
-// the channel ch.
+// the channel ch, with the account that operates it.
 func (m moderation) Unmod(ctx context.Context, ch connector.Channel, target user.Identity) error {
-	st, err := m.p.account(ctx)
+	st, hc, err := m.p.accountFor(ctx, ch)
 	if err != nil {
 		return err
 	}
 	broadcaster, err := m.p.channelID(ctx, ch)
-	if err != nil {
-		return err
-	}
-	hc, err := m.p.ops(ctx)
 	if err != nil {
 		return err
 	}

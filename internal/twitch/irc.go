@@ -613,16 +613,16 @@ func parseBadgesTag(raw string) map[string]int {
 	return out
 }
 
-// emotes is the emotes tag ("id:start-end,...") as the EventSub emote
-// list.
 // emotes parses the IRC emotes tag (id-start-end pairs) into the
 // fragments of the structured chat message; the code is the text the
 // mark spans (IRC names no code), the ID for the catalog fallback.
+// The range is inclusive and counted in code points (IRC Reference,
+// "emotes" tag), so the last code point of the emote is part of it.
 func emotes(raw, text string) []fragment {
 	if raw == "" {
 		return nil
 	}
-	var out []fragment
+	out := make([]fragment, 0, 2)
 	for e := range strings.SplitSeq(raw, ",") {
 		id, rangeStr, _ := strings.Cut(e, ":")
 		startStr, endStr, _ := strings.Cut(rangeStr, "-")
@@ -630,8 +630,9 @@ func emotes(raw, text string) []fragment {
 		end, _ := strconv.Atoi(endStr)
 		f := fragment{Type: "emote"}
 		f.Emote.ID = id
-		if start >= 0 && end > start && end <= len(text) {
-			f.Text = text[start:end]
+		r := []rune(text)
+		if start >= 0 && end > start && end < len(r) {
+			f.Text = string(r[start : end+1])
 		}
 		out = append(out, f)
 	}

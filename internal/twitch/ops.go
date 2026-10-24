@@ -28,19 +28,50 @@ func (p *Platform) account(ctx context.Context) (AccountState, error) {
 	return st, nil
 }
 
-// ops builds the Helix client of the platform operations (roadmap 4.4);
-// the client is stateless, so one per call keeps the platform free of
-// operation state.
+// ops builds the Helix client of the platform operations (roadmap 4.4)
+// with the token of the streamer account; the client is stateless, so one
+// per call keeps the platform free of operation state.
 func (p *Platform) ops(ctx context.Context) (*helix.Client, error) {
+	return p.opsToken(ctx, p.auth.Token)
+}
+
+// opsToken builds a Helix client that signs its requests with the given
+// token (the streamer's or the bot's, spec twitch-multi-channel.md B4).
+func (p *Platform) opsToken(ctx context.Context, token func(ctx context.Context) (string, error)) (*helix.Client, error) {
 	clientID, err := p.auth.ClientID(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return helix.New(p.helix, helix.Options{
 		ClientID: clientID,
-		Token:    p.auth.Token,
+		Token:    token,
 		BaseURL:  p.helixBase,
 	}), nil
+}
+
+// accountFor resolves the account that operates the channel ch (spec
+// twitch-multi-channel.md, B4): the streamer's for the home channel, the
+// bot's for an additional channel, together with a Helix client for its
+// token. With an additional channel it wraps ErrNotConnected when the bot
+// account has no valid token.
+func (p *Platform) accountFor(ctx context.Context, ch connector.Channel) (AccountState, *helix.Client, error) {
+	if ch == "" {
+		st, err := p.account(ctx)
+		if err != nil {
+			return AccountState{}, nil, err
+		}
+		hc, err := p.ops(ctx)
+		return st, hc, err
+	}
+	bot, err := p.auth.Bot(ctx)
+	if err != nil {
+		return AccountState{}, nil, err
+	}
+	if !bot.Ready {
+		return AccountState{}, nil, errors.Join(connector.ErrNotConnected, errors.New("the bot account has no valid token"))
+	}
+	hc, err := p.opsToken(ctx, p.auth.BotToken)
+	return bot, hc, err
 }
 
 // refuse wraps a 403 answer of Helix with connector.ErrRefused: the

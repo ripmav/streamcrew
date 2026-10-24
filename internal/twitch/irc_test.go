@@ -233,7 +233,7 @@ func TestIRCSessionMessage(t *testing.T) {
 	srv := newFakeIRCServer(t, map[string]string{"testchan": "moderator/1"})
 	runSession(t, ircSession(t, r, srv), srv)
 
-	srv.push(t, "@badges=moderator/1;color=#ff0000;display-name=Alice;emotes=42:0-5;id=msg-1;user-id=42;tmi-sent-ts=1 :alice!alice@alice.tmi.twitch.tv PRIVMSG #testchan :Kappa hi")
+	srv.push(t, "@badges=moderator/1;color=#ff0000;display-name=Alice;emotes=42:0-4;id=msg-1;user-id=42;tmi-sent-ts=1 :alice!alice@alice.tmi.twitch.tv PRIVMSG #testchan :Kappa hi")
 	waitFor(t, 5*time.Second, func() int64 {
 		if len(r.received()) == 1 {
 			return 1
@@ -250,6 +250,21 @@ func TestIRCSessionMessage(t *testing.T) {
 	assert.Equal(t, "msg-1", m.Message.ID)
 	assert.Equal(t, "Kappa hi", m.Message.Text)
 	assert.Equal(t, []string{"Kappa"}, m.Message.Emotes, "the emote code is read from the position")
+
+	// The range is inclusive and counted in code points (code review
+	// 2026-10-24, T4): the emoji is one code point of two bytes, so
+	// 1-2 spans "hi"; the old byte-slice cut the emoji in half.
+	srv.push(t, "@display-name=Alice;emotes=43:1-2;id=msg-2;user-id=42;tmi-sent-ts=1 :alice!alice@alice.tmi.twitch.tv PRIVMSG #testchan :😀hi")
+	waitFor(t, 5*time.Second, func() int64 {
+		if len(r.received()) == 2 {
+			return 2
+		}
+		return 0
+	})
+	m = r.lastMessage(t)
+	assert.Equal(t, "msg-2", m.Message.ID)
+	assert.Equal(t, "😀hi", m.Message.Text)
+	assert.Equal(t, []string{"hi"}, m.Message.Emotes, "the range is counted in code points")
 }
 
 // TestIRCSessionMessageFromBot flags the messages of the bot account

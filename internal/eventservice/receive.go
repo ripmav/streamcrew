@@ -342,7 +342,10 @@ func (s *Service) checkEvent(e connector.Event) (eventtype.Descriptor, error) {
 	}
 	_, mass := eventtype.SingleGift(e.Type)
 	switch {
-	case mass && len(e.Recipients) != e.Details.Gift.Count:
+	// A mass gift without named recipients is valid: Twitch names only the
+	// total (twitch-events.md B21). With recipients, they must match the
+	// count.
+	case mass && len(e.Recipients) > 0 && len(e.Recipients) != e.Details.Gift.Count:
 		return d, fmt.Errorf("%w: %d recipients of %d gifts", eventtype.ErrShape, len(e.Recipients), e.Details.Gift.Count)
 	case !mass && len(e.Recipients) > 0:
 		return d, fmt.Errorf("%w: recipients without a mass gift", eventtype.ErrShape)
@@ -352,15 +355,26 @@ func (s *Service) checkEvent(e connector.Event) (eventtype.Descriptor, error) {
 
 // massGiftLocked fires a mass gift: from the threshold of the profile on
 // the mass gift alone, below it one gift per recipient, never both (B5).
-// s.mu is held.
+// The count is the number of named recipients, or the total of the payload
+// when the platform names none (Twitch, twitch-events.md B21). s.mu is held.
 func (s *Service) massGiftLocked(ctx context.Context, e connector.Event, single event.Type, payload eventtype.Payload) error {
 	s.recordFeed(ctx, e.Type, payload)
 	cfg, err := s.settings(ctx)
 	if err != nil {
 		return fmt.Errorf("mass gift: %w", err)
 	}
-	if len(e.Recipients) >= cfg.MassGiftThreshold {
+	count := e.Details.Gift.Count
+	if len(e.Recipients) > 0 {
+		count = len(e.Recipients)
+	}
+	if count >= cfg.MassGiftThreshold {
 		s.fire(ctx, e.Platform, e.Type, payload)
+		return nil
+	}
+	// Below the threshold: one gift per named recipient. Without named
+	// recipients there is nothing to fire (the single gifts arrive on
+	// their own, twitch-events.md B21).
+	if len(e.Recipients) == 0 {
 		return nil
 	}
 	recipients := make([]user.User, 0, len(e.Recipients))
