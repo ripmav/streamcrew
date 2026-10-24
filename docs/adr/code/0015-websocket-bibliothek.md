@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-10-10 |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | Roadmap 4.3 (EventSub-WebSocket); [Code-ADR-0001](0001-go-toolchain-und-linting.md) (Abhängigkeiten, Allowlist), [Code-ADR-0003](0003-fehler-und-logging.md), [Code-ADR-0004](0004-nebenlaeufigkeit-und-supervisor.md), [Code-ADR-0006](0006-teststrategie.md), [Code-ADR-0018](0018-json-v2.md); [ADR-0004](../0004-plattformumfang-zum-start.md) |

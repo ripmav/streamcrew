@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
+| **Status** | Umgesetzt |
 | **Stand** | 2026-10-10 |
 | **Bezug** | Roadmap Phase 4.4; [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-originals.md), [Code-ADR-0015](../adr/code/0015-websocket-bibliothek.md); [`events.md`](events.md), [`template.md`](template.md); Plan Anhang A.2, A.6; [Plan 4.3](../superpowers/plans/2026-10-10-eventsub-websocket.md) |
 | **Umsetzung** | Abgleich der EventSub-Subscriptions in `internal/twitch` (Soll-Zustand), Abbildung auf das Event-Modell in `internal/twitch` (4.3), Identifier als Familien in `internal/template` (4.4) |
@@ -48,7 +48,7 @@ Twitch-Actions (Roadmap 4.4, A4 für Umfragen und Vorhersagen).
 | B6 | `channel.follow` ist ein Follow ohne weitere Werte. | Q1, Q2, Q3 |
 | B7 | Moderationsereignisse: `chat.moderate.ban`/`chat.moderate.unban`, `chat.moderate.timeout`/`chat.moderate.untimeout`, `chat.moderate.add`/`chat.moderate.remove`, `chat.moderate.vip`/`chat.moderate.unvip` tragen den moderierten Nutzer als Nutzer; Ban und Timeout tragen außerdem Dauer und Grund, soweit die Plattform sie nennt. | Q1, Q3 |
 | B8 | `chat.user.whisper` ist eine Flüsternachricht: sie trägt den Absender als Nutzer und den Nachrichtentext (die Nutzlast nennt keine Emotes und keine Fragmente). | Q1, Q3, Q7 |
-| B9 | `twitch.shared_chat.opened`/`comment`/`deleted` tragen die Thread-Nachricht (Betreff bei „geöffnet“, Kommentar oder Löschung bei „Kommentar“); sie sind Twitch-spezifisch ohne neutrale Entsprechung. | Q1, Q3 |
+| B9 | `twitch.shared_chat.start`/`update`/`end` tragen die gemeinsame Chat-Sitzung (Betreff bei „geöffnet“, Aktualisierung bei „update", Ende bei „end"); sie sind Twitch-spezifisch ohne neutrale Entsprechung (EventSub Reference „Shared Chat"). | Q1, Q3 |
 | B10 | `channel.goal.begin`/`progress`/`end` abonnieren den Goal-Lebenszyklus; `progress`/`end` tragen den aktuellen und den Zielwert; `end` ist zugleich die vollständige Erreichung; die Nutzlast nennt keine Währung mehr (nur Home-Kanal: das Condition muss den Token-Besitzer nennen, [EventSub Reference: Goals Condition](https://dev.twitch.tv/docs/eventsub/eventsub-reference/#goals-condition)). | Q1, Q3, Q7 |
 | B11 | `channel.hype_train.begin`/`progress`/`end` (Version 2) tragen Stufe, Fortschritt und Ziel; die Nutzlast nennt kein Reward-Intervall und keinen Endgrund mehr. | Q1, Q3, Q7 |
 | B12 | `channel.ad_break.begin` trägt die Dauer der Werbeeinschaltung in Sekunden; die Nutzlast nennt keine Nachricht mehr. | Q1, Q3, Q7 |

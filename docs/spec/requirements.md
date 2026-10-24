@@ -169,17 +169,17 @@ Die Meldungen je Art:
 
 ## Akzeptanzkriterien
 
-- [ ] B1–B8, B101: Reihenfolge der Prüfungen mit je einer nicht erfüllten Anforderung an jeder Stelle; Entscheidungen, die zu `engine.Decision` passen; Aufrufe mit Prüfung; fehlerhafte und unbekannte Anforderungen; Durchläufe ohne Nutzer.
-- [ ] B3, B100, B43: Nebenläufigkeit mit `-race`: gleichzeitige Auslösungen desselben Nutzers und desselben Commands, gleichzeitige Ausgaben.
-- [ ] B10–B12, B110: Rollen gegen die Rangordnung, gebannte Nutzer, Plattform des Durchlaufs.
+- [x] B1–B8, B101: Reihenfolge der Prüfungen mit je einer nicht erfüllten Anforderung an jeder Stelle; Entscheidungen, die zu `engine.Decision` passen; Aufrufe mit Prüfung; fehlerhafte und unbekannte Anforderungen; Durchläufe ohne Nutzer.
+- [x] B3, B100, B43: Nebenläufigkeit mit `-race`: gleichzeitige Auslösungen desselben Nutzers und desselben Commands, gleichzeitige Ausgaben.
+- [x] B10–B12, B110: Rollen gegen die Rangordnung, gebannte Nutzer, Plattform des Durchlaufs.
 - [x] B20–B25, B102, B103: jede Cooldown-Art mit `testing/synctest`; verknüpfte Identitäten; Neustart; geänderte Dauer; gelöschte Gruppe.
 - [x] B30–B35, B105, B106, B111–B113: Zuordnung, Rest im letzten Text-Argument, jeder Typ mit gültigen und ungültigen Eingaben, Werte als Identifier.
 - [x] B36: Namen beim Speichern (B80).
-- [ ] B36: Namen beim Import.
+- [ ] B36: Namen beim Import (Phase 10).
 - [ ] B40, B109: Währung, Rang und Inventar vor Phase 8 fehlerhaft.
-- [ ] B50–B54, B107, B108: Schwelle mit Zeitfenster, doppelter Teilnahme, je Nutzer, Kosten und Neubeginn.
+- [ ] B50–B54, B107, B108: Schwelle mit Zeitfenster, doppelter Teilnahme, je Nutzer, Kosten und Neubeginn (Phase 8).
 - [x] B60–B62: Löschen der auslösenden Nachricht über einen Fake des Chat-Ports; Kontextmenü ohne Wirkung auf die Prüfung.
-- [ ] B70–B72: Meldung je Art in EN und DE; `Tell` nach B71; Antwort oder `@` je nach Plattform.
+- [x] B70–B72: Meldung je Art in EN und DE; `Tell` nach B71; Antwort oder `@` je nach Plattform.
 - [x] B80, B81: Ablehnungen und Warnungen beim Speichern.
 
 ## Offene Fragen

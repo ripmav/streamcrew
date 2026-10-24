@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
+| **Status** | Umgesetzt |
 | **Stand** | 2026-10-20 |
 | **Bezug** | Roadmap Phase 4.6; [Plan 4.6](../superpowers/plans/2026-10-12-twitch-multi-channel.md); [`events.md`](events.md), [`actions.md`](actions.md), [`twitch-events.md`](twitch-events.md), [ADR-0024](../adr/0024-eingebaute-twitch-app.md) |
-| **Umsetzung** | noch offen (später: `internal/config`, `internal/connector`, `internal/twitch`) |
+| **Umsetzung** | umgesetzt (Roadmap 4.6): die Sektion `channels` in `internal/settings`, die Startkonfiguration `twitch-eventsub`/`twitch-irc` in `internal/config`, die Betriebslogik (zusätzliche Channels, IRC-Modus, Bot-Sender, Kanal-Aktionen) in `internal/twitch` |
 
 ## Zweck und Umfang
 
@@ -103,16 +103,16 @@ Send-Buckets je Channel (B9).
 
 ## Akzeptanzkriterien
 
-- [ ] B1: die Sektion `channels` akzeptiert Login-Listen und lehnt leere, doppelte und den eigenen Channel ab
-- [ ] B3: ein Channel ohne Mod-Status wird nicht betrieben und meldet `mod_missing`
-- [ ] B5: Events aus einem zusätzlichen Channel lösen Commands in diesem Channel aus
-- [ ] B6: ein ereignisgetriggertes Chat- oder Moderations-Action wirkt auf den Channel des Events; Timer auf den eigenen Channel
-- [ ] B7: eine Owner-Action auf einem zusätzlichen Channel schlägt mit der klaren Fehlermeldung fehl
-- [ ] B9: der Send-Bucket eines Channels wird nicht durch den anderen limitiert
-- [ ] B15: die Startkonfiguration akzeptiert `twitch-eventsub`/`twitch-irc` `on`/`off`, lehnt unbekannte Werte ab, hält die Defaults `on`/`off` und startet nicht, wenn beide aus sind
-- [ ] B16: im IRC-Modus lösen Chat-Nachrichten und Flüsternachrichten eines zusätzlichen Channels Commands in diesem Channel aus, ohne EventSub-Subscriptions für den Channel
-- [ ] B17: im IRC-Modus wird ein Channel ohne Mod-Status betrieben und meldet `mod_missing`; der Mod-Status kommt aus den USERSTATE-Badges
-- [ ] B18: im IRC-Modus sendet eine Chat-Action eines zusätzlichen Channels über IRC innerhalb des Send-Buckets des Channels
+- [x] B1: die Sektion `channels` akzeptiert Login-Listen und lehnt leere, doppelte und den eigenen Channel ab
+- [x] B3: ein Channel ohne Mod-Status wird nicht betrieben und meldet `mod_missing`
+- [x] B5: Events aus einem zusätzlichen Channel lösen Commands in diesem Channel aus
+- [x] B6: ein ereignisgetriggertes Chat- oder Moderations-Action wirkt auf den Channel des Events; Timer auf den eigenen Channel
+- [x] B7: eine Owner-Action auf einem zusätzlichen Channel schlägt mit der klaren Fehlermeldung fehl
+- [x] B9: der Send-Bucket eines Channels wird nicht durch den anderen limitiert
+- [x] B15: die Startkonfiguration akzeptiert `twitch-eventsub`/`twitch-irc` `on`/`off`, lehnt unbekannte Werte ab, hält die Defaults `on`/`off` und startet nicht, wenn beide aus sind
+- [x] B16: im IRC-Modus lösen Chat-Nachrichten und Flüsternachrichten eines zusätzlichen Channels Commands in diesem Channel aus, ohne EventSub-Subscriptions für den Channel
+- [x] B17: im IRC-Modus wird ein Channel ohne Mod-Status betrieben und meldet `mod_missing`; der Mod-Status kommt aus den USERSTATE-Badges
+- [x] B18: im IRC-Modus sendet eine Chat-Action eines zusätzlichen Channels über IRC innerhalb des Send-Buckets des Channels
 
 ## Quellen
 

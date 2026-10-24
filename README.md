@@ -15,7 +15,7 @@ Phase 6 (Agent-Plattform) ist fast vollständig umgesetzt, M2 (Headless-MVP) ist
 - **TUI** (6.3/6.4): `streamcrew tui` zeigt Dashboard, Chat, Events, Warteschlange, Commands, Nutzer und Logs live aus dem Event-Stream — lokal oder gegen einen entfernten Core (`--server`).
 - **On-the-fly-Konfiguration** (6.5): Einstellungen wie `listen` und `log_level` wirken im laufenden Core ohne Neustart, per Konfigurationsdatei (Watcher) oder über die API (`ConfigService`, TUI-Settings-View).
 - **Log-Stream** (6.6): Log-Zeilen sind Ereignisse; Clients abonnieren sie gefiltert nach Level, Plattform, Channel und Ereignisklasse über den Event-Stream.
-- **Release MVP** (6.7): Auslieferung und Nutzerdokumentation sind offen.
+- **Release MVP** (6.7): Auslieferung steht (Releases mit Binary, Doku und Docker-Tar, [ADR-0025](docs/adr/0025-release.md)); offen sind die ADR-0025-Akzeptanz und die Registry-Publishing-Nachführung.
 
 Die vollständige Planung mit Abnahmekriterien steht in der [Roadmap](docs/roadmap.md).
 
@@ -79,8 +79,8 @@ go build ./cmd/streamcrew   # -> ./streamcrew
 
 | Modus | Standard-Listenadresse |
 |---|---|
-| `desktop` (Standard) | Unix-Socket `<data-dir>/core.sock` |
-| `daemon` | `127.0.0.1:8740` |
+| `desktop` | Unix-Socket `<data-dir>/core.sock` |
+| `daemon` (Standard) | `127.0.0.1:8740` |
 | `server` | `:8740` (alle Interfaces) |
 
 Capabilities je Modus (Standard, ohne `--grant`/`--revoke`):
@@ -106,7 +106,9 @@ Standard: `~/.config/streamcrew` (Linux/macOS), `%AppData%\streamcrew` (Windows)
 ├── secret.key           # Schlüsselsatz (ohne System-Keyring; Priorität: Umgebungsvariable > System-Keyring > Datei)
 ├── core.sock              # Unix-Socket (Desktop-Modus)
 ├── runtime.json           # Adresse, PID, Version des laufenden Cores
+├── api.token              # Local-Token des Daemons (Daemon-Modus, ADR-0013)
 ├── desktop-token          # API-Token der Desktop-App (Desktop-Modus, ADR-0005)
+├── streamcrew.lock        # Sperrdatei gegen Doppelstart
 ├── logs/streamcrew.log  # JSON-Logdatei mit Rotation
 ├── chat/<plattform>.jsonl    # optionales Chat-Protokoll
 ├── backups/             # Profile-Backups
@@ -162,7 +164,7 @@ Alle Flags gelten für jeden Befehl; die dazugehörige Umgebungsvariable steht i
 | `--config FILE` (`$STREAMCREW_CONFIG`) | Konfigurationsdatei (YAML); ohne Flag wird `config.yaml` im Datenverzeichnis gelesen, falls vorhanden |
 | `--data-dir DIR` (`$STREAMCREW_DATA_DIR`) | Datenverzeichnis; Standard `~/.config/streamcrew` |
 | `--profile ID` (`$STREAMCREW_PROFILE`) | Profil; Standard: das aktive Profil |
-| `--mode MODE` (`$STREAMCREW_MODE`) | Betriebsmodus: `desktop` (Standard), `daemon`, `server` |
+| `--mode MODE` (`$STREAMCREW_MODE`) | Betriebsmodus: `desktop`, `daemon` (Standard), `server` |
 | `--listen HOST:PORT` (`$STREAMCREW_LISTEN`) | HTTP-Server-Adresse; Standard `127.0.0.1:8740`, in Server-Modus `:8740` |
 | `--dev` (`$STREAMCREW_DEV`) | Entwicklermodus: pprof unter `/debug/pprof/`, erfordert Loopback-Adresse |
 | `--cors-allow ORIGIN,...` (`$STREAMCREW_CORS_ALLOW`) | erlaubte CORS-Origin, wiederholbar; Standard: cross-origin abgelehnt |
@@ -268,7 +270,7 @@ Die Plattform-Ereignisse der Twitch-Quelle (`twitch.bits.cheer`, `twitch.channel
 | `mock` | Core mit der Mock-Plattform gegen eine Profil-Kopie; die Konsole simuliert Chat, Events und den Stream |
 | `tui` | Terminal-UI gegen lokalen oder entfernten Core |
 | `profile list/create/rename/use/delete` | Profile verwalten |
-| `profile channels list/add/remove/chat` | zusätzliche Kanäle des Profils (Add/Remove/Chat: Core muss gestoppt sein); `chat` wechselt den Chat-Adapter der zusätzlichen Kanäle zwischen `eventsub` (Standard) und `irc` |
+| `profile channels list/add/remove` | zusätzliche Kanäle des Profils (Add/Remove: Core muss gestoppt sein); mit EventSub-Adapter muss das Bot-Konto im Kanal Moderator sein |
 | `auth login/status/logout` | Twitch-Konten anmelden (Authorization Code Flow, `--device-flow` als Fallback), anzeigen, abmelden |
 | `command list/show/run/delete/enable/disable` | Commands des laufenden Cores über die API |
 | `command import/export/validate` | Commands as Code ein-/ausladen, prüfen |
@@ -333,7 +335,7 @@ streamcrew token list
 streamcrew token revoke <id-oder-name>
 ```
 
-Scopes: `read`, `control`, `admin` (Standard), `overlay`. Solange kein Token gespeichert ist, ist die API offen (Bootstrap, nur Loopback-Standard laut [ADR-0003](docs/adr/0003-betriebsmodi.md)); sobald mindestens ein Token existiert, braucht **jeder** Request ein gültiges Bearer-Token mit dem für die Methode nötigen Scope. In `server`-Modus gehört das Erstellen eines Tokens deshalb zum Aufsetzen — der Loopback-Standard und die offene Bootstrap-Phase gelten dort nicht.
+Scopes: `read`, `control`, `admin` (Standard), `overlay`. Die API ist ohne Token **geschlossen** (401): `daemon` legt beim ersten Start automatisch ein Local-Token in `<data-dir>/api.token` an, `server` startet ohne Token und braucht `streamcrew token create` oder `$STREAMCREW_TOKEN`; `desktop` legt `desktop-token` an. Sobald mindestens ein Token existiert, braucht **jeder** Request ein gültiges Bearer-Token mit dem für die Methode nötigen Scope.
 
 **Zugriff:**
 

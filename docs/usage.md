@@ -166,14 +166,18 @@ STREAMCREW_SECRET_KEY=…
 
 ### 3. Container
 
-Das Release enthält ein mehrplatformiges Image (linux/amd64,
-linux/arm64). Im Container läuft der Core standardmäßig im Server-Modus
-mit Daten in `/data` (Volume) und JSON-Logs auf stderr:
+Das Release enthält das Container-Image (linux/amd64, linux/arm64) als
+OCI-Tar (das Registry-Publish steht noch aus, ADR-0025); lokal lädt man
+ihn mit `docker load` und taggt das Image. Im Container läuft der Core
+standardmäßig im Server-Modus mit Daten in `/data` (Volume) und
+JSON-Logs auf stderr:
 
 ```bash
+docker load -i streamcrew-linux-amd64-arm64.tar   # Image-Tar aus dem Release
+docker tag <manifest-referenz> streamcrew
 docker run -d --name streamcrew -v streamcrew-data:/data \
   -e STREAMCREW_TOKEN=… -e STREAMCREW_SECRET_KEY=… \
-  ghcr.io/ripmav/streamcrew:v1.0.0
+  streamcrew
 ```
 
 Der Smoke-Test `scripts/docker-smoke.sh` prüft Image-Build,

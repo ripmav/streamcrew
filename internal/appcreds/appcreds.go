@@ -47,7 +47,6 @@ type wireRecord struct {
 // SealedRecord is the JSON bytes the generator seals and the runtime
 // opens (ADR-0024); it pins the wire form shared by both.
 func SealedRecord(clientID, clientSecret string) ([]byte, error) {
-	//nolint:gosec // G117: the record is sealed immediately; no plaintext persists
 	return json.Marshal(wireRecord{ClientID: clientID, ClientSecret: clientSecret})
 }
 
