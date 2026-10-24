@@ -75,9 +75,10 @@ jobs:
       - name: Image SBOM (CycloneDX)
         run: |
           tag=$(git describe --tags --exact-match)
-          # oci-archive: the tar is an OCI image layout (multi-platform);
+          # root syft form, not "syft pkg" (alias misparses -o in v1.55);
+          # oci-archive: the tar is an OCI image layout (multi-platform),
           # syft selects the current platform (runner is amd64)
-          syft pkg "oci-archive:dist/streamcrew-image-${tag}.tar" -o cyclonedx-json="dist/streamcrew-image-${tag}.sbom.json"
+          syft "oci-archive:dist/streamcrew-image-${tag}.tar" -o cyclonedx-json="dist/streamcrew-image-${tag}.sbom.json"
 
       - name: Upload image artifacts
         env:
