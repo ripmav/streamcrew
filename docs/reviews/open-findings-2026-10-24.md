@@ -23,6 +23,9 @@ Alle Punkte sind erledigt, Details in
 - **T1a, T1b, N2a, N3a** (neue Befunde aus dem Fix-Commit): erledigt mit
   `d4b047f`.
 
+Was danach noch offen ist, steht in
+[open-findings-2026-10-25.md](open-findings-2026-10-25.md).
+
 ## 1. Unvollständig umgesetzt
 
 | # | Sev. | Befund | Ort | Bezug |
