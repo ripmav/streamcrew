@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"slices"
 
 	"go.yaml.in/yaml/v3"
@@ -44,6 +45,12 @@ func (c apiConfig) Update(ctx context.Context, document string) ([]string, []str
 	}
 	applied, restart, stored, err := a.watcher.Update(ctx, []byte(document))
 	if err != nil {
+		// A document that extends the current configuration names its
+		// keys in the error (Code-ADR-0021, Nachtrag 2026-10-24); the
+		// api maps it to PermissionDenied.
+		if errors.Is(err, config.ErrNarrowOnly) {
+			return nil, nil, "", err
+		}
 		return nil, nil, "", api.ErrConfigInvalid
 	}
 	return applied, restart, string(stored), nil

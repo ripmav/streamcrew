@@ -5,6 +5,7 @@ package api_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
 	streamcrewv1alpha1connect "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1/streamcrewv1alpha1connect"
 	"github.com/ripmav/streamcrew/internal/api"
+	"github.com/ripmav/streamcrew/internal/config"
 )
 
 // fakeConfig is a fake of the api.Config port.
@@ -82,8 +84,10 @@ func TestConfigUpdateStoresTheDocument(t *testing.T) {
 }
 
 // TestConfigUpdateMapsErrors checks the error mapping: invalid document is
-// an invalid argument, a read-only core is a failed precondition, and an
-// internal error stays internal (roadmap 6.5.2).
+// an invalid argument, a read-only core is a failed precondition, a
+// document that extends the current configuration is a permission denied
+// (Code-ADR-0021, Nachtrag 2026-10-24), and an internal error stays
+// internal (roadmap 6.5.2).
 func TestConfigUpdateMapsErrors(t *testing.T) {
 	t.Parallel()
 
@@ -92,6 +96,13 @@ func TestConfigUpdateMapsErrors(t *testing.T) {
 	}}
 	_, err := configClient(t, invalid).Update(t.Context(), &v1alpha1.UpdateConfigRequest{Document: "nope"})
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+	narrow := &fakeConfig{live: true, update: func(context.Context, string) ([]string, []string, string, error) {
+		return nil, nil, "", fmt.Errorf("%w: grant", config.ErrNarrowOnly)
+	}}
+	_, err = configClient(t, narrow).Update(t.Context(), &v1alpha1.UpdateConfigRequest{Document: "grant: [host:fs]\n"})
+	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+	assert.Contains(t, err.Error(), "grant")
 
 	readonly := &fakeConfig{live: false, update: func(context.Context, string) ([]string, []string, string, error) {
 		return nil, nil, "", api.ErrConfigReadOnly

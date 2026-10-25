@@ -46,6 +46,7 @@ type watched struct {
 	live    *config.Live
 	logs    *logs
 	applies *config.ApplyFuncs
+	watcher *config.Watcher
 }
 
 // watch parses the configuration like the streamcrew command does, then,
@@ -62,6 +63,7 @@ func watch(t *testing.T, dataDir string, args []string, applies *config.ApplyFun
 	synctest.Test(t, func(t *testing.T) {
 		w := &watched{t: t, path: filepath.Join(dataDir, "config.yaml"), live: config.NewLive(r), logs: &logs{}, applies: applies}
 		watcher := config.NewWatcher(file, cfg, w.live, w.applies, slog.New(slog.NewTextHandler(w.logs, nil)))
+		w.watcher = watcher
 		ctx, cancel := context.WithCancel(t.Context())
 		var wg sync.WaitGroup
 		wg.Go(func() { assert.NoError(t, watcher.Run(ctx)) })

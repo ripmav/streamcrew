@@ -4,6 +4,7 @@ package app_test
 
 import (
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -75,6 +76,32 @@ func TestConfigServiceUpdatesTheLiveDocument(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 	assert.False(t, pub.sentText("recorded"))
 	_ = path
+}
+
+// TestConfigServiceRejectsAnExtendingDocument covers the narrowing rule
+// (Code-ADR-0021, Nachtrag 2026-10-24): a document that extends the
+// currently effective configuration is rejected as a whole, and the
+// response names the keys.
+func TestConfigServiceRejectsAnExtendingDocument(t *testing.T) {
+	t.Parallel()
+	a, path, token := hotCoreServer(t, &outPub{})
+	cfg := configClient(t, a, token)
+
+	// A new grant entry extends the current rights: denied.
+	_, err := cfg.Update(t.Context(), &v1alpha1.UpdateConfigRequest{Document: "grant: [host:fs]\n"})
+	require.Error(t, err)
+	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+	assert.Contains(t, err.Error(), "grant")
+	assert.Contains(t, err.Error(), "configuration file", "the hint where the key can be extended")
+
+	// The file keeps the content last seen.
+	data, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.NotContains(t, string(data), "grant")
+
+	// A narrowing document is accepted.
+	_, err = cfg.Update(t.Context(), &v1alpha1.UpdateConfigRequest{Document: "revoke: [net:outbound]\n"})
+	assert.NoError(t, err)
 }
 
 // TestConfigServiceReadOnlyInDaemonMode checks that the daemon mode serves

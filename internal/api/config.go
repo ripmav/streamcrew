@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
+	"github.com/ripmav/streamcrew/internal/config"
 )
 
 // ErrConfigReadOnly reports that the live configuration is not available:
@@ -76,6 +77,11 @@ func configError(err error) error {
 		return connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	case errors.Is(err, ErrConfigInvalid):
 		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	case errors.Is(err, config.ErrNarrowOnly):
+		// The document is valid, but the API may only narrow the
+		// current configuration (Code-ADR-0021, Nachtrag 2026-10-24);
+		// the error names the keys to extend in the file.
+		return connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
 	}
 	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 }

@@ -116,6 +116,7 @@ func (serveCmd) Run(ctx context.Context, e *Env) error {
 		Revoke:            cfg.Revoke,
 		FileRoot:          cfg.FileRoot,
 		OutboundAllow:     cfg.OutboundAllow,
+		BootstrapToken:    cfg.BootstrapToken,
 		LogLevel:          cfg.Log.Level,
 		LogFormat:         cfg.Log.Format,
 		LogFile:           cfg.Log.File,
