@@ -169,4 +169,4 @@ unverändert; diese Entscheidung passt sich an:
 
 Für die übrigen Einstellungen ändert dieser Nachtrag nichts.
 
-Umsetzung offen; siehe [Roadmap 6.5](../../roadmap.md#65-on-the-fly-konfiguration-server-modus).
+Umgesetzt am 2026-10-25; siehe [Roadmap 6.5](../../roadmap.md#65-on-the-fly-konfiguration-server-modus).

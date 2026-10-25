@@ -749,11 +749,12 @@ hot-capablen Einstellungen an. Vom Flag oder der Umgebungsvariablen fixierte Ein
   - `e`: im `$EDITOR` bearbeiten, anwenden über die API, `r`: neu laden
   - zeigt das Anwenden-Ergebnis; in Nicht-Server-Modi read-only
 - [x] Dokumentation (S), erledigt 2026-10-18: Abschnitt „On-the-fly-Konfiguration (Server-Modus)“ in `docs/usage.md`
-- [ ] Die Config-API erweitert keine Rechte (M), aus dem Code-Review 2026-10-24 (V3), entschieden im [Nachtrag 2026-10-24 zu Code-ADR-0021](adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte):
-  - `Watcher.Update` lehnt jede Erweiterung gegenüber den aktuell wirksamen Werten ab, betroffen sind Rechte, `file-root`, `outbound-allow`, `mode`, `cors-allow`, `listen`, TLS und `dev`
-  - Tests, auch für den Wechsel von `mode` server → daemon
-- [ ] `log-file` gilt nur beim Start (S), aus dem Code-Review 2026-10-24, [Nachtrag zu Code-ADR-0021](adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte), Punkt 6: von `Hot()` nach `RestartOnly()` verschieben, für die Datei wie für die API
-- [ ] `serve` verdrahtet den File-Resolver (S), aus dem Code-Review 2026-10-24 (C14): `core.Run` ruft `Load` auf, damit Watcher und `ConfigService/Update` die Datei kennen. Erst nach dem vorigen Punkt umsetzen.
+- [x] Die Config-API erweitert keine Rechte (M), erledigt 2026-10-25, aus dem Code-Review 2026-10-24 (V3), entschieden im [Nachtrag 2026-10-24 zu Code-ADR-0021](adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte):
+  - `Watcher.Update` lehnt jede Erweiterung gegenüber den aktuell wirksamen Werten ab, betroffen sind Rechte, `file-root`, `outbound-allow`, `mode`, `cors-allow`, `listen`, TLS und `dev`; ein Dokument mit einer Erweiterung wird ganz abgelehnt und nicht geschrieben
+  - Die Antwort (PermissionDenied) nennt die betroffenen Schlüssel mit dem Hinweis, dass sie nur lokal in der Konfigurationsdatei erweitert werden können
+  - Tests, auch für den Wechsel von `mode` server → daemon und den Maßstab „aktuell wirksam, nicht Start“
+- [x] `log-file` gilt nur beim Start (S), erledigt 2026-10-25, aus dem Code-Review 2026-10-24, [Nachtrag zu Code-ADR-0021](adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte), Punkt 6: von `Hot()` nach `RestartOnly()` verschoben; der Watcher meldet eine Änderung als Restart, der Log-Apply behält die Datei-Einstellung des Starts, für die Datei wie für die API
+- [x] `serve` verdrahtet den File-Resolver (S), erledigt 2026-10-25, aus dem Code-Review 2026-10-24 (C14): `core.Run` ruft `Load` auf, damit Watcher und `ConfigService/Update` die Datei kennen; mit `BootstrapToken` in `core.Options` erreicht der Bootstrap-Token-Wert aus `--bootstrap-token`/`STREAMCREW_TOKEN` den Server-Modus, den die CLI zuvor fallen ließ. Erst nach dem vorigen Punkt umgesetzt.
 
 ### 6.6 Log-Stream (read-only)
 

@@ -6,16 +6,18 @@
   [`recheck-2026-10-25.md`](recheck-2026-10-25.md)
 - **Geprüft:** Branch `fix/code-review-2026-10-24` bei `491a204`
 - **Ergebnis:** Alle Findings der Prioritäten 1–6 des Fix-Plans sind beseitigt,
-  auch T1, T1a, T1b, N2a und N3a aus der zweiten Nachprüfung (`d4b047f`).
-  Offen sind die Umsetzung von V3/C14 und `log-file`, die laut Fix-Plan
-  zurückgestellten Findings und die Prozesspunkte.
+  auch T1, T1a, T1b, N2a und N3a aus der zweiten Nachprüfung (`d4b047f`),
+  sowie V3/C14 und `log-file` (am 2026-10-25 umgesetzt, `01eee42`).
+  Offen sind die laut Fix-Plan zurückgestellten Findings und die
+  Prozesspunkte (Commit-Titel und Stack brauchen einen Force-Push; die
+  Fix-Commits ab 2026-10-25 sind signiert).
 
 ## 1. Offen aus dem Fix-Plan (entschieden, nicht umgesetzt)
 
 | # | Sev. | Stand | Ort |
 |---|---|---|---|
-| V3/C14 | Mittel | Entschieden am 2026-10-24 (Nachtrag zu Code-ADR-0021, Branch `docs/config-api-rechte-nur-einschraenken`): `ConfigService/Update` darf Rechte, `file-root`, `outbound-allow`, `mode`, `cors-allow`, `listen`, TLS und `dev` nur einschränken, gemessen am aktuell wirksamen Stand. Erst danach wird der Watcher in `serve` verdrahtet (`core.Run` ruft `Load` nicht auf). Umsetzung offen (Roadmap 6.5). | `internal/config/watch.go`, `core/core.go:158-160` |
-| `log-file` | Mittel | Entschieden (Nachtrag Punkt 6): `log-file` gilt nur beim Start und wechselt von hot zu restart, für die Datei wie für die API. Umsetzung offen (Roadmap 6.5). | `internal/config/watch.go` |
+| V3/C14 | Mittel | Erledigt am 2026-10-25 (Roadmap 6.5): `Watcher.Update` lehnt jedes Dokument ab, das gegenüber den aktuell wirksamen Werten erweitert (Rechte, `file-root`, `outbound-allow`, `mode`, `cors-allow`, `listen`, TLS, `dev`), ganz und ohne Write; die Antwort (PermissionDenied) nennt die Schlüssel. `core.Run` ruft `Load` auf (C14), `serve` gibt den Bootstrap-Token-Wert weiter. | `internal/config/watch.go`, `core/core.go`, `internal/cli/commands.go` |
+| `log-file` | Mittel | Erledigt am 2026-10-25 (Roadmap 6.5): `log-file` gilt nur beim Start und wechselt von hot zu restart, für die Datei wie für die API; der Watcher meldet eine Änderung als Restart, der Log-Apply behält die Datei-Einstellung des Starts. | `internal/config/watch.go` |
 
 ## 2. Hinweis ohne Befund
 
@@ -109,7 +111,12 @@ Die Einzelheiten stehen im [Review](code-review-2026-10-24.md).
 
 ## 4. Prozess
 
-- **Signaturen:** Bis auf `02e946d` (G) und `021ee40` (E) sind alle Commits des Branches unsigniert (`git log --format=%G?` zeigt `N`).
+Diese Punkte betreffen nur die älteren Commits und brauchen einen Force-Push,
+um sie zu beheben (Entscheidung des Projektinhabers). Die Fix-Commits ab
+2026-10-25 (`01eee42`, `9c79bc5`) sind signiert (G) und tragen den
+`Assisted-by`-Footer.
+
+- **Signaturen:** Bis auf `02e946d` (G), `021ee40` (E) und die Fix-Commits ab 2026-10-25 (G) sind die älteren Commits des Branches unsigniert (`git log --format=%G?` zeigt `N`).
 - **Stack:** Kein PR-Stack, alles liegt auf einem Branch. Der Doku-Commit (D1–D6) liegt oben statt ganz unten.
 - **Commit-Titel:** `docs:Doku…` (`55001c3`) und `refactor:encoding…` (`a0981f9`) ohne Leerzeichen nach dem Doppelpunkt.
 - **Footer:** `d4b047f` trägt `Assisted-by: Qwen 3.8 27B (medium) via OpenCode`, ältere Commits `Claude (high) via Pi` ohne Modellnamen; `Co-Authored-By` fehlt.
