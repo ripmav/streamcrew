@@ -15,7 +15,7 @@ Phase 6 (Agent-Plattform) ist fast vollständig umgesetzt, M2 (Headless-MVP) ist
 - **TUI** (6.3/6.4): `streamcrew tui` zeigt Dashboard, Chat, Events, Warteschlange, Commands, Nutzer und Logs live aus dem Event-Stream — lokal oder gegen einen entfernten Core (`--server`).
 - **On-the-fly-Konfiguration** (6.5): Einstellungen wie `listen` und `log_level` wirken im laufenden Core ohne Neustart, per Konfigurationsdatei (Watcher) oder über die API (`ConfigService`, TUI-Settings-View).
 - **Log-Stream** (6.6): Log-Zeilen sind Ereignisse; Clients abonnieren sie gefiltert nach Level, Plattform, Channel und Ereignisklasse über den Event-Stream.
-- **Release MVP** (6.7): Auslieferung steht (Releases mit Binary, Doku und Docker-Tar, [ADR-0025](docs/adr/0025-release.md)); offen sind die ADR-0025-Akzeptanz und die Registry-Publishing-Nachführung.
+- **Release MVP** (6.7): Auslieferung steht (Releases mit Binary, Doku und Docker-Tar, [ADR-0025](docs/adr/0025-release-und-distribution.md)); offen sind die ADR-0025-Akzeptanz und die Registry-Publishing-Nachführung.
 
 Die vollständige Planung mit Abnahmekriterien steht in der [Roadmap](docs/roadmap.md).
 
