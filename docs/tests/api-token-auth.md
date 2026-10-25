@@ -1,6 +1,9 @@
 # Test-Matrix: API-Auth (fail-closed, Throttle, Bootstrap)
 
-Issue: Code-Review 2026-10-24, S1/S3 + Nachprüfung 2026-10-24 (S3, N1) — die API ist ohne Token geschlossen, der Login-Throttle wirkt pro IP, und die Bootstrapping-Pfade (Local-Token, STREAMCREW_TOKEN) registrieren das richtige Token.
+Issue: Code-Review 2026-10-24, S1/S3 + Nachprüfung 2026-10-24 (S3, N1) +
+Nachprüfung 2026-10-25 (N2a) — die API ist ohne Token geschlossen, der
+Login-Throttle wirkt pro IP, und die Bootstrapping-Pfade (Local-Token,
+STREAMCREW_TOKEN) registrieren das richtige Token.
 
 | Test | Datei | Deckt ab |
 |---|---|---|
@@ -11,5 +14,6 @@ Issue: Code-Review 2026-10-24, S1/S3 + Nachprüfung 2026-10-24 (S3, N1) — die 
 | `TestAPITokensProtectTheAPI` | `internal/app/api_test.go` | Daemon legt `api.token` (0600) beim Start an; ohne Token → 401, mit dem Local-Token → 200; zusätzliche Tokens ändern nichts am Schutz. |
 | `TestHotApply*` (Bootstrap-Abschnitt) | `internal/app/hot_test.go` | Der Server-Core nimmt das `--bootstrap-token`-Token (S2); der Daemon den Local-Token — die Bootstrapping-Pfade der Betriebsmodi. |
 | `TestTokenForLocalServersOnly` | `internal/cli/commands_api_test.go` | N1: das lokale Admin-Token der Datenverzeichnisse geht nur an den lokalen Core (Runtime-Adresse, Loopback, Unix-Socket), nie an ein entferntes `--server`; `--token` gewinnt immer. |
+| `TestLocalTokenStore` | `internal/app/runtime_test.go` | N2/N2a: ein gelöschter (leerer) Token-Store ist keine Rücknahme — der Wert aus `api.token` wird neu registriert, das File bleibt unverändert; ein nicht leerer Store ohne den Wert lässt das Token zurückgenommen, das File behält den Wert. |
 
-Nicht abgedeckt: das Auslaufen der Throttle-Fenster (echte Zeit, kein synctest im api-Paket) und der 1024-Einträge-Prune — beides sind Abwehrpfade, die der Normalpfad deterministisch nicht erreicht; N2 (ein zurückgenommenes Local-Token bleibt zurückgenommen) ist Verhalten im Neustart-Zweig und über die App-Klasse ohne laufenden Core nicht zu testen.
+Nicht abgedeckt: das Auslaufen der Throttle-Fenster (echte Zeit, kein synctest im api-Paket) und der 1024-Einträge-Prune — beides sind Abwehrpfade, die der Normalpfad deterministisch nicht erreicht.

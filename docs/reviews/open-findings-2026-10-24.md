@@ -11,6 +11,18 @@ Die Prioritäten 1–5 des Reviews sind weitgehend umgesetzt. Die Punkte unten
 sind noch offen: Entweder ist der Fix unvollständig, oder der Fix hat einen
 neuen Befund mitgebracht.
 
+## Stand (zweite Nachprüfung, 2026-10-25)
+
+Alle Punkte sind erledigt, Details in
+[recheck-2026-10-25.md](recheck-2026-10-25.md):
+
+- **S3, T4, U3, U2, N1, N4, N2, N3:** erledigt mit `a0d5659`; die Fixes für
+  N2 und N3 brachten die neuen Befunde N2a und N3a mit.
+- **T1:** in `a0d5659` unvollständig umgesetzt (die ID wurde den
+  Einzelgeschenken nicht gemappt); vollends erledigt mit `d4b047f`.
+- **T1a, T1b, N2a, N3a** (neue Befunde aus dem Fix-Commit): erledigt mit
+  `d4b047f`.
+
 ## 1. Unvollständig umgesetzt
 
 | # | Sev. | Befund | Ort | Bezug |
