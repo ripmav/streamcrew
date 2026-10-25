@@ -328,11 +328,15 @@ func TestCommandsViewFetchesFiltersAndEdits(t *testing.T) {
 	})
 	t.Run("edit", func(t *testing.T) {
 		// no t.Parallel(): the test sets the EDITOR environment variable.
-		// The no-op editor keeps the document unchanged, like the original
-		// test. The edit command writes the fetched document to a temp file
-		// before opening the editor, so that file appearing is the
-		// completion signal that the editor ran on the document.
-		t.Setenv("EDITOR", "true")
+		// The editor script flips the enabled flag of the command it opens,
+		// so the flag in the API is the completion signal: it is set only
+		// after the editor ran and the model wrote the file back. (A
+		// trailing YAML comment is not a usable signal — the document
+		// round-trips through the command-file converter, which drops
+		// comments.)
+		script := filepath.Join(t.TempDir(), "editor.sh")
+		require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\nsed -i '0,/enabled: true/s//enabled: false/' \"$1\"\n"), 0o755)) //nolint:gosec // test-only editor script
+		t.Setenv("EDITOR", script)
 		tm, base := newTestModelWithCore(t)
 		importExampleCommands(t, base)
 
@@ -349,11 +353,37 @@ func TestCommandsViewFetchesFiltersAndEdits(t *testing.T) {
 			}
 			return false
 		}, 10*time.Second, 50*time.Millisecond, "the editor to open the fetched document")
-		// the update runs a moment after the editor; let it settle so the
-		// final model carries the result
-		time.Sleep(200 * time.Millisecond)
+		// Wait until the model wrote the edited file back: one of the
+		// imported commands is disabled in the API.
+		cc := commandClient(t, base)
+		var disabled string
+		require.Eventually(t, func() bool {
+			list, err := cc.List(t.Context(), &v1alpha1.ListCommandsRequest{})
+			if err != nil {
+				return false
+			}
+			for _, c := range list.GetCommands() {
+				if (c.GetName() == "Hello" || c.GetName() == "Bye") && !c.GetEnabled() {
+					disabled = c.GetName()
+					return true
+				}
+			}
+			return false
+		}, 10*time.Second, 50*time.Millisecond, "the edited command to be stored disabled")
+		// The key presses are queued behind the actionDoneMsg of the edit
+		// (the one that clears the editing flag), so once the program
+		// caught up with them the final model carries the result of the
+		// edit. (tm.Send is an async program.Send; a single key press does
+		// not order the quit against the message of the edit.)
+		for range 8 {
+			tm.Send(tea.KeyPressMsg{Code: tea.KeyUp})
+			time.Sleep(25 * time.Millisecond)
+			tm.Send(tea.KeyPressMsg{Code: tea.KeyDown})
+			time.Sleep(25 * time.Millisecond)
+		}
 		m := quitModel(t, tm)
 		assert.NoError(t, m.err)
+		assert.NotEmpty(t, disabled, "an imported command to be the edited one")
 		// the actionDoneMsg cleared the editing flag again
 		assert.False(t, m.commands.editing)
 	})
