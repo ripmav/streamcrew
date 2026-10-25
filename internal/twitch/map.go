@@ -582,12 +582,15 @@ type resubNotice struct {
 	SubTier          string `json:"sub_tier"`
 }
 
-// subGiftNotice is the sub_gift object of a "sub_gift" notice.
+// subGiftNotice is the sub_gift object of a "sub_gift" notice;
+// CommunityGiftID is the ID of the mass gift the gift belongs to, empty
+// for a gift outside of one.
 type subGiftNotice struct {
-	SubTier        string `json:"sub_tier"`
-	RecipientID    string `json:"recipient_user_id"`
-	RecipientLogin string `json:"recipient_user_login"`
-	RecipientName  string `json:"recipient_user_name"`
+	SubTier         string `json:"sub_tier"`
+	RecipientID     string `json:"recipient_user_id"`
+	RecipientLogin  string `json:"recipient_user_login"`
+	RecipientName   string `json:"recipient_user_name"`
+	CommunityGiftID string `json:"community_gift_id"`
 }
 
 // communityGiftNotice is the community_sub_gift object of a
@@ -636,7 +639,7 @@ func (p chatNotification) event() (connector.Event, error) {
 			Target:   new(identity(chatUser{ID: p.SubGift.RecipientID, Login: p.SubGift.RecipientLogin, DisplayName: p.SubGift.RecipientName})),
 			Details: eventtype.Details{
 				Subscription: &eventtype.Subscription{Plan: p.SubGift.SubTier},
-				Gift:         &eventtype.Gift{Anonymous: p.ChatterAnonymous, Count: 1},
+				Gift:         &eventtype.Gift{Anonymous: p.ChatterAnonymous, Count: 1, CommunityGiftID: p.SubGift.CommunityGiftID},
 			},
 		}
 		if !p.ChatterAnonymous {

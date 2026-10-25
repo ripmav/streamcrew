@@ -108,11 +108,23 @@ func (a *App) ensureLocalToken(store *apitoken.Store, path string) error {
 		if _, ok := store.Validate(value); ok {
 			return nil // file and store are in sync
 		}
-		// The token was revoked: the store is the truth, and a revoked
-		// token stays revoked across restarts (Nachprüfung 2026-10-24,
-		// N2). The file keeps the value for a new token create.
-		a.logger.Warn("the local admin token was revoked; it stays revoked until a new one is created", "path", path)
-		return nil
+		stored, err := store.List()
+		if err != nil {
+			return fmt.Errorf("list api tokens: %w", err)
+		}
+		if len(stored) > 0 {
+			// The token was revoked: the store is the truth, and a
+			// revoked token stays revoked across restarts (Nachprüfung
+			// 2026-10-24, N2). The file keeps the value for a new token
+			// create.
+			a.logger.Warn("the local admin token was revoked; it stays revoked until a new one is created", "path", path)
+			return nil
+		}
+		// An empty store does not prove a revocation: it was deleted or
+		// lost. Re-register the value from the file (Nachprüfung
+		// 2026-10-25, N2a).
+		a.logger.Info("the token store is empty; re-registering the local admin token", "path", path)
+		return a.registerToken(store, "admin", value, false)
 	}
 	if a.cfg.BootstrapToken != "" {
 		value = a.cfg.BootstrapToken

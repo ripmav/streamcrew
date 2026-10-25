@@ -135,8 +135,10 @@ overlay; Default admin; der Wert wird genau einmal gezeigt) — oder beim
 Erststart aus `STREAMCREW_TOKEN` (Umgebungsvariable oder
 `--bootstrap-token`), die dann als Admin-Token gespeichert wird und danach
 ignoriert wird. Im Daemon-Modus legt der Core beim ersten Start einen
-lokalen Admin-Token in `<data-dir>/api.token` an, den CLI und TUI ohne
-zusätzliches `--token` lesen. Jeder Client setzt den Token:
+lokalen Admin-Token in `<data-dir>/api.token` an, dessen Wert
+`STREAMCREW_TOKEN` bzw. `--bootstrap-token` vorgibt, wenn gesetzt,
+sonst der Core selbst erzeugt; CLI und TUI lesen ihn ohne
+zusätzliches `--token`. Jeder Client setzt den Token:
 
 ```bash
 streamcrew --server https://meinstream.example:8740 --token <TOKEN> counter list

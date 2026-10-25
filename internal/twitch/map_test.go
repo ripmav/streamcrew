@@ -291,6 +291,20 @@ func TestMapNotification(t *testing.T) {
 	assert.Equal(t, "carol", ev.Target.Login)
 	assert.False(t, ev.Details.Gift.Anonymous)
 	assert.Equal(t, 1, ev.Details.Gift.Count)
+	assert.Empty(t, ev.Details.Gift.CommunityGiftID, "a gift outside of a mass gift")
+
+	// A gift of a mass action carries the community gift ID, so the
+	// core can drop it when the action fired (events.md B5, "never
+	// both").
+	handle(t, m, "channel.chat.notification", `{
+		"notice_type": "sub_gift",
+		"chatter_user_id": "8", "chatter_user_login": "alice",
+		"chatter_is_anonymous": false,
+		"sub_gift": {"sub_tier": "1000", "recipient_user_id": "11", "recipient_user_login": "dave", "recipient_user_name": "Dave", "community_gift_id": "cg-1"}
+	}`)
+	ev = r.lastEvent(t)
+	assert.Equal(t, eventtype.TwitchSubscriptionGift, ev.Type)
+	assert.Equal(t, "cg-1", ev.Details.Gift.CommunityGiftID)
 
 	// An anonymous mass gift: no user, no recipient list (the payload
 	// names the total only).

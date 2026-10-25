@@ -7,12 +7,14 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ripmav/streamcrew/internal/apitoken"
 	"github.com/ripmav/streamcrew/internal/app"
 	"github.com/ripmav/streamcrew/internal/config"
 )
@@ -96,6 +98,48 @@ func TestDesktopTokenIsCreatedOnce(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, a2.Close())
 	assert.Equal(t, value, bytes.TrimSpace(mustRead(t, path)))
+}
+
+// TestLocalTokenStore covers the local admin token of daemon mode
+// (ADR-0013 §5): a deleted token store is not a revocation, the core
+// re-registers the value of api.token (Nachprüfung 2026-10-25, N2a); a
+// non-empty store that lacks the token keeps it revoked (N2).
+func TestLocalTokenStore(t *testing.T) {
+	t.Parallel()
+	var console bytes.Buffer
+	cfg := testConfig(t)
+
+	newCore := func() {
+		t.Helper()
+		a, err := app.New(t.Context(), cfg, app.WithConsole(&console), app.WithKeyring(nil))
+		require.NoError(t, err)
+		require.NoError(t, a.Close())
+	}
+	newCore()
+	value := string(bytes.TrimSpace(mustRead(t, cfg.APITokenPath())))
+	_, ok := apitoken.Open(cfg.DataDir).Validate(value)
+	require.True(t, ok, "the local token validates on the first start")
+
+	// A deleted token store is not a revocation: the core re-registers
+	// the value from the file, so the api is not left closed (N2a).
+	require.NoError(t, os.Remove(filepath.Join(cfg.DataDir, apitoken.FileName)))
+	newCore()
+	assert.Equal(t, value, string(bytes.TrimSpace(mustRead(t, cfg.APITokenPath()))), "the file is untouched")
+	_, ok = apitoken.Open(cfg.DataDir).Validate(value)
+	assert.True(t, ok, "an empty store re-registers the local token")
+
+	// A revoked token stays revoked across restarts, but only when the
+	// store still holds other tokens; the file keeps the value (N2).
+	store := apitoken.Open(cfg.DataDir)
+	_, _, err := store.Create("other", []apitoken.Scope{apitoken.Admin})
+	require.NoError(t, err)
+	revoked, err := store.Revoke("admin")
+	require.NoError(t, err)
+	require.True(t, revoked)
+	newCore()
+	_, ok = apitoken.Open(cfg.DataDir).Validate(value)
+	assert.False(t, ok, "a non-empty store keeps the token revoked")
+	assert.Equal(t, value, string(bytes.TrimSpace(mustRead(t, cfg.APITokenPath()))), "the file keeps the value")
 }
 
 // mustRead reads a file and fails the test on error.
