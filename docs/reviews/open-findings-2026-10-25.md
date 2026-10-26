@@ -1,5 +1,8 @@
 # Offene Findings: Stand nach der dritten Nachprüfung (Code-Review 2026-10-24)
 
+> Die Zuordnung der offenen Findings zu Phase 6 steht in
+> [`open-findings-2026-10-26.md`](open-findings-2026-10-26.md).
+
 - **Grundlage:** [`code-review-2026-10-24.md`](code-review-2026-10-24.md),
   [`fix-plan-2026-10-24.md`](fix-plan-2026-10-24.md),
   [`open-findings-2026-10-24.md`](open-findings-2026-10-24.md) und
