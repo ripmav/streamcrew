@@ -7,7 +7,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.6
 	connectrpc.com/connect/v2 v2.0.2
 	github.com/alecthomas/kong v1.16.1
-	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20261018003744-cb897cb4ed72
+	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20261025003702-835ad0048169
 	github.com/cockroachdb/apd/v3 v3.2.3
 	github.com/coder/websocket v1.8.15
 	github.com/pressly/goose/v3 v3.29.0
