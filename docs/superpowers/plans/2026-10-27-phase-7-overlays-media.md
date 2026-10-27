@@ -117,19 +117,27 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
 
 ### 3.3 7.3 Medien — `feat/phase-7.3-media`
 
-- [ ] `internal/media`: Sink-Interface, `overlay`-Sink (Audio-Item auf dem Default-Endpunkt),
-  `local`-Sink (Build-Tag `localaudio`, oto/v3, Geräteauswahl `audio-device`; Dekodierung WAV
-  + MP3), `agent`-Port vorbereitet
-- [ ] Sound-Action: Typ `sound` (file, volume, sink, waitForFinish), `VisualAudio`,
-  `PlaybackEnds`
-- [ ] TTS: `internal/tts` mit Provider-Interface; `browser` (Packet an die Runtime,
-  Web Speech API), `google` (REST, API-Key per Env), `azure` (REST, Key+Region per Env),
-  `piper` (externer Prozess, `host:process`); Config `tts-provider`
-- [ ] TextToSpeech-Action: Typ `text_to_speech` (text, provider, voice, volume, rate, pitch,
+- [x] `internal/media`: Sink-Interface, `overlay`-Sink (Audio-Item auf dem Default-Endpunkt),
+  `local`-Sink (Build-Tag `localaudio`, oto/v3; **Abweichung:** keine Geräteauswahl —
+  oto/v3 kennt keine Geräte-API, System-Defaultgerät, ADR-0020 offener Punkt; **Abweichung:**
+  nur 16-Bit-PCM-WAV — der MP3-Kandidat `dmarc/ito/mp3` ist tot (404), ADR-0020 §1),
+  `agent`-Port vorbereitet (Stub bis 9.6)
+- [x] Sound-Action: Typ `sound` (file, volume, sink, waitForFinish), `VisualAudio`,
+  `PlaybackEnds` (nur mit `waitForFinish` — ohne wartet die Aktion nicht, und die Engine
+  zählt den Medien-Abstand vom Ende der Aktion, B43-Fallback; Abweichung von B40 „immer“,
+  dokumentiert im Code)
+- [x] TTS: `internal/tts` mit Provider-Interface; `browser` (Packet an die Runtime,
+  Web Speech API, `tts.speak`/`tts.ended` mit Sequence gegen veraltete Meldungen),
+  `google` (REST, API-Key per Env), `azure` (REST, Key+Region per Env),
+  `piper` (externer Prozess, `host:process`, Pitch ignoriert — ADR-0020 offener Punkt);
+  Config `tts-provider` (+ `audio-sink`, `tts-piper-model`)
+- [x] TextToSpeech-Action: Typ `text_to_speech` (text, provider, voice, volume, rate, pitch,
   waitForFinish, sink)
-- [ ] Release: Desktop-Variante des Core-Binaries (goreleaser-Build `streamcrew-desktop` mit
-  Tag `localaudio`)
-- [ ] Tests (inkl. Build-Tag-Stub), Test-Matrizen, Roadmap 7.3 abhaken
+- [x] Release: Desktop-Variante des Core-Binaries (goreleaser-Build `streamcrew-desktop` mit
+  Tag `localaudio`, linux/windows/darwin amd64+arm64 — oto/v3 ist reines Go via purego,
+  kein cgo, daher Cross-Build ohne Toolchain; CI: `go build -tags localaudio` +
+  `goreleaser check`)
+- [x] Tests (inkl. Build-Tag-Stub), Test-Matrizen, Roadmap 7.3 abhaken
 
 ### 3.4 7.4 OBS Studio — `feat/phase-7.4-obs`
 

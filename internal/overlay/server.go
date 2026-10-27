@@ -324,8 +324,9 @@ func (s *Server) handleClientMessage(ctx context.Context, endpoint string, slot 
 			s.cfg.Service.ItemEnded(ctx, endpoint, id)
 		}
 	case TypeTTSEnded:
-		// The browser TTS finished (B41); 7.3 waits for it, 7.1
-		// ignores it.
+		// The browser TTS finished (B41); the seq ends the speech of
+		// the tts.speak that carries it.
+		s.cfg.Service.TTSEnded(ctx, endpoint, int64Field(msg.Data, "seq"))
 	default:
 		s.logger.DebugContext(ctx, "overlay: unknown message", "slot", slot.ID, "type", msg.Type)
 	}
@@ -341,4 +342,19 @@ func stringField(data any, name string) string {
 	}
 	s, _ := m[name].(string)
 	return s
+}
+
+// int64Field returns the integer field name of the decoded data, 0 if
+// the data is not an object with such a field. json/v2 decodes a number
+// into any as a float64.
+func int64Field(data any, name string) int64 {
+	m, ok := data.(map[string]any)
+	if !ok {
+		return 0
+	}
+	f, ok := m[name].(float64)
+	if !ok {
+		return 0
+	}
+	return int64(f)
 }

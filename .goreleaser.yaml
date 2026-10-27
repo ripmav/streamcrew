@@ -28,12 +28,44 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
+  # The desktop variant with the tag localaudio (ADR-0020 §1): the local
+  # sink plays the sound on the audio device of the host. oto/v3 is pure
+  # Go (purego), so it cross-compiles with CGO_ENABLED=0 like the core.
+  # The local playback itself is not verified by the CI (no audio device
+  # on the runners).
+  - id: streamcrew-desktop
+    main: ./cmd/streamcrew
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+      - -tags=localaudio
+    ldflags:
+      - -s -w
 
 archives:
-  - formats: [tar.gz]
+  - id: streamcrew
+    ids: [streamcrew]
+    formats: [tar.gz]
     format_overrides:
       - goos: windows
         formats: [zip]
+  # The desktop archives are named after their build, so they do not
+  # collide with the core archives of the same version and platform.
+  - id: streamcrew-desktop
+    ids: [streamcrew-desktop]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "streamcrew-desktop_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: "checksums.txt"

@@ -75,5 +75,15 @@ Medien-Items (`kind: audio|video|clip`) mit Audio-Track werden im Browser-Pane d
 
 ## Open Items
 
-- **MP3-Decoder** für `local`-Sink: in 7.3 entscheiden (`github.com/dmarc/ito/mp3` vs. WAV-only). Entscheidung wird in der 7.3-PR dokumentiert.
+- ~~**MP3-Decoder** für `local`-Sink: in 7.3 entscheiden (`github.com/dmarc/ito/mp3` vs. WAV-only).~~ Erledigt 2026-10-27 (Nachtrag): WAV-only, der Kandidat ist tot.
 - **Agent-Audio-Durchleitung** (9.6): Protokoll-Meldung `audio.play` (Datei oder URL) ist der voraussichtliche Vorschlag; wird in 9.6 spezialisiert.
+- **Geräteauswahl** für `local`: weggefallen mit dem Nachtrag 2026-10-27 (oto/v3 hat keine Geräte-API). Falls sie gebraucht wird, ist ein anderer Backend-Weg nötig (z. B. ein Gerätewechsel auf Systemseite, ein zweites Backend oder eine neue Dependency).
+
+## Nachtrag 2026-10-27 (Umsetzung 7.3)
+
+Vier Punkte der Entscheidung haben sich bei der Umsetzung geändert:
+
+1. **MP3 entfällt, WAV-only.** Der Kandidat `github.com/dmarc/ito/mp3` ist tot (Repository 404). Die `local`-Ausgabe dekodiert 16-Bit-PCM-WAV; andere Formate (MP3, 24-Bit, float32, andere Kanalzahlen) sind ein klarer Fehler (`internal/media/wav.go`, `shortcut:`-Kommentar). Die Wiedergabe normalisiert alles auf 44100 Hz Stereo float32 — oto/v3 kennt pro Prozess genau ein Format (`FormatFloat32LE`) und einen einzigen Audio-Kontext.
+2. **`audio-device` entfällt.** oto/v3 v3.5.1 hat keine API zur Geräteauswahl (ALSA/PulseAudio-Systemdefault). Der Config-Key kommt nicht, die Doku (usage) sagt es. Offener Punkt bleibt, ob das genügt.
+3. **piper-Pitch wird ignoriert.** piper kennt kein Pitch-Flag (nur `--length-scale` für die Rate und `--volume`); die Pitch-Option der Aktion geht bei `piper` verloren (`internal/tts/piper.go`, `shortcut:`-Kommentar).
+4. **Kein cgo nötig.** oto/v3 v3.5.1 ist auf Linux reines Go (purego/ALSA) — der Goreleaser-Build `streamcrew-desktop` (Tag `localaudio`) cross-compiliert mit `CGO_ENABLED=0` für linux, windows und darwin, ohne Mingw/osxcross. Die Wiedergabe selbst prüft die CI nicht (kein Audiogerät auf den Runnern); die Abnahme läuft auf dem Streaming-PC.

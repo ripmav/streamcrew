@@ -62,6 +62,27 @@ type Config struct {
 	// applies only at the start of the core (no hot apply).
 	Twitch TwitchConfig `embed:"" prefix:"twitch-"`
 
+	// AudioSink is the sink the sound and text_to_speech actions play
+	// on by default (roadmap 7.3, ADR-0020 §2): the overlay endpoint
+	// (default, no capability), the audio device of the host (build tag
+	// localaudio, capability host:audio) or the agent (Phase 9.6). The
+	// check of the sink is at the action, not at the configuration, so
+	// the server mode without host:audio still plays on the overlay.
+	// Changes need a restart.
+	AudioSink string `name:"audio-sink" enum:"overlay,local,agent" default:"overlay" help:"The sink the sound and text-to-speech actions play on by default (roadmap 7.3): ${enum}. The sink local needs the build tag localaudio and the capability host:audio. Changes need a restart."`
+	// TTSProvider is the provider the text_to_speech action speaks with
+	// by default (roadmap 7.3, ADR-0020 §3): the Web Speech API of the
+	// overlay (default, no key), the REST APIs of google and azure
+	// (keys in the environment STREAMCREW_TTS_GOOGLE_KEY,
+	// STREAMCREW_TTS_AZURE_KEY and STREAMCREW_TTS_AZURE_REGION) or the
+	// external piper process (capability host:process). Changes need a
+	// restart.
+	TTSProvider string `name:"tts-provider" enum:"browser,google,azure,piper" default:"browser" help:"The default provider of the text-to-speech action (roadmap 7.3): ${enum}. The providers google and azure read their keys from the environment. Changes need a restart."`
+	// TTSPiperModel is the onnx model of the piper TTS provider
+	// (roadmap 7.3, ADR-0020 §3); needed only for the provider piper.
+	// Changes need a restart.
+	TTSPiperModel string `name:"tts-piper-model" type:"path" placeholder:"FILE" help:"The onnx model of the piper TTS provider (roadmap 7.3); needed only for the provider piper. Changes need a restart."`
+
 	// Grant, Revoke, FileRoot and OutboundAllow are the rights of
 	// Code-ADR-0019. Changes of them in the configuration file apply
 	// without a restart (Watcher).

@@ -561,8 +561,10 @@ function speak(d: any): void {
   if (d.volume !== undefined) u.volume = d.volume;
   if (d.rate !== undefined) u.rate = d.rate;
   if (d.pitch !== undefined) u.pitch = d.pitch;
-  u.onend = () => send("tts.ended", null);
-  u.onerror = () => send("tts.ended", null);
+  // The seq echoes the speech, so the tts.ended of a canceled speech
+  // cannot end the next one (B49).
+  u.onend = () => send("tts.ended", { seq: d.seq });
+  u.onerror = () => send("tts.ended", { seq: d.seq });
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
 }

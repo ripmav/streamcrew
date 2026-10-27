@@ -14,7 +14,9 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/moderation"
 	"github.com/ripmav/streamcrew/internal/action/network"
 	overlayaction "github.com/ripmav/streamcrew/internal/action/overlay"
+	soundaction "github.com/ripmav/streamcrew/internal/action/sound"
 	streamaction "github.com/ripmav/streamcrew/internal/action/stream"
+	ttsaction "github.com/ripmav/streamcrew/internal/action/tts"
 	twitchaction "github.com/ripmav/streamcrew/internal/action/twitch"
 	"github.com/ripmav/streamcrew/internal/action/usercommand"
 	"github.com/ripmav/streamcrew/internal/action/users"
@@ -38,6 +40,8 @@ func ActionCatalog(granted capability.Source) (*action.Registry, error) {
 		moderation.Catalog(),
 		network.Catalog(),
 		overlayaction.Catalog(),
+		soundaction.Catalog(),
+		ttsaction.Catalog(),
 		twitchaction.Catalog(),
 		users.Catalog(),
 		values.Catalog(),

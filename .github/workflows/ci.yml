@@ -29,6 +29,7 @@ on:
       - "Dockerfile"
       - ".dockerignore"
       - "scripts/**"
+      - ".goreleaser.yaml"
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
@@ -47,6 +48,7 @@ on:
       - "Dockerfile"
       - ".dockerignore"
       - "scripts/**"
+      - ".goreleaser.yaml"
       - ".github/workflows/ci.yml"
   schedule:
     - cron: "17 5 * * 1"
@@ -227,6 +229,24 @@ jobs:
             GOOS=${target%/*} GOARCH=${target#*/} go build -o "${RUNNER_TEMP}/build/${target}/" ./...
             echo "::endgroup::"
           done
+
+      # The desktop variant with the tag localaudio (ADR-0020 §1, roadmap
+      # 7.3): oto/v3 is pure Go, so the tagged build is a plain
+      # cross-compile with CGO_ENABLED=0.
+      - name: go build -tags localaudio
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          for target in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+            echo "::group::${target}"
+            GOOS=${target%/*} GOARCH=${target#*/} go build -tags localaudio -o "${RUNNER_TEMP}/build-localaudio/${target}/" ./...
+            echo "::endgroup::"
+          done
+
+      # The release configuration must stay valid (goreleaser v2, pinned
+      # like the other build tools).
+      - name: goreleaser check
+        run: go run github.com/goreleaser/goreleaser/v2@v2.19.0 check
 
       # In the same job to save a billed minute: build the image, run version
       # and serve, check /healthz and /readyz and a clean stop on SIGTERM.

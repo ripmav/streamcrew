@@ -330,3 +330,79 @@ func (r *recorder) wait(t *testing.T, n int) {
 	t.Helper()
 	require.GreaterOrEqual(t, len(r.all()), n)
 }
+
+// TestTTSSpeakCoversSpeechReplacementAndEnded covers B41 and B49: the
+// tts.speak carries a seq to the runtimes, the tts.ended of the seq
+// closes the channel of the speech, the tts.ended of a canceled speech
+// ends nothing, and a new speech replaces the old one.
+func TestTTSSpeakCoversSpeechReplacementAndEnded(t *testing.T) {
+	ctx := context.Background()
+	svc := testService(t, settings.Overlay{})
+	rec := &recorder{}
+	rec.attach(t, svc)
+
+	// An empty text and an unknown endpoint are clear errors.
+	_, err := svc.TTSSpeak(ctx, settings.DefaultEndpointID, overlay.TTSSpeakData{})
+	require.Error(t, err)
+	_, err = svc.TTSSpeak(ctx, "nope", overlay.TTSSpeakData{Text: "x"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nope")
+
+	end, err := svc.TTSSpeak(ctx, settings.DefaultEndpointID, overlay.TTSSpeakData{Text: "one"})
+	require.NoError(t, err)
+	msgs := rec.all()
+	require.NotEmpty(t, msgs)
+	last := msgs[len(msgs)-1]
+	require.Equal(t, overlay.TypeTTSSpeak, last.Type)
+	data := last.Data.(overlay.TTSSpeakData)
+	seq1 := data.Seq
+	require.NotZero(t, seq1)
+
+	// A stale tts.ended (a canceled speech) ends nothing.
+	assert.False(t, svc.TTSEnded(ctx, settings.DefaultEndpointID, seq1-1))
+
+	end2, err := svc.TTSSpeak(ctx, settings.DefaultEndpointID, overlay.TTSSpeakData{Text: "two"})
+	require.NoError(t, err)
+	select {
+	case <-end:
+	default:
+		t.Fatal("the replaced speech must end")
+	}
+	// The tts.ended of the canceled speech must not end the new one.
+	assert.False(t, svc.TTSEnded(ctx, settings.DefaultEndpointID, seq1))
+	msgs = rec.all()
+	last = msgs[len(msgs)-1]
+	require.Equal(t, overlay.TypeTTSSpeak, last.Type)
+	seq2 := last.Data.(overlay.TTSSpeakData).Seq
+	require.NotEqual(t, seq1, seq2)
+
+	assert.True(t, svc.TTSEnded(ctx, settings.DefaultEndpointID, seq2))
+	select {
+	case <-end2:
+	default:
+		t.Fatal("the ended speech must close its channel")
+	}
+	assert.False(t, svc.TTSEnded(ctx, settings.DefaultEndpointID, seq2))
+}
+
+// TestTTSSpeakEndsWithReload covers B41: a reload that drops the endpoint
+// of an in-flight speech closes its channel, so the action of the speech
+// ends with the time limit, not after the reload.
+func TestTTSSpeakEndsWithReload(t *testing.T) {
+	ctx := context.Background()
+	sec := settings.Overlay{Endpoints: []settings.OverlayEndpoint{{ID: "alerts", Name: "Alerts"}}}
+	svc, err := overlay.New(ctx, overlay.Ports{
+		Section: func(context.Context) (settings.Overlay, error) { return sec, nil },
+		Version: "test",
+	})
+	require.NoError(t, err)
+	end, err := svc.TTSSpeak(ctx, "alerts", overlay.TTSSpeakData{Text: "hello"})
+	require.NoError(t, err)
+	sec = settings.Overlay{}
+	require.NoError(t, svc.Reload(ctx))
+	select {
+	case <-end:
+	default:
+		t.Fatal("the speech of the removed endpoint must end")
+	}
+}

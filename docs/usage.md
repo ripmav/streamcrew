@@ -227,7 +227,8 @@ lassen.
 
 **Restart:** `data-dir`, `profile`, `config` (offene Dateien und
 Datenbanken des laufenden Prozesses), `overlay-listen`, `overlay-token`
-(Overlay-Server, s. u.).
+(Overlay-Server, s. u.), `audio-sink`, `tts-provider`, `tts-piper-model`
+(Sound und TTS, s. u.).
 
 **Beispiele:**
 
@@ -352,6 +353,67 @@ Operationen der 7.5-Widgets (`add_to_credits`, `play_credits`,
 
 **Ausfall:** Der Overlay-Server ist nicht-kritisch — sein Ausfall
 beendet den Core nicht, die API bleibt erreichbar.
+
+## Sound und Sprachsynthese (Roadmap 7.3)
+
+Sound und Text-to-Speech (TTS) sind Command-Aktionen der Typen `sound`
+und `text_to_speech` (spec [overlays.md](spec/overlays.md) B40, B41,
+ADR-0020). Beide sind `visual_audio` und halten in Begrüßungen den
+Medien-Abstand der Engine ([`command-engine.md`](spec/command-engine.md)
+B43).
+
+**Sound (B40):** Die Aktion `sound` spielt eine Datei
+(`file`) aus `<data-dir>/profiles/<profil-id>/media/` mit der Lautstärke
+`volume` (0–100, Default 100) auf dem Sink `sink` (Default:
+`audio-sink`):
+
+- `overlay` (Default): zeigt die Datei als Ton-Item auf dem
+  Default-Endpunkt — die Browserquelle spielt sie ab, das Core braucht
+  kein Recht.
+- `local`: spielt auf dem Audiogerät des Hosts — der Build braucht das
+  Tag `localaudio` (die Release-Binaries `streamcrew-desktop` haben es)
+  und das Core das Recht `host:audio` (Desktop- und Daemon-Modus haben
+  es, Server-Modus nur per `grant`). Ohne Tag oder Recht ist die
+  Ausführung ein klarer Fehler (B40). Die Wahl des Geräts ist nicht
+  möglich, es gilt das System-Defaultgerät (ADR-0020, offener Punkt).
+- `agent`: vorbereitet für den Agent-Passthrough (Phase 9.6), ein
+  klarer Fehler bis dahin.
+
+Unterstützt sind 16-Bit-PCM-WAV-Dateien; andere Formate (MP3, 24-Bit,
+float32) lehnt die Aktion mit klarem Fehler ab (Shortcut, ADR-0020,
+offener Punkt). `waitForFinish` hält die Aktion bis zum
+Wiedergabe-Ende und meldet es der Engine; ohne sie endet die Aktion
+beim Start der Wiedergabe, und die Engine zählt den Medien-Abstand
+vom Ende der Aktion.
+
+**TTS (B41):** Die Aktion `text_to_speech` spricht einen Text
+(`text`, Template) mit dem Provider `provider` (Default:
+`tts-provider`):
+
+- `browser` (Default): die Web Speech API der Overlay-Runtime spricht
+  den Text in der Browserquelle — ohne Key und ohne Recht, nur mit dem
+  Sink `overlay` (ein anderer Sink ist ein klarer Fehler).
+- `google`: REST-API, Key in der Umgebungsvariablen
+  `STREAMCREW_TTS_GOOGLE_KEY`, Recht `net:outbound`.
+- `azure`: REST-API, Key in `STREAMCREW_TTS_AZURE_KEY`, Region in
+  `STREAMCREW_TTS_AZURE_REGION`, Recht `net:outbound`.
+- `piper`: externer Prozess `piper`, Modell in `tts-piper-model`, Recht
+  `host:process`. Die Tonhöhe (`pitch`) ignoriert piper (Shortcut,
+  ADR-0020, offener Punkt).
+
+`voice`, `volume` (0–100), `rate` und `pitch` (0 oder 1 = normal)
+werden an den Provider durchgereicht. Die Cloud-Keys liest das Core zum
+Aufruf aus der Umgebung (ein gesetzter Key gilt ohne Neustart) und
+niemals in Logs; ohne gesetzten Key ist die Ausführung ein klarer
+Fehler (B54). Die erzeugten Audiodateien landen unter
+`<media-dir>/generated/` und werden wie Sound-Dateien abgespielt
+(`sink` wie bei `sound`). `waitForFinish` ist standardmäßig aus.
+
+**Release:** Das Release enthält neben dem Core-Binary eine
+Desktop-Variante `streamcrew-desktop` mit dem Tag `localaudio`
+(linux, windows, darwin; amd64, arm64) — die Variante für den
+Streaming-PC mit lokaler Tonwiedergabe. Die Wiedergabe selbst prüft die
+CI nicht (kein Audiogerät auf den Runnern).
 
 ## Logs im Stream (read-only)
 

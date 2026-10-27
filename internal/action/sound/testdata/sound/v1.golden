@@ -1,0 +1,7 @@
+{
+  "type": "sound",
+  "schemaVersion": 1,
+  "enabled": true,
+  "file": "chime.mp3",
+  "volume": 100
+}
