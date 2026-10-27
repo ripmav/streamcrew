@@ -16,35 +16,35 @@
 
 ### Twitch im Echtbetrieb (Phase 4/5 abgehakt, aber fehlerhaft)
 
-- [ ] T5 – **Mittel** – Keine Whispers/Replies über Twitch: Der Twitch-Chat setzt `connector.Replier`/`Whisperer` nicht um, obwohl Roadmap 5.1 erledigt ist.
-- [ ] T6 – **Mittel** – Der Stream-Status wird nach einem EventSub-Reconnect nicht neu gemeldet (`streamState` nur einmal je `channelSession`, `internal/twitch/platform.go:753`).
-- [ ] T7 – **Mittel** – EventSub: Die Reader-Goroutine blockiert ohne Abbruch auf `in` und leckt je Reconnect; Frames der alten Session gehen beim Warten auf den neuen Welcome verloren (`internal/twitch/ws.go:404-414`).
-- [ ] T8 – **Mittel** – `channel.moderate` ist nur für Ban/Timeout gemappt; Unban, Untimeout, Mod, VIP usw. landen als Warn „unmapped“ (`internal/twitch/map.go:215-240`).
-- [ ] T9 – **Mittel** – Der Event-Service hält seinen globalen Mutex während Netzwerk-I/O (Helix-Delete, `Moderation.Check`); ein langsamer Helix-Call blockiert alle Plattformen.
-- [ ] T10 – **Mittel** – Anonyme Cheers werden verworfen: Die leere Identität scheitert an `checkAccount` (`internal/eventservice/receive.go:647`).
-- [ ] T11 – **Mittel** – Die Follow-Zeit für die Teilnahmeregel kommt nur aus dem Cache des Heimkanals; neue Chatter gelten als „nicht erfüllt“ (`internal/moderation/moderation.go:206`).
-- [ ] T13 – **Niedrig** – IRC-Lebenszyklus: Der Backoff geht über das Maximum (32 s > 30 s) und wird nie zurückgesetzt, `streamStatePoll` startet je Reconnect einen weiteren Poller, Close-Goroutine und Welcome-Timeout.
-- [ ] T14 – **Niedrig** – IRC: `Send` entfernt kein CR/LF (ein Template-Zeilenumbruch kann IRC-Befehle einschleusen), Tag-Werte werden nicht unescaped, nur der 20/30-s-Bucket.
-- [ ] T15 – **Niedrig** – `Manager.Reconcile` hat keinen Mutex und kann parallel laufen (Ticker, Session- und Revocation-Callbacks).
-- [ ] IRC-CRLF – **Unter Schwelle** – `IRCSession.Send`/`writeLine` entfernen CR/LF nicht; zusammen mit T14 beheben.
-- [ ] Rollen – **Unter Schwelle** – Badges aus Zusatzkanälen werden global zu `Streamer`/`Moderator`; Rollen pro Kanal ableiten (users-and-roles.md B25).
+- [x] T5 – **Mittel** – Keine Whispers/Replies über Twitch: Der Twitch-Chat setzt `connector.Replier`/`Whisperer` nicht um, obwohl Roadmap 5.1 erledigt ist.
+- [x] T6 – **Mittel** – Der Stream-Status wird nach einem EventSub-Reconnect nicht neu gemeldet (`streamState` nur einmal je `channelSession`, `internal/twitch/platform.go:753`).
+- [x] T7 – **Mittel** – EventSub: Die Reader-Goroutine blockiert ohne Abbruch auf `in` und leckt je Reconnect; Frames der alten Session gehen beim Warten auf den neuen Welcome verloren (`internal/twitch/ws.go:404-414`).
+- [x] T8 – **Mittel** – `channel.moderate` ist nur für Ban/Timeout gemappt; Unban, Untimeout, Mod, VIP usw. landen als Warn „unmapped“ (`internal/twitch/map.go:215-240`).
+- [x] T9 – **Mittel** – Der Event-Service hält seinen globalen Mutex während Netzwerk-I/O (Helix-Delete, `Moderation.Check`); ein langsamer Helix-Call blockiert alle Plattformen.
+- [x] T10 – **Mittel** – Anonyme Cheers werden verworfen: Die leere Identität scheitert an `checkAccount` (`internal/eventservice/receive.go:647`).
+- [x] T11 – **Mittel** – Die Follow-Zeit für die Teilnahmeregel kommt nur aus dem Cache des Heimkanals; neue Chatter gelten als „nicht erfüllt“ (`internal/moderation/moderation.go:206`).
+- [x] T13 – **Niedrig** – IRC-Lebenszyklus: Der Backoff geht über das Maximum (32 s > 30 s) und wird nie zurückgesetzt, `streamStatePoll` startet je Reconnect einen weiteren Poller, Close-Goroutine und Welcome-Timeout.
+- [x] T14 – **Niedrig** – IRC: `Send` entfernt kein CR/LF (ein Template-Zeilenumbruch kann IRC-Befehle einschleusen), Tag-Werte werden nicht unescaped, nur der 20/30-s-Bucket.
+- [x] T15 – **Niedrig** – `Manager.Reconcile` hat keinen Mutex und kann parallel laufen (Ticker, Session- und Revocation-Callbacks).
+- [x] IRC-CRLF – **Unter Schwelle** – `IRCSession.Send`/`writeLine` entfernen CR/LF nicht; zusammen mit T14 beheben.
+- [x] Rollen – **Unter Schwelle** – Badges aus Zusatzkanälen werden global zu `Streamer`/`Moderator`; Rollen pro Kanal ableiten (users-and-roles.md B25).
 
 ### API, CLI, TUI (Phase 6)
 
-- [ ] S5 – **Mittel** – API-Tokens liegen global in `<data-dir>/api-tokens.json` statt in der Profil-DB, ohne ADR; README.md:330/377 behauptet „pro Profil, verschlüsselt“ und „ohne Token offen“. Weicht vom ADR ab: vorher den Besitzer fragen.
-- [ ] S6 – **Mittel** – Die CLI-API-Befehle nutzen weder `runtime.json` noch den Unix-Socket (Standard fest `http://127.0.0.1:8740`, `internal/cli/api.go:24`).
-- [ ] U4 – **Mittel** – `apiCounters.Create` ruft `CheckReserved` nicht auf; ein Counter `date` überschattet `$date` (`internal/app/api_wiring.go:95`).
-- [ ] U5 – **Mittel** – Fehler-Mapping: Decimal-Syntax, `id.Parse`, `role.Parse`, unbekannte Statistik, Settings-Validierung, `ErrReserved` und `ErrLoginInProgress` werden zu `CodeInternal` (HTTP 500) (`internal/api/counter.go:51`).
-- [ ] U6 – **Mittel** – TUI-Stream ohne Reconnect, stille Verluste ab 64 Events, `ctx` ist `context.Background()` (`internal/tui/model.go:151-154`).
-- [ ] S12 – **Niedrig** – Doppelte Token-Namen erlaubt, `Revoke(name)` entfernt alle; Read-Modify-Write nur prozessintern gesperrt; offene Streams überleben eine Rücknahme.
-- [ ] C11 – **Niedrig** – `checksums.txt` deckt nicht alle Release-Artefakte ab (Image-Tar, SBOM, Quell-Zip und systemd-Dateien werden nach goreleaser hochgeladen); betrifft den ersten Release-Tag (6.7).
+- [x] S5 – **Mittel** – API-Tokens liegen global in `<data-dir>/api-tokens.json` statt in der Profil-DB, ohne ADR; README.md:330/377 behauptet „pro Profil, verschlüsselt“ und „ohne Token offen“. Weicht vom ADR ab: vorher den Besitzer fragen.
+- [x] S6 – **Mittel** – Die CLI-API-Befehle nutzen weder `runtime.json` noch den Unix-Socket (Standard fest `http://127.0.0.1:8740`, `internal/cli/api.go:24`).
+- [x] U4 – **Mittel** – `apiCounters.Create` ruft `CheckReserved` nicht auf; ein Counter `date` überschattet `$date` (`internal/app/api_wiring.go:95`).
+- [x] U5 – **Mittel** – Fehler-Mapping: Decimal-Syntax, `id.Parse`, `role.Parse`, unbekannte Statistik, Settings-Validierung, `ErrReserved` und `ErrLoginInProgress` werden zu `CodeInternal` (HTTP 500) (`internal/api/counter.go:51`).
+- [x] U6 – **Mittel** – TUI-Stream ohne Reconnect, stille Verluste ab 64 Events, `ctx` ist `context.Background()` (`internal/tui/model.go:151-154`).
+- [x] S12 – **Niedrig** – Doppelte Token-Namen erlaubt, `Revoke(name)` entfernt alle; Read-Modify-Write nur prozessintern gesperrt; offene Streams überleben eine Rücknahme.
+- [x] C11 – **Niedrig** – `checksums.txt` deckt nicht alle Release-Artefakte ab (Image-Tar, SBOM, Quell-Zip und systemd-Dateien werden nach goreleaser hochgeladen); betrifft den ersten Release-Tag (6.7).
 
 ### Commands und Actions
 
-- [ ] A1 – **Mittel** – `command_admin update` meldet Erfolg und speichert, auch wenn der Command keine Chat-Action hat.
-- [ ] A2 – **Mittel** – `command_admin find` unterscheidet „keins“, „mehrere“ und Fehler nicht; `add` wertet einen Listing-Fehler als „frei“.
-- [ ] A4 – **Mittel** – `user_command`-Antworten sind am Command-Namen geschlüsselt; eine Umbenennung (auch nur Groß/Klein) verwaist sie (`internal/action/usercommand/usercommand.go:154`).
-- [ ] A9 – **Niedrig** – `addcmd !hello` erzeugt `!!hello` (der Trigger wird ungekürzt mit `TriggerExclamation` übernommen); `find` und `Save` sind nicht atomar.
+- [x] A1 – **Mittel** – `command_admin update` meldet Erfolg und speichert, auch wenn der Command keine Chat-Action hat.
+- [x] A2 – **Mittel** – `command_admin find` unterscheidet „keins“, „mehrere“ und Fehler nicht; `add` wertet einen Listing-Fehler als „frei“.
+- [x] A4 – **Mittel** – `user_command`-Antworten sind am Command-Namen geschlüsselt; eine Umbenennung (auch nur Groß/Klein) verwaist sie (`internal/action/usercommand/usercommand.go:154`).
+- [x] A9 – **Niedrig** – `addcmd !hello` erzeugt `!!hello` (der Trigger wird ungekürzt mit `TriggerExclamation` übernommen); `find` und `Save` sind nicht atomar.
 
 ## 2. Nach Phase 6
 
