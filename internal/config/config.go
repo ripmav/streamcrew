@@ -45,6 +45,8 @@ type Config struct {
 	Profile         string        `placeholder:"ID" help:"Profile to use. Default: the active profile (streamcrew profile use)."`
 	Mode            Mode          `enum:"desktop,daemon,server" default:"daemon" help:"Operating mode: ${enum}. The mode decides the base of the host rights and the default listen address."`
 	Listen          string        `placeholder:"HOST:PORT" help:"Address of the HTTP server. Default: 127.0.0.1:8740, in server mode :8740."`
+	OverlayListen   string        `name:"overlay-listen" placeholder:"HOST:PORT" help:"Address of the overlay server (roadmap 7.1). Default: 127.0.0.1:8742, in server mode :8742. Changes need a restart."`
+	OverlayToken    string        `name:"overlay-token" env:"STREAMCREW_OVERLAY_TOKEN" placeholder:"TOKEN" help:"Token the overlay URLs require as the query parameter token; empty leaves the endpoints open (roadmap 7.1). Changes need a restart."`
 	BootstrapToken  string        `name:"bootstrap-token" env:"STREAMCREW_TOKEN" placeholder:"TOKEN" help:"Bootstrap admin token: when no api token is stored yet, an admin token with this value is created at the first start. In daemon mode it is the value of the new local token in the data directory (api.token); server mode without it starts without a token (the api is closed)."`
 	Dev             bool          `help:"Developer mode: serves pprof under /debug/pprof/. Requires a loopback listen address."`
 	CorsAllow       []string      `name:"cors-allow" placeholder:"ORIGIN" help:"Origins allowed to call the API cross-origin (CORS), e.g. http://localhost:5173. Repeatable. Default: none — cross-origin requests are refused."`
@@ -187,6 +189,22 @@ func DefaultListen(m Mode, dataDir string) string {
 	}
 }
 
+// DefaultOverlayPort is the TCP port of the overlay server unless
+// --overlay-listen says otherwise (roadmap 7.1, spec overlays.md B1).
+// Port 8741 is already taken by the auth loopback URL.
+const DefaultOverlayPort = 8742
+
+// DefaultOverlayListen returns the listen address used when
+// --overlay-listen is not set: loopback only in desktop and daemon mode
+// and any interface in server mode (B1). The overlay server is always
+// TCP: a browser source cannot open a Unix socket.
+func DefaultOverlayListen(m Mode) string {
+	if m == ModeServer {
+		return net.JoinHostPort("", strconv.Itoa(DefaultOverlayPort))
+	}
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(DefaultOverlayPort))
+}
+
 // LogDir returns the directory of the log files.
 func (c *Config) LogDir() string {
 	return filepath.Join(c.DataDir, "logs")
@@ -197,6 +215,9 @@ func (c *Config) LogDir() string {
 func (c *Config) Resolve() error {
 	if c.Listen == "" {
 		c.Listen = DefaultListen(c.Mode, c.DataDir)
+	}
+	if c.OverlayListen == "" {
+		c.OverlayListen = DefaultOverlayListen(c.Mode)
 	}
 
 	var errs []error
@@ -217,6 +238,13 @@ func (c *Config) Resolve() error {
 		} else if c.Dev && !isLoopback(host) {
 			errs = append(errs, fmt.Errorf("--dev: pprof is only served on a loopback address, not on %q", c.Listen))
 		}
+	}
+	// The overlay server is always TCP: a browser source cannot open a
+	// Unix socket (spec overlays.md, B1).
+	if strings.HasPrefix(c.OverlayListen, "unix:") {
+		errs = append(errs, fmt.Errorf("--overlay-listen: the overlay server is TCP only, not a Unix socket: %q", c.OverlayListen))
+	} else if _, err := splitListen(c.OverlayListen); err != nil {
+		errs = append(errs, fmt.Errorf("--overlay-listen: %w", err))
 	}
 	if (c.TLSCert == "") != (c.TLSKey == "") {
 		errs = append(errs, errors.New("--tls-cert and --tls-key must be set together"))
@@ -296,6 +324,20 @@ func isLoopback(host string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+// OverlayPublicInsecure reports whether the overlay server listens on a
+// TCP address beyond loopback without a token (roadmap 7.1, spec
+// overlays.md, B5): the case that warns at start.
+func (c Config) OverlayPublicInsecure() bool {
+	if c.OverlayToken != "" {
+		return false
+	}
+	host, err := splitListen(c.OverlayListen)
+	if err != nil {
+		return false
+	}
+	return !isLoopback(host)
 }
 
 // PublicInsecure reports whether the HTTP server listens on a TCP address

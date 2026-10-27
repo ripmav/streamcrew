@@ -4,12 +4,14 @@ package config
 
 // FileView is the flat form of a Config with the keys of the configuration
 // file. "streamcrew config show" prints it, so its output can be used as a
-// configuration file.
+// configuration file. The overlay token is a credential and stays out,
+// like the bootstrap token.
 type FileView struct {
 	DataDir           string            `yaml:"data_dir" json:"data_dir"`
 	Profile           string            `yaml:"profile,omitempty" json:"profile,omitempty"`
 	Mode              Mode              `yaml:"mode" json:"mode"`
 	Listen            string            `yaml:"listen" json:"listen"`
+	OverlayListen     string            `yaml:"overlay_listen" json:"overlay_listen"`
 	Dev               bool              `yaml:"dev" json:"dev"`
 	DryRun            bool              `yaml:"dry_run" json:"dry_run"`
 	ShutdownTimeout   string            `yaml:"shutdown_timeout" json:"shutdown_timeout"`
@@ -37,6 +39,7 @@ func (c *Config) View() FileView {
 		Profile:           c.Profile,
 		Mode:              c.Mode,
 		Listen:            c.Listen,
+		OverlayListen:     c.OverlayListen,
 		Dev:               c.Dev,
 		DryRun:            c.DryRun,
 		ShutdownTimeout:   c.ShutdownTimeout.String(),

@@ -86,16 +86,17 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
 
 ### 3.1 7.1 Overlay-Server und Runtime — `feat/phase-7.1-overlay-server`
 
-- [ ] `internal/overlay`: Endpunkt-Registry (aus der Sektion), Item- und Widget-Registry mit
-  State-Sync, `Server` (HTTP+WS Runnable), Token-Prüfung, `Rebind`-fähiges Config
-- [ ] Runtime: `runtime/src` (TS), `web/` (index.html + bundle.js eingecheckt), `generate.go`
+- [x] `internal/overlay`: Endpunkt-Registry (aus der Sektion), Item- und Widget-Registry mit
+  State-Sync, `Server` (HTTP+WS Runnable), Token-Prüfung, Config (Restart-only, kein
+  Rebind — ADR-0019)
+- [x] Runtime: `runtime/src` (TS), `web/` (index.html + bundle.js eingecheckt), `generate.go`
   mit gepinntem esbuild, `go:embed`; Pakete/Positionen/Ebenen, Ein-/Ausblend-Animationen
   (CSS), Batching, sandboxed iframes für HTML, Reconnect mit Backoff
-- [ ] Medien-Handler: `os.Root` über den freigegebenen Wurzeln (Profil-`media`-Verzeichnis +
+- [x] Medien-Handler: `os.Root` über den freigegebenen Wurzeln (Profil-`media`-Verzeichnis +
   `file-root`-Namen), `http.ServeContent` (Range), MIME-Typen; Gate `host:fs`
-- [ ] Settings-Sektion "overlay" (Version 1): `endpoints` (+ Default), `widgets` (Leerliste)
-- [ ] Config: `overlay-listen`, `overlay-token` (Restart-only)
-- [ ] App-Wiring (Supervisor, non-critical), `core.Options`, Tests (Server, WS, Token, Range,
+- [x] Settings-Sektion "overlay" (Version 1): `endpoints` (+ Default), `widgets` (Leerliste)
+- [x] Config: `overlay-listen`, `overlay-token` (Restart-only)
+- [x] App-Wiring (Supervisor, non-critical), `core.Options`, Tests (Server, WS, Token, Range,
   Runtime-Bundle-Check), Test-Matrizen, Roadmap 7.1 abhaken
 
 ### 3.2 7.2 Items und Widgets (P1) — `feat/phase-7.2-items-widgets`

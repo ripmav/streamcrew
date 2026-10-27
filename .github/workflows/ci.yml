@@ -15,6 +15,7 @@ on:
     branches: [main]
     paths:
       - "**.go"
+      - "**/*.ts"
       - "**/testdata/**"
       - "go.mod"
       - "go.sum"
@@ -32,6 +33,7 @@ on:
   pull_request:
     paths:
       - "**.go"
+      - "**/*.ts"
       - "**/testdata/**"
       - "go.mod"
       - "go.sum"
@@ -98,6 +100,14 @@ jobs:
       # version is pinned like in internal/store/generate.go.
       - name: sqlc diff
         run: go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 diff -f sqlc.yaml
+
+      # The overlay runtime bundle must match the TypeScript source
+      # (Code-ADR-0016). The esbuild version is pinned in
+      # internal/overlay/generate.go.
+      - name: overlay bundle diff
+        run: |
+          go generate ./internal/overlay/...
+          git diff --exit-code -- internal/overlay/web
 
       # The API contract must lint and the generated Go code must match the
       # protobuf (ADR-0010, Code-ADR-0016). Versions pinned in api/generate.go.

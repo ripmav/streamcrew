@@ -11,3 +11,7 @@ internal/template/testdata/*.txt -text
 # The exported JSON Schema is compared byte for byte with the output of
 # "schema export" (commands-as-code.md, B30).
 schemas/*.json -text
+
+# The overlay runtime bundle is compared byte for byte by the CI regen
+# check (Code-ADR-0016); git must not convert its line endings.
+internal/overlay/web/bundle.js -text

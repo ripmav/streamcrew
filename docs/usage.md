@@ -226,7 +226,8 @@ Sonst könnte ein Admin-Token Log-Zeilen in beliebige Dateien schreiben
 lassen.
 
 **Restart:** `data-dir`, `profile`, `config` (offene Dateien und
-Datenbanken des laufenden Prozesses).
+Datenbanken des laufenden Prozesses), `overlay-listen`, `overlay-token`
+(Overlay-Server, s. u.).
 
 **Beispiele:**
 
@@ -244,6 +245,59 @@ tls_key: /etc/streamcrew/tls/key.pem
 
 Ein ungültiges Dokument (unbekannter Key, ungültiger Wert) wird
 abgelehnt, ohne die laufende Konfiguration zu verändern.
+
+## Overlay (OBS-Browserquellen)
+
+Der Core hostet einen eigenen HTTP-Server für OBS-Browserquellen
+(Roadmap 7.1, ADR-0019): Jede Browserquelle lädt genau eine URL, die die
+eingebettete Overlay-Runtime ausliefert — HTML, JavaScript und die
+Medienauslieferung über einen einzigen Server, kein zweites Tool.
+
+**OBS-Einrichtung:** In OBS eine Browserquelle anlegen mit der URL
+
+```
+http://127.0.0.1:8742/overlay/default
+```
+
+(Auffrischrate 30 ist gut, der Hintergrund der Quelle bleibt
+transparent.) Der Endpunkt `default` existiert immer; weitere benannte
+Endpunkte mit eigener URL stehen in der Profil-Sektion `overlay`.
+
+**Port und Bindung:** Der Default ist `127.0.0.1:8742` (Daemon- und
+Desktop-Modus) bzw. `:8742` (Server-Modus, alle Interfaces — z. B. für
+OBS auf einem anderen Rechner per Reverse-Proxy). `--overlay-listen`
+bzw. `overlay_listen` in der Konfigurationsdatei ändert die Adresse;
+die Änderung gilt erst nach einem **Neustart**, und die Browserquellen
+müssen nach einem Portwechsel neu geladen werden. Ein Unix-Socket ist
+keine Option (`--overlay-listen` lehnt es ab).
+
+**Token:** Leer gelassen sind die Endpunkte offen — nur korrekt für
+`127.0.0.1`. Wird der Server auf ein anderes Interface gebunden,
+sollte `--overlay-token` (bzw. `overlay_token`, oder die
+Umgebungsvariable `STREAMCREW_OVERLAY_TOKEN`) einen Wert tragen; dann
+verlangen Seite, WebSocket und Medien-URLs den gleichen Wert als
+Query-Parameter:
+
+```
+http://127.0.0.1:8742/overlay/default?token=<wert>
+```
+
+Der Token ist ein Credential: er steht nicht in der Ausgabe von
+`streamcrew config show` und nicht in den Logs. Auch er gilt erst nach
+einem **Neustart**.
+
+**Medien:** Dateien aus `<data-dir>/profiles/<profil-id>/media/`
+dient der Server unter `http://127.0.0.1:8742/media/media/<datei>` aus,
+freigegebene `file-root`-Verzeichnisse zusätzlich unter
+`/media/<wurzel>/<pfad>` — mit Range-Requests (Video/Audio-Seeking)
+und korrekten MIME-Typen. Die Medienlieferung braucht das Recht
+`host:fs`; im Server-Modus ohne `grant` antworten die Medien-URLs
+deshalb mit 404. Pfade außerhalb der Wurzeln antworten ebenfalls 404
+(nie 403).
+
+**Ausfall:** Der Overlay-Server ist nicht-kritisch — sein Ausfall
+beendet den Core nicht, die API bleibt erreichbar. Items und Widgets
+dienen ab Roadmap 7.2 über Commands.
 
 ## Logs im Stream (read-only)
 

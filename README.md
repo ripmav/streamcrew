@@ -77,11 +77,11 @@ go build ./cmd/streamcrew   # -> ./streamcrew
 
 `--mode` entscheidet über die Standard-Listenadresse und den Basissatz der Host-Rechte; die Capability-Richtlinie wird in der Codebasis zentral gepflegt, nicht pro Deployment konfiguriert ([ADR-0013](docs/adr/0013-sicherheitsmodell.md), [Code-ADR-0019](docs/adr/code/0019-host-rechte-in-der-startkonfiguration.md)).
 
-| Modus | Standard-Listenadresse |
-|---|---|
-| `desktop` | Unix-Socket `<data-dir>/core.sock` |
-| `daemon` (Standard) | `127.0.0.1:8740` |
-| `server` | `:8740` (alle Interfaces) |
+| Modus | API | Overlay-Server (Roadmap 7.1) |
+|---|---|---|
+| `desktop` | Unix-Socket `<data-dir>/core.sock` | `127.0.0.1:8742` |
+| `daemon` (Standard) | `127.0.0.1:8740` | `127.0.0.1:8742` |
+| `server` | `:8740` (alle Interfaces) | `:8742` (alle Interfaces) |
 
 Capabilities je Modus (Standard, ohne `--grant`/`--revoke`):
 
@@ -166,6 +166,8 @@ Alle Flags gelten für jeden Befehl; die dazugehörige Umgebungsvariable steht i
 | `--profile ID` (`$STREAMCREW_PROFILE`) | Profil; Standard: das aktive Profil |
 | `--mode MODE` (`$STREAMCREW_MODE`) | Betriebsmodus: `desktop`, `daemon` (Standard), `server` |
 | `--listen HOST:PORT` (`$STREAMCREW_LISTEN`) | HTTP-Server-Adresse; Standard `127.0.0.1:8740`, in Server-Modus `:8740` |
+| `--overlay-listen HOST:PORT` (`$STREAMCREW_OVERLAY_LISTEN`) | Overlay-Server für OBS-Browserquellen (nur TCP); Standard `127.0.0.1:8742`, in Server-Modus `:8742`; gilt nach Neustart |
+| `--overlay-token TOKEN` (`$STREAMCREW_OVERLAY_TOKEN`) | Token, den die Overlay-URLs als Query-Parameter `token` verlangen (leer = offen); gilt nach Neustart, steht nicht in `config show` |
 | `--dev` (`$STREAMCREW_DEV`) | Entwicklermodus: pprof unter `/debug/pprof/`, erfordert Loopback-Adresse |
 | `--cors-allow ORIGIN,...` (`$STREAMCREW_CORS_ALLOW`) | erlaubte CORS-Origin, wiederholbar; Standard: cross-origin abgelehnt |
 | `--tls-cert FILE` / `--tls-key FILE` (`$STREAMCREW_TLS_CERT`/`$STREAMCREW_TLS_KEY`) | TLS des HTTP-Servers (PEM); Standard: plain HTTP |

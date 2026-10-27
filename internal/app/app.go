@@ -65,6 +65,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/logging"
 	modsvc "github.com/ripmav/streamcrew/internal/moderation"
 	"github.com/ripmav/streamcrew/internal/netguard"
+	"github.com/ripmav/streamcrew/internal/overlay"
 	"github.com/ripmav/streamcrew/internal/preset"
 	"github.com/ripmav/streamcrew/internal/profile"
 	"github.com/ripmav/streamcrew/internal/prompt"
@@ -154,6 +155,7 @@ type App struct {
 	sup          *supervisor.Supervisor
 	http         *httpserver.Server
 	api          *api.Server
+	overlay      *overlay.Server
 	ready        *readiness
 	rights       *config.Live
 	// file is the resolver of the configuration file; watcher applies
@@ -602,10 +604,29 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 			"hint", "put a reverse proxy with tls in front, or set --tls-cert and --tls-key")
 	}
 
+	// The overlay server (roadmap 7.1, ADR-0019): a dedicated,
+	// non-critical HTTP server beside the API server. It serves the
+	// embedded runtime and the released media; without host:fs (the
+	// server mode) it serves no media.
+	mediaDir := filepath.Join(a.profiles.Dir(), a.profile.ID, "media")
+	if err := os.MkdirAll(mediaDir, 0o700); err != nil {
+		return a, fmt.Errorf("create the media directory: %w", err)
+	}
+	a.overlay, err = newOverlayServer(ctx, cfg, a, mediaDir, component(logger, "overlay"))
+	if err != nil {
+		return a, err
+	}
+	if cfg.OverlayPublicInsecure() {
+		logger.WarnContext(ctx, "the overlay listens on a public address without a token",
+			"listen", cfg.OverlayListen,
+			"hint", "set --overlay-token, or put a reverse proxy in front")
+	}
+
 	err = errors.Join(
 		a.sup.Add("auth", a.auth),
 		a.sup.Add("backup", scheduler),
 		a.sup.Add("http", a.http, supervisor.WithCritical()),
+		a.sup.Add("overlay", a.overlay),
 		a.sup.Add("events", a.events),
 		a.sup.Add("timer", a.timer),
 		a.sup.Add("users", a.userSvc),
@@ -903,8 +924,8 @@ func (a *App) Store() *store.Store {
 	return a.store
 }
 
-// Ready reports whether the core is ready: all runnables run and the core is
-// not shutting down.
+// Ready reports whether the core is ready: every runnable runs (a failed
+// non-critical runnable does not block), and the core is not shutting down.
 func (a *App) Ready() bool {
 	return a.ready.Ready()
 }
@@ -1197,10 +1218,12 @@ func component(logger *slog.Logger, name string) *slog.Logger {
 }
 
 // readiness derives the readiness of the core from the states of its
-// runnables.
+// runnables. A non-critical runnable that failed or stopped does not block
+// the readiness: its failure does not stop the core (the overlay server,
+// roadmap 7.1, B1).
 type readiness struct {
 	mu       sync.Mutex
-	states   map[string]supervisor.State
+	states   map[string]runnableState
 	shutdown bool
 	// started is true once "app.started" was published or given up.
 	started bool
@@ -1209,14 +1232,30 @@ type readiness struct {
 	closed bool
 }
 
+// runnableState is the state of one runnable for the readiness.
+type runnableState struct {
+	state    supervisor.State
+	critical bool
+}
+
+// ok reports whether the state does not block the readiness: running
+// always; a failed or stopped non-critical runnable does not, because its
+// failure does not stop the core.
+func (rs runnableState) ok() bool {
+	if rs.state == supervisor.StateRunning {
+		return true
+	}
+	return !rs.critical && (rs.state == supervisor.StateFailed || rs.state == supervisor.StateStopped)
+}
+
 func newReadiness() *readiness {
-	return &readiness{states: make(map[string]supervisor.State), done: make(chan struct{})}
+	return &readiness{states: make(map[string]runnableState), done: make(chan struct{})}
 }
 
 func (r *readiness) update(st supervisor.Status) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.states[st.Name] = st.State
+	r.states[st.Name] = runnableState{state: st.State, critical: st.Critical}
 	r.doneOnce()
 }
 
@@ -1227,7 +1266,7 @@ func (r *readiness) doneOnce() {
 		return
 	}
 	for _, s := range r.states {
-		if s != supervisor.StateRunning {
+		if !s.ok() {
 			return
 		}
 	}
@@ -1236,7 +1275,8 @@ func (r *readiness) doneOnce() {
 }
 
 // Done returns a channel that closes when every runnable runs for the first
-// time; it stays open if a runnable never reaches running.
+// time (a failed or stopped non-critical one counts); it stays open if a
+// critical runnable never reaches running.
 func (r *readiness) Done() <-chan struct{} {
 	return r.done
 }
@@ -1265,7 +1305,8 @@ func (r *readiness) publishStopping(fn func() error) error {
 	return fn()
 }
 
-// Ready reports whether all runnables run and no shutdown has begun.
+// Ready reports whether the core is ready: every runnable runs, or it is a
+// non-critical one that failed or stopped, and no shutdown has begun.
 func (r *readiness) Ready() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1273,7 +1314,7 @@ func (r *readiness) Ready() bool {
 		return false
 	}
 	for _, s := range r.states {
-		if s != supervisor.StateRunning {
+		if !s.ok() {
 			return false
 		}
 	}
