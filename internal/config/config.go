@@ -45,6 +45,7 @@ type Config struct {
 	Profile         string        `placeholder:"ID" help:"Profile to use. Default: the active profile (streamcrew profile use)."`
 	Mode            Mode          `enum:"desktop,daemon,server" default:"daemon" help:"Operating mode: ${enum}. The mode decides the base of the host rights and the default listen address."`
 	Listen          string        `placeholder:"HOST:PORT" help:"Address of the HTTP server. Default: 127.0.0.1:8740, in server mode :8740."`
+	BootstrapToken  string        `name:"bootstrap-token" env:"STREAMCREW_TOKEN" placeholder:"TOKEN" help:"Bootstrap admin token: when no api token is stored yet, an admin token with this value is created at the first start. In daemon mode it is the value of the new local token in the data directory (api.token); server mode without it starts without a token (the api is closed)."`
 	Dev             bool          `help:"Developer mode: serves pprof under /debug/pprof/. Requires a loopback listen address."`
 	CorsAllow       []string      `name:"cors-allow" placeholder:"ORIGIN" help:"Origins allowed to call the API cross-origin (CORS), e.g. http://localhost:5173. Repeatable. Default: none — cross-origin requests are refused."`
 	TLSCert         string        `name:"tls-cert" placeholder:"FILE" help:"TLS certificate of the HTTP server (PEM). Together with --tls-key. Default: none — plain HTTP."`
@@ -155,6 +156,9 @@ const (
 	// DesktopTokenFileName is the file with the desktop API token
 	// (ADR-0005).
 	DesktopTokenFileName = "desktop-token"
+	// APITokenFileName is the local admin token of desktop and daemon mode
+	// (ADR-0013 §5), read by the CLI and the TUI.
+	APITokenFileName = "api.token"
 )
 
 // RuntimePath is the runtime file in the data directory.
@@ -162,6 +166,12 @@ func (c Config) RuntimePath() string { return RuntimePath(c.DataDir) }
 
 // DesktopTokenPath is the desktop token file in the data directory.
 func (c Config) DesktopTokenPath() string { return DesktopTokenPath(c.DataDir) }
+
+// APITokenPath is the local admin token file in the data directory.
+func (c Config) APITokenPath() string { return APITokenPath(c.DataDir) }
+
+// APITokenPath is the local admin token file in the data directory.
+func APITokenPath(dataDir string) string { return filepath.Join(dataDir, APITokenFileName) }
 
 // DefaultListen returns the listen address used when --listen is not set:
 // the Unix socket in the data directory in desktop mode, loopback only in
@@ -278,10 +288,25 @@ func splitListen(addr string) (host string, err error) {
 	return host, nil
 }
 
+// isLoopback reports whether host is a loopback address ("" and any other
+// non-IP name are not).
 func isLoopback(host string) bool {
 	if host == "localhost" {
 		return true
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+// PublicInsecure reports whether the HTTP server listens on a TCP address
+// beyond loopback without TLS: the case that warns at start and in doctor.
+func (c Config) PublicInsecure() bool {
+	if strings.HasPrefix(c.Listen, "unix:") || c.TLSCert != "" {
+		return false
+	}
+	host, err := splitListen(c.Listen)
+	if err != nil {
+		return false
+	}
+	return !isLoopback(host)
 }

@@ -25,6 +25,12 @@ import (
 	"github.com/ripmav/streamcrew/internal/template"
 )
 
+// firedGiftTTL bounds how long a fired mass gift keeps its single gifts
+// dropped (Nachprüfung 2026-10-25, T1a): the platform delivers them
+// seconds after the action, so the window ends long after the last of
+// them arrived, and the map holds at most the actions of the window.
+const firedGiftTTL = 5 * time.Minute
+
 // Message implements connector.Receiver (B13): it fires, in this order,
 // "chat.user.new" if the core sees the author in the chat for the first
 // time, "chat.user.join" if for the first time in the session, and
@@ -57,7 +63,19 @@ func (s *Service) Message(ctx context.Context, m connector.Incoming) error {
 	if s.closed {
 		return fmt.Errorf("chat message: %w", ErrStopped)
 	}
-	u, err := s.resolve(ctx, m.Author, true)
+	// The badge roles land in the identity only for the home channel
+	// (spec users-and-roles.md, B24): the identity of a user is one per
+	// platform, and a mod badge of an additional channel must not make
+	// the user a moderator of the home channel (code review 2026-10-24,
+	// "Rollen"). The message of an additional channel still carries the
+	// badges for its own checks; for the identity, they are dropped
+	// before the upsert, so even a new account is not created with the
+	// channel's roles.
+	ident := m.Author
+	if m.Channel != "" {
+		ident.Roles = role.NewSet()
+	}
+	u, err := s.resolve(ctx, ident, m.Channel == "")
 	if err != nil {
 		return fmt.Errorf("chat message: %w", err)
 	}
@@ -69,23 +87,43 @@ func (s *Service) Message(ctx context.Context, m connector.Incoming) error {
 	}
 	// The muted chat is the first check of the moderation stage (spec
 	// chat-service.md, B3, B21): it deletes the message and it fires
-	// nothing; messages of the streamer run through (B22, B31).
+	// nothing; messages of the streamer run through (B22, B31). The
+	// delete runs without the lock: it is network I/O to the platform
+	// (code review 2026-10-24, T9).
 	if s.ports.Chat.Muted() && !m.Author.Roles.Has(role.Streamer) {
-		return s.muteDeleteLocked(ctx, m)
+		s.mu.Unlock()
+		if err := s.ports.Chat.Delete(ctx, m.Platform, m.Channel, m.Message.ID); err != nil {
+			s.logger.WarnContext(ctx, "the muted chat could not delete the message",
+				"platform", m.Platform, "channel", m.Channel, "message_id", m.Message.ID, "error", err)
+		}
+		s.mu.Lock()
+		if s.closed {
+			return fmt.Errorf("chat message: %w", ErrStopped)
+		}
+		return nil
 	}
 	// The word filters are the next check of the moderation stage (spec
 	// moderation.md, B1, B4 to B8): a violated message is discarded, like
-	// the muted chat, without events, trigger or history.
-	if d, err := s.ports.Moderation.Check(ctx, moderation.Message{
+	// the muted chat, without events, trigger or history. The check runs
+	// without the lock: it can be network I/O to the platform (code
+	// review 2026-10-24, T9).
+	s.mu.Unlock()
+	d, err := s.ports.Moderation.Check(ctx, moderation.Message{
 		Platform:  m.Platform,
 		Channel:   string(m.Channel),
 		Text:      m.Message.Text,
 		Emotes:    m.Message.Emotes,
 		MessageID: m.Message.ID,
 		User:      u,
-	}); err != nil {
+	})
+	s.mu.Lock()
+	if s.closed {
+		return fmt.Errorf("chat message: %w", ErrStopped)
+	}
+	if err != nil {
 		return fmt.Errorf("chat message: %w", err)
-	} else if !d.Allow {
+	}
+	if !d.Allow {
 		s.logger.DebugContext(ctx, "message discarded by the moderation", "platform", m.Platform)
 		return nil
 	}
@@ -114,18 +152,6 @@ func (s *Service) Message(ctx context.Context, m connector.Incoming) error {
 	// The history is the last stage of the pipeline (spec
 	// chat-service.md, B1, B14).
 	return s.recordLocked(ctx, m, u)
-}
-
-// muteDeleteLocked deletes m because the chat is muted (spec
-// chat-service.md, B21 to B23): the message is discarded without events
-// or triggers; a delete that the platform cannot do is a warning. s.mu is
-// held.
-func (s *Service) muteDeleteLocked(ctx context.Context, m connector.Incoming) error {
-	if err := s.ports.Chat.Delete(ctx, m.Platform, m.Channel, m.Message.ID); err != nil {
-		s.logger.WarnContext(ctx, "the muted chat could not delete the message",
-			"platform", m.Platform, "channel", m.Channel, "message_id", m.Message.ID, "error", err)
-	}
-	return nil
 }
 
 // recordLocked takes m into the chat history (spec chat-service.md, B14,
@@ -256,6 +282,16 @@ func (s *Service) Event(ctx context.Context, e connector.Event) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// The single gifts of a fired mass gift never run (B5, "nie beide");
+	// the platform delivers them seconds after the action, so the
+	// entries of the recent minutes (firedGiftTTL) hold at most those.
+	if g := e.Details.Gift; g != nil && g.CommunityGiftID != "" {
+		s.purgeFiredGifts()
+		if _, fired := s.firedGifts[g.CommunityGiftID]; fired {
+			s.logger.DebugContext(ctx, "drop the single gift of a fired mass gift", "gift", g.CommunityGiftID)
+			return nil
+		}
+	}
 	if s.closed {
 		return fmt.Errorf("event %s: %w", e.Type, ErrStopped)
 	}
@@ -314,9 +350,13 @@ func (s *Service) checkEvent(e connector.Event) (eventtype.Descriptor, error) {
 	switch cmp.Or(d.Neutral, d.Type) {
 	case eventtype.ChannelFollow, eventtype.ChannelRaid, eventtype.ChannelSubscribe, eventtype.ChannelResubscribe,
 		eventtype.ChannelSubscriptionGift, eventtype.ChannelSubscriptionMassGift, eventtype.ChatWhisper,
-		eventtype.ChatMessageDelete, eventtype.ChatUserLeave, eventtype.ChatUserTimeout, eventtype.ChatUserBan:
-		// the twitch-specific types without a neutral one: their payload
-		// is decided by phase 4 (spec twitch-events.md)
+		eventtype.ChatMessageDelete, eventtype.ChatUserLeave, eventtype.ChatUserTimeout, eventtype.ChatUserBan,
+		eventtype.ChatUserUnban, eventtype.ChatUserUntimeout, eventtype.ChatUserMod, eventtype.ChatUserUnmod,
+		eventtype.ChatUserVIP, eventtype.ChatUserUnVIP:
+		// the types the platforms hand over: the neutral ones a platform
+		// delivers (the core derives the others itself) and the
+		// twitch-specific ones without a neutral one, whose payload is
+		// decided by phase 4 (spec twitch-events.md)
 	case eventtype.TwitchBitsCheer, eventtype.TwitchSharedChatStart, eventtype.TwitchSharedChatUpdate,
 		eventtype.TwitchSharedChatEnd, eventtype.TwitchHypeTrainStart, eventtype.TwitchHypeTrainProgress,
 		eventtype.TwitchHypeTrainEnd, eventtype.TwitchAdStart, eventtype.TwitchShoutoutReceive,
@@ -342,7 +382,10 @@ func (s *Service) checkEvent(e connector.Event) (eventtype.Descriptor, error) {
 	}
 	_, mass := eventtype.SingleGift(e.Type)
 	switch {
-	case mass && len(e.Recipients) != e.Details.Gift.Count:
+	// A mass gift without named recipients is valid: Twitch names only the
+	// total (twitch-events.md B21). With recipients, they must match the
+	// count.
+	case mass && len(e.Recipients) > 0 && len(e.Recipients) != e.Details.Gift.Count:
 		return d, fmt.Errorf("%w: %d recipients of %d gifts", eventtype.ErrShape, len(e.Recipients), e.Details.Gift.Count)
 	case !mass && len(e.Recipients) > 0:
 		return d, fmt.Errorf("%w: recipients without a mass gift", eventtype.ErrShape)
@@ -352,15 +395,33 @@ func (s *Service) checkEvent(e connector.Event) (eventtype.Descriptor, error) {
 
 // massGiftLocked fires a mass gift: from the threshold of the profile on
 // the mass gift alone, below it one gift per recipient, never both (B5).
-// s.mu is held.
+// The count is the number of named recipients, or the total of the payload
+// when the platform names none (Twitch, twitch-events.md B21). The IDs of
+// the fired actions stay for firedGiftTTL (Twitch delivers the single
+// gifts seconds after the action). s.mu is held.
 func (s *Service) massGiftLocked(ctx context.Context, e connector.Event, single event.Type, payload eventtype.Payload) error {
 	s.recordFeed(ctx, e.Type, payload)
 	cfg, err := s.settings(ctx)
 	if err != nil {
 		return fmt.Errorf("mass gift: %w", err)
 	}
-	if len(e.Recipients) >= cfg.MassGiftThreshold {
+	count := e.Details.Gift.Count
+	if len(e.Recipients) > 0 {
+		count = len(e.Recipients)
+	}
+	if count >= cfg.MassGiftThreshold {
+		// The action fired: its single gifts are dropped while they
+		// arrive (B5, "nie beide").
+		if id := e.Details.Gift.CommunityGiftID; id != "" {
+			s.firedGifts[id] = time.Now()
+		}
 		s.fire(ctx, e.Platform, e.Type, payload)
+		return nil
+	}
+	// Below the threshold: one gift per named recipient. Without named
+	// recipients there is nothing to fire (the single gifts arrive on
+	// their own, twitch-events.md B21).
+	if len(e.Recipients) == 0 {
 		return nil
 	}
 	recipients := make([]user.User, 0, len(e.Recipients))
@@ -380,6 +441,16 @@ func (s *Service) massGiftLocked(ctx context.Context, e connector.Event, single 
 		s.fire(ctx, e.Platform, single, p)
 	}
 	return nil
+}
+
+// purgeFiredGifts removes the fired mass gifts whose window is over
+// (T1a), so the map does not grow until the next Run. s.mu is held.
+func (s *Service) purgeFiredGifts() {
+	for id, fired := range s.firedGifts {
+		if time.Since(fired) > firedGiftTTL {
+			delete(s.firedGifts, id)
+		}
+	}
 }
 
 // fireOn fires the event of platform p whose platform-neutral type is
@@ -508,6 +579,7 @@ func values(t event.Type, d eventtype.Details) map[string]template.Value {
 	}
 	if b := d.Bits; b != nil {
 		v[template.EventCheerBits] = template.NumberValue(decimal.New(b.Amount))
+		v[template.EventAnonymous] = template.TextValue(strconv.FormatBool(b.Anonymous))
 	}
 	if mo := d.Moderation; mo != nil && mo.Message != "" {
 		v[template.EventModerationMessage] = template.TextValue(mo.Message)

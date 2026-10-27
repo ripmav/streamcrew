@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | Entwurf |
+| **Status** | Umgesetzt |
 | **Stand** | 2026-10-16 |
 | **Bezug** | Roadmap 5.5 (Core-Services, Moderation), Plan §5.5; [Code-ADR-0013](../adr/code/0013-typ-registry.md); [`chat-service.md`](chat-service.md) (B1, B3, B21–B25), [`actions.md`](actions.md) (B80–B92), [`users-and-roles.md`](users-and-roles.md), [`commands.md`](commands.md) |
-| **Umsetzung** | noch offen (später: `internal/moderation`, die Moderationsstufe in `internal/eventservice`, die Settings-Sektion `moderation` in `internal/settings`) |
+| **Umsetzung** | umgesetzt: `internal/moderation` (Filter, Stufen, Strikes), die Moderationsstufe in `internal/eventservice`, die Settings-Sektion `moderation` in `internal/settings` (Roadmap 5.5) |
 
 ## Zweck und Umfang
 
@@ -74,11 +74,11 @@ Folge-Commands. Die API und TUI für die Moderation (Phase 6).
 
 ## Akzeptanzkriterien
 
-- [ ] B1–B2: die Moderationsstufe prüft nach dem Stummen Chat; Streamer und Bot laufen durch; eine verworfene Nachricht löst nichts aus.
-- [ ] B3, B24: die Teilnahmeregeln (Follow-Dauer, Watchtime, Rolle) lassen nur Erlaubte chatten; ohne Regeln jeder.
-- [ ] B4–B7, B20: je Filter-Art das Verhalten (Bannwort mit Wildcards, Link, Großbuchstaben/Satzzeichen/Emotes absolut und prozentual); ohne Filter keine Prüfung.
-- [ ] B8, B21, B22: der erste verletzte Filter zählt, eine Nachricht ist ein Verstoß, befreite Nutzer sind ausgenommen.
-- [ ] B9–B12, B23, B25: der Verstoß steigert den Strike, der Folge-Command der Stufe (bzw. der höchsten) läuft mit den Parametern der Nachricht, ohne Stufen nur der Zähler, Zurücksetzen beginnt bei 1.
+- [x] B1–B2: die Moderationsstufe prüft nach dem Stummen Chat; Streamer und Bot laufen durch; eine verworfene Nachricht löst nichts aus.
+- [x] B3, B24: die Teilnahmeregeln (Follow-Dauer, Watchtime, Rolle) lassen nur Erlaubte chatten; ohne Regeln jeder.
+- [x] B4–B7, B20: je Filter-Art das Verhalten (Bannwort mit Wildcards, Link, Großbuchstaben/Satzzeichen/Emotes absolut und prozentual); ohne Filter keine Prüfung.
+- [x] B8, B21, B22: der erste verletzte Filter zählt, eine Nachricht ist ein Verstoß, befreite Nutzer sind ausgenommen.
+- [x] B9–B12, B23, B25: der Verstoß steigert den Strike, der Folge-Command der Stufe (bzw. der höchsten) läuft mit den Parametern der Nachricht, ohne Stufen nur der Zähler, Zurücksetzen beginnt bei 1.
 
 ## Offene Fragen
 

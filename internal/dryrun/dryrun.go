@@ -163,6 +163,17 @@ func (w Platform) UserPlatformData(ctx context.Context, platformUserID string) (
 	return d.UserPlatformData(ctx, platformUserID)
 }
 
+// FollowSince implements connector.FollowData of the inner platform, so
+// the dry-run wrapper keeps the follow data capability for the moderation
+// (moderation.md, B3).
+func (w Platform) FollowSince(ctx context.Context, ch connector.Channel, platformUserID string) (time.Time, error) {
+	d, ok := w.inner.(connector.FollowData)
+	if !ok {
+		return time.Time{}, connector.ErrUnknownUser
+	}
+	return d.FollowSince(ctx, ch, platformUserID)
+}
+
 // Say implements mock.Say of the inner platform, so the dry-run wrapper
 // stays a mock platform for the API (roadmap 6.3) and the platform set
 // (roadmap 6.5).

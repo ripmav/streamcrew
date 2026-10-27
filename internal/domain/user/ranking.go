@@ -2,6 +2,11 @@
 
 package user
 
+import (
+	"errors"
+	"fmt"
+)
+
 // Stat is a statistic of the users that can be ranked
 // (roadmap 5.2.5). DonatedCents (phase 9) and Strikes (5.5) have no
 // ranking yet.
@@ -28,6 +33,18 @@ func (s Stat) Valid() bool {
 		return true
 	}
 	return false
+}
+
+// ErrUnknownStat is wrapped when a statistic has no ranking.
+var ErrUnknownStat = errors.New("unknown statistic")
+
+// ParseStat reads a statistic name.
+func ParseStat(s string) (Stat, error) {
+	st := Stat(s)
+	if !st.Valid() {
+		return "", fmt.Errorf("%w: %q", ErrUnknownStat, s)
+	}
+	return st, nil
 }
 
 // Ranked is a user in a ranking with the value of the statistic

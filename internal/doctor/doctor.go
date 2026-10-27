@@ -8,6 +8,7 @@ package doctor
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -50,6 +51,9 @@ type Config struct {
 	ConfigFile string
 	// Listen is the listen address of the HTTP server.
 	Listen string
+	// TLS reports whether the HTTP server runs with TLS; the probe tries
+	// https then, and a public address without TLS warns.
+	TLS bool
 	// Rights are the rights the configuration gives now.
 	Rights Rights
 }
@@ -73,7 +77,7 @@ func Run(ctx context.Context, cfg Config) []Result {
 	results := []Result{
 		checkDataDir(cfg.DataDir),
 		checkConfigFile(cfg.ConfigFile),
-		checkListen(ctx, cfg.Listen),
+		checkListen(ctx, cfg.Listen, cfg.TLS),
 		checkTimeZones(),
 	}
 	return append(results, checkRights(cfg.Rights)...)
@@ -163,7 +167,7 @@ func checkConfigFile(path string) Result {
 	return Result{name, StatusOK, path}
 }
 
-func checkListen(ctx context.Context, addr string) Result {
+func checkListen(ctx context.Context, addr string, tls bool) Result {
 	const name = "listen address"
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", addr)
@@ -171,16 +175,43 @@ func checkListen(ctx context.Context, addr string) Result {
 		if err := ln.Close(); err != nil {
 			return Result{name, StatusWarn, fmt.Sprintf("%s is available, but closing the probe failed: %v", addr, err)}
 		}
-		return Result{name, StatusOK, addr + " is available"}
+		return Result{name, StatusOK, addr + " is available" + publicTLSNote(addr, tls)}
 	}
-	if probeCore(ctx, addr) {
+	if probeCore(ctx, addr, tls) {
 		return Result{name, StatusOK, addr + " is used by a running streamcrew core"}
 	}
 	return Result{name, StatusFail, fmt.Sprintf("%s cannot be used: %v", addr, err)}
 }
 
-// probeCore reports whether a streamcrew core answers /healthz on addr.
-func probeCore(ctx context.Context, addr string) bool {
+// publicTLSNote warns in the detail when the address is public and the
+// server has no TLS.
+func publicTLSNote(addr string, tls bool) string {
+	if tls {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err == nil && isPublicHost(host) {
+		return "; public address without tls — put a reverse proxy in front or start with --tls-cert/--tls-key"
+	}
+	return ""
+}
+
+// isPublicHost reports whether the host binds an address beyond loopback.
+func isPublicHost(host string) bool {
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && !ip.IsLoopback()
+}
+
+// probeCore reports whether a streamcrew core answers /healthz on addr,
+// over https when it runs with TLS, otherwise over http.
+func probeCore(ctx context.Context, addr string, withTLS bool) bool {
+	schemes := []string{"http"}
+	if withTLS {
+		schemes = append(schemes, "https")
+	}
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return false
@@ -188,18 +219,31 @@ func probeCore(ctx context.Context, addr string) bool {
 	if host == "" || host == "0.0.0.0" || host == "::" {
 		host = "127.0.0.1"
 	}
-	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+net.JoinHostPort(host, port)+"/healthz", nil)
-	if err != nil {
-		return false
+	for _, scheme := range schemes {
+		ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, scheme+"://"+net.JoinHostPort(host, port)+"/healthz", nil)
+		if err == nil {
+			client := http.DefaultClient
+			if scheme == "https" {
+				// The probe only asks whether the core answers at all; the
+				// certificate is local and unknown to the checker, so the
+				// verification is off for the probe (Nachprüfung 2026-10-24,
+				// N4). Nothing of the core reaches out through it.
+				client = &http.Client{Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // probe only, see above
+				}}
+			}
+			if resp, err := client.Do(req); err == nil {
+				_ = resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					cancel()
+					return true
+				}
+			}
+		}
+		cancel()
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return false
-	}
-	_ = resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	return false
 }
 
 func checkTimeZones() Result {

@@ -4,7 +4,7 @@ package twitch_test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"net/http"
 	"testing"
@@ -51,7 +51,7 @@ func fireChat(t *testing.T, c *twitchmock.Client, id, text string) {
 			`"message":{"text":%q},`+
 			`"chatter_user_id":%q,"chatter_user_login":%q,"chatter_user_name":"MockViewer"}`,
 		id, text, c.BroadcasterID, c.BroadcasterLogin)
-	require.NoError(t, c.FireEvent("channel.chat.message", "2", json.RawMessage(body)))
+	require.NoError(t, c.FireEvent("channel.chat.message", "2", jsontext.Value(body)))
 }
 
 // TestChaosAgainstTheMock runs the reconnect paths of the EventSub

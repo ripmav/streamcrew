@@ -26,7 +26,7 @@
 ## Entscheidung
 
 1. **Go-Version:**
-   - Die `go`-Direktive in `go.mod` nennt die neueste stabile Patch-Version, derzeit `go 1.27.1`.
+   - Die `go`-Direktive in `go.mod` nennt die neueste stabile Patch-Version, derzeit `go 1.27.3`.
    - Eine `toolchain`-Zeile gibt es nur, wenn sie von der `go`-Direktive abweicht.
    - Neue Go-Releases hebt Renovate in der `go`-Direktive an, im Pull Request für die Go-Module. Die lokale Toolchain wird danach von Hand aktualisiert.
    - Die CI liest die Version aus `go.mod` (`go-version-file`). Lokal und in der CI läuft damit dieselbe Version.

@@ -20,9 +20,9 @@ import (
 // of the stream (roadmap 6.6.3): min_level delivers the log events at and
 // above the level only, and an invalid value is rejected.
 func TestSubscribeFiltersLogEventsByMinLevel(t *testing.T) {
-	a, path := hotCore(t, &outPub{})
+	a, path, token := hotCore(t, &outPub{})
 	base := "http://" + mustServerAddr(t, a)
-	stream := streamcrewv1alpha1connect.NewStreamServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	stream := streamcrewv1alpha1connect.NewStreamServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0)), withAuth(token)))
 
 	// The invalid level is rejected: the stream breaks with invalid
 	// argument before it delivers anything.

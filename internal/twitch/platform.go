@@ -722,6 +722,11 @@ func (p *Platform) channelSession(ctx context.Context, cs channelSession) error 
 			p.log.ErrorContext(ctx, "the post-subscription-revocation reconciliation failed", "error", err)
 		}
 	})
+	// welcomes counts the session welcomes of this connection; the
+	// first one is covered by the initial stream state below, the
+	// re-welcomes of a session_reconnect report it again (code review
+	// 2026-10-24, T6).
+	welcomes := 0
 	client := New(Options{
 		Base:       p.base,
 		Token:      cs.token,
@@ -729,6 +734,7 @@ func (p *Platform) channelSession(ctx context.Context, cs channelSession) error 
 		Logger:     p.log,
 		Session: func(id string) {
 			sessions.report(id)
+			welcomes++
 			// The new session's 10 s window (F12, EventSub Reference
 			// "Welcome message"): a drop disabled the old session's
 			// subscriptions, so they are re-pointed right after every
@@ -740,6 +746,14 @@ func (p *Platform) channelSession(ctx context.Context, cs channelSession) error 
 					p.log.ErrorContext(ctx, "the post-session reconciliation failed", "error", err)
 				}
 			}()
+			// The session_reconnect replaces the session, and the stream
+			// state of the old session is gone with it (code review
+			// 2026-10-24, T6): the home session reports the state again
+			// after a re-welcome; the first welcome is covered by the
+			// initial report below.
+			if cs.home && welcomes > 1 {
+				go p.streamState(ctx, hc, cs.accountID)
+			}
 		},
 		Breaker: p.eventSubBrk,
 	})
@@ -902,6 +916,15 @@ func (p *Platform) setConnected(v bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.connected = v
+}
+
+// botState reports whether a bot session runs (an additional-channel or
+// IRC session); while it does, the bot account is the sender for chat
+// (actions.md B61).
+func (p *Platform) botState() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.botConnected
 }
 
 func (p *Platform) setBot(v bool) {

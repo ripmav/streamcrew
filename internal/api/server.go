@@ -129,7 +129,14 @@ func (s *Server) Handler() http.Handler {
 		streamcrewv1alpha1connect.RegisterCommandServiceHandler(server, &commandService{c: cm})
 	}
 	if st := s.cfg.Stream; st != nil {
-		streamcrewv1alpha1connect.RegisterStreamServiceHandler(server, &streamService{s: st})
+		var valid func(ctx context.Context, value string) bool
+		if t := s.cfg.Tokens; t != nil {
+			valid = func(ctx context.Context, value string) bool {
+				_, ok := t.Validate(ctx, value)
+				return ok
+			}
+		}
+		streamcrewv1alpha1connect.RegisterStreamServiceHandler(server, &streamService{s: st, valid: valid})
 	}
 	// The remaining services (Agent) are added as their application
 	// surface is wired (roadmap 6.2.1, 6.1.5).
@@ -137,7 +144,7 @@ func (s *Server) Handler() http.Handler {
 	// WithReadMaxBytes(0) instead of the v2 default of 4 MiB.
 	connecthttp.Mount(mux, server, connecthttp.WithReadMaxBytes(0))
 	if t := s.cfg.Tokens; t != nil {
-		return tokenAuth(t, mux)
+		return tokenAuth(t, newAuthLimiter(10, time.Minute), mux)
 	}
 	return mux
 }

@@ -25,20 +25,26 @@ import (
 
 // fakeCommands is the commandadmin Commands port.
 type fakeCommands struct {
-	mu     sync.Mutex
-	list   []command.Command
-	nextID id.ID
+	mu      sync.Mutex
+	list    []command.Command
+	listErr error
+	saves   int
+	nextID  id.ID
 }
 
 func (f *fakeCommands) Commands(context.Context) ([]command.Command, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
 	return append([]command.Command(nil), f.list...), nil
 }
 
 func (f *fakeCommands) Save(_ context.Context, cmd command.Command) (command.Saved, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.saves++
 	if cmd.ID.IsZero() {
 		f.nextID = id.New()
 		cmd.ID = f.nextID
@@ -184,6 +190,112 @@ func TestNoArgs(t *testing.T) {
 		inst := f.harness.Start(f.harness.Command("addcmd", f.action(commandadmin.KindAdd)),
 			engine.Params{})
 		assert.NotEmpty(t, inst.Errors, "no name fails the action")
+	})
+}
+
+func TestAddStripsExclamation(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		inst := f.harness.Start(f.harness.Command("addcmd", f.action(commandadmin.KindAdd)),
+			engine.Params{Args: []string{"!greet", "Hello", "there"}, ArgsText: "!greet Hello there"})
+		assert.Equal(t, engine.StateCompleted, inst.State, "a leading ! is the trigger marker, not the name")
+		require.Len(t, f.cmds.list, 1)
+		assert.Equal(t, "greet", f.cmds.list[0].Name)
+		assert.Equal(t, []string{"greet"}, f.cmds.list[0].Triggers)
+	})
+}
+
+func TestUpdateStripsExclamation(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		f.cmds.list = []command.Command{{
+			ID: id.New(), Name: "greet", Kind: command.KindChat, Enabled: true,
+			TriggerMode: command.TriggerExclamation, Triggers: []string{"greet"},
+			Actions: []command.Action{fakeChatAction("old")},
+		}}
+		inst := f.harness.Start(f.harness.Command("updatecmd", f.action(commandadmin.KindUpdate)),
+			engine.Params{Args: []string{"!greet", "new"}, ArgsText: "!greet new"})
+		assert.Equal(t, engine.StateCompleted, inst.State, "the command is found by the bare trigger")
+	})
+}
+
+func TestUpdateNoChatAction(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		f.cmds.list = []command.Command{{
+			ID: id.New(), Name: "greet", Kind: command.KindChat, Enabled: true,
+			TriggerMode: command.TriggerExclamation, Triggers: []string{"greet"},
+		}}
+		inst := f.harness.Start(f.harness.Command("updatecmd", f.action(commandadmin.KindUpdate)),
+			engine.Params{Args: []string{"greet", "new"}, ArgsText: "greet new"})
+		require.NotEmpty(t, inst.Errors)
+		assert.Contains(t, inst.Errors[0].Message, "no chat action")
+		assert.Zero(t, f.cmds.saves, "nothing is saved")
+	})
+}
+
+func TestAddFailsOnListingError(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		f.cmds.listErr = errors.New("the listing failed")
+		inst := f.harness.Start(f.harness.Command("addcmd", f.action(commandadmin.KindAdd)),
+			engine.Params{Args: []string{"greet", "hi"}, ArgsText: "greet hi"})
+		require.NotEmpty(t, inst.Errors, "a listing error is not a free name")
+		assert.Contains(t, inst.Errors[0].Message, "the listing failed")
+		assert.Empty(t, f.cmds.list, "no command is created")
+	})
+}
+
+func TestUpdateFailsOnListingError(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		f.cmds.listErr = errors.New("the listing failed")
+		inst := f.harness.Start(f.harness.Command("updatecmd", f.action(commandadmin.KindUpdate)),
+			engine.Params{Args: []string{"greet", "new"}, ArgsText: "greet new"})
+		require.NotEmpty(t, inst.Errors, "the listing error is reported, not swallowed as not found")
+		assert.Contains(t, inst.Errors[0].Message, "the listing failed")
+	})
+}
+
+func TestUpdateAmbiguous(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		f.cmds.list = []command.Command{
+			{ID: id.New(), Name: "greet", Kind: command.KindChat, Enabled: true,
+				TriggerMode: command.TriggerExclamation, Triggers: []string{"greet"},
+				Actions: []command.Action{fakeChatAction("one")}},
+			{ID: id.New(), Name: "greet-old", Kind: command.KindChat, Enabled: false,
+				TriggerMode: command.TriggerExclamation, Triggers: []string{"greet"}},
+		}
+		inst := f.harness.Start(f.harness.Command("updatecmd", f.action(commandadmin.KindUpdate)),
+			engine.Params{Args: []string{"greet", "new"}, ArgsText: "greet new"})
+		require.NotEmpty(t, inst.Errors, "several commands fail the update")
+		assert.Contains(t, inst.Errors[0].Message, "several")
+		assert.Zero(t, f.cmds.saves, "no command is changed")
+	})
+}
+
+func TestDisableAmbiguous(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		f.cmds.list = []command.Command{
+			{ID: id.New(), Name: "greet", Kind: command.KindChat, Enabled: true,
+				TriggerMode: command.TriggerExclamation, Triggers: []string{"greet"}},
+			{ID: id.New(), Name: "greet-old", Kind: command.KindChat, Enabled: false,
+				TriggerMode: command.TriggerExclamation, Triggers: []string{"greet"}},
+		}
+		inst := f.harness.Start(f.harness.Command("disablecmd", f.action(commandadmin.KindDisable)),
+			engine.Params{Args: []string{"greet"}, ArgsText: "greet"})
+		require.NotEmpty(t, inst.Errors, "several commands fail the disable")
+		assert.Contains(t, inst.Errors[0].Message, "several")
+		assert.True(t, f.cmds.list[0].Enabled, "nothing is disabled")
 	})
 }
 

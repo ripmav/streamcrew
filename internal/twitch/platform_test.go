@@ -29,6 +29,9 @@ type fakeAuth struct {
 	ready      bool
 	token      string
 	tokenFails bool
+	// bot gives the fake a bot account (ID 8, login "bot"); off by
+	// default, the tests opt in with readyAuthWithBot.
+	bot bool
 }
 
 func (f *fakeAuth) Streamer(context.Context) (twitch.AccountState, error) {
@@ -51,11 +54,21 @@ func (f *fakeAuth) ClientID(context.Context) (string, error) {
 }
 
 func (f *fakeAuth) Bot(context.Context) (twitch.AccountState, error) {
-	return twitch.AccountState{}, nil // no bot account in the tests by default
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.bot {
+		return twitch.AccountState{}, nil // no bot account in the tests by default
+	}
+	return twitch.AccountState{AccountID: "8", Login: "bot", Ready: f.ready}, nil
 }
 
 func (f *fakeAuth) BotToken(context.Context) (string, error) {
-	return "", errors.New("no bot account")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.bot {
+		return "", errors.New("no bot account")
+	}
+	return f.token, nil
 }
 
 func (f *fakeAuth) setReady(v bool) {

@@ -128,8 +128,17 @@ tls_cert: /etc/streamcrew/tls/cert.pem
 tls_key: /etc/streamcrew/tls/key.pem
 ```
 
-**Access Control:** Die API verlangt einen Bearer-Token
-(`streamcrew token create --scope <scope>` erzeugt ihn (Scopes: read, control, admin, overlay; Default admin); der Wert wird genau einmal gezeigt). Jeder Client setzt ihn:
+**Access Control:** Die API ist fail-closed (ADR-0013 §5): ohne Token lehnt
+jede Anfrage mit 401 ab. Im Server-Modus entsteht der erste Token mit
+`streamcrew token create --scope <scope>` (Scopes: read, control, admin,
+overlay; Default admin; der Wert wird genau einmal gezeigt) — oder beim
+Erststart aus `STREAMCREW_TOKEN` (Umgebungsvariable oder
+`--bootstrap-token`), die dann als Admin-Token gespeichert wird und danach
+ignoriert wird. Im Daemon-Modus legt der Core beim ersten Start einen
+lokalen Admin-Token in `<data-dir>/api.token` an, dessen Wert
+`STREAMCREW_TOKEN` bzw. `--bootstrap-token` vorgibt, wenn gesetzt,
+sonst der Core selbst erzeugt; CLI und TUI lesen ihn ohne
+zusätzliches `--token`. Jeder Client setzt den Token:
 
 ```bash
 streamcrew --server https://meinstream.example:8740 --token <TOKEN> counter list
@@ -159,14 +168,18 @@ STREAMCREW_SECRET_KEY=…
 
 ### 3. Container
 
-Das Release enthält ein mehrplatformiges Image (linux/amd64,
-linux/arm64). Im Container läuft der Core standardmäßig im Server-Modus
-mit Daten in `/data` (Volume) und JSON-Logs auf stderr:
+Das Release enthält das Container-Image (linux/amd64, linux/arm64) als
+OCI-Tar (das Registry-Publish steht noch aus, ADR-0025); lokal lädt man
+ihn mit `docker load` und taggt das Image. Im Container läuft der Core
+standardmäßig im Server-Modus mit Daten in `/data` (Volume) und
+JSON-Logs auf stderr:
 
 ```bash
+docker load -i streamcrew-linux-amd64-arm64.tar   # Image-Tar aus dem Release
+docker tag <manifest-referenz> streamcrew
 docker run -d --name streamcrew -v streamcrew-data:/data \
   -e STREAMCREW_TOKEN=… -e STREAMCREW_SECRET_KEY=… \
-  ghcr.io/ripmav/streamcrew:v1.0.0
+  streamcrew
 ```
 
 Der Smoke-Test `scripts/docker-smoke.sh` prüft Image-Build,
@@ -195,22 +208,22 @@ wurde und was einen Restart braucht). `r` lädt neu. Im Daemon- und
 Desktop-Modus ist die Ansicht read-only.
 
 **Hot:** `grant`, `revoke`, `file-root`, `outbound-allow`,
-`log-level`, `log-component-level`, `log-format`, `log-file` (wird
-restart, siehe unten), `log-max-size`, `log-max-files`, `dry-run`, `dev`, `cors-allow`,
-`listen` (Rebind), `tls-cert`, `tls-key`, `mode`, `shutdown-timeout`.
+`log-level`, `log-component-level`, `log-format`, `log-max-size`,
+`log-max-files`, `dry-run`, `dev`, `cors-allow`, `listen` (Rebind),
+`tls-cert`, `tls-key`, `mode`, `shutdown-timeout`.
 
 **Nur einschränken:** Rechte und sicherheitsrelevante Einstellungen
 (`grant`, `revoke`, `file-root`, `outbound-allow`, `mode`, `cors-allow`,
 `listen`, `tls-cert`/`tls-key`, `dev`) lassen sich über die TUI bzw. die
-API nur einschränken. Ein Dokument, das sie erweitert, wird ganz
-abgelehnt. Erweitern geht nur lokal in der Konfigurationsdatei
-([Code-ADR-0021, Nachtrag 2026-10-24](adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte);
-die Umsetzung ist offen).
+API nur einschränken, gemessen am aktuell wirksamen Stand. Ein Dokument,
+das sie erweitert, wird ganz abgelehnt und die Antwort nennt die
+betroffenen Schlüssel. Erweitern geht nur lokal in der
+Konfigurationsdatei ([Code-ADR-0021, Nachtrag 2026-10-24](adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte)).
 
 **Nur beim Start:** `log-file` (Pfad und Ein/Aus) gilt nach demselben
 Nachtrag nur nach einem Neustart, auch bei einer Änderung in der Datei.
 Sonst könnte ein Admin-Token Log-Zeilen in beliebige Dateien schreiben
-lassen (die Umsetzung ist offen).
+lassen.
 
 **Restart:** `data-dir`, `profile`, `config` (offene Dateien und
 Datenbanken des laufenden Prozesses).

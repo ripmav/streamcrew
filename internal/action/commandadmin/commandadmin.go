@@ -25,6 +25,13 @@ import (
 // TypeCommandAdmin is the type ID of the command-admin action.
 const TypeCommandAdmin = "command_admin"
 
+// ErrNotFound is returned by find when no chat command carries the trigger.
+var ErrNotFound = errors.New("no command with the trigger")
+
+// ErrAmbiguous is returned by find when several chat commands carry the
+// trigger (an enabled and a disabled one may share it, B14).
+var ErrAmbiguous = errors.New("several commands with the trigger")
+
 // Kind is what a command-admin action does.
 type Kind string
 
@@ -135,6 +142,12 @@ func (a CommandAdmin) Perform(ctx context.Context, run *engine.Run) error {
 	if !ok {
 		return fmt.Errorf("%w: the command name is the first argument", action.ErrInvalid)
 	}
+	// A leading "!" is the trigger marker as the user types it, not part of
+	// the name; exclamation triggers carry no "!" (B11).
+	name = strings.TrimLeft(name, "!")
+	if name == "" {
+		return fmt.Errorf("%w: the command name is the first argument", action.ErrInvalid)
+	}
 	switch a.Kind {
 	case KindAdd:
 		return a.add(ctx, name, answer)
@@ -147,13 +160,17 @@ func (a CommandAdmin) Perform(ctx context.Context, run *engine.Run) error {
 	}
 }
 
-// add creates a chat command named name that answers with answer.
+// add creates a chat command named name that answers with answer. The
+// find-then-save race is covered by the store: the unique name and trigger
+// indexes make a concurrent duplicate fail with a conflict error, B14.
 func (a CommandAdmin) add(ctx context.Context, name, answer string) error {
 	if answer == "" {
 		return fmt.Errorf("%w: the answer is the text after the name", action.ErrInvalid)
 	}
-	if _, found := a.find(ctx, name); found {
+	if _, err := a.find(ctx, name); err == nil {
 		return fmt.Errorf("%w: a command with the trigger %q exists", action.ErrInvalid, name)
+	} else if !errors.Is(err, ErrNotFound) {
+		return err
 	}
 	cmd := command.Command{
 		Name:        name,
@@ -182,10 +199,11 @@ func (a CommandAdmin) update(ctx context.Context, name, answer string) error {
 	if answer == "" {
 		return fmt.Errorf("%w: the answer is the text after the name", action.ErrInvalid)
 	}
-	cmd, found := a.find(ctx, name)
-	if !found {
-		return fmt.Errorf("%w: no command with the trigger %q", action.ErrInvalid, name)
+	cmd, err := a.find(ctx, name)
+	if err != nil {
+		return notFound(name, err)
 	}
+	changed := false
 	for i, act := range cmd.Actions {
 		c, ok := act.(chataction.Chat)
 		if !ok {
@@ -193,7 +211,11 @@ func (a CommandAdmin) update(ctx context.Context, name, answer string) error {
 		}
 		c.Message = action.Template(answer)
 		cmd.Actions[i] = c
+		changed = true
 		break
+	}
+	if !changed {
+		return fmt.Errorf("%w: the command has no chat action", action.ErrInvalid)
 	}
 	if _, err := a.ports.Commands.Save(ctx, cmd); err != nil {
 		return fmt.Errorf("update command %q: %w", name, err)
@@ -204,9 +226,9 @@ func (a CommandAdmin) update(ctx context.Context, name, answer string) error {
 
 // disable turns off the command named name.
 func (a CommandAdmin) disable(ctx context.Context, name string) error {
-	cmd, found := a.find(ctx, name)
-	if !found {
-		return fmt.Errorf("%w: no command with the trigger %q", action.ErrInvalid, name)
+	cmd, err := a.find(ctx, name)
+	if err != nil {
+		return notFound(name, err)
 	}
 	if _, err := a.ports.Commands.SwitchCommand(ctx, cmd.ID, command.SwitchOff); err != nil {
 		return fmt.Errorf("disable command %q: %w", name, err)
@@ -215,13 +237,28 @@ func (a CommandAdmin) disable(ctx context.Context, name string) error {
 	return nil
 }
 
+// notFound turns the find result into the failure message of the subcommand:
+// a missing command says so, an ambiguous one names how many matched, and
+// any other error (a failed listing) is reported as is.
+func notFound(name string, err error) error {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return fmt.Errorf("%w: no command with the trigger %q", action.ErrInvalid, name)
+	case errors.Is(err, ErrAmbiguous):
+		return fmt.Errorf("%w: %w", action.ErrInvalid, err)
+	default:
+		return err
+	}
+}
+
 // find returns the chat command whose triggers include name, regardless of
-// case for ASCII letters; ok is false if there is none or several.
-func (a CommandAdmin) find(ctx context.Context, name string) (command.Command, bool) {
+// case for ASCII letters. It fails with ErrNotFound if there is none,
+// ErrAmbiguous if there are several, and with the listing error if that
+// failed.
+func (a CommandAdmin) find(ctx context.Context, name string) (command.Command, error) {
 	all, err := a.ports.Commands.Commands(ctx)
 	if err != nil {
-		a.ports.Logger.WarnContext(ctx, "listing the commands failed", "error", err)
-		return command.Command{}, false
+		return command.Command{}, fmt.Errorf("listing the commands: %w", err)
 	}
 	var found command.Command
 	n := 0
@@ -235,7 +272,14 @@ func (a CommandAdmin) find(ctx context.Context, name string) (command.Command, b
 			}
 		}
 	}
-	return found, n == 1
+	switch n {
+	case 0:
+		return command.Command{}, fmt.Errorf("%w: %q", ErrNotFound, name)
+	case 1:
+		return found, nil
+	default:
+		return command.Command{}, fmt.Errorf("%w: %q (%d)", ErrAmbiguous, name, n)
+	}
 }
 
 // splitArgs returns the first argument (the name) and the rest joined by a

@@ -4,9 +4,11 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -20,7 +22,9 @@ import (
 // pollInterval is how often the dashboard polls the core status.
 const pollInterval = 2 * time.Second
 
-// retryInterval is the retry delay when the core is not reachable.
+// retryInterval is the retry delay when the core is not reachable and the
+// maximum delay between stream reconnects (U6 of the code review
+// 2026-10-26).
 const retryInterval = 5 * time.Second
 
 // Options configures the TUI.
@@ -49,9 +53,12 @@ type statusErr struct {
 // pollMsg is the tick that triggers the next status request.
 type pollMsg time.Time
 
-// streamMsg carries one event of the live stream.
+// streamMsg carries one event of the live stream; a nil event is the
+// notice of a broken stream, with the count of the events that did not fit
+// the buffer before it (U6 of the code review 2026-10-26).
 type streamMsg struct {
 	event *v1alpha1.Event
+	drops int64
 }
 
 // clients bundles the API clients of the TUI.
@@ -125,6 +132,7 @@ type model struct {
 
 	cl       *clients
 	streamCh chan streamMsg
+	drops    *atomic.Int64 // the events that did not fit streamCh (U6 of the code review 2026-10-26)
 
 	chat     chatView
 	feed     feedView
@@ -141,17 +149,20 @@ type model struct {
 //nolint:gochecknoglobals // static table of views
 var views = []string{"dashboard", "chat", "events", "queue", "commands", "users", "logs", "settings"}
 
-// newModel returns the initial model.
-func newModel(opts Options) model {
+// newModel returns the initial model. The context ends the stream
+// subscription and the pending requests when it is canceled.
+func newModel(ctx context.Context, opts Options) model {
 	base := server(opts.DataDir, opts.Server)
 	httpClient, base := httpClientFor(base)
+	drops := &atomic.Int64{}
 	return model{
 		server:   base,
 		token:    opts.Token,
-		ctx:      context.Background(),
+		ctx:      ctx,
 		dark:     opts.Theme != "light",
 		cl:       newClients(httpClient, base, opts.Token),
 		streamCh: make(chan streamMsg, 64),
+		drops:    drops,
 		logMin:   slog.LevelDebug, // "all": nothing is logged below debug
 	}
 }
@@ -201,7 +212,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Every(retryInterval, func(t time.Time) tea.Msg { return pollMsg(t) })
 
 	case streamMsg:
-		m.handleEvent(msg.event)
+		if msg.event != nil {
+			m.handleEvent(msg.event)
+		} else if msg.drops > 0 {
+			// a lost stream is no silent one (U6 of the code review
+			// 2026-10-26)
+			m.logs.append("warn", fmt.Sprintf("stream lost: %d event(s) dropped before the break; reconnecting", msg.drops))
+		}
 		return m, m.nextStream()
 
 	case commandsLoadedMsg:
@@ -287,14 +304,43 @@ func (m model) nextStream() tea.Cmd {
 }
 
 // subscribeLoop forwards the live stream into the model until the context
-// ends or the stream breaks.
+// ends. When the stream breaks, it reports the dropped events and
+// resubscribes with a growing delay of at most retryInterval
+// (U6 of the code review 2026-10-26).
 func (m model) subscribeLoop() {
+	delay := time.Second
+	for m.ctx.Err() == nil {
+		m.subscribeOnce()
+		if m.ctx.Err() != nil {
+			return
+		}
+		// The stream broke: notice with the events that did not fit the
+		// buffer, then wait before the next attempt.
+		notice := streamMsg{drops: m.drops.Swap(0)}
+		select {
+		case m.streamCh <- notice:
+		case <-m.ctx.Done():
+			return
+		}
+		select {
+		case <-time.After(delay):
+		case <-m.ctx.Done():
+			return
+		}
+		delay = min(delay*2, retryInterval)
+	}
+}
+
+// subscribeOnce runs one subscription: it forwards events until the stream
+// breaks or the context ends, counting the events that did not fit the
+// buffer.
+func (m model) subscribeOnce() {
 	stream, err := m.cl.stream.Subscribe(m.ctx, &v1alpha1.SubscribeRequest{})
 	if err != nil {
 		return
 	}
 	defer stream.Close()
-	for {
+	for m.ctx.Err() == nil {
 		event, err := stream.Receive()
 		if err != nil {
 			return
@@ -302,6 +348,7 @@ func (m model) subscribeLoop() {
 		select {
 		case m.streamCh <- streamMsg{event: event}:
 		default: // the UI is too slow; drop the event
+			m.drops.Add(1)
 		}
 	}
 }

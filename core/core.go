@@ -76,6 +76,10 @@ type Options struct {
 	// least one must be on.
 	TwitchEventSub string
 	TwitchIRC      string
+	// BootstrapToken is the value of --bootstrap-token (STREAMCREW_TOKEN);
+	// in the server mode without a stored token, it creates the bootstrap
+	// admin token at the first start.
+	BootstrapToken string
 	// SecretKey is the value of STREAMCREW_SECRET_KEY (ADR-0012); it wins
 	// over the environment variable.
 	SecretKey string
@@ -130,6 +134,7 @@ func Run(ctx context.Context, opts Options) error {
 		Revoke:          opts.Revoke,
 		FileRoot:        opts.FileRoot,
 		OutboundAllow:   opts.OutboundAllow,
+		BootstrapToken:  opts.BootstrapToken,
 		ShutdownTimeout: opts.ShutdownTimeout,
 		Stream: config.StreamConfig{
 			Buffer:  opts.StreamBuffer,
@@ -156,7 +161,15 @@ func Run(ctx context.Context, opts Options) error {
 		optsList = append(optsList, app.WithConsole(opts.LogWriter))
 	}
 	if opts.ConfigFile != "" {
-		optsList = append(optsList, app.WithConfigFile(config.NewFileResolver(opts.ConfigFile)))
+		// Load the resolver, so the watcher watches the file and
+		// ConfigService/Update knows its allowed keys (code review
+		// 2026-10-24, C14); only after the Update check that the API may
+		// only narrow (Code-ADR-0021, Nachtrag 2026-10-24).
+		file := config.NewFileResolver(opts.ConfigFile)
+		if err := file.Load(opts.ConfigFile); err != nil {
+			return err
+		}
+		optsList = append(optsList, app.WithConfigFile(file))
 	}
 	a, err := app.New(ctx, cfg, optsList...)
 	if err != nil {

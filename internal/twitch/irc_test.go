@@ -5,9 +5,11 @@ package twitch_test
 import (
 	"bufio"
 	"context"
+	"errors"
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -233,7 +235,7 @@ func TestIRCSessionMessage(t *testing.T) {
 	srv := newFakeIRCServer(t, map[string]string{"testchan": "moderator/1"})
 	runSession(t, ircSession(t, r, srv), srv)
 
-	srv.push(t, "@badges=moderator/1;color=#ff0000;display-name=Alice;emotes=42:0-5;id=msg-1;user-id=42;tmi-sent-ts=1 :alice!alice@alice.tmi.twitch.tv PRIVMSG #testchan :Kappa hi")
+	srv.push(t, "@badges=moderator/1;color=#ff0000;display-name=Alice;emotes=42:0-4;id=msg-1;user-id=42;tmi-sent-ts=1 :alice!alice@alice.tmi.twitch.tv PRIVMSG #testchan :Kappa hi")
 	waitFor(t, 5*time.Second, func() int64 {
 		if len(r.received()) == 1 {
 			return 1
@@ -250,6 +252,34 @@ func TestIRCSessionMessage(t *testing.T) {
 	assert.Equal(t, "msg-1", m.Message.ID)
 	assert.Equal(t, "Kappa hi", m.Message.Text)
 	assert.Equal(t, []string{"Kappa"}, m.Message.Emotes, "the emote code is read from the position")
+
+	// The range is inclusive and counted in code points (code review
+	// 2026-10-24, T4): the emoji is one code point of two bytes, so
+	// 1-2 spans "hi"; the old byte-slice cut the emoji in half.
+	srv.push(t, "@display-name=Alice;emotes=43:1-2;id=msg-2;user-id=42;tmi-sent-ts=1 :alice!alice@alice.tmi.twitch.tv PRIVMSG #testchan :😀hi")
+	waitFor(t, 5*time.Second, func() int64 {
+		if len(r.received()) == 2 {
+			return 2
+		}
+		return 0
+	})
+	m = r.lastMessage(t)
+	assert.Equal(t, "msg-2", m.Message.ID)
+	assert.Equal(t, "😀hi", m.Message.Text)
+	assert.Equal(t, []string{"hi"}, m.Message.Emotes, "the range is counted in code points")
+
+	// A single-code-point emote: the range start-end with equal values
+	// spans it (Nachprüfung 2026-10-24, T4).
+	srv.push(t, "@display-name=Alice;emotes=44:0-0;id=msg-3;user-id=42;tmi-sent-ts=1 :alice!alice@alice.tmi.twitch.tv PRIVMSG #testchan :😀xy")
+	waitFor(t, 5*time.Second, func() int64 {
+		if len(r.received()) == 3 {
+			return 3
+		}
+		return 0
+	})
+	m = r.lastMessage(t)
+	assert.Equal(t, "msg-3", m.Message.ID)
+	assert.Equal(t, []string{"😀"}, m.Message.Emotes, "the single code point is the emote")
 }
 
 // TestIRCSessionMessageFromBot flags the messages of the bot account
@@ -350,19 +380,26 @@ func TestIRCSessionModStatus(t *testing.T) {
 // TestIRCSessionSend sends through the session (spec twitch-multi-
 // channel.md, B18): the message rides the PRIVMSG of the channel, a
 // long text is split, and the send without a connection is an error.
+// The second limiter of the adapter holds one message in 3 seconds per
+// channel (code review 2026-10-24, T14), so the split parts of a second
+// channel take their 3 seconds while the first one stays fast.
 func TestIRCSessionSend(t *testing.T) {
 	t.Parallel()
 	r := &fakeReceiver{}
 	srv := newFakeIRCServer(t, map[string]string{"testchan": "moderator/1"})
-	s := ircSession(t, r, srv)
+	s := ircSession(t, r, srv, "testchan", "slowchan")
 
 	err := s.Send(t.Context(), "testchan", "no connection")
 	assert.ErrorContains(t, err, "not connected")
 
 	runSession(t, s, srv)
+	start := time.Now()
 	require.NoError(t, s.Send(t.Context(), "testchan", "hello"))
 	long := strings.Repeat("word ", 200) // 1000 runes: two parts
-	require.NoError(t, s.Send(t.Context(), "testchan", long))
+	require.NoError(t, s.Send(t.Context(), "slowchan", long))
+	// The second part of the split waited the 3 seconds of the second
+	// limiter of the channel; the send of the other channel did not.
+	require.GreaterOrEqual(t, time.Since(start), 2900*time.Millisecond, "the second send limiter is missing")
 
 	var got []string
 	waitFor(t, 5*time.Second, func() int64 {
@@ -377,9 +414,109 @@ func TestIRCSessionSend(t *testing.T) {
 	// the parts are in order and cover the text without the break space
 	var joined strings.Builder
 	for _, line := range got[1:] {
-		joined.WriteString(strings.TrimPrefix(line, "PRIVMSG #testchan :") + " ")
+		joined.WriteString(strings.TrimPrefix(line, "PRIVMSG #slowchan :") + " ")
 	}
 	assert.Equal(t, strings.TrimSuffix(long, " ")+" ", strings.TrimSuffix(joined.String(), " "), "the split keeps the text")
+}
+
+// TestIRCSessionSendReply covers code review 2026-10-24, T5: the reply
+// rides the reply-parent-msg-id tag of the PRIVMSG of the channel, and
+// the send without a connection is an error.
+func TestIRCSessionSendReply(t *testing.T) {
+	t.Parallel()
+	r := &fakeReceiver{}
+	srv := newFakeIRCServer(t, map[string]string{"testchan": "moderator/1"})
+	s := ircSession(t, r, srv)
+
+	assert.ErrorContains(t, s.SendReply(t.Context(), "testchan", "m-1", "nope"), "not connected")
+
+	runSession(t, s, srv)
+	require.NoError(t, s.SendReply(t.Context(), "testchan", "m-1", "hi there"))
+	var got []string
+	waitFor(t, 5*time.Second, func() int64 {
+		got = srv.privmsgs()
+		if len(got) == 1 {
+			return 1
+		}
+		return 0
+	})
+	assert.Equal(t, []string{"PRIVMSG #testchan :@reply-parent-msg-id=m-1 hi there"}, got)
+}
+
+// TestIRCSendSanitizesLineEndings covers code review 2026-10-24, T14:
+// CR and LF in the text go to a space, so the message stays one line of
+// the protocol and cannot inject a second command.
+func TestIRCSendSanitizesLineEndings(t *testing.T) {
+	t.Parallel()
+	r := &fakeReceiver{}
+	srv := newFakeIRCServer(t, map[string]string{"testchan": "moderator/1"})
+	s := ircSession(t, r, srv)
+	runSession(t, s, srv)
+
+	require.NoError(t, s.Send(t.Context(), "testchan", "a\nb"))
+	require.NoError(t, s.Send(t.Context(), "testchan", "c\r\nd"))
+	var got []string
+	waitFor(t, 5*time.Second, func() int64 {
+		got = srv.privmsgs()
+		if len(got) == 2 {
+			return 1
+		}
+		return 0
+	})
+	assert.Equal(t, []string{"PRIVMSG #testchan :a b", "PRIVMSG #testchan :c d"}, got)
+}
+
+// TestIRCSessionTagUnescape covers code review 2026-10-24, T14: the
+// escapes of an IRC tag value are decoded before the mapping reads them.
+func TestIRCSessionTagUnescape(t *testing.T) {
+	t.Parallel()
+	r := &fakeReceiver{}
+	srv := newFakeIRCServer(t, map[string]string{"testchan": "moderator/1"})
+	runSession(t, ircSession(t, r, srv), srv)
+
+	srv.push(t, "@display-name=A\\:lice;id=msg-5;tmi-sent-ts=1 :alice!alice@alice.tmi.twitch.tv PRIVMSG #testchan :hi")
+	waitFor(t, 5*time.Second, func() int64 {
+		if len(r.received()) == 1 {
+			return 1
+		}
+		return 0
+	})
+	assert.Equal(t, "A:lice", r.lastMessage(t).Author.DisplayName, "the escaped colon is decoded")
+}
+
+// TestIRCTokenErrorRetries covers code review 2026-10-24, T13: a
+// missing token is logged and retried with the backoff, like a failed
+// start; Run does not return it, the next attempt picks the token up.
+func TestIRCTokenErrorRetries(t *testing.T) {
+	t.Parallel()
+	r := &fakeReceiver{}
+	srv := newFakeIRCServer(t, map[string]string{"testchan": "moderator/1"})
+	var tokenCalls atomic.Int64
+	s := twitch.NewIRCSession(t.Context(), twitch.IRCOptions{
+		Receiver: r,
+		Login:    "bot",
+		Token: func(context.Context) (string, error) {
+			if tokenCalls.Add(1) == 1 {
+				return "", errors.New("login required")
+			}
+			return "tok", nil
+		},
+		Channels: []string{"testchan"},
+		BotID:    "99",
+		Base:     srv.addr,
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = s.Run(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	srv.waitJoin(t) // the second attempt joins the channel
+	assert.Equal(t, int64(2), tokenCalls.Load())
 }
 
 // TestIRCSessionReconnect rejoins the channels after the server drops

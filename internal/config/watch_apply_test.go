@@ -96,24 +96,28 @@ func TestWatcherAppliesHotSettings(t *testing.T) {
 	})
 }
 
-// TestWatcherAppliesTheLogFile verifies the log_file setting reaches the log
-// apply as text, as a path and as a bool (roadmap 6.5).
-func TestWatcherAppliesTheLogFile(t *testing.T) {
+// TestWatcherReportsTheLogFileAsRestart verifies log_file is restart-only
+// (Code-ADR-0021, Nachtrag 2026-10-24, point 6): the change is reported,
+// the log apply keeps the file setting the core runs with.
+func TestWatcherReportsTheLogFileAsRestart(t *testing.T) {
 	clearEnv(t)
 	dataDir := t.TempDir()
 	rec := &applyRec{}
-	writeFile(t, filepath.Join(dataDir, "config.yaml"), "log_level: info\n")
+	writeFile(t, filepath.Join(dataDir, "config.yaml"), "log_level: info\nlog_file: true\n")
 	watch(t, dataDir, nil, rec.funcs(), func(w *watched) {
 		w.tick()
 		assert.Empty(t, rec.logCalls, "an unchanged file applies nothing")
 
-		w.write("log_file: /var/log/streamcrew/custom.log\n")
-		requireLen(t, rec.logCalls, 1)
-		assert.Equal(t, "/var/log/streamcrew/custom.log", rec.logCalls[0].File)
+		w.write("log_level: info\nlog_file: /var/log/streamcrew/custom.log\n")
+		assert.Empty(t, rec.logCalls, "log_file is not a hot apply")
+		assert.Contains(t, w.logs.String(), "configuration changes apply after a restart")
+		assert.Contains(t, w.logs.String(), "settings=log_file")
 
-		w.write("log_file: false\n")
-		requireLen(t, rec.logCalls, 2)
-		assert.Equal(t, "false", rec.logCalls[1].File)
+		// A change of a hot log setting still applies the log, with the
+		// file setting of the start configuration.
+		w.write("log_level: debug\nlog_file: /var/log/streamcrew/custom.log\n")
+		requireLen(t, rec.logCalls, 1)
+		assert.Equal(t, "true", rec.logCalls[0].File, "the file setting stays until a restart")
 	})
 }
 

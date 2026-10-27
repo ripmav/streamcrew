@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -94,8 +95,8 @@ func keepaliveJSON() string {
 	return `{"metadata":{"message_id":"m-ka","message_type":"session_keepalive","message_timestamp":"2026-01-01T00:00:01Z"},"payload":{}}`
 }
 
-func notificationJSON(subType, version string, event string) string {
-	return `{"metadata":{"message_id":"m-1","message_type":"notification","message_timestamp":"2026-01-01T00:00:02Z","subscription_type":"` + subType + `","subscription_version":"` + version + `"},"payload":{"subscription":{"id":"sub-1","type":"` + subType + `","version":"` + version + `"},"event":` + event + `}}`
+func notificationJSON(event string) string {
+	return `{"metadata":{"message_id":"m-1","message_type":"notification","message_timestamp":"2026-01-01T00:00:02Z","subscription_type":"channel.follow","subscription_version":"2"},"payload":{"subscription":{"id":"sub-1","type":"channel.follow","version":"2"},"event":` + event + `}}`
 }
 
 // hold keeps the connection open until the other side closes it.
@@ -130,7 +131,7 @@ func TestRunWelcomeKeepaliveAndMessage(t *testing.T) {
 	srv := wsServer(t, func(t *testing.T, _ *http.Request, conn *websocket.Conn) {
 		writeText(t, conn, welcomeJSON("s1", "10"))
 		writeText(t, conn, keepaliveJSON())
-		writeText(t, conn, notificationJSON("channel.follow", "2", `{"user_id":"8"}`))
+		writeText(t, conn, notificationJSON(`{"user_id":"8"}`))
 		// Hold the connection until the test closes it.
 		hold(conn)
 	})
@@ -203,6 +204,93 @@ func TestRunSessionReconnectAtTheGivenURL(t *testing.T) {
 	<-done
 }
 
+// The old session delivers events while the new session's welcome is
+// still outstanding (code review 2026-10-24, T7): the frames must not
+// pile up in the buffer or be lost, the client keeps reading the old
+// connection until the new welcome arrives.
+func TestRunSessionReconnectDeliversOldSessionEvents(t *testing.T) {
+	var dialed, welcomed atomic.Int64
+	release := make(chan struct{})
+	srv := wsServer(t, func(t *testing.T, r *http.Request, conn *websocket.Conn) {
+		switch r.URL.Path {
+		case "/":
+			writeText(t, conn, welcomeJSON("s1", "10"))
+			writeText(t, conn, notificationJSON(`{"user_id":"8"}`))
+			writeText(t, conn, `{"metadata":{"message_id":"m-re","message_type":"session_reconnect"},"payload":{"session":{"id":"s2","status":"reconnecting","keepalive_timeout_seconds":null,"reconnect_url":"/re?reconnect_id=abc","connected_at":"2026-01-01T00:00:00Z"}}}`)
+			// The event that arrives while the new session's welcome is
+			// outstanding: the client must deliver it from the old
+			// session, not wait for the new one.
+			writeText(t, conn, notificationJSON(`{"user_id":"9"}`))
+			_, _, _ = conn.Read(context.Background())
+		case "/re":
+			dialed.Store(1)
+			<-release
+			writeText(t, conn, welcomeJSON("s2", "10"))
+			welcomed.Store(1)
+			hold(conn)
+		}
+	})
+	defer srv.Close()
+
+	h := newTestHandler()
+	c := newClient(t, srv)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		assert.NoError(t, c.Run(ctx, h))
+	}()
+	waitFor(t, 10*time.Second, dialed.Load)
+	e1 := h.nextEvent(t)
+	assert.JSONEq(t, `{"user_id":"8"}`, string(e1.Body))
+	e2 := h.nextEvent(t)
+	assert.JSONEq(t, `{"user_id":"9"}`, string(e2.Body))
+	assert.Zero(t, welcomed.Load(), "the second event was delivered while the new welcome was missing")
+	close(release)
+	waitFor(t, 10*time.Second, welcomed.Load)
+	cancel()
+	<-done
+}
+
+// The reader goroutine of the connection ends with the loop (code
+// review 2026-10-24, T7): after the cancel, no goroutine of the client
+// is left behind, the count is back at the level before the cancel.
+func TestRunLoopCleansUpTheReader(t *testing.T) {
+	up := make(chan struct{})
+	srv := wsServer(t, func(t *testing.T, _ *http.Request, conn *websocket.Conn) {
+		writeText(t, conn, welcomeJSON("s1", "10"))
+		hold(conn)
+	})
+	defer srv.Close()
+
+	c := twitch.New(twitch.Options{
+		Base:       srv.URL + "/",
+		Token:      func(context.Context) (string, error) { return "tok", nil },
+		HTTPClient: srv.Client(),
+		Session: func(string) {
+			select {
+			case <-up:
+			default:
+				close(up)
+			}
+		},
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		assert.NoError(t, c.Run(ctx, newTestHandler()))
+	}()
+	<-up // the session is up, the reader goroutine runs
+	time.Sleep(200 * time.Millisecond)
+	base := runtime.NumGoroutine()
+	cancel()
+	<-done
+	require.Eventually(t, func() bool {
+		return runtime.NumGoroutine() <= base
+	}, 5*time.Second, 50*time.Millisecond, "a goroutine of the client leaked")
+}
+
 func TestRunRevocationReconnectsWithAFreshToken(t *testing.T) {
 	var dials, tokenCalls atomic.Int64
 	var fresh atomic.Bool
@@ -273,7 +361,7 @@ func TestRunRevocationKeepsTheSession(t *testing.T) {
 				dials.Add(1)
 				writeText(t, conn, welcomeJSON("s1", "10"))
 				writeText(t, conn, `{"metadata":{"message_id":"m-rev","message_type":"revocation","subscription_type":"channel.follow","subscription_version":"2"},"payload":{"subscription":{"id":"sub-1","status":"`+status+`","type":"channel.follow","version":"2"}}}`)
-				writeText(t, conn, notificationJSON("channel.follow", "2", `{"user_id":"8"}`))
+				writeText(t, conn, notificationJSON(`{"user_id":"8"}`))
 				hold(conn)
 			})
 			defer srv.Close()

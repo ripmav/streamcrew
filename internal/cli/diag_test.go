@@ -16,6 +16,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/apitoken"
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/profile"
+	"github.com/ripmav/streamcrew/internal/store"
 )
 
 // TestDiagBundle covers the diagnostics bundle (roadmap 6.3): it contains
@@ -26,17 +27,22 @@ func TestDiagBundle(t *testing.T) {
 	dir := t.TempDir()
 	ctx := t.Context()
 
-	// A profile and a token the bundle must mention.
+	// A profile and a token the bundle must mention; the token lives in
+	// the profile database (S5 of the code review 2026-10-24).
 	mgr := profile.NewManager(dir)
-	_, err := mgr.Create(ctx, "Demo", "demo")
+	prof, err := mgr.Create(ctx, "Demo", "demo")
 	require.NoError(t, err)
-	_, value, err := apitoken.Open(dir).Create("diag", []apitoken.Scope{apitoken.Read})
+	s, err := store.Open(ctx, prof.Path)
 	require.NoError(t, err)
+	_, value, err := apitoken.New(s).Create(ctx, "diag", []apitoken.Scope{apitoken.Read})
+	require.NoError(t, err)
+	require.NoError(t, s.Close())
 	require.NoError(t, os.MkdirAll(dir+"/logs", 0o700))
 	require.NoError(t, os.WriteFile(dir+"/logs/streamcrew.log", []byte("a log line\n"), 0o600))
 
 	cfg := config.Config{
 		DataDir:         dir,
+		Profile:         "demo",
 		Mode:            config.ModeDaemon,
 		ShutdownTimeout: time.Second,
 		Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},

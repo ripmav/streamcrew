@@ -62,7 +62,7 @@ Nutzer und Zielnutzer nach B6, Werte nach B7 (B9). „–“ heißt: Das Ereigni
 | `chat.message.delete` | der Absender der gelöschten Nachricht | – | die Nachricht, wenn die Plattform sie nennt |
 | `chat.user.join`, `chat.user.leave`, `chat.user.new` | der Nutzer | – | – |
 | `chat.user.entrance`, `chat.user.first_message` | der Nutzer | – | die Nachricht |
-| `chat.user.timeout`, `chat.user.ban` | der gesperrte Nutzer | – | – |
+| `chat.user.timeout`, `chat.user.ban`, `chat.user.unban`, `chat.user.untimeout`, `chat.user.mod`, `chat.user.unmod`, `chat.user.vip`, `chat.user.unvip` | der betroffene Nutzer | – | – |
 
 Abo-Stufe und ihr Name stehen so da, wie die Plattform sie nennt; für Twitch legt sie `twitch-events.md` fest (Phase 4). „Anonym“ ist `true` oder `false` wie die anderen Ja-Nein-Werte der Templates ([`template.md`](template.md)).
 
@@ -124,6 +124,12 @@ Die Log-Ereignisse (Roadmap 6.6) sind die Log-Zeilen des Cores im Stream: Der Co
 | `chat.user.first_message` | Ein Nutzer hat zum allerersten Mal eine Nachricht geschrieben; nie wieder für ihn. | Q9 |
 | `chat.user.timeout` | Ein Nutzer wurde auf Zeit gesperrt. | Q9 |
 | `chat.user.ban` | Ein Nutzer wurde gebannt. | Q9 |
+| `chat.user.unban` | Ein Bann wurde wieder aufgehoben. | Q9 |
+| `chat.user.untimeout` | Eine zeitliche Sperre wurde wieder aufgehoben. | Q9 |
+| `chat.user.mod` | Ein Nutzer wurde zum Moderator ernannt. | Q9 |
+| `chat.user.unmod` | Ein Nutzer wurde als Moderator entlassen. | Q9 |
+| `chat.user.vip` | Ein Nutzer wurde zum VIP ernannt. | Q9 |
+| `chat.user.unvip` | Ein Nutzer wurde als VIP entlassen. | Q9 |
 
 **Twitch** (Phase 4)
 
@@ -180,7 +186,7 @@ Die Log-Ereignisse (Roadmap 6.6) sind die Log-Zeilen des Cores im Stream: Der Co
 | A1 | einmal je Programmlauf, nie zurückgesetzt, für Stream-Start/-Ende, Follow, Raid, Abo, Resub, Join, Leave, Entrance und weitere; nach einem Neustart mitten im Stream gibt es gar keinen Stream-Start (Q11) | einmal je Stream-Sitzung, auch über einen Neustart des Cores hinweg, mit Karenzzeit für kurze Unterbrechungen (B3, B8) | Der Core läuft im Server-Modus und als Daemon über viele Streams; „je Programmlauf“ unterdrückt ab dem zweiten Stream alles (ADR-0003). Die Sitzung muss dafür gespeichert werden. Die Karenzzeit hält einen kurzen Verbindungsabbruch aus der Sitzung heraus; Entscheidung des Projektinhabers (2026-10-02) |
 | A2 | Ereignisse als Aufzählung mit numerischen Werten | stabile Namen nach Namensregel | Code-ADR-0011; lesbar in API, Logs und Commands als Code |
 | A3 | Schwelle „Mass Gifted Subs Filter Amount“ mit „mehr als“, Standard 1; 0 schaltet den Filter ab, und beide Arten laufen (Q11) | „ab“ der Schwelle, Standard 2, mindestens 2; nie beide Arten (B5) | gleiches Verhalten im Standard, ohne doppelte Ereignis-Commands für dieselben Geschenke; Entscheidung des Projektinhabers (2026-10-02) |
-| A4 | keine Ereignisse für Umfragen und Vorhersagen; nur die Twitch-Action, die eine Umfrage oder Vorhersage erstellt, hat eine Unterliste, die nach dem Ende läuft, mit `$pollchoice` bzw. `$predictionoutcome` (Q11) | Ereignistypen für Umfragen und Vorhersagen; die Action mit Unterliste gibt es zusätzlich (Phase 4) | Auch auf Twitch selbst gestartete Umfragen lösen Commands aus; die Action bleibt für den Import; Entscheidung des Projektinhabers (2026-10-02) |
+| A4 | keine Ereignisse für Umfragen und Vorhersagen; nur die Twitch-Action, die eine Umfrage oder Vorhersage erstellt, hat eine Unterliste, die nach dem Ende läuft, mit `$pollchoice` bzw. `$predictionoutcome` (Q11) | keine Twitch-Ereignis-Typen für Umfragen und Vorhersagen ([twitch-events.md](twitch-events.md), B17); die Action mit Unterliste gibt es zusätzlich (Phase 4) | Auch auf Twitch selbst gestartete Umfragen lösen keine Commands aus; die Action bleibt für den Import; Entscheidung des Projektinhabers (2026-10-02) |
 
 ## Akzeptanzkriterien
 
@@ -217,6 +223,7 @@ Keine.
 
 | Datum | Änderung |
 |---|---|
+| 2026-10-27 | Code-Review 2026-10-24 (T8): Sechs neue plattformneutrale Typen für die Moderationsaktionen ohne Ban/Timeout: `chat.user.unban`, `chat.user.untimeout`, `chat.user.mod`, `chat.user.unmod`, `chat.user.vip`, `chat.user.unvip`; wie `chat.user.timeout` und `chat.user.ban` tragen sie den betroffenen Nutzer, sonst nichts (Nutzlast). |
 | 2026-10-18 | Neue Log-Ereignisse (Roadmap 6.6): `log.line` trägt die Log-Zeilen des Cores in den Stream (Nutzlast `level`, `component`, `message`); wie die Authentifizierungsereignisse nicht im Trigger-Katalog `All()`. |
 | 2026-09-29 | Erstfassung (Entwurf) aus der offiziellen Doku und dem Plan, ohne Code des Originals |
 | 2026-09-29 | Vom Projektinhaber geprüft und akzeptiert. Die offenen Fragen bleiben bis zur Prüfung am Original offen; bis dahin gilt das hier beschriebene Verhalten. |

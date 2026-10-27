@@ -14,6 +14,8 @@ import (
 
 	"github.com/ripmav/streamcrew/internal/apitoken"
 	"github.com/ripmav/streamcrew/internal/config"
+	"github.com/ripmav/streamcrew/internal/profile"
+	"github.com/ripmav/streamcrew/internal/store"
 )
 
 // TestTokenKong covers the kong structure of the token commands.
@@ -39,12 +41,21 @@ func TestTokenKong(t *testing.T) {
 }
 
 // TestTokenLifecycle covers create, list and revoke end to end: the value
-// is printed once, the token validates, and the revoked one is gone.
+// is printed once, the token validates, and the revoked one is gone. The
+// tokens live in the profile database (S5 of the code review 2026-10-24).
 func TestTokenLifecycle(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	dataDir := t.TempDir()
+
+	// The tokens belong to a profile.
+	mgr := profile.NewManager(dataDir)
+	prof, err := mgr.Create(ctx, "Demo", "demo")
+	require.NoError(t, err)
+
 	cfg := config.Config{
 		DataDir:         dataDir,
+		Profile:         "demo",
 		Mode:            config.ModeDaemon,
 		ShutdownTimeout: 5 * time.Second,
 		Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},
@@ -55,28 +66,29 @@ func TestTokenLifecycle(t *testing.T) {
 
 	stdout := &syncedLog{}
 	env.Stdout = stdout
-	err := (tokenCreateCmd{Name: "tui", Scopes: []string{"control"}}).Run(env)
-	require.NoError(t, err)
+	require.NoError(t, (tokenCreateCmd{Name: "tui", Scopes: []string{"control"}}).Run(ctx, env))
 	value := strings.TrimSpace(stdout.String())
 	assert.True(t, strings.HasPrefix(value, "sc_"), "the token has the sc_ prefix")
 
-	s := apitoken.Open(dataDir)
-	tok, ok := s.Validate(value)
+	s, err := store.Open(ctx, prof.Path)
+	require.NoError(t, err)
+	defer s.Close()
+	tok, ok := apitoken.New(s).Validate(ctx, value)
 	require.True(t, ok, "the printed token validates")
 	assert.Equal(t, "tui", tok.Name)
 
 	stdout.Reset()
 	env.Stdout = stdout
-	require.NoError(t, (tokenListCmd{}).Run(env))
+	require.NoError(t, (tokenListCmd{}).Run(ctx, env))
 	assert.Contains(t, stdout.String(), "tui")
 
 	stdout.Reset()
 	env.Stdout = stdout
-	require.NoError(t, (tokenRevokeCmd{IDOrName: "tui"}).Run(env))
+	require.NoError(t, (tokenRevokeCmd{IDOrName: "tui"}).Run(ctx, env))
 	assert.Contains(t, stdout.String(), "revoked")
-	_, ok = s.Validate(value)
+	_, ok = apitoken.New(s).Validate(ctx, value)
 	assert.False(t, ok, "the revoked token is gone")
 
-	err = (tokenRevokeCmd{IDOrName: "tui"}).Run(env)
+	err = (tokenRevokeCmd{IDOrName: "tui"}).Run(ctx, env)
 	require.Error(t, err, "revoking a missing token fails")
 }

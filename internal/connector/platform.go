@@ -143,6 +143,18 @@ type PlatformData interface {
 	UserPlatformData(ctx context.Context, platformUserID string) (user.PlatformData, error)
 }
 
+// FollowData is the optional capability of a Platform to report when an
+// account followed one of the channels it operates in (moderation.md,
+// B3): the participation rule of the minimum follow time asks it for an
+// account the platform's cache has not seen yet (code review
+// 2026-10-24, T11).
+type FollowData interface {
+	// FollowSince returns the time the account with the platform user ID
+	// followed the channel ch (empty: the home channel); the zero time
+	// if the account does not follow it.
+	FollowSince(ctx context.Context, ch Channel, platformUserID string) (time.Time, error)
+}
+
 // StreamControl is the optional capability of a Platform to change the
 // title and the category of its stream (roadmap 5.6, SetTitle, SetGame).
 type StreamControl interface {

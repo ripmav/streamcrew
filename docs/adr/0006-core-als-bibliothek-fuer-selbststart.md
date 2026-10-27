@@ -63,7 +63,7 @@
 **Folgearbeiten:**
 
 - [x] Plan und Roadmap an diese Entscheidung angepasst (2026-09-27)
-- [ ] Paket `core` mit Start-API anlegen; `streamcrew serve` nutzt sie (Phase 6)
+- [x] Paket `core` mit Start-API anlegen; `streamcrew serve` nutzt sie (Phase 6), erledigt 2026-10-12: `internal/app` ist das Core-Paket mit der Start-API (`app.New`/`Run`), `streamcrew serve` nutzt sie — als eigenständiges Paket `internal/core` mit eigener Start-API bleibt es offen (Desktop-D0/D1)
 - [ ] Beide Startroutinen und den Build-Tag in der Desktop-App umsetzen (Desktop D1)
 - [ ] Paketierungs-Spike (Desktop D0): beide Varianten auf allen Zielplattformen bauen und vergleichen (Signatur, Notarisierung, Paketgröße, Virenscanner, kein Dock-Symbol); daraus die Standardvariante je Plattform in der Build-Konfiguration festlegen
 

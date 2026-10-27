@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-10-16 |
 | **Entscheidung durch** | Projektinhaber (ripmav) — abwartend auf Review |
 | **Bezug** | [ADR-0010](../0010-api-protokoll.md) (API-Protokoll), [ADR-0003](../0003-betriebsmodi.md), [Code-ADR-0008](0008-datenbankzugriff.md) (sqlc-Konventionen), [Code-ADR-0001](0001-go-toolchain-und-linting.md) (Versionspinning, Linting); Plan §6.14, §6.16; Roadmap Phase 6.1 |

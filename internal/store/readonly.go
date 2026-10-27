@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/ripmav/streamcrew/internal/apitoken"
 	"github.com/ripmav/streamcrew/internal/store/sqlcgen"
 	"github.com/ripmav/streamcrew/internal/vault"
 )
@@ -66,6 +67,20 @@ func (r *ReadOnly) Accounts(ctx context.Context) ([]Account, error) {
 	out := make([]Account, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, accountFrom(row))
+	}
+	return out, nil
+}
+
+// ListAPITokens returns the API tokens, oldest first; the diag bundle uses
+// the names and scopes only (code review 2026-10-24, S12).
+func (r *ReadOnly) ListAPITokens(ctx context.Context) ([]apitoken.Token, error) {
+	rows, err := sqlcgen.New(r.db).ListAPITokens(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list api tokens: %w", translate(err))
+	}
+	out := make([]apitoken.Token, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, toAPIToken(row))
 	}
 	return out, nil
 }

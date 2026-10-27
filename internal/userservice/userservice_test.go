@@ -594,6 +594,50 @@ func TestWatchTime(t *testing.T) {
 	})
 }
 
+// TestWatchTimeSilenceAndEnd covers the code review 2026-10-24, U1: a
+// silent user stops counting after the inactivity window, and the active
+// set ends with the stream session.
+func TestWatchTimeSilenceAndEnd(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		stop := f.run(t)
+		defer stop()
+		synctest.Wait()
+		// The events carry the real clock so that the inactivity window
+		// (real time in the tick) compares against them.
+		at := time.Now().UTC().Truncate(time.Second)
+		f.store.setSession(stream.Session{Platform: platform.Mock, State: stream.StateLive, StartedAt: at})
+		ada := mockUser("ada")
+		f.publish(t, eventtype.ChatUserJoin, &ada, eventtype.Details{}, at)
+
+		// After the silence window, Ada is no longer counted although she
+		// never left and the stream is live.
+		time.Sleep(6 * time.Minute)
+		settle(t)
+		time.Sleep(time.Minute)
+		settle(t)
+		assert.Less(t, f.store.stat(ada.ID).WatchMinutes, int64(7), "the silent user stops counting")
+
+		// A new message reactivates her; the next minute counts again.
+		f.publish(t, eventtype.ChatMessage, &ada, eventtype.Details{}, at.Add(7*time.Minute))
+		time.Sleep(time.Minute)
+		settle(t)
+		assert.GreaterOrEqual(t, f.store.stat(ada.ID).WatchMinutes, int64(1), "the message reactivates her")
+
+		// The stream ends: the active set is cleared, and no minute counts
+		// any more although the user stays in the chat.
+		f.store.setSession(stream.Session{Platform: platform.Mock, State: stream.StateOffline, StartedAt: at})
+		time.Sleep(time.Minute)
+		settle(t)
+		last := f.store.stat(ada.ID).WatchMinutes
+		time.Sleep(time.Minute)
+		settle(t)
+		assert.Equal(t, last, f.store.stat(ada.ID).WatchMinutes, "an ended session counts no watch time")
+		assert.Empty(t, f.activeLogins(t), "the active set ends with the session")
+	})
+}
+
 // TestJoinOffline covers that a join while the stream is not live makes
 // the user active but does not count a watched stream (B9).
 func TestJoinOffline(t *testing.T) {
@@ -735,88 +779,4 @@ func TestPlatformDataCache(t *testing.T) {
 		assert.Equal(t, at.Add(2*time.Hour), data.FollowedAt)
 		assert.Equal(t, 1, data.SubTier)
 	})
-}
-
-// TestRankings covers the exclusion of the channel's accounts from the
-// top lists (roadmap 5.2.5): the streamer's and the bot's user are never
-// ranked, the list is refilled, excluded users (B7) and zero values are
-// absent, and invalid arguments fail.
-func TestRankings(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	store := newMemStore()
-	plats := newFakePlatform()
-	// The streamer's and the bot's accounts on the platform, which the core
-	// knows; the service resolves them for the exclusion (roadmap 5.2.5).
-	streamerIdent := user.Identity{Platform: platform.Mock, PlatformUserID: "s1", Login: "streamy", DisplayName: "streamy"}
-	botIdent := user.Identity{Platform: platform.Mock, PlatformUserID: "b1", Login: "botbot", DisplayName: "botbot"}
-	plats.connect(streamerIdent, botIdent)
-	streamer, _, err := store.UpsertIdentity(ctx, streamerIdent)
-	require.NoError(t, err)
-	bot, _, err := store.UpsertIdentity(ctx, botIdent)
-	require.NoError(t, err)
-
-	alice, bob, carol := id.New(), id.New(), id.New()
-	dan := id.New()
-	require.NoError(t, store.AddStats(ctx, []user.StatsDelta{
-		{UserID: alice, Messages: 30},
-		{UserID: bob, Messages: 20},
-		{UserID: carol, Messages: 10},
-		{UserID: streamer.ID, Messages: 999},
-		{UserID: bot.ID, Messages: 998},
-		{UserID: dan, Messages: 0},
-	}))
-	// excl is exempt from rankings (B7).
-	excl := id.New()
-	require.NoError(t, store.AddStats(ctx, []user.StatsDelta{{UserID: excl, Messages: 500}}))
-	store.mu.Lock()
-	store.excluded[excl] = true
-	store.mu.Unlock()
-
-	svc, err := userservice.New(userservice.Ports{
-		Store:     store,
-		Bus:       event.NewBus(nil),
-		Settings:  func(context.Context) (settings.Users, error) { return settings.Users{}, nil },
-		Platforms: plats,
-	})
-	require.NoError(t, err)
-
-	// Top 3 by messages: alice, bob, carol. The streamer (999), the bot
-	// (998) and the excluded (500) are absent, and dan has 0.
-	top, err := svc.Rankings(ctx, user.StatMessages, 3)
-	require.NoError(t, err)
-	assert.Equal(t, []id.ID{alice, bob, carol}, rankedIDs(top))
-	assert.Equal(t, []int64{30, 20, 10}, rankedVals(top))
-
-	// Top 5: only the three non-zero, non-excluded users exist.
-	top, err = svc.Rankings(ctx, user.StatMessages, 5)
-	require.NoError(t, err)
-	assert.Equal(t, []id.ID{alice, bob, carol}, rankedIDs(top))
-
-	// A statistic nobody has: empty, not an error.
-	top, err = svc.Rankings(ctx, user.StatCommandsRun, 3)
-	require.NoError(t, err)
-	assert.Empty(t, top)
-
-	// Invalid arguments.
-	_, err = svc.Rankings(ctx, user.Stat("donated_cents"), 1)
-	require.ErrorIs(t, err, user.ErrInvalid)
-	_, err = svc.Rankings(ctx, user.StatMessages, 0)
-	require.ErrorIs(t, err, user.ErrInvalid)
-}
-
-func rankedIDs(top []user.Ranked) []id.ID {
-	out := make([]id.ID, 0, len(top))
-	for _, r := range top {
-		out = append(out, r.User.ID)
-	}
-	return out
-}
-
-func rankedVals(top []user.Ranked) []int64 {
-	out := make([]int64, 0, len(top))
-	for _, r := range top {
-		out = append(out, r.Value)
-	}
-	return out
 }

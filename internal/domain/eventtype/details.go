@@ -47,6 +47,9 @@ type Details struct {
 type Bits struct {
 	// Amount is the number of bits cheered; not negative.
 	Amount int64 `json:"amount"`
+	// Anonymous reports whether the cheery stays unknown; the event
+	// then has no user (twitch-events.md, B4).
+	Anonymous bool `json:"anonymous"`
 }
 
 // SharedChat is the session of a shared chat (twitch.shared_chat.*).
@@ -164,4 +167,8 @@ type Gift struct {
 	// Count is the number of subscriptions gifted with the event: 1 for a
 	// gift to one user, at least 1 for a mass gift.
 	Count int `json:"count"`
+	// CommunityGiftID is the ID of the mass-gift action the gift belongs to;
+	// empty for a gift outside of one. The core uses it to suppress the
+	// single gifts of a fired mass gift (events.md B5).
+	CommunityGiftID string `json:"communityGiftId,omitempty"`
 }

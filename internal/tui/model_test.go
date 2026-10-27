@@ -34,6 +34,7 @@ func startCore(t *testing.T) string {
 		ShutdownTimeout: 5 * time.Second,
 		Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},
 		Log:             config.LogConfig{Level: "info", Format: "text", MaxSize: 1, MaxFiles: 1},
+		BootstrapToken:  testToken,
 	}
 	require.NoError(t, cfg.Resolve())
 	mgr := profile.NewManager(dir)
@@ -101,7 +102,7 @@ func TestQuit(t *testing.T) {
 func TestModelFetchStatus(t *testing.T) {
 	t.Parallel()
 	base := startCore(t)
-	tm := newTestModel(t, Options{Server: base})
+	tm := newTestModel(t, Options{Server: base, Token: testToken})
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		return strings.Contains(string(b), "Demo")
 	}, teatest.WithDuration(10*time.Second))
@@ -152,7 +153,7 @@ func TestViewRendering(t *testing.T) {
 	t.Parallel()
 	t.Run("initial", func(t *testing.T) {
 		t.Parallel()
-		m := newModel(Options{Server: "http://127.0.0.1:1"})
+		m := newModel(t.Context(), Options{Server: "http://127.0.0.1:1"})
 		m.width, m.height = 100, 30
 
 		view := m.View()
@@ -201,7 +202,7 @@ func TestClientsBuildsAUnixClient(t *testing.T) {
 // TestThemeToggles renders dark and light.
 func TestThemeToggles(t *testing.T) {
 	t.Parallel()
-	m := newModel(Options{Server: "http://127.0.0.1:1", Theme: "dark"})
+	m := newModel(t.Context(), Options{Server: "http://127.0.0.1:1", Theme: "dark"})
 	dark := m.View()
 	m.dark = false
 	light := m.View()

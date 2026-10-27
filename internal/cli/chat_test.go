@@ -22,8 +22,9 @@ import (
 )
 
 // startMockCore starts a core with the mock platform in the process and
-// returns the base URL of its API.
-func startMockCore(t *testing.T) string {
+// returns the base URL of its API and the data directory (with the local
+// admin token the api requires).
+func startMockCore(t *testing.T) (base, dataDir string) {
 	t.Helper()
 	ctx := t.Context()
 	dir := t.TempDir()
@@ -59,7 +60,8 @@ func startMockCore(t *testing.T) string {
 		cancel()
 		require.NoError(t, <-errc)
 	})
-	return "http://" + mustServerAddr(t, a)
+	base = "http://" + mustServerAddr(t, a)
+	return base, dir
 }
 
 // TestChatEventKong covers the kong structure of the chat and event
@@ -101,10 +103,10 @@ func TestChatEventKong(t *testing.T) {
 // (roadmap 6.3) against a running core with the mock platform.
 func TestChatSendAndEventSimulate(t *testing.T) {
 	t.Parallel()
-	base := startMockCore(t)
+	base, dir := startMockCore(t)
 
 	var out bytes.Buffer
-	env := &Env{Stdout: &out, Stderr: io.Discard, Config: &config.Config{}, Server: base}
+	env := &Env{Stdout: &out, Stderr: io.Discard, Config: &config.Config{DataDir: dir}, Server: base}
 
 	require.NoError(t, chatSendCmd{Text: []string{"hello", "core"}}.Run(t.Context(), env))
 	assert.Contains(t, out.String(), "sent")

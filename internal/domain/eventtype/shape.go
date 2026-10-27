@@ -100,6 +100,12 @@ func shapes() map[event.Type]Shape {
 		ChatUserFirstMessage: userMessage,
 		ChatUserTimeout:      user,
 		ChatUserBan:          user,
+		ChatUserUnban:        user,
+		ChatUserUntimeout:    user,
+		ChatUserMod:          user,
+		ChatUserUnmod:        user,
+		ChatUserVIP:          user,
+		ChatUserUnVIP:        user,
 	}
 }
 

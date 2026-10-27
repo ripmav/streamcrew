@@ -218,6 +218,24 @@ func nextWait(drop time.Duration, err error, now time.Time) time.Duration {
 	return drop
 }
 
+// redactDialError strips the access token from a dial error: the
+// *url.Error of the websocket handshake carries the full dial URL with
+// the token query, and the log redactor only masks by attribute key,
+// so the token would otherwise land in the log (code review 2026-10-24).
+func redactDialError(err error) error {
+	ue, ok := errors.AsType[*url.Error](err)
+	if !ok || ue.URL == "" {
+		return err
+	}
+	u, perr := url.Parse(ue.URL)
+	if perr != nil {
+		return err
+	}
+	u.RawQuery = "redacted"
+	u.Fragment = ""
+	return &url.Error{Op: ue.Op, URL: u.String(), Err: ue.Err}
+}
+
 // sessionID returns a random UUID for the Twitch-Session-Id header the
 // EventSub WebSocket handshake requires; without it Twitch answers 403.
 func sessionID() string {
@@ -322,7 +340,7 @@ func (c *Client) dialAndWelcome(ctx context.Context, dialURL string, asIs bool) 
 		err = dial(dctx)
 	}
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, redactDialError(err)
 	}
 	c.log.InfoContext(ctx, "the eventsub connection is up")
 
@@ -373,25 +391,36 @@ func (c *Client) resolveAsIs(dialURL string) (*url.URL, error) {
 	return resolveReconnectURL(c.base, dialURL)
 }
 
-// loop reads the connection until it drops: it hands the events to
-// the handler, reacts to session_reconnect and revocation, and closes
-// the connection when no frame has come for pongFactor keepalive
-// intervals.
+// frameIn is one frame the reader goroutine read from the connection.
+type frameIn struct {
+	op      websocket.MessageType
+	data    []byte
+	dropErr error
+}
+
+// loop reads the connection until it drops: it hands the frames to the
+// dispatch, and closes the connection when no frame has come for
+// pongFactor keepalive intervals. The reader goroutine ends with the
+// loop (code review 2026-10-24, T7).
 func (c *Client) loop(ctx context.Context, h Handler, conn *websocket.Conn, interval time.Duration) (next, error) {
-	type frameIn struct {
-		op      websocket.MessageType
-		data    []byte
-		dropErr error
-	}
+	done := make(chan struct{})
+	defer close(done)
 	in := make(chan frameIn, 1)
 	go func() {
 		for {
 			op, data, err := conn.Read(ctx)
 			if err != nil {
-				in <- frameIn{dropErr: err}
+				select {
+				case in <- frameIn{dropErr: err}:
+				case <-done:
+				}
 				return
 			}
-			in <- frameIn{op: op, data: data}
+			select {
+			case in <- frameIn{op: op, data: data}:
+			case <-done:
+				return
+			}
 		}
 	}()
 
@@ -415,118 +444,8 @@ func (c *Client) loop(ctx context.Context, h Handler, conn *websocket.Conn, inte
 				}
 				return reconnectBase()
 			}
-			if i.op != websocket.MessageText {
-				continue
-			}
-			// Any frame is proof of life: the server keeps the session
-			// alive with the session_keepalive frames.
-			deadline = time.Now().Add(pongFactor * interval)
-			var env envelope
-			if err := jsonv2.Unmarshal(i.data, &env); err != nil {
-				c.log.WarnContext(ctx, "drop an unreadable eventsub frame", "error", err)
-				continue
-			}
-			c.log.DebugContext(ctx, "the eventsub frame", "type", env.Metadata.MessageType)
-			switch env.Metadata.MessageType {
-			case "session_welcome", "session_keepalive":
-				// the connection is alive, nothing to do
-			case "notification":
-				var e Event
-				if err := jsonv2.Unmarshal(env.Payload, &e); err != nil {
-					c.log.WarnContext(ctx, "drop an unreadable eventsub event", "error", err)
-					continue
-				}
-				// The dedup key is the event object, not the whole
-				// payload: the subscription shell (session ID, created
-				// at) changes on a reconnect, the event object (and its
-				// message ID) does not, so a redelivery is still the
-				// repeat it is (B22).
-				e.ID = string(e.Body)
-				h.OnMessage(ctx, e)
-			case "session_reconnect":
-				var r reconnect
-				if err := jsonv2.Unmarshal(env.Payload, &r); err != nil {
-					return reconnectBase()
-				}
-				u, err := c.resolveAsIs(r.Session.ReconnectURL)
-				if err != nil {
-					return reconnectBase()
-				}
-				c.log.InfoContext(ctx, "the eventsub session reconnects", "session", r.Session.ID)
-				// The docs (EventSub Reference "Reconnect message"):
-				// the new session is dialed at once at the given URL
-				// and the old session stays open until the new one's
-				// welcome, so no event is lost. The old session
-				// receives events until the new one has the welcome.
-				// Without a welcome within the reconnect window the
-				// old session serves the rest of it and is dropped
-				// (the server closes it with code 4004 at the latest).
-				welcomed := make(chan error, 1)
-				out := make(chan result, 1)
-				nctx, ncancel := context.WithCancel(ctx)
-				// The context of the new session is canceled on every
-				// path that does not adopt the new session (the adopter
-				// owns it).
-				adopted := false
-				defer func() {
-					if !adopted {
-						ncancel()
-					}
-				}()
-				go func() {
-					n, e := c.session(nctx, h, u.String(), true, welcomed)
-					out <- result{n, e}
-				}()
-				windowEnd := time.Now().Add(reconnectWindow)
-				var welcomedErr error
-				select {
-				case <-ctx.Done():
-					ncancel()
-					return next{}, ctx.Err()
-				case welcomedErr = <-welcomed:
-				case <-time.After(reconnectWindow):
-					welcomedErr = errors.New("eventsub: the reconnect window expired")
-				}
-				if welcomedErr != nil {
-					ncancel()
-					c.log.WarnContext(ctx, "the reconnect session did not welcome in time", "error", welcomedErr)
-					select {
-					case <-ctx.Done():
-						return next{}, ctx.Err()
-					case <-time.After(time.Until(windowEnd)):
-					}
-					return reconnectBase()
-				}
-				// The new session has the welcome: the old session may
-				// close (the caller's deferred close), and Run adopts
-				// the new one.
-				adopted = true
-				return next{run: func() (next, error) {
-					res := <-out
-					return res.n, res.err
-				}}, nil
-			case "revocation":
-				var rv revocation
-				if err := jsonv2.Unmarshal(env.Payload, &rv); err != nil {
-					c.log.WarnContext(ctx, "drop an unreadable revocation", "error", err)
-					continue
-				}
-				c.log.InfoContext(ctx, "an eventsub subscription is revoked", "type", rv.Subscription.Type, "status", rv.Subscription.Status)
-				switch rv.Subscription.Status {
-				case "authorization_revoked":
-					// The token is gone: a fresh start (new token, no
-					// session) at the base URL.
-					h.OnRevoked(ctx)
-					return next{url: c.base}, errors.New("eventsub: the token is revoked")
-				case "user_removed", "version_removed":
-					// One subscription is gone, the session stays (the
-					// docs): the caller replaces the subscription.
-					h.OnSubscriptionRevoked(ctx, rv.Subscription)
-				default:
-					c.log.WarnContext(ctx, "an unknown revocation status", "status", rv.Subscription.Status)
-				}
-			default:
-				c.log.WarnContext(ctx, "drop an unknown eventsub frame type", "type", env.Metadata.MessageType)
+			if n, ok, err := c.dispatch(ctx, h, in, i, interval, &deadline); ok {
+				return n, err
 			}
 		case <-ticker.C:
 			if time.Now().After(deadline) {
@@ -536,6 +455,149 @@ func (c *Client) loop(ctx context.Context, h Handler, conn *websocket.Conn, inte
 			}
 		}
 	}
+}
+
+// dispatch handles one text frame of the connection and reports where
+// to go next; ok is false for a frame that keeps this connection
+// running (a keepalive, an event, a single-subscription revocation, an
+// unknown frame). in is the frame channel the session_reconnect keeps
+// reading while the new session's welcome is outstanding; deadline is
+// the keepalive deadline the frame resets.
+func (c *Client) dispatch(ctx context.Context, h Handler, in chan frameIn, i frameIn, interval time.Duration, deadline *time.Time) (next, bool, error) {
+	if i.op != websocket.MessageText {
+		return next{}, false, nil
+	}
+	// Any frame is proof of life: the server keeps the session alive
+	// with the session_keepalive frames.
+	*deadline = time.Now().Add(pongFactor * interval)
+	var env envelope
+	if err := jsonv2.Unmarshal(i.data, &env); err != nil {
+		c.log.WarnContext(ctx, "drop an unreadable eventsub frame", "error", err)
+		return next{}, false, nil
+	}
+	c.log.DebugContext(ctx, "the eventsub frame", "type", env.Metadata.MessageType)
+	switch env.Metadata.MessageType {
+	case "session_welcome", "session_keepalive":
+		// the connection is alive, nothing to do
+	case "notification":
+		var e Event
+		if err := jsonv2.Unmarshal(env.Payload, &e); err != nil {
+			c.log.WarnContext(ctx, "drop an unreadable eventsub event", "error", err)
+			return next{}, false, nil
+		}
+		// The dedup key is the event object, not the whole
+		// payload: the subscription shell (session ID, created
+		// at) changes on a reconnect, the event object (and its
+		// message ID) does not, so a redelivery is still the
+		// repeat it is (B22).
+		e.ID = string(e.Body)
+		h.OnMessage(ctx, e)
+	case "session_reconnect":
+		var r reconnect
+		if err := jsonv2.Unmarshal(env.Payload, &r); err != nil {
+			return next{url: c.base}, true, errors.New("eventsub: connection dropped")
+		}
+		u, err := c.resolveAsIs(r.Session.ReconnectURL)
+		if err != nil {
+			return next{url: c.base}, true, errors.New("eventsub: connection dropped")
+		}
+		c.log.InfoContext(ctx, "the eventsub session reconnects", "session", r.Session.ID)
+		// The docs (EventSub Reference "Reconnect message"):
+		// the new session is dialed at once at the given URL
+		// and the old session stays open until the new one's
+		// welcome, so no event is lost. The old session
+		// receives events until the new one has the welcome.
+		// Without a welcome within the reconnect window the
+		// old session serves the rest of it and is dropped
+		// (the server closes it with code 4004 at the latest).
+		welcomed := make(chan error, 1)
+		out := make(chan result, 1)
+		nctx, ncancel := context.WithCancel(ctx)
+		// The context of the new session is canceled on every
+		// path that does not adopt the new session (the adopter
+		// owns it).
+		adopted := false
+		defer func() {
+			if !adopted {
+				ncancel()
+			}
+		}()
+		go func() {
+			n, e := c.session(nctx, h, u.String(), true, welcomed)
+			out <- result{n, e}
+		}()
+		windowEnd := time.Now().Add(reconnectWindow)
+		var welcomedErr error
+		// The welcome wait keeps reading the old session (code review
+		// 2026-10-24, T7): its frames must not pile up or be lost
+		// while the new session's welcome is outstanding.
+	wait:
+		for {
+			select {
+			case <-ctx.Done():
+				ncancel()
+				return next{}, true, ctx.Err()
+			case welcomedErr = <-welcomed:
+				break wait
+			case i := <-in:
+				if i.dropErr != nil {
+					ncancel()
+					if ctx.Err() != nil {
+						return next{}, true, ctx.Err()
+					}
+					return next{url: c.base}, true, errors.New("eventsub: connection dropped")
+				}
+				if n, ok, e := c.dispatch(ctx, h, in, i, interval, deadline); ok {
+					ncancel()
+					return n, true, e
+				}
+			case <-time.After(time.Until(windowEnd)):
+				welcomedErr = errors.New("eventsub: the reconnect window expired")
+				break wait
+			}
+		}
+		if welcomedErr != nil {
+			ncancel()
+			c.log.WarnContext(ctx, "the reconnect session did not welcome in time", "error", welcomedErr)
+			select {
+			case <-ctx.Done():
+				return next{}, true, ctx.Err()
+			case <-time.After(time.Until(windowEnd)):
+			}
+			return next{url: c.base}, true, errors.New("eventsub: connection dropped")
+		}
+		// The new session has the welcome: the old session may
+		// close (the caller's deferred close), and Run adopts
+		// the new one.
+		adopted = true
+		return next{run: func() (next, error) {
+			res := <-out
+			return res.n, res.err
+		}}, true, nil
+	case "revocation":
+		var rv revocation
+		if err := jsonv2.Unmarshal(env.Payload, &rv); err != nil {
+			c.log.WarnContext(ctx, "drop an unreadable revocation", "error", err)
+			return next{}, false, nil
+		}
+		c.log.InfoContext(ctx, "an eventsub subscription is revoked", "type", rv.Subscription.Type, "status", rv.Subscription.Status)
+		switch rv.Subscription.Status {
+		case "authorization_revoked":
+			// The token is gone: a fresh start (new token, no
+			// session) at the base URL.
+			h.OnRevoked(ctx)
+			return next{url: c.base}, true, errors.New("eventsub: the token is revoked")
+		case "user_removed", "version_removed":
+			// One subscription is gone, the session stays (the
+			// docs): the caller replaces the subscription.
+			h.OnSubscriptionRevoked(ctx, rv.Subscription)
+		default:
+			c.log.WarnContext(ctx, "an unknown revocation status", "status", rv.Subscription.Status)
+		}
+	default:
+		c.log.WarnContext(ctx, "drop an unknown eventsub frame type", "type", env.Metadata.MessageType)
+	}
+	return next{}, false, nil
 }
 
 // result is the outcome of the session the session_reconnect started

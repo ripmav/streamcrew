@@ -3,7 +3,6 @@
 package tui
 
 import (
-	"context"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -24,7 +23,7 @@ func TestSettingsViewShowsTheDocument(t *testing.T) {
 	t.Parallel()
 	base := startMockCoreServer(t)
 	client, base := httpClientFor(base)
-	cfgClient := streamcrewv1alpha1connect.NewConfigServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))))
+	cfgClient := streamcrewv1alpha1connect.NewConfigServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0)), bearerInterceptor(testToken)))
 
 	resp, err := cfgClient.Get(t.Context(), &v1alpha1.GetConfigRequest{})
 	require.NoError(t, err)
@@ -53,7 +52,7 @@ func TestSettingsViewReadOnlyInDaemonMode(t *testing.T) {
 	t.Parallel()
 	base := startMockCore(t)
 	client, base := httpClientFor(base)
-	cfgClient := streamcrewv1alpha1connect.NewConfigServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))))
+	cfgClient := streamcrewv1alpha1connect.NewConfigServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0)), bearerInterceptor(testToken)))
 
 	resp, err := cfgClient.Get(t.Context(), &v1alpha1.GetConfigRequest{})
 	require.NoError(t, err)
@@ -75,8 +74,7 @@ func TestSettingsViewReadOnlyInDaemonMode(t *testing.T) {
 // refused in the read-only state (roadmap 6.5.3).
 func TestSettingsKeyReloads(t *testing.T) {
 	base := startMockCoreServer(t)
-	m := newModel(Options{Server: base})
-	m.ctx = context.Background()
+	m := newModel(t.Context(), Options{Server: base, Token: testToken})
 
 	_, cmd := m.updateSettingsKey(tea.Key{Code: 'r'})
 	require.NotNil(t, cmd, "r returns the reload command")

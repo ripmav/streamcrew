@@ -22,6 +22,32 @@ import (
 	"github.com/ripmav/streamcrew/internal/config"
 )
 
+// TestTokenForLocalServersOnly covers the Nachprüfung of the code review
+// 2026-10-24, N1: the local admin token of the data directory goes only
+// to the local core, never to a remote --server.
+func TestTokenForLocalServersOnly(t *testing.T) {
+	t.Parallel()
+	base, dir := startMockCore(t)
+	token := apiToken(t, dir)
+	require.NotEmpty(t, token)
+
+	// The local core (its runtime address) gets the token.
+	env := &Env{Config: &config.Config{DataDir: dir}, Server: base}
+	assert.Equal(t, token, env.token())
+
+	// Without a server (default local core) it goes too.
+	env = &Env{Config: &config.Config{DataDir: dir}}
+	assert.Equal(t, token, env.token())
+
+	// A remote server does not.
+	env = &Env{Config: &config.Config{DataDir: dir}, Server: "https://meinstream.example:8740"}
+	assert.Empty(t, env.token())
+
+	// --token always wins, even for a remote server.
+	env = &Env{Config: &config.Config{DataDir: dir}, Server: "https://meinstream.example:8740", APIToken: "sc_given"}
+	assert.Equal(t, "sc_given", env.token())
+}
+
 // TestCommandUserKong covers the kong structure of the API subcommands of
 // command and user.
 func TestCommandUserKong(t *testing.T) {
@@ -56,11 +82,11 @@ func TestCommandUserKong(t *testing.T) {
 // (roadmap 6.3) against a running core with the mock platform.
 func TestCommandUserAPICommands(t *testing.T) {
 	t.Parallel()
-	base := startMockCore(t)
+	base, dir := startMockCore(t)
 	ctx := t.Context()
 
 	// A command the commands work on.
-	cc := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0))))
+	cc := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0)), bearerInterceptor(apiToken(t, dir))))
 	_, err := cc.Import(ctx, &v1alpha1.ImportCommandsRequest{
 		Document: mockConsoleExampleCommands,
 		Format:   "yaml",
@@ -68,7 +94,7 @@ func TestCommandUserAPICommands(t *testing.T) {
 	require.NoError(t, err)
 
 	var out bytes.Buffer
-	env := &Env{Stdout: &out, Stderr: io.Discard, Config: &config.Config{}, Server: base}
+	env := &Env{Stdout: &out, Stderr: io.Discard, Config: &config.Config{DataDir: dir}, Server: base}
 
 	// command list shows the imported command.
 	require.NoError(t, commandListCmd{}.Run(ctx, env))
@@ -114,6 +140,27 @@ func TestCommandUserAPICommands(t *testing.T) {
 	out.Reset()
 	require.NoError(t, userSetCmd{Login: "alice", Platform: "mock", Role: "moderator"}.Run(ctx, env))
 	assert.Contains(t, out.String(), "updated")
+
+	// The title and strikes follow the contract (Nachprüfung 2026-10-24,
+	// U3): unset keeps, an empty title clears, strikes 0 clears the
+	// counter.
+	out.Reset()
+	require.NoError(t, userSetCmd{Login: "alice", Platform: "mock", Title: "Queen"}.Run(ctx, env))
+	out.Reset()
+	require.NoError(t, userShowCmd{Login: "alice", Platform: "mock"}.Run(ctx, env))
+	assert.Contains(t, out.String(), "Queen")
+	out.Reset()
+	require.NoError(t, userSetCmd{Login: "alice", Platform: "mock"}.Run(ctx, env)) // no title: keeps
+	out.Reset()
+	require.NoError(t, userShowCmd{Login: "alice", Platform: "mock"}.Run(ctx, env))
+	assert.Contains(t, out.String(), "Queen")
+	zero := uint32(0)
+	out.Reset()
+	require.NoError(t, userSetCmd{Login: "alice", Platform: "mock", ClearTitle: true, Strikes: &zero}.Run(ctx, env))
+	out.Reset()
+	require.NoError(t, userShowCmd{Login: "alice", Platform: "mock"}.Run(ctx, env))
+	assert.NotContains(t, out.String(), "Queen", "the clear flag removes the title")
+	assert.NotContains(t, out.String(), "strikes: ", "strikes 0 clears the counter")
 
 	// An unknown name is an error.
 	require.Error(t, commandShowCmd{Name: "nope"}.Run(ctx, env))

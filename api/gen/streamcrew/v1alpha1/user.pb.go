@@ -468,8 +468,9 @@ type UpdateUserRequest struct {
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// role is the new role; empty keeps the current role.
 	Role string `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"`
-	// title is the new title; empty clears it.
-	Title string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	// title is the new title; unset keeps the current title, an empty
+	// value clears it.
+	Title *string `protobuf:"bytes,3,opt,name=title,proto3,oneof" json:"title,omitempty"`
 	// excluded sets the excluded switch; unset keeps it.
 	Excluded *bool `protobuf:"varint,4,opt,name=excluded,proto3,oneof" json:"excluded,omitempty"`
 	// strikes sets the strike counter; unset keeps it.
@@ -523,8 +524,8 @@ func (x *UpdateUserRequest) GetRole() string {
 }
 
 func (x *UpdateUserRequest) GetTitle() string {
-	if x != nil {
-		return x.Title
+	if x != nil && x.Title != nil {
+		return *x.Title
 	}
 	return ""
 }
@@ -936,13 +937,14 @@ const file_streamcrew_v1alpha1_user_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
 	"\x0eplatform_login\x18\x02 \x01(\tR\rplatformLogin\"D\n" +
 	"\x0fGetUserResponse\x121\n" +
-	"\x04user\x18\x01 \x01(\v2\x1d.streamcrew.v1alpha1.UserViewR\x04user\"\xa6\x01\n" +
+	"\x04user\x18\x01 \x01(\v2\x1d.streamcrew.v1alpha1.UserViewR\x04user\"\xb5\x01\n" +
 	"\x11UpdateUserRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04role\x18\x02 \x01(\tR\x04role\x12\x14\n" +
-	"\x05title\x18\x03 \x01(\tR\x05title\x12\x1f\n" +
-	"\bexcluded\x18\x04 \x01(\bH\x00R\bexcluded\x88\x01\x01\x12\x1d\n" +
-	"\astrikes\x18\x05 \x01(\rH\x01R\astrikes\x88\x01\x01B\v\n" +
+	"\x04role\x18\x02 \x01(\tR\x04role\x12\x19\n" +
+	"\x05title\x18\x03 \x01(\tH\x00R\x05title\x88\x01\x01\x12\x1f\n" +
+	"\bexcluded\x18\x04 \x01(\bH\x01R\bexcluded\x88\x01\x01\x12\x1d\n" +
+	"\astrikes\x18\x05 \x01(\rH\x02R\astrikes\x88\x01\x01B\b\n" +
+	"\x06_titleB\v\n" +
 	"\t_excludedB\n" +
 	"\n" +
 	"\b_strikes\"G\n" +

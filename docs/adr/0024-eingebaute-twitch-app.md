@@ -24,9 +24,11 @@ Die Ökosystem-Recherche (2026-10-11) zeigt die zwei etablierten Muster:
 - **MixItUp** (lokaler Desktop-Bot, Open Source) liefert eine **eingebaute
   App für alle Nutzer**: die Client-ID liegt im Quellcode, das Secret ist in
   der verteilten Binary eingebettet (geschlossene Build-Ebene), der Flow ist
-  der Authorization Code Flow mit Loopback-Redirect; der Refresh läuft ohne
-  Secret. Das Secret ist damit an alle Nutzer verteilt, die Binary ist der
-  Wertschutz.
+  der Authorization Code Flow mit Loopback-Redirect. Das Secret ist damit an
+  alle Nutzer verteilt, die Binary ist der Wertschutz. Dass der Refresh dort
+  ohne Secret läuft, überträgt streamcrew nicht: Twitch verlangt für
+  Confidential Apps das Secret auch beim Refresh (im Feld bestätigt,
+  2026-10-20).
 - **StreamElements** (Hosted-Service) hält das Secret **nur serverseitig**
   und verteilt keine Credentials — für streamcrew nicht übernehmbar, weil der
   Core local-first ohne Projekt-Backend läuft (ADR-0003).
@@ -107,8 +109,9 @@ der BYO-Ansatz bleibt optional erhalten.
   eigene Rate-Limits).
 - Postquantum-fähiger Verschluss (ML-KEM) ohne neue Abhängigkeiten
   (Go-Standardlibrary).
-- Refresh ohne Secret: Secret-Rotation bricht keine bestehenden Accounts;
-  das Secret wird nach dem ersten Login nie wieder gebraucht.
+- Refresh mit dem eingebauten Secret: der Re-Login nach einer
+  Secret-Rotation ist der eingepreiste Preis (Punkt 5); ohne ihn bräche die
+  Rotation jeden bestehenden Account.
 
 **Negativ und Risiken:**
 

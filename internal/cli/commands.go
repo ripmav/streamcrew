@@ -116,6 +116,7 @@ func (serveCmd) Run(ctx context.Context, e *Env) error {
 		Revoke:            cfg.Revoke,
 		FileRoot:          cfg.FileRoot,
 		OutboundAllow:     cfg.OutboundAllow,
+		BootstrapToken:    cfg.BootstrapToken,
 		LogLevel:          cfg.Log.Level,
 		LogFormat:         cfg.Log.Format,
 		LogFile:           cfg.Log.File,
@@ -251,7 +252,8 @@ func (c doctorCmd) Run(ctx context.Context, e *Env) error {
 		return &usageError{err: err}
 	}
 	results := doctor.Run(ctx, doctor.Config{
-		DataDir: cfg.DataDir, ConfigFile: e.File.Path(), Listen: cfg.Listen, Rights: doctorRights(rights),
+		DataDir: cfg.DataDir, ConfigFile: e.File.Path(), Listen: cfg.Listen, TLS: cfg.TLSCert != "",
+		Rights: doctorRights(rights),
 	})
 	if c.Output == "json" {
 		err = writeJSON(e.Stdout, results)

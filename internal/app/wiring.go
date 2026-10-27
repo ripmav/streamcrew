@@ -117,6 +117,21 @@ func (p *platformSet) All() []connector.Platform {
 	return p.set.All()
 }
 
+// followSince adapts the platforms of the profile to the FollowData port
+// of the moderation (moderation.md, B3, code review 2026-10-24, T11): it
+// asks the platform that operates the channel, while the core runs.
+func (a *App) followSince(ctx context.Context, p platform.Name, ch, platformUserID string) (time.Time, error) {
+	plat, ok := a.platforms.Platform(p)
+	if !ok {
+		return time.Time{}, fmt.Errorf("the platform %s is not in the profile", p)
+	}
+	fd, ok := plat.(connector.FollowData)
+	if !ok {
+		return time.Time{}, fmt.Errorf("the platform %s reports no follow time", p)
+	}
+	return fd.FollowSince(ctx, connector.Channel(ch), platformUserID)
+}
+
 // userStore adapts *store.Store to the Store port of the user service:
 // the store reports a missing user with an error, the service wants ok.
 type userStore struct{ *store.Store }

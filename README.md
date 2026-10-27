@@ -15,7 +15,7 @@ Phase 6 (Agent-Plattform) ist fast vollständig umgesetzt, M2 (Headless-MVP) ist
 - **TUI** (6.3/6.4): `streamcrew tui` zeigt Dashboard, Chat, Events, Warteschlange, Commands, Nutzer und Logs live aus dem Event-Stream — lokal oder gegen einen entfernten Core (`--server`).
 - **On-the-fly-Konfiguration** (6.5): Einstellungen wie `listen` und `log_level` wirken im laufenden Core ohne Neustart, per Konfigurationsdatei (Watcher) oder über die API (`ConfigService`, TUI-Settings-View).
 - **Log-Stream** (6.6): Log-Zeilen sind Ereignisse; Clients abonnieren sie gefiltert nach Level, Plattform, Channel und Ereignisklasse über den Event-Stream.
-- **Release MVP** (6.7): Auslieferung und Nutzerdokumentation sind offen.
+- **Release MVP** (6.7): Auslieferung steht (Releases mit Binary, Doku und Docker-Tar, [ADR-0025](docs/adr/0025-release-und-distribution.md)); offen sind die ADR-0025-Akzeptanz und die Registry-Publishing-Nachführung.
 
 Die vollständige Planung mit Abnahmekriterien steht in der [Roadmap](docs/roadmap.md).
 
@@ -79,8 +79,8 @@ go build ./cmd/streamcrew   # -> ./streamcrew
 
 | Modus | Standard-Listenadresse |
 |---|---|
-| `desktop` (Standard) | Unix-Socket `<data-dir>/core.sock` |
-| `daemon` | `127.0.0.1:8740` |
+| `desktop` | Unix-Socket `<data-dir>/core.sock` |
+| `daemon` (Standard) | `127.0.0.1:8740` |
 | `server` | `:8740` (alle Interfaces) |
 
 Capabilities je Modus (Standard, ohne `--grant`/`--revoke`):
@@ -106,7 +106,9 @@ Standard: `~/.config/streamcrew` (Linux/macOS), `%AppData%\streamcrew` (Windows)
 ├── secret.key           # Schlüsselsatz (ohne System-Keyring; Priorität: Umgebungsvariable > System-Keyring > Datei)
 ├── core.sock              # Unix-Socket (Desktop-Modus)
 ├── runtime.json           # Adresse, PID, Version des laufenden Cores
+├── api.token              # Local-Token des Daemons (Daemon-Modus, ADR-0013)
 ├── desktop-token          # API-Token der Desktop-App (Desktop-Modus, ADR-0005)
+├── streamcrew.lock        # Sperrdatei gegen Doppelstart
 ├── logs/streamcrew.log  # JSON-Logdatei mit Rotation
 ├── chat/<plattform>.jsonl    # optionales Chat-Protokoll
 ├── backups/             # Profile-Backups
@@ -151,7 +153,7 @@ twitch_eventsub: on         # EventSub-Adapter der Twitch-Plattform: an oder aus
 twitch_irc: off             # IRC-Adapter der Twitch-Plattform: an oder aus; mindestens einer muss an sein
 ```
 
-Änderungen der **Hot-Settings** wirken im laufenden Core, ohne Neustart: Der Watcher liest die Datei regelmäßig, wendet die Änderung an und meldet Fehlschläge im Log. Hot sind `listen` (+ `tls_cert`/`tls_key`), `cors_allow`, `dev`, `dry_run`, die `log_*`-Einstellungen (außer `log_file`, das nach dem Nachtrag 2026-10-24 nur beim Start gilt), `grant`, `revoke`, `file_root`, `outbound_allow`, `mode` und `shutdown_timeout`; `data_dir`, `profile`, `config`, `stream_buffer`, `stream_catch_up`, `twitch_eventsub` und `twitch_irc` brauchen einen Neustart. Dieselben Einstellungen lassen sich über die API setzen (`ConfigService`) — die TUI-Settings-View nutzt das ([Code-ADR-0021](docs/adr/code/0021-on-the-fly-konfiguration.md)). Rechte und sicherheitsrelevante Einstellungen (`grant`, `revoke`, `file_root`, `outbound_allow`, `mode`, `cors_allow`, `listen`, TLS, `dev`) darf die API nur einschränken, erweitern geht nur lokal in der Datei ([Nachtrag 2026-10-24](docs/adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte); die Umsetzung ist offen).
+Änderungen der **Hot-Settings** wirken im laufenden Core, ohne Neustart: Der Watcher liest die Datei regelmäßig, wendet die Änderung an und meldet Fehlschläge im Log. Hot sind `listen` (+ `tls_cert`/`tls_key`), `cors_allow`, `dev`, `dry_run`, die `log_*`-Einstellungen (außer `log_file`, das nach dem Nachtrag 2026-10-24 nur beim Start gilt), `grant`, `revoke`, `file_root`, `outbound_allow`, `mode` und `shutdown_timeout`; `data_dir`, `profile`, `config`, `stream_buffer`, `stream_catch_up`, `twitch_eventsub` und `twitch_irc` brauchen einen Neustart. Dieselben Einstellungen lassen sich über die API setzen (`ConfigService`) — die TUI-Settings-View nutzt das ([Code-ADR-0021](docs/adr/code/0021-on-the-fly-konfiguration.md)). Rechte und sicherheitsrelevante Einstellungen (`grant`, `revoke`, `file_root`, `outbound_allow`, `mode`, `cors_allow`, `listen`, TLS, `dev`) darf die API nur einschränken, gemessen am aktuell wirksamen Stand; ein erweiterndes Dokument wird ganz abgelehnt, erweitern geht nur lokal in der Datei ([Nachtrag 2026-10-24](docs/adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte)).
 
 ### Flags und Umgebungsvariablen
 
@@ -162,7 +164,7 @@ Alle Flags gelten für jeden Befehl; die dazugehörige Umgebungsvariable steht i
 | `--config FILE` (`$STREAMCREW_CONFIG`) | Konfigurationsdatei (YAML); ohne Flag wird `config.yaml` im Datenverzeichnis gelesen, falls vorhanden |
 | `--data-dir DIR` (`$STREAMCREW_DATA_DIR`) | Datenverzeichnis; Standard `~/.config/streamcrew` |
 | `--profile ID` (`$STREAMCREW_PROFILE`) | Profil; Standard: das aktive Profil |
-| `--mode MODE` (`$STREAMCREW_MODE`) | Betriebsmodus: `desktop` (Standard), `daemon`, `server` |
+| `--mode MODE` (`$STREAMCREW_MODE`) | Betriebsmodus: `desktop`, `daemon` (Standard), `server` |
 | `--listen HOST:PORT` (`$STREAMCREW_LISTEN`) | HTTP-Server-Adresse; Standard `127.0.0.1:8740`, in Server-Modus `:8740` |
 | `--dev` (`$STREAMCREW_DEV`) | Entwicklermodus: pprof unter `/debug/pprof/`, erfordert Loopback-Adresse |
 | `--cors-allow ORIGIN,...` (`$STREAMCREW_CORS_ALLOW`) | erlaubte CORS-Origin, wiederholbar; Standard: cross-origin abgelehnt |
@@ -268,7 +270,7 @@ Die Plattform-Ereignisse der Twitch-Quelle (`twitch.bits.cheer`, `twitch.channel
 | `mock` | Core mit der Mock-Plattform gegen eine Profil-Kopie; die Konsole simuliert Chat, Events und den Stream |
 | `tui` | Terminal-UI gegen lokalen oder entfernten Core |
 | `profile list/create/rename/use/delete` | Profile verwalten |
-| `profile channels list/add/remove/chat` | zusätzliche Kanäle des Profils (Add/Remove/Chat: Core muss gestoppt sein); `chat` wechselt den Chat-Adapter der zusätzlichen Kanäle zwischen `eventsub` (Standard) und `irc` |
+| `profile channels list/add/remove` | zusätzliche Kanäle des Profils (Add/Remove: Core muss gestoppt sein); mit EventSub-Adapter muss das Bot-Konto im Kanal Moderator sein |
 | `auth login/status/logout` | Twitch-Konten anmelden (Authorization Code Flow, `--device-flow` als Fallback), anzeigen, abmelden |
 | `command list/show/run/delete/enable/disable` | Commands des laufenden Cores über die API |
 | `command import/export/validate` | Commands as Code ein-/ausladen, prüfen |
@@ -333,7 +335,7 @@ streamcrew token list
 streamcrew token revoke <id-oder-name>
 ```
 
-Scopes: `read`, `control`, `admin` (Standard), `overlay`. Solange kein Token gespeichert ist, ist die API offen (Bootstrap, nur Loopback-Standard laut [ADR-0003](docs/adr/0003-betriebsmodi.md)); sobald mindestens ein Token existiert, braucht **jeder** Request ein gültiges Bearer-Token mit dem für die Methode nötigen Scope. In `server`-Modus gehört das Erstellen eines Tokens deshalb zum Aufsetzen — der Loopback-Standard und die offene Bootstrap-Phase gelten dort nicht.
+Scopes: `read`, `control`, `admin` (Standard), `overlay`. Die API ist ohne Token **geschlossen** (401): `daemon` legt beim ersten Start automatisch ein Local-Token in `<data-dir>/api.token` an, `server` startet ohne Token und braucht `streamcrew token create` oder `$STREAMCREW_TOKEN`; `desktop` legt `desktop-token` an. Sobald mindestens ein Token existiert, braucht **jeder** Request ein gültiges Bearer-Token mit dem für die Methode nötigen Scope.
 
 **Zugriff:**
 
@@ -358,21 +360,21 @@ _, err := cl.Status(ctx, connect.NewRequest(&streamcrewv1alpha1.StatusRequest{})
 - **User-Nachrichten und API-Antworten:** Im Debug-Log-Level oder mit `--dry-run` gehen zusätzlich alle User-Nachrichten (Chat, Whispers, mit vollem Text) in eine eigene Datei `<Log-Verzeichnis>/messages.json` (JSON, gleiche Rotation), und alle Antworten der APIs (Twitch/Helix, BetterTTV, FrankerFaceZ) landen mit ihrem Body (ab 64 KiB gekürzt) im normalen Log. Sicherheitsrelevante Werte — Token- und Secret-Felder im Body (`access_token`, `refresh_token`, …) und in URLs (`token=`, `code=`, …) — werden dabei durch `***` ersetzt; dieselbe Maskierung gilt für alle Log-Attribute mit secret-ahnendem Schlüssel (existierende `redact`-Logik). Beide werden beim Start entschieden; eine Hot-Änderung von `log_level` oder `dry_run` öffnet/schließt die Datei nicht.
 - **Stream:** Log-Zeilen sind zugleich Ereignisse (`log.line`) und laufen in den Event-Stream; TUI und Clients abonnieren sie gefiltert nach Level, Plattform, Channel und Ereignisklasse ([Roadmap 6.6](docs/roadmap.md)).
 
-Alle Log-Einstellungen sind Hot-Settings: Änderungen wirken ohne Neustart. Ausnahme: `log_file` gilt nach dem [Nachtrag 2026-10-24 zu Code-ADR-0021](docs/adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte) nur beim Start (die Umsetzung ist offen).
+Alle Log-Einstellungen sind Hot-Settings: Änderungen wirken ohne Neustart. Ausnahme: `log_file` gilt nach dem [Nachtrag 2026-10-24 zu Code-ADR-0021](docs/adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte) nur beim Start.
 
 ## Plattform: Twitch
 
 - **Login:** `streamcrew auth login twitch` — Authorization Code Flow mit Loopback-Redirect, Device Code Flow per `--device-flow` ([ADR-0023](docs/adr/0023-twitch-login-authorization-code-flow.md)). Tokens und App-Credentials liegen **verschlüsselt** im Profil (Vault) und werden vor Ablauf erneuert.
 - **App:** eingebauter Twitch-App-Client oder eigene (BYO) ([ADR-0024](docs/adr/0024-eingebaute-twitch-app.md)).
 - **Verbindung:** EventSub-WebSocket mit Keepalive, Session-Reconnect und Deduplizierung; die Subscriptions werden je Channel am Soll-Zustand gehalten.
-- **Funktionen:** Chat (senden, antworten, flüstern, löschen, leeren), Moderation, Titel/Kategorie, Channel Points, Bits, Emote-Katalog (Twitch, BetterTTV, FrankerFaceZ), Clips, Marker, Raid, Shoutout, Umfrage, Vorhersage, Belohnungen.
-- **Zusätzliche Kanäle:** `streamcrew profile channels add <login>` — der Bot arbeitet in jedem Kanal, in dem sein Konto Moderator ist, ohne zweiten Login; jeder Kanal bekommt die eigene WebSocket-Verbindung und Subscriptions. Die Startkonfiguration `twitch_irc: on` (oder `--twitch-irc on`, Neustart nötig) lässt die zusätzlichen Kanäle stattdessen über den Twitch-IRC-Chat des Bot-Kontos laufen — ohne Mod-Voraussetzung, mit Whisper und Senden; der Mod-Status wird dann aus den Chat-Badges erkannt. Ist EventSub aus (`twitch_eventsub: off`), übernimmt der IRC-Adapter auch den Heimkanal — mindestens ein Adapter muss an sein, sonst startet der Core nicht. Details in der [Spezifikation](docs/spec/twitch-multi-channel.md).
+- **Funktionen:** Chat (senden, antworten, Flüstern empfangen, löschen, leeren), Moderation, Titel/Kategorie, Channel Points, Bits, Emote-Katalog (Twitch, BetterTTV, FrankerFaceZ), Clips, Marker, Raid, Shoutout, Umfrage, Vorhersage, Belohnungen.
+- **Zusätzliche Kanäle:** `streamcrew profile channels add <login>` — der Bot arbeitet in jedem Kanal, in dem sein Konto Moderator ist, ohne zweiten Login; jeder Kanal bekommt die eigene WebSocket-Verbindung und Subscriptions. Die Startkonfiguration `twitch_irc: on` (oder `--twitch-irc on`, Neustart nötig) lässt die zusätzlichen Kanäle stattdessen über den Twitch-IRC-Chat des Bot-Kontos laufen — ohne Mod-Voraussetzung, mit Whisper-Empfang und Senden; der Mod-Status wird dann aus den Chat-Badges erkannt. Ist EventSub aus (`twitch_eventsub: off`), übernimmt der IRC-Adapter auch den Heimkanal — mindestens ein Adapter muss an sein, sonst startet der Core nicht. Details in der [Spezifikation](docs/spec/twitch-multi-channel.md).
 - **Pro-Channel-Konfiguration:** ein Command trägt einen optionalen Channel-Scope (`channel`, leer = alle betriebenen Kanäle); Counter, Cooldowns, Währungen und Nutzer-Statistiken gelten profiltweit.
 
 ## Sicherheit
 
 - **Capabilities** ([ADR-0013](docs/adr/0013-sicherheitsmodell.md)): Jede Funktion, die über den Core hinausgreift, braucht eine benannte Capability; Action- und Requirement-Typen nennen ihre Rechte im Descriptor, die Engine prüft sie vor der Ausführung und scheitert sonst mit klarer Meldung. Die Menge entsteht aus dem Betriebsmodus plus `--grant`/`--revoke` und kann ohne Neustart aus der Konfigurationsdatei nachgeladen werden ([Code-ADR-0019](docs/adr/code/0019-host-rechte-in-der-startkonfiguration.md)).
-- **Tokens:** API-Tokens sind pro Profil, verschlüsselt in der Profil-Datenbank gespeichert, per `secret rotate` neu verschlüsselbar; ohne gespeichertes Token ist die API offen (nur Loopback-Standard), mit einem Token ist jeder Request authentifiziert und berechtigt.
+- **Tokens:** API-Tokens liegen pro Profil als Hash in der Profil-Datenbank; jede Anfrage braucht ein gültiges Bearer-Token mit dem nötigen Scope (außer `/healthz`, `/readyz` und die Overlay-Endpunkte) — ohne Token bleibt die API geschlossen (ADR-0013 §5). Die OAuth-Tokens des Profils liegen verschlüsselt in der Datenbank und sind per `secret rotate` neu verschlüsselbar.
 - **Diagnose:** `diag bundle` sammelt Umgebungs-, Konfigurations- und Log-Informationen für Bug-Reports — Secrets und Token werden maskiert.
 
 ## Container

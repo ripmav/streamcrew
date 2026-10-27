@@ -60,19 +60,23 @@ func (p *outPub) sentText(text string) bool {
 
 // hotCore starts a daemon-mode core with a mock platform (whose outputs go
 // to pub) and a configuration file the watcher watches (roadmap 6.5).
-func hotCore(t *testing.T, pub *outPub) (*app.App, string) {
+func hotCore(t *testing.T, pub *outPub) (*app.App, string, string) {
 	return hotCoreWithConsole(t, pub, &bytes.Buffer{})
 }
 
-func hotCoreWithConsole(t *testing.T, pub *outPub, _ *bytes.Buffer) (*app.App, string) {
+func hotCoreWithConsole(t *testing.T, pub *outPub, _ *bytes.Buffer) (*app.App, string, string) {
 	return hotCoreArgs(t, pub, config.ModeDaemon)
 }
 
-func hotCoreArgs(t *testing.T, pub *outPub, mode config.Mode, _ ...string) (*app.App, string) {
+func hotCoreArgs(t *testing.T, pub *outPub, mode config.Mode, _ ...string) (*app.App, string, string) {
 	return hotCoreArgsConsole(t, pub, mode, &bytes.Buffer{})
 }
 
-func hotCoreArgsConsole(t *testing.T, pub *outPub, mode config.Mode, console *bytes.Buffer, args ...string) (*app.App, string) {
+// hotTestToken is the admin token the server-mode hot cores start with, so
+// the api tests talk to a protected api (ADR-0013 §5).
+const hotTestToken = "hot-test-token"
+
+func hotCoreArgsConsole(t *testing.T, pub *outPub, mode config.Mode, console *bytes.Buffer, args ...string) (*app.App, string, string) {
 	cfg := testConfig(t)
 	require.NoError(t, cfg.Resolve())
 	require.NoError(t, os.MkdirAll(cfg.DataDir, 0o700))
@@ -94,7 +98,7 @@ func hotCoreArgsConsole(t *testing.T, pub *outPub, mode config.Mode, console *by
 		args = append(args, "--mode", string(mode))
 	}
 	if mode == config.ModeServer {
-		args = append(args, "--listen", "127.0.0.1:0")
+		args = append(args, "--listen", "127.0.0.1:0", "--bootstrap-token", hotTestToken)
 	}
 	_, err = parser.Parse(args)
 	require.NoError(t, err)
@@ -125,12 +129,20 @@ func hotCoreArgsConsole(t *testing.T, pub *outPub, mode config.Mode, console *by
 	case err := <-errRun:
 		t.Fatalf("Run returned early: %v", err)
 	}
+	// The api is protected (ADR-0013 §5): the daemon core created the
+	// local admin token, the server core took the bootstrap token.
+	token := hotTestToken
+	if mode != config.ModeServer {
+		data, err := os.ReadFile(cfg.APITokenPath())
+		require.NoError(t, err)
+		token = strings.TrimSpace(string(data))
+	}
 	// Warm up the watcher: the file was created before the resolver
 	// loaded, so the watcher compares against the content it read at
 	// start; a rewrite with the same content is a no-op for the rights
 	// but proves the comparison runs.
 	rewriteFile(t, path, "log_level: debug\n")
-	return a, path
+	return a, path, token
 }
 
 // freePort asks the system for a free TCP port on loopback.
@@ -144,9 +156,9 @@ func freePort(t *testing.T) string {
 	return addr[strings.LastIndex(addr, ":")+1:]
 }
 
-func chatClient(t *testing.T, base string) streamcrewv1alpha1connect.ChatServiceClient {
+func chatClient(t *testing.T, base, token string) streamcrewv1alpha1connect.ChatServiceClient {
 	t.Helper()
-	return streamcrewv1alpha1connect.NewChatServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base)))
+	return streamcrewv1alpha1connect.NewChatServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base), withAuth(token)))
 }
 
 // rewriteFile rewrites the file and waits for the watcher interval to pass.
@@ -161,10 +173,10 @@ func rewriteFile(t *testing.T, path, content string) {
 // chat write is recorded instead of delivered to the platform.
 func TestHotApplyDryRun(t *testing.T) {
 	pub := &outPub{}
-	a, path := hotCore(t, pub)
+	a, path, token := hotCore(t, pub)
 	// Dry run off: the core's chat message goes to the platform.
 	base := "http://" + mustServerAddr(t, a)
-	chat := chatClient(t, base)
+	chat := chatClient(t, base, token)
 	_, err := chat.Send(t.Context(), &v1alpha1.SendChatRequest{Text: "hello"})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool { return pub.sentText("hello") },
@@ -188,7 +200,7 @@ func TestHotApplyDryRun(t *testing.T) {
 // TestHotApplyShutdownTimeout verifies the shutdown timeout changes at
 // runtime (roadmap 6.5).
 func TestHotApplyShutdownTimeout(t *testing.T) {
-	a, path := hotCore(t, &outPub{})
+	a, path, _ := hotCore(t, &outPub{})
 	assert.Equal(t, 15*time.Second, a.ShutdownTimeout())
 	rewriteFile(t, path, "log_level: debug\nshutdown_timeout: 30s\n")
 	require.Eventually(t, func() bool { return a.ShutdownTimeout() == 30*time.Second },
@@ -198,7 +210,7 @@ func TestHotApplyShutdownTimeout(t *testing.T) {
 // TestHotApplyListenRebinds verifies the listen address moves at runtime
 // (roadmap 6.5): the new address serves, the old one stops.
 func TestHotApplyListenRebinds(t *testing.T) {
-	a, path := hotCore(t, &outPub{})
+	a, path, _ := hotCore(t, &outPub{})
 	old := mustServerAddr(t, a)
 
 	// The rebind moves the server to a fixed port the test picks.

@@ -76,6 +76,23 @@ type Stream interface {
 // streamService implements the StreamService handler.
 type streamService struct {
 	s Stream
+	// valid rechecks the token of a long-lived stream per event, so a
+	// revocation ends already-open streams (code review 2026-10-24, S12);
+	// nil for an open API.
+	valid func(ctx context.Context, value string) bool
+}
+
+// tokenValid reports whether the stream's token is still valid; without a
+// recheck (open API) it is.
+func (s *streamService) tokenValid(ctx context.Context) bool {
+	if s.valid == nil {
+		return true
+	}
+	v, ok := tokenValue(ctx)
+	if !ok {
+		return true
+	}
+	return s.valid(ctx, v)
 }
 
 // Subscribe streams events to the client until the client cancels.
@@ -98,6 +115,9 @@ func (s *streamService) Subscribe(ctx context.Context, req *v1alpha1.SubscribeRe
 		case e, ok := <-events:
 			if !ok {
 				return nil
+			}
+			if !s.tokenValid(ctx) {
+				return connect.NewError(connect.CodePermissionDenied, "the token was revoked")
 			}
 			if err := stream.Send(e); err != nil {
 				return err

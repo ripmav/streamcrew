@@ -141,7 +141,7 @@ sie ausdrücklich übernimmt.*
 | `channel:read:vips` | VIP-Liste lesen (4.4) |
 | `channel:manage:vips` | VIP setzen und entziehen (Twitch-Action) (4.4) |
 | `moderator:read:followers` | EventSub `channel.follow`; Follower-Liste (4.4) |
-| `user:manage:whispers` | Flüstern senden und empfangen (4.2/4.4) |
+| `user:read:whispers` | Flüstern empfangen (4.2/4.4); Flüstern an ein Bot-Konto sendet Twitch nicht zu, ein Antworten läuft als Reply über `chat:edit` (Code-Review 2026-10-24, T5) |
 | `channel:read:subscriptions` | Abo, Resub, Geschenk, Massengeschenk, Abo-Ende (4.4) |
 | `channel:read:charity` | Charity-Ereignisse (4.4) |
 | `channel:read:goals` | Ziel-Ereignisse (4.4) |

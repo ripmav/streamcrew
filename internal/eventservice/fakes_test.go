@@ -48,6 +48,21 @@ type memStore struct {
 	sessionStats  map[string]feed.SessionStats
 }
 
+// identityOf is the stored identity of the account, for the tests;
+// ok is false for an unknown account.
+func (m *memStore) identityOf(p platform.Name, platformUserID string) (user.Identity, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, u := range m.users {
+		for _, have := range u.Identities {
+			if have.Platform == p && have.PlatformUserID == platformUserID {
+				return have, true
+			}
+		}
+	}
+	return user.Identity{}, false
+}
+
 func newMemStore() *memStore {
 	return &memStore{
 		sessions:      make(map[platform.Name]stream.Session),
@@ -344,6 +359,10 @@ type fakeChat struct {
 	deleted []string
 	muted   bool
 	fail    error
+	// deleteFn, when set, runs before the delete is recorded; the
+	// lock-free tests use it to hold the delete (code review 2026-10-24,
+	// T9).
+	deleteFn func(ctx context.Context, p platform.Name, ch connector.Channel, messageID string) error
 }
 
 func (c *fakeChat) Record(_ context.Context, e chatsvc.Entry) error {
@@ -359,11 +378,26 @@ func (c *fakeChat) Muted() bool {
 	return c.muted
 }
 
-func (c *fakeChat) Delete(_ context.Context, p platform.Name, ch connector.Channel, messageID string) error {
+func (c *fakeChat) Delete(ctx context.Context, p platform.Name, ch connector.Channel, messageID string) error {
+	c.mu.Lock()
+	fn, fail := c.deleteFn, c.fail
+	c.mu.Unlock()
+	if fn != nil {
+		if err := fn(ctx, p, ch, messageID); err != nil {
+			return err
+		}
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.deleted = append(c.deleted, fmt.Sprintf("%s/%s/%s", p, ch, messageID))
-	return c.fail
+	return fail
+}
+
+// setDeleteFn sets the hook that runs before a delete is recorded.
+func (c *fakeChat) setDeleteFn(fn func(ctx context.Context, p platform.Name, ch connector.Channel, messageID string) error) {
+	c.mu.Lock()
+	c.deleteFn = fn
+	c.mu.Unlock()
 }
 
 func (c *fakeChat) setMuted(b bool) {
@@ -412,6 +446,9 @@ type fakeModeration struct {
 	cmds    commands
 	engine  *fakeEngine
 	strikes *memStrikes
+	// checkFn, when set, replaces the real check; the lock-free tests
+	// use it to hold the check (code review 2026-10-24, T9).
+	checkFn func(ctx context.Context, m moderation.Message) (moderation.Decision, error)
 }
 
 func (f *fakeModeration) get(context.Context) (settings.Moderation, error) {
@@ -427,7 +464,20 @@ func (f *fakeModeration) set(cfg settings.Moderation) {
 	f.mu.Unlock()
 }
 
+// setCheckFn replaces the check; the real check runs while it is nil.
+func (f *fakeModeration) setCheckFn(fn func(ctx context.Context, m moderation.Message) (moderation.Decision, error)) {
+	f.mu.Lock()
+	f.checkFn = fn
+	f.mu.Unlock()
+}
+
 func (f *fakeModeration) Check(ctx context.Context, m moderation.Message) (moderation.Decision, error) {
+	f.mu.Lock()
+	fn := f.checkFn
+	f.mu.Unlock()
+	if fn != nil {
+		return fn(ctx, m)
+	}
 	svc, err := moderation.New(moderation.Ports{
 		Settings: f.get, Strikes: f.strikes, Commands: f.cmds, Engine: f.engine,
 	})

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Vorgeschlagen |
+| **Status** | Akzeptiert |
 | **Datum** | 2026-09-30 |
 | **Entscheidung durch** | … (Vorgabe des Projektinhabers vom 2026-09-30; Abnahme des ADR ausstehend) |
 | **Bezug** | Plan §11.1; [ADR-0010](../0010-api-protokoll.md); [Code-ADR-0002](0002-dependency-injection.md), [Code-ADR-0003](0003-fehler-und-logging.md), [Code-ADR-0005](0005-konfiguration.md), [Code-ADR-0010](0010-polymorphe-serialisierung.md) |

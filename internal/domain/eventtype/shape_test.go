@@ -63,6 +63,12 @@ func TestShapes(t *testing.T) {
 		eventtype.ChatUserFirstMessage:        "user message",
 		eventtype.ChatUserTimeout:             "user",
 		eventtype.ChatUserBan:                 "user",
+		eventtype.ChatUserUnban:               "user",
+		eventtype.ChatUserUntimeout:           "user",
+		eventtype.ChatUserMod:                 "user",
+		eventtype.ChatUserUnmod:               "user",
+		eventtype.ChatUserVIP:                 "user",
+		eventtype.ChatUserUnVIP:               "user",
 	}
 	for _, d := range eventtype.All() {
 		sh, ok := eventtype.ShapeOf(d.Type)

@@ -313,6 +313,69 @@ func TestMassGift(t *testing.T) {
 	bad := gift(false, "ada", "bob")
 	bad.Details.Gift.Count = 2
 	require.ErrorIs(t, f.service.Event(ctx, bad), eventtype.ErrShape, "recipients and count differ")
+
+	// Twitch names only the total of a mass gift, no recipients
+	// (twitch-events.md B21): from the threshold on the mass gift fires,
+	// below it nothing does (the single gifts arrive on their own).
+	noRecipients := func(total int) connector.Event {
+		e := connector.Event{
+			Platform: platform.Twitch, Type: eventtype.TwitchSubscriptionMassGift,
+			Details: eventtype.Details{
+				Subscription: &eventtype.Subscription{Plan: "1000"},
+				Gift:         &eventtype.Gift{Count: total},
+			},
+		}
+		who := account(platform.Twitch, "ada")
+		e.User = &who
+		return e
+	}
+	require.NoError(t, f.service.Event(ctx, noRecipients(3)))
+	assert.Empty(t, f.engine.take(), "below the threshold of 5 nothing fires")
+
+	f.settings.set(func(e *settings.Events) { e.MassGiftThreshold = 2 })
+	require.NoError(t, f.service.Event(ctx, noRecipients(3)))
+	reqs = f.engine.take()
+	require.Len(t, reqs, 1, "at the threshold of 2 the mass gift fires")
+	assert.Equal(t, eventtype.ChannelSubscriptionMassGift, reqs[0].Event, "the event command is the neutral one")
+	assert.Equal(t, template.NumberValue(decimal.New(3)), reqs[0].Params.Values[template.EventGiftedSubs])
+
+	// The single gifts of a fired mass action are dropped (B5, "never
+	// both"): the platform delivers them with the community gift ID of
+	// the action (Nachprüfung 2026-10-24, T1). The fired action gets an ID.
+	firedNoRecipients := func(total int, id string) connector.Event {
+		e := noRecipients(total)
+		e.Details.Gift.CommunityGiftID = id
+		return e
+	}
+	single := func(communityGiftID, recipient string) connector.Event {
+		return connector.Event{
+			Platform: platform.Twitch, Type: eventtype.TwitchSubscriptionGift,
+			Target: new(account(platform.Twitch, recipient)),
+			Details: eventtype.Details{
+				Subscription: &eventtype.Subscription{Plan: "1000"},
+				Gift:         &eventtype.Gift{Anonymous: true, Count: 1, CommunityGiftID: communityGiftID},
+			},
+		}
+	}
+	require.NoError(t, f.service.Event(ctx, firedNoRecipients(3, "cg-1")))
+	require.Len(t, f.engine.take(), 1, "the mass gift fires")
+	require.NoError(t, f.service.Event(ctx, single("cg-1", "bob")))
+	require.NoError(t, f.service.Event(ctx, single("cg-1", "carol")))
+	assert.Empty(t, f.engine.take(), "the single gifts of the fired action are dropped")
+
+	// A mass gift below the threshold does not drop its single gifts.
+	f.settings.set(func(e *settings.Events) { e.MassGiftThreshold = 5 })
+	require.NoError(t, f.service.Event(ctx, firedNoRecipients(1, "cg-2")))
+	assert.Empty(t, f.engine.take(), "below the threshold nothing fires yet")
+	require.NoError(t, f.service.Event(ctx, single("cg-2", "bob")))
+	reqs = f.engine.take()
+	require.Len(t, reqs, 1, "below the threshold the single gifts run")
+	assert.Equal(t, eventtype.ChannelSubscriptionGift, reqs[0].Event)
+	assert.Equal(t, "bob", reqs[0].Params.Target.Identities[0].Login)
+
+	// A gift outside of any mass action runs always.
+	require.NoError(t, f.service.Event(ctx, single("", "dave")))
+	assert.Len(t, f.engine.take(), 1)
 }
 
 // TestEventData covers B7 and B9: values of the events, and data that do

@@ -56,9 +56,10 @@ type Users interface {
 	List(ctx context.Context, prefix, stat string, limit int) ([]User, error)
 	// Get returns one user by ID and/or platform login ("platform/login").
 	Get(ctx context.Context, idStr, platformLogin string) (User, error)
-	// Update edits the user: title (empty clears), role (empty keeps, added
-	// to every identity), excluded and strikes (nil keeps).
-	Update(ctx context.Context, idStr, roleStr, title string, excluded *bool, strikes *uint32) (User, error)
+	// Update edits the user: title (nil keeps, an empty value clears),
+	// role (empty keeps, added to every identity), excluded and strikes
+	// (nil keeps).
+	Update(ctx context.Context, idStr, roleStr string, title *string, excluded *bool, strikes *uint32) (User, error)
 	// Merge folds the merge account into the keep account; it returns the
 	// remaining user ID.
 	Merge(ctx context.Context, keepPlatformLogin, mergePlatformLogin string) (string, error)
@@ -130,7 +131,7 @@ func (us *userService) Get(ctx context.Context, req *v1alpha1.GetUserRequest) (*
 // Update edits the mutable fields of a user.
 func (us *userService) Update(ctx context.Context, req *v1alpha1.UpdateUserRequest) (*v1alpha1.UpdateUserResponse, error) {
 	m := req
-	u, err := us.u.Update(ctx, m.GetId(), m.GetRole(), m.GetTitle(), m.Excluded, m.Strikes)
+	u, err := us.u.Update(ctx, m.GetId(), m.GetRole(), m.Title, m.Excluded, m.Strikes)
 	if err != nil {
 		return nil, apiError(err)
 	}

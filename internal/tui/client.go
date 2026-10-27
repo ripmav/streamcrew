@@ -4,7 +4,7 @@ package tui
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net"
 	"net/http"
 	"os"

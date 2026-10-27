@@ -101,7 +101,7 @@ func TestRememberStoresWithArgs(t *testing.T) {
 		cmd := f.harness.Command("mynote", f.action())
 		inst := f.harness.Start(cmd, engine.Params{User: u, Args: []string{"hi", "there"}, ArgsText: "hi there"})
 		assert.Equal(t, engine.StateCompleted, inst.State)
-		ans, found, err := f.answers.UserAnswer(t.Context(), u.ID, "mynote")
+		ans, found, err := f.answers.UserAnswer(t.Context(), u.ID, cmd.ID.String())
 		require.NoError(t, err)
 		assert.True(t, found)
 		assert.Equal(t, "hi there", ans)
@@ -113,8 +113,8 @@ func TestRememberAnswersStored(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		f := newFixture(t)
 		u := alice()
-		require.NoError(t, f.answers.SetUserAnswer(t.Context(), u.ID, "mynote", "stored note"))
 		cmd := f.harness.Command("mynote", f.action())
+		require.NoError(t, f.answers.SetUserAnswer(t.Context(), u.ID, cmd.ID.String(), "stored note"))
 		inst := f.harness.Start(cmd, engine.Params{User: u})
 		assert.Equal(t, engine.StateCompleted, inst.State)
 		require.Len(t, f.chat.sent, 1)
@@ -157,10 +157,27 @@ func TestPerUserAnswersAreSeparate(t *testing.T) {
 		cmd := f.harness.Command("mynote", f.action())
 		f.harness.Start(cmd, engine.Params{User: ada, Args: []string{"ada"}, ArgsText: "ada"})
 		f.harness.Start(cmd, engine.Params{User: bob, Args: []string{"bob"}, ArgsText: "bob"})
-		a, _, _ := f.answers.UserAnswer(t.Context(), ada.ID, "mynote")
-		b, _, _ := f.answers.UserAnswer(t.Context(), bob.ID, "mynote")
+		a, _, _ := f.answers.UserAnswer(t.Context(), ada.ID, cmd.ID.String())
+		b, _, _ := f.answers.UserAnswer(t.Context(), bob.ID, cmd.ID.String())
 		assert.Equal(t, "ada", a)
 		assert.Equal(t, "bob", b)
+	})
+}
+
+func TestRenameKeepsTheAnswer(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+		u := alice()
+		cmd := f.harness.Command("mynote", f.action())
+		f.harness.Start(cmd, engine.Params{User: u, Args: []string{"hi"}, ArgsText: "hi"})
+		// A rename, even a case-only one, must not orphan the answer (B127).
+		renamed := cmd
+		renamed.Name = "Mynote"
+		inst := f.harness.Start(renamed, engine.Params{User: u})
+		assert.Equal(t, engine.StateCompleted, inst.State)
+		require.Len(t, f.chat.sent, 1)
+		assert.Equal(t, "hi", f.chat.sent[0])
 	})
 }
 

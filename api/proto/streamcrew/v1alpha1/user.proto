@@ -99,8 +99,9 @@ message UpdateUserRequest {
   string id = 1;
   // role is the new role; empty keeps the current role.
   string role = 2;
-  // title is the new title; empty clears it.
-  string title = 3;
+  // title is the new title; unset keeps the current title, an empty
+  // value clears it.
+  optional string title = 3;
   // excluded sets the excluded switch; unset keeps it.
   optional bool excluded = 4;
   // strikes sets the strike counter; unset keeps it.

@@ -28,6 +28,10 @@ import (
 	"github.com/ripmav/streamcrew/internal/profile"
 )
 
+// testToken is the admin token the in-process test cores start with
+// (bootstrap token, ADR-0013 §5); the test clients send it as bearer.
+const testToken = "tui-test-token"
+
 // startMockCore starts an in-process core with the mock platform and
 // returns its base URL.
 func startMockCore(t *testing.T) string {
@@ -52,6 +56,7 @@ func startMockCoreWithConfigFile(t *testing.T, cfgFile string, mode config.Mode)
 		Mode:            mode,
 		Listen:          "127.0.0.1:0",
 		ShutdownTimeout: 5 * time.Second,
+		BootstrapToken:  testToken,
 		Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},
 		Log:             config.LogConfig{Level: "info", Format: "text", MaxSize: 1, MaxFiles: 1},
 	}
@@ -115,7 +120,7 @@ const mockConsoleExampleCommands = "apiVersion: streamcrew/v1alpha1\nkind: ChatC
 func importExampleCommands(t *testing.T, base string) {
 	t.Helper()
 	client, base := httpClientFor(base)
-	cmdClient := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))))
+	cmdClient := streamcrewv1alpha1connect.NewCommandServiceClient(connect.NewClient(connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0)), bearerInterceptor(testToken)))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := cmdClient.Import(ctx, &v1alpha1.ImportCommandsRequest{
@@ -128,7 +133,7 @@ func importExampleCommands(t *testing.T, base string) {
 // TestStreamEventsFillTheViews routes stream events into the view buffers.
 func TestStreamEventsFillTheViews(t *testing.T) {
 	t.Parallel()
-	m := newModel(Options{Server: "http://127.0.0.1:1"})
+	m := newModel(t.Context(), Options{Server: "http://127.0.0.1:1"})
 
 	m.handleEvent(&v1alpha1.Event{
 		Type:     "chat.message",
@@ -323,11 +328,15 @@ func TestCommandsViewFetchesFiltersAndEdits(t *testing.T) {
 	})
 	t.Run("edit", func(t *testing.T) {
 		// no t.Parallel(): the test sets the EDITOR environment variable.
-		// The no-op editor keeps the document unchanged, like the original
-		// test. The edit command writes the fetched document to a temp file
-		// before opening the editor, so that file appearing is the
-		// completion signal that the editor ran on the document.
-		t.Setenv("EDITOR", "true")
+		// The editor script flips the enabled flag of the command it opens,
+		// so the flag in the API is the completion signal: it is set only
+		// after the editor ran and the model wrote the file back. (A
+		// trailing YAML comment is not a usable signal — the document
+		// round-trips through the command-file converter, which drops
+		// comments.)
+		script := filepath.Join(t.TempDir(), "editor.sh")
+		require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\nsed -i '0,/enabled: true/s//enabled: false/' \"$1\"\n"), 0o755)) //nolint:gosec // test-only editor script
+		t.Setenv("EDITOR", script)
 		tm, base := newTestModelWithCore(t)
 		importExampleCommands(t, base)
 
@@ -344,11 +353,37 @@ func TestCommandsViewFetchesFiltersAndEdits(t *testing.T) {
 			}
 			return false
 		}, 10*time.Second, 50*time.Millisecond, "the editor to open the fetched document")
-		// the update runs a moment after the editor; let it settle so the
-		// final model carries the result
-		time.Sleep(200 * time.Millisecond)
+		// Wait until the model wrote the edited file back: one of the
+		// imported commands is disabled in the API.
+		cc := commandClient(t, base)
+		var disabled string
+		require.Eventually(t, func() bool {
+			list, err := cc.List(t.Context(), &v1alpha1.ListCommandsRequest{})
+			if err != nil {
+				return false
+			}
+			for _, c := range list.GetCommands() {
+				if (c.GetName() == "Hello" || c.GetName() == "Bye") && !c.GetEnabled() {
+					disabled = c.GetName()
+					return true
+				}
+			}
+			return false
+		}, 10*time.Second, 50*time.Millisecond, "the edited command to be stored disabled")
+		// The key presses are queued behind the actionDoneMsg of the edit
+		// (the one that clears the editing flag), so once the program
+		// caught up with them the final model carries the result of the
+		// edit. (tm.Send is an async program.Send; a single key press does
+		// not order the quit against the message of the edit.)
+		for range 8 {
+			tm.Send(tea.KeyPressMsg{Code: tea.KeyUp})
+			time.Sleep(25 * time.Millisecond)
+			tm.Send(tea.KeyPressMsg{Code: tea.KeyDown})
+			time.Sleep(25 * time.Millisecond)
+		}
 		m := quitModel(t, tm)
 		assert.NoError(t, m.err)
+		assert.NotEmpty(t, disabled, "an imported command to be the edited one")
 		// the actionDoneMsg cleared the editing flag again
 		assert.False(t, m.commands.editing)
 	})
@@ -415,7 +450,7 @@ func TestUsersViewRendersTheList(t *testing.T) {
 	// wait until the user service lists alice before the view fetches
 	require.Eventually(t, func() bool {
 		client, b := httpClientFor(base)
-		users := streamcrewv1alpha1connect.NewUserServiceClient(connect.NewClient(connecthttp.NewTransport(client, b, connecthttp.WithReadMaxBytes(0))))
+		users := streamcrewv1alpha1connect.NewUserServiceClient(connect.NewClient(connecthttp.NewTransport(client, b, connecthttp.WithReadMaxBytes(0)), bearerInterceptor(testToken)))
 		resp, err := users.List(t.Context(), &v1alpha1.ListUsersRequest{Limit: 100})
 		if err != nil {
 			return false

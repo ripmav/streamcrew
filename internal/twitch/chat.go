@@ -24,13 +24,23 @@ const (
 	chatBurst = 20                      // messages that may go at once
 )
 
+// The second send limit of the IRC adapter, per channel: one message
+// in 3 seconds (spec twitch-multi-channel.md, B18).
+const (
+	chatRate3  = rate.Limit(1.0 / 3.0)
+	chatBurst3 = 1
+)
+
 // chat is the connector.Chat of the twitch platform (roadmap 4.4): it
-// sends and deletes messages of the channel through Helix. The bot
-// account is not connected in phase 4, so a message from it is
-// refused.
+// sends and deletes messages of the channel through Helix. The home
+// channel is operated with the streamer account, the additional channels
+// with the bot account (spec twitch-multi-channel.md, B4).
 type chat struct{ p *Platform }
 
-var _ connector.Chat = chat{}
+var (
+	_ connector.Chat    = chat{}
+	_ connector.Replier = chat{}
+)
 
 // Send implements connector.Chat: it splits a text that is longer than
 // Twitch allows and keeps to the rate limits of the platform through
@@ -43,28 +53,81 @@ func (c chat) Send(ctx context.Context, m connector.Message) error {
 		return c.p.ircSend(ctx, m.Channel, m.Text)
 	}
 	if m.From == connector.AccountBot {
+		return c.p.botSend(ctx, m)
+	}
+	return c.p.streamerSend(ctx, m)
+}
+
+// Reply implements connector.Replier (code review 2026-10-24, T5): a
+// reply of an additional channel runs over the IRC session with the
+// reply-parent-msg-id tag; the home channel and the Helix path have no
+// reply parameter, so the reply degrades to a plain message there
+// (shortcut: no reply tag on the Helix path; add it to SendChatMessage
+// when the platform takes one).
+func (c chat) Reply(ctx context.Context, messageID string, m connector.Message) error {
+	if m.Channel != "" && c.p.ircOn {
+		return c.p.ircSendReply(ctx, m.Channel, messageID, m.Text)
+	}
+	if m.From == connector.AccountBot {
+		return c.p.botSend(ctx, m)
+	}
+	return c.p.streamerSend(ctx, m)
+}
+
+// botSend sends the message with the bot account (spec
+// twitch-multi-channel.md, B4): to an additional channel, or to the home
+// channel while a bot session runs. Without a connected bot account it
+// is refused.
+func (p *Platform) botSend(ctx context.Context, m connector.Message) error {
+	if m.Channel == "" && !p.botState() {
 		return errors.Join(connector.ErrNotConnected, errors.New("the bot account is not connected"))
 	}
-	st, err := c.p.account(ctx)
+	bot, err := p.auth.Bot(ctx)
 	if err != nil {
 		return err
 	}
-	broadcaster, err := c.p.channelID(ctx, m.Channel)
+	if !bot.Ready {
+		return errors.Join(connector.ErrNotConnected, errors.New("the bot account has no valid token"))
+	}
+	broadcaster, err := p.channelID(ctx, m.Channel)
 	if err != nil {
 		return err
 	}
-	hc, err := c.p.ops(ctx)
+	hc, err := p.opsToken(ctx, p.auth.BotToken)
 	if err != nil {
 		return err
 	}
-	limiter := c.p.chatLimiter(m.Channel)
+	return p.sendParts(ctx, hc, broadcaster, bot.AccountID, m)
+}
+
+// streamerSend sends the message with the streamer account.
+func (p *Platform) streamerSend(ctx context.Context, m connector.Message) error {
+	st, err := p.account(ctx)
+	if err != nil {
+		return err
+	}
+	broadcaster, err := p.channelID(ctx, m.Channel)
+	if err != nil {
+		return err
+	}
+	hc, err := p.ops(ctx)
+	if err != nil {
+		return err
+	}
+	return p.sendParts(ctx, hc, broadcaster, st.AccountID, m)
+}
+
+// sendParts splits the text to the Twitch limit and sends the parts as
+// the sender, through the rate limit of the channel.
+func (p *Platform) sendParts(ctx context.Context, hc *helix.Client, broadcaster, sender string, m connector.Message) error {
+	limiter := p.chatLimiter(m.Channel)
 	for _, part := range splitMessage(m.Text) {
 		if err := limiter.Wait(ctx); err != nil {
 			return err
 		}
 		_, err := hc.SendChatMessage(ctx, helix.SendChatMessageInput{
 			BroadcasterID: broadcaster,
-			SenderID:      st.AccountID,
+			SenderID:      sender,
 			Message:       part,
 		})
 		if err != nil {
@@ -74,17 +137,15 @@ func (c chat) Send(ctx context.Context, m connector.Message) error {
 	return nil
 }
 
-// Delete implements connector.Chat; it deletes from the channel ch.
+// Delete implements connector.Chat; it deletes from the channel ch, with
+// the account that operates it (streamer for the home channel, bot for an
+// additional one, spec twitch-multi-channel.md B4).
 func (c chat) Delete(ctx context.Context, ch connector.Channel, messageID string) error {
-	st, err := c.p.account(ctx)
+	st, hc, err := c.p.accountFor(ctx, ch)
 	if err != nil {
 		return err
 	}
 	broadcaster, err := c.p.channelID(ctx, ch)
-	if err != nil {
-		return err
-	}
-	hc, err := c.p.ops(ctx)
 	if err != nil {
 		return err
 	}
@@ -102,6 +163,19 @@ func (p *Platform) ircSend(ctx context.Context, ch connector.Channel, text strin
 		return errors.New("the irc session is not connected")
 	}
 	return s.Send(ctx, ch, text)
+}
+
+// ircSendReply hands the reply to the IRC session of the additional
+// channels (code review 2026-10-24, T5); the session applies the
+// per-channel buckets and the splitting.
+func (p *Platform) ircSendReply(ctx context.Context, ch connector.Channel, replyID, text string) error {
+	p.mu.Lock()
+	s := p.irc
+	p.mu.Unlock()
+	if s == nil {
+		return errors.New("the irc session is not connected")
+	}
+	return s.SendReply(ctx, ch, replyID, text)
 }
 
 // chatLimiter returns the chat send limiter of the channel ch; each

@@ -12,9 +12,13 @@ package role
 
 import (
 	json "encoding/json/v2"
+	"errors"
 	"fmt"
 	"strings"
 )
+
+// ErrUnknown is wrapped when a role ID is no known role.
+var ErrUnknown = errors.New("unknown role")
 
 // Role is a role of a user in a channel. Its value is a stable lowercase ID
 // for the database, the API and commands as code; frontends translate it
@@ -80,7 +84,7 @@ func All() []Role {
 func Parse(s string) (Role, error) {
 	r := Role(s)
 	if r.Rank() == 0 {
-		return "", fmt.Errorf("unknown role %q", s)
+		return "", fmt.Errorf("%w: %q", ErrUnknown, s)
 	}
 	return r, nil
 }

@@ -4,7 +4,8 @@ package emote
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"log/slog"
 	"net"
 	"net/http"
@@ -222,8 +223,8 @@ func (s *BTTVSocket) handle(ctx context.Context, f frame, byID map[string]string
 		return
 	}
 	var m struct {
-		Name string          `json:"name"`
-		Data json.RawMessage `json:"data"`
+		Name string         `json:"name"`
+		Data jsontext.Value `json:"data"`
 	}
 	if err := json.Unmarshal(f.payload, &m); err != nil {
 		s.log.DebugContext(ctx, "the bttv socket frame is unknown", "error", err)

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/ripmav/streamcrew/internal/helix"
@@ -123,6 +124,10 @@ type Manager struct {
 	interval  time.Duration
 	sessionID func(ctx context.Context) (string, error)
 	ready     func(ctx context.Context) (bool, error)
+	// mu serializes the reconciliations: the ticker of Run and the
+	// session and revocation callbacks run them in parallel (code
+	// review 2026-10-24, T15).
+	mu sync.Mutex
 }
 
 // ManagerOptions configures NewManager.
@@ -228,6 +233,8 @@ func (m *Manager) Run(ctx context.Context) error {
 // interval; the composition root calls it right after every new
 // session and after a revocation.
 func (m *Manager) Reconcile(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	// B3: while the channels are not operated, the manager holds no
 	// subscriptions: the own surplus is revoked below, nothing is created.
 	operated := true

@@ -79,9 +79,9 @@ func (u apiUsers) List(ctx context.Context, prefix, stat string, limit int) ([]a
 		limit = apiUserListLimit
 	}
 	if stat != "" {
-		s := user.Stat(stat)
-		if !s.Valid() {
-			return nil, fmt.Errorf("unknown statistic %q", stat)
+		s, err := user.ParseStat(stat)
+		if err != nil {
+			return nil, err
 		}
 		ranked, err := u.a.store.TopUsers(ctx, s, limit)
 		if err != nil {
@@ -132,9 +132,10 @@ func (u apiUsers) Get(ctx context.Context, idStr, platformLogin string) (api.Use
 	}
 }
 
-// Update edits the user: title always, role (added to every identity),
-// excluded and strikes when set.
-func (u apiUsers) Update(ctx context.Context, idStr, roleStr, title string, excluded *bool, strikes *uint32) (api.User, error) {
+// Update edits the user: title when set (nil keeps it, an empty value
+// clears it), role (added to every identity), excluded and strikes when
+// set.
+func (u apiUsers) Update(ctx context.Context, idStr, roleStr string, title *string, excluded *bool, strikes *uint32) (api.User, error) {
 	uid, err := id.Parse(idStr)
 	if err != nil {
 		return api.User{}, err
@@ -155,7 +156,9 @@ func (u apiUsers) Update(ctx context.Context, idStr, roleStr, title string, excl
 		}
 	}
 	updated, err := u.a.store.UpdateUser(ctx, uid, func(x *user.User) error {
-		x.Title = title
+		if title != nil {
+			x.Title = *title
+		}
 		if excluded != nil {
 			x.Excluded = *excluded
 		}

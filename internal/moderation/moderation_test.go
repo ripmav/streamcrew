@@ -4,6 +4,7 @@ package moderation
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -185,11 +186,13 @@ func (f *fakeEngine) requests() []engine.Request {
 
 // fx is a service wired with in-memory ports.
 type fx struct {
-	svc      *Service
-	strikes  *memStrikes
-	commands *fakeCommands
-	engine   *fakeEngine
-	now      func() time.Time
+	svc         *Service
+	strikes     *memStrikes
+	commands    *fakeCommands
+	engine      *fakeEngine
+	now         func() time.Time
+	follow      func(ctx context.Context, p platform.Name, ch, platformUserID string) (time.Time, error)
+	followCalls int64
 }
 
 func newFX(t *testing.T, cfg settings.Moderation, cmds map[string]command.Command) *fx {
@@ -206,6 +209,14 @@ func newFX(t *testing.T, cfg settings.Moderation, cmds map[string]command.Comman
 		Commands: f.commands,
 		Engine:   f.engine,
 		Now:      f.now,
+		FollowData: func(ctx context.Context, p platform.Name, ch, platformUserID string) (time.Time, error) {
+			// Without a follow port, the platform reports no follow time.
+			if f.follow == nil {
+				return time.Time{}, errors.New("no follow time")
+			}
+			f.followCalls++
+			return f.follow(ctx, p, ch, platformUserID)
+		},
 	})
 	require.NoError(t, err)
 	f.svc = s
@@ -378,6 +389,52 @@ func TestParticipationFollowDays(t *testing.T) {
 	unknown := userFull(role.NewSet(role.User), 0, time.Time{})
 	d, _ = f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "hi", User: unknown})
 	assert.False(t, d.Allow, "an unknown follow date is not met")
+}
+
+// TestParticipationFollowDaysPlatformFallback covers the live follow
+// lookup while the cache has none (code review 2026-10-24, T11): a
+// message the moderation rejects would fill the cache never, so a new
+// home chatter must not be rejected forever; an additional channel
+// always asks, because its home-channel follow is the wrong data there;
+// an answer the platform cannot give stays not met.
+func TestParticipationFollowDaysPlatformFallback(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
+	f := fxPart(t, settings.Moderation{MinFollowDays: 30})
+	followed := now.Add(-31 * 24 * time.Hour)
+	f.follow = func(context.Context, platform.Name, string, string) (time.Time, error) {
+		return followed, nil
+	}
+	// The home channel without a cached follow time: the platform's
+	// answer meets the rule.
+	u := userFull(role.NewSet(role.User), 0, time.Time{})
+	d, err := f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "hi", User: u})
+	require.NoError(t, err)
+	assert.True(t, d.Allow, "the platform's follow time meets the rule")
+	assert.Equal(t, int64(1), f.followCalls, "the platform is asked")
+
+	// The home channel with a cached follow time: the cache is enough.
+	cached := userFull(role.NewSet(role.User), 0, followed)
+	d, err = f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "hi", User: cached})
+	require.NoError(t, err)
+	assert.True(t, d.Allow)
+	assert.Equal(t, int64(1), f.followCalls, "the cache is preferred")
+
+	// An additional channel always asks: its home-channel follow is the
+	// wrong data there, even with a cached one.
+	m := Message{Platform: platform.Twitch, Channel: "other", Text: "hi", User: cached}
+	d, err = f.svc.Check(t.Context(), m)
+	require.NoError(t, err)
+	assert.True(t, d.Allow)
+	assert.Equal(t, int64(2), f.followCalls, "the additional channel asks the platform")
+
+	// An answer the platform cannot give stays not met.
+	f.follow = func(context.Context, platform.Name, string, string) (time.Time, error) {
+		return time.Time{}, errors.New("the platform does not say")
+	}
+	d, err = f.svc.Check(t.Context(), Message{Platform: platform.Twitch, Text: "hi", User: u})
+	require.NoError(t, err)
+	assert.False(t, d.Allow, "an unknown follow time is not met")
 }
 
 func TestParticipationFailureNoStrike(t *testing.T) {

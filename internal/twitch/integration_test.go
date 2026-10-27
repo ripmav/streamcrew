@@ -4,7 +4,8 @@ package twitch_test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -208,7 +209,7 @@ func TestPlatformAgainstTheMock(t *testing.T) {
 			`"broadcaster_user_login":%q,"broadcaster_user_display_name":%q,`+
 			`"game_id":"1","game_name":"Test","stream_type":"live","started_at":"2026-01-01T00:00:00Z"}`,
 		c.BroadcasterID, c.BroadcasterLogin, c.BroadcasterLogin)
-	require.NoError(t, c.FireEvent("stream.online", "1", json.RawMessage(online)))
+	require.NoError(t, c.FireEvent("stream.online", "1", jsontext.Value(online)))
 	require.Eventually(t, func() bool {
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -226,8 +227,8 @@ func TestPlatformAgainstTheMock(t *testing.T) {
 			`"chatter_user_id":%q,"chatter_user_login":%q,"chatter_user_name":"Alice"}`,
 		alice.id, alice.login)
 	before = r.msgCount()
-	require.NoError(t, c.FireEvent("channel.chat.message", "2", json.RawMessage(msg)))
-	require.NoError(t, c.FireEvent("channel.chat.message", "2", json.RawMessage(msg))) // the repeat
+	require.NoError(t, c.FireEvent("channel.chat.message", "2", jsontext.Value(msg)))
+	require.NoError(t, c.FireEvent("channel.chat.message", "2", jsontext.Value(msg))) // the repeat
 	require.Eventually(t, func() bool { return r.msgCount() == before+1 },
 		10*time.Second, 50*time.Millisecond)
 	m := r.lastMessage(t)
@@ -243,7 +244,7 @@ func TestPlatformAgainstTheMock(t *testing.T) {
 		`{"is_anonymous":false,"bits":100,"message":"cheer",`+
 			`"user_id":%q,"user_login":%q,"user_name":"Alice"}`,
 		alice.id, alice.login)
-	require.NoError(t, c.FireEvent("channel.cheer", "1", json.RawMessage(cheer)))
+	require.NoError(t, c.FireEvent("channel.cheer", "1", jsontext.Value(cheer)))
 	require.Eventually(t, func() bool {
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -268,7 +269,7 @@ func TestPlatformAgainstTheMock(t *testing.T) {
 			`"user_input":"hello from the integration test",`+
 			`"user_id":%q,"user_login":%q,"user_name":"Alice"}`,
 		alice.id, alice.login)
-	require.NoError(t, c.FireEvent("channel.channel_points_custom_reward_redemption.add", "1", json.RawMessage(redeem)))
+	require.NoError(t, c.FireEvent("channel.channel_points_custom_reward_redemption.add", "1", jsontext.Value(redeem)))
 	require.Eventually(t, func() bool {
 		r.mu.Lock()
 		defer r.mu.Unlock()
