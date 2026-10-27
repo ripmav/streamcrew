@@ -65,7 +65,6 @@ wenn eine Aufgabe wieder eingeplant wird.
 **Nicht geplant (Plan §4.3):**
 
 - Nachbau der WPF-Oberfläche
-- C#-Skripte
 - Funktionen, die Blazing-Cacti-Server brauchen
 - Mixer, Trovo, Glimesh, Facebook, Twitter, OvrStream, InfiniteAlbum
 - Overlay v1/v2
