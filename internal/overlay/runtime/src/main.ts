@@ -52,6 +52,11 @@ interface WidgetData {
   state?: any;
 }
 
+// render is the re-render of an element that runs every second: the
+// label kinds date and time (A5), the timer widget (B26) and the timer
+// item (B17). It is removed with the element.
+type Entry = { el: HTMLElement; data: any; render?: () => void };
+
 const cfg: OverlayConfig = window.__OVERLAY__;
 const send = (type: string, data?: any): void => {
   if (ws && ws.readyState === WebSocket.OPEN) {
@@ -69,10 +74,16 @@ style.textContent = `
   .sc-item.sc-text { font-size: 2.2rem; font-weight: 600; white-space: pre-wrap; text-shadow: 0 2px 8px rgba(0,0,0,.8); }
   .sc-item.sc-text span { display: inline-block; }
   .sc-item.sc-image img, .sc-item.sc-video video { display: block; max-width: 100%; max-height: 100vh; }
-  .sc-item.sc-html iframe { border: 0; display: block; }
+  .sc-item.sc-html iframe, .sc-item.sc-youtube iframe, .sc-item.sc-clip iframe { border: 0; display: block; }
+  .sc-item.sc-timer { font-size: 2.6rem; font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 2px 8px rgba(0,0,0,.8); }
   .sc-item.sc-placeholder { padding: .5rem 1rem; background: rgba(0,0,0,.6); border-radius: .5rem; font-size: 1rem; }
   .sc-widget { font-family: system-ui, sans-serif; color: #fff; background: rgba(0,0,0,.6); border-radius: .5rem; padding: .4rem .8rem; font-size: 1.1rem; }
   .sc-widget small { opacity: .7; }
+  .sc-widget.sc-label { background: transparent; padding: 0; font-size: 1.6rem; font-weight: 600; text-shadow: 0 2px 8px rgba(0,0,0,.8); }
+  .sc-widget .sc-goal-bar { height: 8px; background: rgba(255,255,255,.25); border-radius: 4px; margin: .25rem 0; overflow: hidden; }
+  .sc-widget .sc-goal-fill { height: 100%; background: #4caf50; }
+  .sc-widget ul { list-style: none; margin: 0; padding: 0; }
+  .sc-widget li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   @keyframes sc-fade { from { opacity: 0; } to { opacity: 1; } }
   @keyframes sc-slide-left { from { transform: translateX(-40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
   @keyframes sc-slide-right { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -169,8 +180,8 @@ function hideAnimation(el: HTMLElement, name: string | undefined, ms: number | u
 
 // ---------- state ----------
 
-const items = new Map<string, { el: HTMLElement; data: ItemData }>();
-const widgets = new Map<string, { el: HTMLElement; data: WidgetData }>();
+const items = new Map<string, Entry>();
+const widgets = new Map<string, Entry>();
 let serverTimeOffset = 0; // serverTime - localTime (B4, B26)
 
 // The batching of consecutive items (B8): an item shown within 500 ms
@@ -186,11 +197,73 @@ function itemStartAt(now: number): number {
   return now;
 }
 
-// ---------- item rendering (B11-B15) ----------
+// serverNow is the local clock corrected to the server time of hello
+// (B4, B26); the clocks of the runtime run from it.
+function serverNow(): number {
+  return Date.now() + serverTimeOffset;
+}
 
-function renderContent(el: HTMLElement, data: ItemData): void {
+// The per-second re-renders of the clocks (A5, B17, B26).
+const perSecond = new Set<() => void>();
+setInterval(() => {
+  for (const render of perSecond) render();
+}, 1000);
+
+// ---------- durations and formats (B17) ----------
+
+// parseGoDuration parses a Go duration text, e.g. "1m30s" or "90s"
+// (Code-ADR-0009), into milliseconds.
+function parseGoDuration(text: string): number {
+  const mult: Record<string, number> = { ns: 1e-6, us: 1e-3, ms: 1, s: 1000, m: 60000, h: 3600000 };
+  let total = 0;
+  const re = /(\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    total += parseFloat(m[1]) * mult[m[2]];
+  }
+  return total;
+}
+
+// formatTimer renders a timer into the format (B17): the tokens DD, HH,
+// MM and SS carry the cumulative value, hh, mm and ss the rest, each
+// padded to two digits. A count-down counts the rest of the duration, a
+// count-up the elapsed time; for a count-up both are the same.
+function formatTimer(format: string, totalMs: number, restMs: number): string {
+  const parts = (ms: number): { d: number; h: number; m: number; s: number } => {
+    const t = Math.max(0, Math.floor(ms / 1000));
+    return { d: Math.floor(t / 86400), h: Math.floor((t % 86400) / 3600), m: Math.floor((t % 3600) / 60), s: t % 60 };
+  };
+  const cum = parts(totalMs);
+  const rest = parts(restMs);
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return format
+    .replace("DD", pad(cum.d))
+    .replace("HH", pad(cum.h))
+    .replace("MM", pad(cum.m))
+    .replace("SS", pad(cum.s))
+    .replace("hh", pad(rest.h))
+    .replace("mm", pad(rest.m))
+    .replace("ss", pad(rest.s));
+}
+
+// ---------- item rendering (B11-B17) ----------
+
+// youtubeId is the video ID of a YouTube URL, for the embed frame (B15).
+function youtubeId(url: string): string {
+  const m = url.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : "";
+}
+
+// clipEmbed is the embed URL of a Twitch clip page (B15).
+function clipEmbed(url: string): string {
+  const m = url.match(/clips\.twitch\.tv\/([A-Za-z0-9]+)/);
+  return m ? `https://clips.twitch.tv/embed?clip=${m[1]}` : url;
+}
+
+function renderContent(el: HTMLElement, entry: Entry): void {
+  const data = entry.data as ItemData;
   const c = data.content ?? {};
-  const src = c.source ?? c.url ?? "";
+  const src = c.src ?? c.source ?? c.url ?? "";
   switch (data.kind) {
     case "text": {
       el.classList.add("sc-text");
@@ -217,7 +290,7 @@ function renderContent(el: HTMLElement, data: ItemData): void {
       v.src = src;
       v.autoplay = true;
       v.loop = Boolean(c.loop);
-      if (c.startTime) v.currentTime = c.startTime;
+      if (c.start) v.currentTime = c.start;
       if (c.volume !== undefined) v.volume = Math.min(1, Math.max(0, c.volume / 100));
       // The end of the playback tells the server (B14).
       v.addEventListener("ended", () => send("item.ended", { id: data.id }));
@@ -247,12 +320,63 @@ function renderContent(el: HTMLElement, data: ItemData): void {
       el.appendChild(f);
       break;
     }
-    case "youtube":
-    case "clip":
-    case "timer":
+    case "youtube": {
+      // The embed frame in the browser source (B15).
+      // shortcut: the volume of the embed is not applied; it needs the
+      // YouTube IFrame API, which the runtime does not load yet.
+      el.classList.add("sc-youtube");
+      const f = document.createElement("iframe");
+      const id = youtubeId(c.url ?? "");
+      f.src = `https://www.youtube.com/embed/${id}?autoplay=1${c.start ? `&start=${c.start}` : ""}`;
+      f.allow = "autoplay";
+      if (c.width) f.style.width = `${c.width}px`;
+      if (c.height) f.style.height = `${c.height}px`;
+      el.appendChild(f);
+      break;
+    }
+    case "clip": {
+      // The clip page in a frame (B15).
+      el.classList.add("sc-clip");
+      const f = document.createElement("iframe");
+      f.src = clipEmbed(c.url ?? "");
+      f.allow = "autoplay";
+      if (c.width) f.style.width = `${c.width}px`;
+      if (c.height) f.style.height = `${c.height}px`;
+      el.appendChild(f);
+      break;
+    }
+    case "timer": {
+      // The item counts the duration down (default) or up and shows the
+      // format (B17); a count-down tells the server the end (B14).
+      el.classList.add("sc-timer");
+      const span = document.createElement("span");
+      el.appendChild(span);
+      const totalMs = parseGoDuration(c.duration ?? "");
+      const startAt = serverNow();
+      const countUp = c.direction === "up";
+      let ended = false;
+      entry.render = () => {
+        const now = serverNow();
+        if (countUp) {
+          const elapsed = now - startAt;
+          span.textContent = formatTimer(c.format ?? "MM:SS", elapsed, elapsed);
+        } else {
+          const rest = startAt + totalMs - now;
+          span.textContent = formatTimer(c.format ?? "MM:SS", totalMs, rest);
+          if (rest <= 0 && !ended) {
+            ended = true;
+            perSecond.delete(entry.render!);
+            entry.render = undefined;
+            send("item.ended", { id: data.id });
+          }
+        }
+      };
+      perSecond.add(entry.render);
+      break;
+    }
     case "emote_effect":
     default: {
-      // Rendered from roadmap 7.2/7.5; the placeholder keeps the item
+      // Rendered from roadmap 7.5; the placeholder keeps the item
       // visible in the meantime.
       el.classList.add("sc-placeholder");
       el.textContent = data.kind;
@@ -265,7 +389,8 @@ function showItem(data: ItemData): void {
   if (items.has(data.id)) return;
   const el = document.createElement("div");
   el.className = "sc-item sc-kind-" + data.kind;
-  renderContent(el, data);
+  const entry: Entry = { el, data };
+  renderContent(el, entry);
   place(el, data.position, data.layer ?? 0);
   const now = performance.now();
   const startAt = itemStartAt(now);
@@ -273,7 +398,7 @@ function showItem(data: ItemData): void {
   const start = (): void => {
     document.body.appendChild(el);
     showAnimation(el, data.animation, data.animationDuration);
-    items.set(data.id, { el, data });
+    items.set(data.id, entry);
   };
   if (startAt > now) setTimeout(start, startAt - now);
   else start();
@@ -283,21 +408,121 @@ function removeItem(id: string): void {
   const entry = items.get(id);
   if (!entry) return;
   items.delete(id);
+  if (entry.render) perSecond.delete(entry.render);
   void hideAnimation(entry.el, entry.data.animation, entry.data.animationDuration).then(() => {
     entry.el.remove();
   });
 }
 
-// ---------- widgets (B4, B19, B21, B22) ----------
+// ---------- widgets (B4, B19, B21, B22, B24-B28) ----------
 
-function renderWidget(el: HTMLElement, data: WidgetData): void {
+// clock renders the text of the label kinds date and time (B24, A5) in
+// the locale and the time zone of the profile, per second.
+function renderClock(el: HTMLElement, st: any, entry: Entry): void {
+  const span = document.createElement("span");
+  el.appendChild(span);
+  const locale = st.locale ?? "en-US";
+  const options: Intl.DateTimeFormatOptions =
+    st.kind === "date" ? { dateStyle: "long" } : { timeStyle: "medium" };
+  if (st.timeZone) options.timeZone = st.timeZone;
+  entry.render = () => {
+    span.textContent = new Date(serverNow()).toLocaleString(locale, options);
+  };
+  perSecond.add(entry.render);
+}
+
+function renderWidget(el: HTMLElement, entry: Entry): void {
+  const data = entry.data as WidgetData;
   el.textContent = "";
-  const label = document.createElement("span");
-  label.textContent = data.name || data.id;
-  el.appendChild(label);
-  const kind = document.createElement("small");
-  kind.textContent = ` (${data.kind})`;
-  el.appendChild(kind);
+  const name = data.name || data.id;
+  const st = data.state ?? {};
+  switch (data.kind) {
+    case "label": {
+      // The label shows its text; the kinds date and time the runtime
+      // renders per second in the locale of the profile (B24, A5).
+      el.classList.add("sc-label");
+      if (st.kind === "date" || st.kind === "time") {
+        renderClock(el, st, entry);
+      } else {
+        el.textContent = st.text ?? "";
+      }
+      break;
+    }
+    case "goal": {
+      // The goal shows the reached amount of the total and its segments
+      // (B25).
+      const total = Number(st.total ?? 0);
+      const current = Number(st.current ?? 0);
+      const title = document.createElement("div");
+      title.textContent = `${name}: ${current}/${total}`;
+      el.appendChild(title);
+      const bar = document.createElement("div");
+      bar.className = "sc-goal-bar";
+      const fill = document.createElement("div");
+      fill.className = "sc-goal-fill";
+      fill.style.width = total > 0 ? `${Math.min(100, (current / total) * 100)}%` : "0%";
+      bar.appendChild(fill);
+      el.appendChild(bar);
+      const segs = document.createElement("small");
+      segs.textContent = (st.segments ?? []).map((s: any) => `${s.name} (${s.amount})`).join(" · ");
+      el.appendChild(segs);
+      break;
+    }
+    case "timer": {
+      // The timer widget counts the set duration down, from the server
+      // time of hello (B26); paused it shows the remaining time.
+      const span = document.createElement("span");
+      span.style.fontVariantNumeric = "tabular-nums";
+      el.appendChild(span);
+      const format = st.format ?? "MM:SS";
+      entry.render = () => {
+        const now = serverNow();
+        const rest = st.paused ? Number(st.pausedMs ?? 0) : Number(st.deadline ?? 0) - now;
+        const r = Math.max(0, rest);
+        // The cumulative and the rest coincide while the timer runs;
+        // while it is paused the timer has no set total to show.
+        span.textContent = formatTimer(format, r, r);
+      };
+      perSecond.add(entry.render);
+      break;
+    }
+    case "event_list": {
+      // The event list shows the recent feed events and the dynamic
+      // entries, newest first (B27).
+      // shortcut: the time of an entry is not shown; the list is
+      // dominated by the user and the text.
+      const ul = document.createElement("ul");
+      for (const e of st.entries ?? []) {
+        const li = document.createElement("li");
+        li.textContent = e.user ? `${e.user}: ${e.text ?? ""}` : e.text ?? "";
+        ul.appendChild(li);
+      }
+      el.appendChild(ul);
+      break;
+    }
+    case "chat": {
+      // The chat widget shows the messages, newest last (B28).
+      const ul = document.createElement("ul");
+      for (const m of st.messages ?? []) {
+        const li = document.createElement("li");
+        li.textContent = m.user ? `${m.user}: ${m.text}` : m.text;
+        ul.appendChild(li);
+      }
+      el.appendChild(ul);
+      break;
+    }
+    default: {
+      // The kinds of 7.5 and the states the service does not fill yet;
+      // the placeholder keeps the widget visible.
+      const label = document.createElement("span");
+      label.textContent = name;
+      el.appendChild(label);
+      const kind = document.createElement("small");
+      kind.textContent = ` (${data.kind})`;
+      el.appendChild(kind);
+      break;
+    }
+  }
 }
 
 function setWidget(data: WidgetData, visible: boolean): void {
@@ -308,11 +533,14 @@ function setWidget(data: WidgetData, visible: boolean): void {
     entry = { el, data };
     widgets.set(data.id, entry);
     place(el, data.position, 0);
-    renderWidget(el, data);
     document.body.appendChild(el);
   }
   entry.data = data;
-  renderWidget(entry.el, data);
+  if (entry.render) {
+    perSecond.delete(entry.render);
+    entry.render = undefined;
+  }
+  renderWidget(entry.el, entry);
   entry.el.style.display = visible ? "" : "none";
 }
 
@@ -414,7 +642,11 @@ function syncWidget(id: string, visible?: boolean, state?: any): void {
   if (!entry) return;
   if (state !== undefined) entry.data.state = state;
   if (visible !== undefined) entry.el.style.display = visible ? "" : "none";
-  renderWidget(entry.el, entry.data);
+  if (entry.render) {
+    perSecond.delete(entry.render);
+    entry.render = undefined;
+  }
+  renderWidget(entry.el, entry);
 }
 
 connect();

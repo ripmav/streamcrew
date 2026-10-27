@@ -44,6 +44,13 @@ type Descriptor struct {
 	Once Once
 }
 
+// Overlay, the effects of the overlay widgets (spec overlays.md, B23,
+// A2): the widget effects run as bus events that event commands react to.
+const (
+	OverlayGoalProgress         event.Type = "overlay.goal.progress"
+	OverlayGoalSegmentCompleted event.Type = "overlay.goal.segment_completed"
+)
+
 // Application.
 const (
 	AppStarted  event.Type = "app.started"
@@ -150,6 +157,9 @@ func All() []Descriptor {
 	return []Descriptor{
 		neutral(AppStarted, Always),
 		neutral(AppStopping, Always),
+
+		neutral(OverlayGoalProgress, Always),
+		neutral(OverlayGoalSegmentCompleted, Always),
 
 		neutral(ChannelStreamStart, PerSession),
 		neutral(ChannelStreamStop, PerSession),

@@ -101,19 +101,19 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
 
 ### 3.2 7.2 Items und Widgets (P1) — `feat/phase-7.2-items-widgets`
 
-- [ ] Item-Modell + Kinds `text`, `image`, `video`, `audio`, `html`, `youtube`, `clip`,
+- [x] Item-Modell + Kinds `text`, `image`, `video`, `audio`, `html`, `youtube`, `clip`,
   `timer`, `emote_effect` (Platzhalter, voll in 7.5); Positionen (simple/percent/pixels/
   random), Ebenen, Animationen; Laufzeit pro Item mit `item.remove`; `item.ended` vom
   Client für die Wiedergabe
-- [ ] Runtime: Rendering aller Item-Kinds inkl. YouTube/Clip-Embeds, Timer-Countdown
-- [ ] Widget-Store (`overlay_widget_state`), Widget-Service; Kinds `label`, `goal`, `timer`,
+- [x] Runtime: Rendering aller Item-Kinds inkl. YouTube/Clip-Embeds, Timer-Countdown
+- [x] Widget-Store (`overlay_widget_state`), Widget-Service; Kinds `label`, `goal`, `timer`,
   `event_list`, `chat` mit Kernzustand und Live-Updates (Feed, Chat-Events, Feed-Events)
-- [ ] Runtime: Rendering der fünf Widget-Kinds (inkl. clientseitiger Clock für Datum/Zeit)
-- [ ] Overlay-Action: Typ `overlay`, Kinds `item` und `widget` (show/hide/update +
+- [x] Runtime: Rendering der fünf Widget-Kinds (inkl. clientseitiger Clock für Datum/Zeit)
+- [x] Overlay-Action: Typ `overlay`, Kinds `item` und `widget` (show/hide/update +
   Operationen AddToGoal, AddToTimer, PauseTimer, AddToEventList, SpinWheel-Platzhalter),
   Positions-/Animationsschema für Editoren; `VisualAudio`; `PlaybackEnds` für Ton/Video
-- [ ] Events `overlay.goal.progress`/`segment_completed` (+ Details im Bus-Katalog, in `All()`)
-- [ ] Tests, Test-Matrizen, Roadmap 7.2 abhaken
+- [x] Events `overlay.goal.progress`/`segment_completed` (+ Details im Bus-Katalog, in `All()`)
+- [x] Tests, Test-Matrizen, Roadmap 7.2 abhaken
 
 ### 3.3 7.3 Medien — `feat/phase-7.3-media`
 

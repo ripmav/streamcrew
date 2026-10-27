@@ -41,6 +41,47 @@ type Details struct {
 	// CustomPowerUp is the redemption of
 	// twitch.custom_power_up.redeem.
 	CustomPowerUp *CustomPowerUp `json:"custom_power_up,omitempty"`
+	// GoalProgress is the progress of overlay.goal.progress.
+	GoalProgress *GoalProgress `json:"goal_progress,omitempty"`
+	// GoalSegment is the completed segment of
+	// overlay.goal.segment_completed.
+	GoalSegment *GoalSegment `json:"goal_segment,omitempty"`
+}
+
+// GoalProgress is the progress of the overlay goal widget (spec
+// overlays.md, B25): the overall amount, the part this step added and the
+// segment it works on.
+type GoalProgress struct {
+	// Total is the overall amount of the goal: the sum of the segments for
+	// the kind cumulative, the amount of the current segment for the kind
+	// individual.
+	Total int64 `json:"total"`
+	// Current is the amount reached so far, in the same part of the goal as
+	// Total.
+	Current int64 `json:"current"`
+	// Amount is the part this step added; not negative.
+	Amount int64 `json:"amount"`
+	// SegmentName is the segment the goal works on.
+	SegmentName string `json:"segment_name,omitempty"`
+	// SegmentAmount is the amount of that segment.
+	SegmentAmount int64 `json:"segment_amount,omitempty"`
+}
+
+// GoalSegment is the segment the overlay goal widget completed (spec
+// overlays.md, B25).
+type GoalSegment struct {
+	// SegmentName is the completed segment.
+	SegmentName string `json:"segment_name"`
+	// Current is the overall amount reached so far.
+	Current int64 `json:"current"`
+	// NextSegmentName is the segment the goal works on next; empty if there
+	// is no more segment.
+	NextSegmentName string `json:"next_segment_name,omitempty"`
+	// NextSegmentAmount is the amount of the next segment; 0 if there is
+	// no more segment.
+	NextSegmentAmount int64 `json:"next_segment_amount,omitempty"`
+	// Remaining is the amount still missing to the end of the goal.
+	Remaining int64 `json:"remaining"`
 }
 
 // Bits is the bits of a cheer (twitch.bits.cheer).

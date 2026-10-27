@@ -77,6 +77,7 @@ func shapes() map[event.Type]Shape {
 	}
 	user := with(func(s *Shape) { s.User = Required })
 	userMessage := with(func(s *Shape) { s.User, s.Message = Required, Required })
+	userOptional := with(func(s *Shape) { s.User = Optional })
 	return map[event.Type]Shape{
 		ChannelStreamStart: none,
 		ChannelStreamStop:  none,
@@ -106,6 +107,10 @@ func shapes() map[event.Type]Shape {
 		ChatUserUnmod:        user,
 		ChatUserVIP:          user,
 		ChatUserUnVIP:        user,
+		// The overlay goal events name the user of the effect, if the
+		// effect has one (B23, A2).
+		OverlayGoalProgress:         userOptional,
+		OverlayGoalSegmentCompleted: userOptional,
 	}
 }
 

@@ -63,6 +63,7 @@ Nutzer und Zielnutzer nach B6, Werte nach B7 (B9). „–“ heißt: Das Ereigni
 | `chat.user.join`, `chat.user.leave`, `chat.user.new` | der Nutzer | – | – |
 | `chat.user.entrance`, `chat.user.first_message` | der Nutzer | – | die Nachricht |
 | `chat.user.timeout`, `chat.user.ban`, `chat.user.unban`, `chat.user.untimeout`, `chat.user.mod`, `chat.user.unmod`, `chat.user.vip`, `chat.user.unvip` | der betroffene Nutzer | – | – |
+| `overlay.goal.progress`, `overlay.goal.segment_completed` | der Nutzer des auslösenden Ereignisses, – bei einer Aktion ohne Nutzer | – | Ziel-Fortschritt bzw. er-reichtes Segment ([overlays.md](overlays.md), B25) |
 
 Abo-Stufe und ihr Name stehen so da, wie die Plattform sie nennt; für Twitch legt sie `twitch-events.md` fest (Phase 4). „Anonym“ ist `true` oder `false` wie die anderen Ja-Nein-Werte der Templates ([`template.md`](template.md)).
 
@@ -130,6 +131,15 @@ Die Log-Ereignisse (Roadmap 6.6) sind die Log-Zeilen des Cores im Stream: Der Co
 | `chat.user.unmod` | Ein Nutzer wurde als Moderator entlassen. | Q9 |
 | `chat.user.vip` | Ein Nutzer wurde zum VIP ernannt. | Q9 |
 | `chat.user.unvip` | Ein Nutzer wurde als VIP entlassen. | Q9 |
+
+**Overlay** (Phase 7)
+
+Die Ereignisse der Overlay-Widgets kommen von der Anwendung, nicht von einer Plattform; die Plattform und der Nutzer nennen sie nur, wenn das auslösende Ereignis sie hat. Sie lösen wie alle Katalog-Ereignisse den Ereignis-Command ihres Typs aus.
+
+| Typ | Bedeutung | Quellen |
+|---|---|---|
+| `overlay.goal.progress` | Der Fortschritt eines Ziel-Widgets ist gewachsen, ohne dass ein Segment erreicht wurde. | [overlays.md](overlays.md), B23, A2 |
+| `overlay.goal.segment_completed` | Ein Segment eines Ziel-Widgets ist erreicht. | [overlays.md](overlays.md), B23, A2 |
 
 **Twitch** (Phase 4)
 

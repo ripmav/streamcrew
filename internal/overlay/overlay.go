@@ -106,6 +106,11 @@ type Service struct {
 	items map[string]map[string]*activeItem
 	// clients are the connected runtimes per endpoint ID.
 	clients map[string]map[string]ClientSlot
+	// stateProvider computes the runtime state of a widget for the state
+	// sync of a (re)connecting runtime (B4, B20); set by the widget
+	// service before the server runs, and it must not call back into the
+	// service.
+	stateProvider func(ctx context.Context, w settings.OverlayWidget) any
 
 	nextItem atomic.Uint64
 	nextSlot atomic.Uint64
@@ -115,6 +120,10 @@ type Service struct {
 type activeItem struct {
 	data  ItemData
 	timer *time.Timer
+	// end is closed once the item leaves the active set, by its duration,
+	// an explicit remove, the item.ended of a runtime or a reload that
+	// drops its endpoint (B11, B14).
+	end chan struct{}
 }
 
 // New returns a service with the overlay section of the profile loaded.
@@ -180,6 +189,7 @@ func (s *Service) reload(ctx context.Context) error {
 				if item.timer != nil {
 					item.timer.Stop()
 				}
+				close(item.end)
 			}
 			delete(s.items, id)
 		}
@@ -190,6 +200,15 @@ func (s *Service) reload(ctx context.Context) error {
 // Reload re-reads the overlay section and applies the change (B2, B19).
 func (s *Service) Reload(ctx context.Context) error {
 	return s.reload(ctx)
+}
+
+// SetStateProvider names the provider of the widget state for the state
+// sync (B4, B20); nil removes it. The provider must not call back into
+// the service; set it before the server runs.
+func (s *Service) SetStateProvider(fn func(ctx context.Context, w settings.OverlayWidget) any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stateProvider = fn
 }
 
 // Endpoint returns the named endpoint; ok is false if the profile does
@@ -232,22 +251,23 @@ func (s *Service) Widget(id string) (settings.OverlayWidget, bool) {
 }
 
 // ShowItem registers an item on the endpoint, broadcasts item.show and
-// returns its ID (B9–B13, B18). An unknown endpoint is an error with the
-// ID in the message (B45). A duration of 0 keeps the item in the active
-// set until ItemEnded removes it (B11, B14); a duration above 0 removes
-// the item after the time has passed (B11).
-func (s *Service) ShowItem(ctx context.Context, endpoint string, item Item) (string, error) {
+// returns its ID and the channel that closes once the item leaves the
+// active set (B9–B13, B18). An unknown endpoint is an error with the ID
+// in the message (B45). A duration of 0 keeps the item in the active set
+// until ItemEnded removes it (B11, B14); a duration above 0 removes the
+// item after the time has passed (B11).
+func (s *Service) ShowItem(ctx context.Context, endpoint string, item Item) (string, <-chan struct{}, error) {
 	if !contains(ItemKinds, item.Kind) {
-		return "", fmt.Errorf("overlay: the item kind %q is unknown", item.Kind)
+		return "", nil, fmt.Errorf("overlay: the item kind %q is unknown", item.Kind)
 	}
 	if item.Animation != "" && !contains(Animations, item.Animation) {
-		return "", fmt.Errorf("overlay: the animation %q is unknown", item.Animation)
+		return "", nil, fmt.Errorf("overlay: the animation %q is unknown", item.Animation)
 	}
 	if err := item.Position.Validate(); err != nil {
-		return "", fmt.Errorf("overlay: the position: %w", err)
+		return "", nil, fmt.Errorf("overlay: the position: %w", err)
 	}
 	if item.Duration < 0 {
-		return "", fmt.Errorf("overlay: the duration %s must be 0 or more", item.Duration)
+		return "", nil, fmt.Errorf("overlay: the duration %s must be 0 or more", item.Duration)
 	}
 	if item.Position.Model == settings.PositionRandom {
 		x, y := s.rand()
@@ -257,7 +277,7 @@ func (s *Service) ShowItem(ctx context.Context, endpoint string, item Item) (str
 	s.mu.Lock()
 	if _, ok := s.endpoints[endpoint]; !ok {
 		s.mu.Unlock()
-		return "", fmt.Errorf("overlay: the endpoint %q is unknown", endpoint)
+		return "", nil, fmt.Errorf("overlay: the endpoint %q is unknown", endpoint)
 	}
 	// Zero-padded, so the lexicographic order of the IDs is the order
 	// of the show, which the state sync uses (B4).
@@ -272,7 +292,7 @@ func (s *Service) ShowItem(ctx context.Context, endpoint string, item Item) (str
 		Duration:          int(item.Duration / time.Millisecond),
 		Content:           item.Content,
 	}
-	active := &activeItem{data: data}
+	active := &activeItem{data: data, end: make(chan struct{})}
 	if item.Duration > 0 {
 		active.timer = time.AfterFunc(item.Duration, func() {
 			s.RemoveItem(ctx, endpoint, id)
@@ -286,7 +306,7 @@ func (s *Service) ShowItem(ctx context.Context, endpoint string, item Item) (str
 
 	s.logger.InfoContext(ctx, "overlay item shown", "endpoint", endpoint, "item", id, "kind", item.Kind, "duration", item.Duration)
 	s.broadcast(endpoint, Message{Type: TypeItemShow, Data: data})
-	return id, nil
+	return id, active.end, nil
 }
 
 // RemoveItem removes an active item and broadcasts item.remove (B11);
@@ -306,7 +326,8 @@ func (s *Service) RemoveItem(ctx context.Context, endpoint, id string) (ok bool)
 	return true
 }
 
-// takeItem removes the item from the active set; the caller holds mu.
+// takeItem removes the item from the active set and closes its end
+// channel; the caller holds mu.
 func (s *Service) takeItem(endpoint, id string) (*activeItem, bool) {
 	items := s.items[endpoint]
 	item, ok := items[id]
@@ -317,6 +338,7 @@ func (s *Service) takeItem(endpoint, id string) (*activeItem, bool) {
 	if len(items) == 0 {
 		delete(s.items, endpoint)
 	}
+	close(item.end)
 	return item, true
 }
 
@@ -369,13 +391,50 @@ func (s *Service) SetVisible(ctx context.Context, widgetID string, visible bool)
 	return nil
 }
 
-// WidgetStates returns the state of the visible widgets of the endpoint
-// for the state sync (B4, B20). The state is empty in 7.1; the widget
-// services fill it from 7.2.
-func (s *Service) WidgetStates(endpoint string) []WidgetState {
+// WidgetVisible reports the effective visibility of the widget (B21): the
+// flag of the section or a runtime override of SetVisible; ok is false if
+// the profile does not know the widget. A hidden widget does not run.
+func (s *Service) WidgetVisible(widgetID string) (visible, ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.widgetStates(endpoint)
+	w, ok := s.widgets[widgetID]
+	if !ok {
+		return false, false
+	}
+	visible = w.Visible
+	if v, set := s.visible[widgetID]; set {
+		visible = v
+	}
+	return visible, true
+}
+
+// UpdateWidget changes the state of a widget and broadcasts
+// widget.update to the runtimes of its endpoint (B22); an unknown widget
+// is an error with the ID in the message.
+func (s *Service) UpdateWidget(ctx context.Context, widgetID string, state any) error {
+	s.mu.Lock()
+	w, ok := s.widgets[widgetID]
+	if !ok {
+		s.mu.Unlock()
+		return fmt.Errorf("overlay: the widget %q is unknown", widgetID)
+	}
+	endpoint := w.Endpoint
+	if endpoint == "" {
+		endpoint = settings.DefaultEndpointID
+	}
+	s.mu.Unlock()
+	s.logger.DebugContext(ctx, "overlay widget updated", "widget", widgetID)
+	s.broadcast(endpoint, Message{Type: TypeWidgetUpdate, Data: WidgetUpdateData{ID: widgetID, State: state}})
+	return nil
+}
+
+// WidgetStates returns the state of the visible widgets of the endpoint
+// for the state sync (B4, B20). The state is filled by the widget
+// services from 7.2.
+func (s *Service) WidgetStates(ctx context.Context, endpoint string) []WidgetState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.widgetStates(ctx, endpoint)
 }
 
 // Attach registers a connected runtime of the endpoint and sends it the
@@ -402,14 +461,14 @@ func (s *Service) Attach(ctx context.Context, endpoint string, send func(msg Mes
 // of B4: hello, state.widgets and the active items. The server calls it
 // on attach and on ready, so a message lost during the connection is
 // caught (B4, B7).
-func (s *Service) SyncState(_ context.Context, endpoint string, send func(msg Message)) error {
+func (s *Service) SyncState(ctx context.Context, endpoint string, send func(msg Message)) error {
 	e, ok := s.Endpoint(endpoint)
 	if !ok {
 		return fmt.Errorf("overlay: the endpoint %q is unknown", endpoint)
 	}
 	s.mu.Lock()
 	hello := HelloData{Version: s.version, Endpoint: e.ID, Name: e.Name, Time: time.Now()}
-	widgets := s.widgetStates(endpoint)
+	widgets := s.widgetStates(ctx, endpoint)
 	items := s.activeItems(endpoint)
 	s.mu.Unlock()
 	for _, msg := range s.handshake(hello, widgets, items) {
@@ -431,7 +490,7 @@ func (s *Service) handshake(hello HelloData, widgets []WidgetState, items []Item
 }
 
 // widgetStates is WidgetStates without the lock; the caller holds mu.
-func (s *Service) widgetStates(endpoint string) []WidgetState {
+func (s *Service) widgetStates(ctx context.Context, endpoint string) []WidgetState {
 	var out []WidgetState
 	for _, w := range s.widgets {
 		ep := w.Endpoint
@@ -448,7 +507,11 @@ func (s *Service) widgetStates(endpoint string) []WidgetState {
 		if !visible {
 			continue
 		}
-		out = append(out, WidgetState{ID: w.ID, Kind: w.Kind, Name: w.Name, Position: w.Position})
+		var state any
+		if s.stateProvider != nil {
+			state = s.stateProvider(ctx, w)
+		}
+		out = append(out, WidgetState{ID: w.ID, Kind: w.Kind, Name: w.Name, Position: w.Position, State: state})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out

@@ -295,9 +295,63 @@ und korrekten MIME-Typen. Die Medienlieferung braucht das Recht
 deshalb mit 404. Pfade außerhalb der Wurzeln antworten ebenfalls 404
 (nie 403).
 
+**Items (Roadmap 7.2):** Eine Aktion des Typs `overlay` mit dem Kind
+`item` zeigt ein Item auf einem Endpunkt. Es gibt die Kinds `text`,
+`image`, `video`, `audio`, `html`, `youtube`, `clip` und `timer`;
+Position (simple/percent/pixels/random), Ebene und Ein-/Ausblend-
+Animation je Item, eine anzeigedauer (`duration`, leer = bis das Item
+weg ist) und die Item-Inhalte selbst. Ein Clip-Item nennt eine URL oder
+einen Nutzer — bei einem Nutzer zeigt das Item den neuesten Clip des
+Kanals. Ton- und Video-Items melden ihr Wiedergabe-Ende der Engine: In
+Begrüßungen halten sie damit den Medien-Abstand
+([`command-engine.md`](spec/command-engine.md), B43) bis zum Ende des
+Items. Die Aktion ist statisch `visual_audio` — auch ein reines
+Text-Item wartet in einer Begrüßung auf seine Reihe (Abweichung von
+[overlays.md](spec/overlays.md) B39, die den Status nur für Ton und
+Video vorsieht).
+
+**Widgets (Roadmap 7.2):** Widgets stehen als Definitionen in der
+Profil-Sektion `overlay` (je Widget `id`, `kind`, Position, Sichtbarkeit
+und eine Konfiguration) und werden von einem eigenen Dienst bedient. Es
+gibt die fünf Kinds `label`, `goal`, `timer`, `event_list` und `chat`:
+
+- `label` zeigt Text (Template) oder Werte: `viewer_count`,
+  `chatter_count`, `total_followers`, `total_subscribers`,
+  `latest_follower`, `latest_subscriber`, `latest_raid`, sowie
+  `date` und `time` (die Runtime rendert diese clientseitig pro Sekunde
+  in Locale und Zeitzone des Profils). Der Text wird bei Veränderung
+  neu gesendet; Werte, die die Plattform nicht meldet, haben keinen
+  Text. `total_followers` und `total_subscribers` stehen bis Phase 9
+  die Zähler der Stream-Sitzung.
+- `goal` zeigt den Fortschritt mit Segmenten (`cumulative` oder
+  `individual`) und einem optionalen Automatik-Reset (täglich oder
+  wochenmonatlich, in der Zeitzone des Profils). Follow, Abo, Raid und
+  Bits wachsen das Ziel; der Stand bleibt im Profil erhalten. Ohne
+  erreichtes Segment veröffentlicht der Core `overlay.goal.progress`,
+  bei einem erreichten Segment `overlay.goal.segment_completed` —
+  beides als Bus-Ereignis, auf das Ereignis-Commands reagieren. Negativ
+  addierte Beträge klemmen den Fortschritt bei null.
+- `timer` zählt eine Dauer (Format wie bei den Timer-Items) runter oder
+  hoch; die Aktionen `add_to_timer` (negativ erlaubt) und
+  `pause_timer` (pausiert bzw. setzt fort) steuern ihn live.
+- `event_list` zeigt die letzten Feed-Ereignisse (Follow, Abo, Resub,
+  Geschenke, Raids, Cheers — filterbar) plus dynamische Einträge, die
+  die Aktion `add_to_event_list` hinzufügt (Nutzer der Ausführung und
+  Text).
+- `chat` zeigt die Chat-Nachrichten der gewählten Plattformen, mit
+  optionaler Verzögerung und Ablaufzeit. Gelöschte Nachrichten
+  verschwinden über die Plattform-Nachrichten-ID; bei Sperre oder Bann
+  eines Nutzers verschwinden seine Nachrichten.
+
+Die Aktionen des Typs `overlay` mit dem Kind `widget` wirken auf diese
+Widgets: `show`/`hide` (Sichtbarkeit), `update` (Zustandsdaten; beim
+`timer` eine neue Dauer oder ein Reset), `add_to_goal` (Betrag, negativ
+erlaubt), `add_to_timer`, `pause_timer` und `add_to_event_list`.
+Operationen der 7.5-Widgets (`add_to_credits`, `play_credits`,
+`spin_wheel`, `damage_stream_boss`) sind ein klarer Fehler.
+
 **Ausfall:** Der Overlay-Server ist nicht-kritisch — sein Ausfall
-beendet den Core nicht, die API bleibt erreichbar. Items und Widgets
-dienen ab Roadmap 7.2 über Commands.
+beendet den Core nicht, die API bleibt erreichbar.
 
 ## Logs im Stream (read-only)
 
