@@ -96,7 +96,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 4: Twitch | 4.1 (Authentifizierung), 4.2 (Helix-Client), 4.3 (EventSub), 4.4 (Funktionen) und 4.5 (Tests) abgeschlossen; das Exit-Kriterium des manuellen 4-h-Test-Streams (4.5) ist noch offen |
 | Phase 5: Core-Services | abgeschlossen: 5.1, 5.2.1–5.2.6, 5.3, 5.4, 5.5 und 5.6 (P0 und P1) |
 | Phase 6: API, CLI, TUI | in Arbeit (Nachprüfung 2026-10-23): 6.1, 6.2–6.3 (bis auf CLI-Reste), 6.4 (Grundgerüst; Ansichten bis auf Login-Flow; TUI-Tests mit Test-Harness), 6.6 abgeschlossen, 6.5 bis auf die Nacharbeit aus dem Code-Review 2026-10-24; offen: 6.2 Agent-Handler, 6.5 Config-API nur einschränkend und `serve`-Verdrahtung, 6.4 Login-Flow, 6.7 ADR-0025-Akzeptanz und erster Release-Tag |
-| Phase 7: Overlays und Medien | offen |
+| Phase 7: Overlays und Medien | in Arbeit (2026-10-27): Spezifikation und ADRs (0019, 0020) fertig; 7.1–7.5 in Arbeit |
 | Phase 8: Economy, Community, Spiele | offen |
 | Phase 9: Integrationen, Scripting, Agent | offen |
 | Phase 10: Developer-API, MCP, Webhooks, Import | offen |
@@ -819,7 +819,7 @@ Konfiguration (6.5) bzw. der Konfigurationsdatei.
 
 ### 7.1 Overlay-Server und Runtime
 
-- [ ] Spezifikation `docs/spec/overlays.md` und ADR-0019: Architektur und Protokoll (S)
+- [x] Spezifikation `docs/spec/overlays.md` und ADR-0019: Architektur und Protokoll (S), erledigt 2026-10-27
 - [ ] HTTP- und WebSocket-Server, mehrere Endpunkte (eine URL je Browserquelle), optionales Token, Wiederverbinden der Clients (M)
 - [ ] Neu geschriebene Overlay-Runtime in TypeScript, gebündelt mit der Go-API von esbuild per `go generate` und per `go:embed` ausgeliefert (L):
   - Pakete, Positionen, Ebenen
@@ -836,7 +836,7 @@ Konfiguration (6.5) bzw. der Konfigurationsdatei.
 
 ### 7.3 Medien
 
-- [ ] ADR-0020 Audio-Ausgabe (S)
+- [x] ADR-0020 Audio-Ausgabe (S), erledigt 2026-10-27
 - [ ] Audio-Sinks: Overlay als Standard; lokale Ausgabe mit Geräteauswahl per Build-Tag, P1 wegen des Streaming-PCs als Hauptbetriebsort (ADR-0003); Agent-Schnittstelle vorbereitet (M)
 - [ ] Sound-Action mit Lautstärke und Ausgabe; meldet das Ende der Wiedergabe mit `engine.Run.PlaybackEnds` ([`command-engine.md`](spec/command-engine.md), B43) (S)
 - [ ] Desktop-Variante des Core-Binaries (Build-Tag für lokale Audioausgabe) als Release-Artefakt für die Desktop-Pakete ([ADR-0005](adr/0005-core-in-desktop-builds.md)) (S)
@@ -1496,3 +1496,4 @@ Eigene Datei seit 2026-10-09: [backlog.md](backlog.md).
 | 2026-10-24 | Release-Pipeline-Fix (zweiter Tag-Lauf): Der Syft-Install-Schritt legte das Binary im Standardverzeichnis `./bin` des Checkouts ab — goreleaser verweigert den Lauf bei „git is in a dirty state“ (`?? bin/`). Die Installation bekommt jetzt `-b /usr/local/bin`. Nebenbefund: Der zweite Tag trug einen Tippfehler (`v0.1.0-aplha1`); der dritte Lauf nutzt den korrigierten Tag `v0.1.0-alpha1` auf dem Merge-Commit. |
 | 2026-10-26 | Code-Review-Nachbesserung (docs/reviews/2026-10-24, Findings A1, A2, A4, A9): Die Command-Verwaltung (`command_admin`) akzeptiert ein führendes „!“ im Namen als Trigger-Zeichen (`!addcmd !hello …` legt den Command `hello` an; das `!!hello`-Doppel-Trigger war bereits an der B11-Validierung gescheitert, jetzt ist der natürliche Weg der funktionierende); `update` scheitert mit einer klaren Meldung, wenn der Command keine Chat-Action hat, statt still zu speichern, und `find` unterscheidet „fehlend“, „mehrdeutig“ und „Liste nicht lesbar“ — ein Listenfehler wird nicht mehr als „frei“ gewertet (`add` speichert dann nicht, `update`/`disable` melden den Fehler, mehrere Treffer nennen die Trefferzahl). Die `user_command`-Antworten hängen jetzt an der ID des Commands statt an seinem Namen: eine Umbenennung (auch nur Groß-/Klein) verwaist keine gespeicherten Antworten (Spec `actions.md` B122–B124, B127; Migration 0021 weist die vorhandenen Antworten um; Cooldowns waren bereits ID-schlüsselt, der Schlüssel ist damit konsistent). |
 | 2026-10-27 | Code-Review-Nachbesserung (docs/reviews/2026-10-24, Findings S5, S6, U4, U5, U6, S12, C11 und T5–T11, T13–T15, IRC-CRLF, „Rollen“): API-Tokens liegen je Profil in der Profildatenbank (ADR-0013 §5), der alte Datei-Stand wird einmal importiert; die CLI-API-Befehle lesen `runtime.json` und nutzen den Unix-Socket; Counter-Namen mit Reservierung werden bei der Anlage geprüft; Fehler-Mapping auf die passenden Codes; der TUI-Stream reconnectet und meldet verlorene Events; doppelte Token-Namen werden abgelehnt und die Rücknahme entfernt genau einen Token; `checksums.txt` deckt alle Release-Artefakte ab. Twitch: Antworten über `reply-parent-msg-id` (IRC-Modus der Zusatzkanäle, sonst normale Nachricht), Whispers nur empfangen; Stream-Status nach einem EventSub-Reconnect neu gemeldet; der EventSub-Reader leckt nicht und liefert während des Reconnects die Events der alten Session; `channel.moderate` mappt die acht Aktionen mit Zielnutzer (sechs neue neutrale Typen, twitch-events.md B7); anonyme Cheers werden ohne Nutzer gemappt (B4); die Follow-Zeit der Teilnahmeregel wird live nachgefragt und im Fehlerfall nicht erfüllt (moderation.md B3); IRC-Lebenszyklus (Backoff-Obergrenze und -Rücksetzung, Token-Fehler wie Fehlschlag, Welcome-Frist), CR/LF-Sanitisierung der Sends, Unescaping der Tag-Werte und der zweite Send-Bucket (1 in 3 s); `Manager.Reconcile` läuft unter Mutex; Badges-Rollen von Zusatzkanälen landen nicht in der je-Plattform-Identität (users-and-roles.md B24). |
+| 2026-10-27 | Phase 7 (Overlays und Medien) gestartet: Plan in `docs/superpowers/plans/2026-10-27-phase-7-overlays-media.md`, Spezifikation [`docs/spec/overlays.md`](spec/overlays.md) (B1–B55, Abweichungen A1–A10, Status Geprüft) und zwei ADRs: [ADR-0019](adr/0019-overlay-architektur.md) (eigener, nicht-kritischer Overlay-HTTP-Server mit eingebettetem TypeScript-Client, WebSocket-Protokoll, Medienlieferung über `os.Root`/`http.ServeContent`) und [ADR-0020](adr/0020-audio-ausgabe.md) (Audio-Sinks `overlay`/`local` (Build-Tag `localaudio`)/`agent`-Stub). Umsetzung in gestapelten PRs 7.1–7.5. |
