@@ -112,6 +112,9 @@ type IRCSession struct {
 	// lims is the per-channel chat send limiter (spec twitch-
 	// multi-channel.md, B9), one bucket per channel.
 	lims map[string]*rate.Limiter
+	// lims3 is the second send limiter of the IRC adapter, one message
+	// in 3 seconds per channel (spec twitch-multi-channel.md, B18).
+	lims3 map[string]*rate.Limiter
 	// mods is the mod status per channel (lowercase login) from the
 	// USERSTATE badges; seen reports which channels delivered one.
 	mods map[string]bool
@@ -173,6 +176,7 @@ func NewIRCSession(ctx context.Context, o IRCOptions) *IRCSession {
 		mappers:      mappers,
 		whisperDedup: whisperDedup,
 		lims:         make(map[string]*rate.Limiter, len(o.Channels)),
+		lims3:        make(map[string]*rate.Limiter, len(o.Channels)),
 		mods:         make(map[string]bool, len(o.Channels)),
 		seen:         make(map[string]bool, len(o.Channels)),
 	}
@@ -180,22 +184,31 @@ func NewIRCSession(ctx context.Context, o IRCOptions) *IRCSession {
 
 // Run connects the IRC session and runs it until the context ends: a
 // dropped connection is reconnected with a backoff and a fresh token,
-// and the channels are rejoined after every (re)connect.
+// and the channels are rejoined after every (re)connect. The backoff
+// grows with every failed start, stays at the cap, and a session that
+// reached the welcome starts the next attempt fresh; a missing token
+// is logged and retried, like a failure (code review 2026-10-24, T13).
 func (s *IRCSession) Run(ctx context.Context) error {
 	var backoff time.Duration
 	for ctx.Err() == nil {
+		var runErr error
 		token, err := s.token(ctx)
 		if err != nil {
-			return err
-		}
-		runErr := s.runConnection(ctx, token)
-		if ctx.Err() != nil {
-			return ctx.Err()
+			runErr = err
+		} else {
+			welcomed, err := s.runConnection(ctx, token)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			runErr = err
+			if welcomed {
+				backoff = 0 // the session ran: the next start is a fresh one
+			}
 		}
 		if backoff == 0 {
 			backoff = ircBackoffMin
-		} else if backoff < ircBackoffMax {
-			backoff *= 2
+		} else {
+			backoff = min(backoff*2, ircBackoffMax)
 		}
 		s.log.WarnContext(ctx, "the irc connection ended, it is reconnected", "error", runErr, "backoff", backoff)
 		select {
@@ -208,8 +221,11 @@ func (s *IRCSession) Run(ctx context.Context) error {
 }
 
 // runConnection runs one connection: the login sequence, the joins,
-// the keepalive and the read loop; it returns when the connection ends.
-func (s *IRCSession) runConnection(ctx context.Context, token string) error {
+// the keepalive and the read loop; it returns when the connection ends,
+// with welcomed set when the connection reached the welcome (the
+// 001), so the caller knows whether the start was a failure or a
+// session that ran (code review 2026-10-24, T13).
+func (s *IRCSession) runConnection(ctx context.Context, token string) (welcomed bool, err error) {
 	base := s.base
 	tlsConf := true
 	if base == "" {
@@ -219,7 +235,6 @@ func (s *IRCSession) runConnection(ctx context.Context, token string) error {
 	}
 	dialer := net.Dialer{Timeout: 10 * time.Second}
 	var conn net.Conn
-	var err error
 	if tlsConf {
 		d := tls.Dialer{NetDialer: &dialer, Config: &tls.Config{}}
 		conn, err = d.DialContext(ctx, "tcp", base)
@@ -227,7 +242,7 @@ func (s *IRCSession) runConnection(ctx context.Context, token string) error {
 		conn, err = dialer.Dial("tcp", base)
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	s.mu.Lock()
 	s.conn = conn
@@ -239,9 +254,13 @@ func (s *IRCSession) runConnection(ctx context.Context, token string) error {
 		_ = conn.Close()
 	}()
 	// A finished context closes the connection, so the read unblocks at
-	// the shutdown and does not wait the read deadline.
+	// the shutdown and does not wait the read deadline; the closer dies
+	// with the connection, not with the context (code review 2026-10-24,
+	// T13).
+	connCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	go func() {
-		<-ctx.Done()
+		<-connCtx.Done()
 		_ = conn.Close()
 	}()
 	// The capability negotiation (dev.twitch.tv/docs/chat/irc): the
@@ -255,10 +274,10 @@ func (s *IRCSession) runConnection(ctx context.Context, token string) error {
 		"PASS oauth:"+token,
 		"NICK "+s.login,
 	); err != nil {
-		return err
+		return false, err
 	}
 	if err := conn.SetReadDeadline(time.Now().Add(ircWelcomeTimeout)); err != nil {
-		return err
+		return false, err
 	}
 	s.log.InfoContext(ctx, "the irc session connected", "channels", s.logins)
 	defer s.log.InfoContext(ctx, "the irc session disconnected")
@@ -268,10 +287,18 @@ func (s *IRCSession) runConnection(ctx context.Context, token string) error {
 	for {
 		line, err := r.ReadLine()
 		if err != nil {
-			return err
+			return welcome, err
 		}
-		if err := conn.SetReadDeadline(time.Now().Add(ircIdleTimeout)); err != nil {
-			return err
+		// The idle deadline only applies after the welcome (code
+		// review 2026-10-24, T13): before it, every line must come
+		// within the welcome timeout, so a server that acks the login
+		// and never welcomes does not hold the start for 6 minutes.
+		deadline := ircIdleTimeout
+		if !welcome {
+			deadline = ircWelcomeTimeout
+		}
+		if err := conn.SetReadDeadline(time.Now().Add(deadline)); err != nil {
+			return welcome, err
 		}
 		// Every line rides the log (truncated): the tags carry the
 		// message data, the server lines the state of the connection
@@ -282,7 +309,7 @@ func (s *IRCSession) runConnection(ctx context.Context, token string) error {
 			if lines := joinLines(s.logins); len(lines) > 0 {
 				s.log.DebugContext(ctx, "the irc session joins", "channels", s.logins)
 				if err := s.writeLines(conn, lines...); err != nil {
-					return err
+					return welcome, err
 				}
 			}
 			continue
@@ -294,7 +321,7 @@ func (s *IRCSession) runConnection(ctx context.Context, token string) error {
 		switch msg.command {
 		case "PING":
 			if err := s.writeLine(conn, "PONG "+msg.trailing); err != nil {
-				return err
+				return welcome, err
 			}
 		case "USERSTATE":
 			s.onUserState(ctx, msg, channelOf(msg))
@@ -307,7 +334,7 @@ func (s *IRCSession) runConnection(ctx context.Context, token string) error {
 			// to the send call.
 			s.log.WarnContext(ctx, "the irc server reports a notice", "channel", channelOf(msg), "notice", msg.trailing)
 		case "RECONNECT":
-			return errors.New("the irc server asked for a reconnect")
+			return welcome, errors.New("the irc server asked for a reconnect")
 		}
 	}
 }
@@ -322,11 +349,18 @@ func (s *IRCSession) writeLines(conn net.Conn, lines ...string) error {
 	return nil
 }
 
+// crlfReplacer keeps an IRC line a single line: CR and LF go to a space,
+// so a template newline cannot split the line into a second command
+// (code review 2026-10-24, T14).
+//
+//nolint:gochecknoglobals // the static replacer, never mutated
+var crlfReplacer = strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ")
+
 // writeLine sends one line of the connection.
 func (s *IRCSession) writeLine(conn net.Conn, line string) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	_, err := conn.Write([]byte(line + "\r\n"))
+	_, err := conn.Write([]byte(crlfReplacer.Replace(line) + "\r\n"))
 	return err
 }
 
@@ -365,12 +399,45 @@ func (s *IRCSession) Send(ctx context.Context, ch connector.Channel, text string
 	}
 	key := strings.ToLower(string(ch))
 	l := s.limiter(key)
+	l3 := s.limiter3(key)
 	s.log.DebugContext(ctx, "the irc send", "channel", key, "runes", len([]rune(text)))
 	for _, part := range splitMessage(text) {
 		if err := l.Wait(ctx); err != nil {
 			return err
 		}
+		if err := l3.Wait(ctx); err != nil {
+			return err
+		}
 		if err := s.writeLine(conn, "PRIVMSG #"+key+" :"+part); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SendReply sends a reply to the message with the platform's ID replyID
+// in the channel ch over the session (code review 2026-10-24, T5): the
+// reply is marked with the reply-parent-msg-id tag; the per-channel
+// buckets and the splitting apply, like the plain send.
+func (s *IRCSession) SendReply(ctx context.Context, ch connector.Channel, replyID, text string) error {
+	s.mu.Lock()
+	conn := s.conn
+	s.mu.Unlock()
+	if conn == nil {
+		return errors.New("the irc session is not connected")
+	}
+	key := strings.ToLower(string(ch))
+	l := s.limiter(key)
+	l3 := s.limiter3(key)
+	s.log.DebugContext(ctx, "the irc reply", "channel", key, "runes", len([]rune(text)))
+	for _, part := range splitMessage(text) {
+		if err := l.Wait(ctx); err != nil {
+			return err
+		}
+		if err := l3.Wait(ctx); err != nil {
+			return err
+		}
+		if err := s.writeLine(conn, "PRIVMSG #"+key+" :@reply-parent-msg-id="+replyID+" "+part); err != nil {
 			return err
 		}
 	}
@@ -397,6 +464,19 @@ func (s *IRCSession) limiter(key string) *rate.Limiter {
 	}
 	l := rate.NewLimiter(chatRate, chatBurst)
 	s.lims[key] = l
+	return l
+}
+
+// limiter3 returns the second send limiter of the channel key, one
+// message in 3 seconds (spec twitch-multi-channel.md, B18).
+func (s *IRCSession) limiter3(key string) *rate.Limiter {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if l, ok := s.lims3[key]; ok {
+		return l
+	}
+	l := rate.NewLimiter(chatRate3, chatBurst3)
+	s.lims3[key] = l
 	return l
 }
 
@@ -536,6 +616,14 @@ type ircMsg struct {
 	trailing   string
 }
 
+// tagUnescape decodes the escapes of an IRC tag value (IRC Reference,
+// "Tags"): "\s" to a space, "\n" to a newline, "\:" to a colon, "\\" to
+// a backslash; the single pass keeps a "\\" before an escape (e.g.
+// "\\s") a literal backslash (code review 2026-10-24, T14).
+//
+//nolint:gochecknoglobals // the static replacer, never mutated
+var tagUnescape = strings.NewReplacer(`\s`, " ", `\n`, "\n", `\:`, ":", `\\`, `\`)
+
 // parseIRCLine parses a line of the IRC protocol with the Twitch tags
 // ("@a=b;c=d :nick!user@host COMMAND param :trailing").
 func parseIRCLine(line string) (ircMsg, error) {
@@ -549,7 +637,7 @@ func parseIRCLine(line string) (ircMsg, error) {
 		}
 		for pair := range strings.SplitSeq(rest[1:i], ";") {
 			k, v, _ := strings.Cut(pair, "=")
-			m.tags[k] = v
+			m.tags[k] = tagUnescape.Replace(v)
 		}
 		rest = rest[i+1:]
 	}

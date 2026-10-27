@@ -194,13 +194,17 @@ type App struct {
 	systemLocale string
 	templates    *template.Engine
 	actions      *action.Registry
-	commands     *command.Service
-	engine       *engine.Engine
-	events       *eventservice.Service
-	moderation   *modsvc.Service
-	timer        *timersvc.Service
-	userSvc      *userservice.Service
-	catalog      *event.Catalog
+	// reserved is the set of names a counter must not take (the built-in
+	// identifiers and the actions' result names, B7); the API's counter
+	// creation checks against it.
+	reserved   command.Names
+	commands   *command.Service
+	engine     *engine.Engine
+	events     *eventservice.Service
+	moderation *modsvc.Service
+	timer      *timersvc.Service
+	userSvc    *userservice.Service
+	catalog    *event.Catalog
 	// messages renders the localized texts of the core (ADR-0022).
 	messages *i18n.Catalog
 	// twitchHelix is the resilient HTTP client of the Helix API, shared by
@@ -469,9 +473,10 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if err != nil {
 		return a, err
 	}
+	a.reserved = Reserved(reserved, a.actions)
 	a.commands, err = command.NewService(a.store, codec, command.Checks{
 		Counters: a.store,
-		Names:    Reserved(reserved, a.actions),
+		Names:    a.reserved,
 		Types:    a.actions,
 		Roots:    a.rights,
 		Channels: scopeChannels{store: a.store, settings: a.settings},
@@ -496,10 +501,11 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		return a, err
 	}
 	a.moderation, err = modsvc.New(modsvc.Ports{
-		Settings: a.moderationSettings,
-		Strikes:  a.userSvc,
-		Commands: a.commands,
-		Engine:   a.engine,
+		Settings:   a.moderationSettings,
+		Strikes:    a.userSvc,
+		Commands:   a.commands,
+		Engine:     a.engine,
+		FollowData: a.followSince,
 	}, modsvc.WithLogger(component(logger, "moderation")))
 	if err != nil {
 		return a, err
@@ -580,14 +586,14 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		Commands:  apiCommands{a: a},
 		Stream:    newAPIStream(a, cfg.Stream),
 		Config:    apiConfig{a: a},
-		Tokens:    apitoken.Open(cfg.DataDir),
+		Tokens:    apitoken.New(a.store),
 		Shutdown:  a.Shutdown,
 	})
 	a.http.SetAPI(a.api.Handler())
 
 	// The api fails closed without a token, so guarantee one (ADR-0013 §5):
 	// the desktop token file in desktop mode, the bootstrap token otherwise.
-	if err := a.ensureAPIToken(); err != nil {
+	if err := a.ensureAPIToken(ctx); err != nil {
 		return a, fmt.Errorf("api token: %w", err)
 	}
 	if cfg.PublicInsecure() {
@@ -890,6 +896,11 @@ func (a *App) Rights() *config.Live {
 // Profile returns the running profile.
 func (a *App) Profile() profile.Profile {
 	return a.profile
+}
+
+// Store returns the profile database of the running core.
+func (a *App) Store() *store.Store {
+	return a.store
 }
 
 // Ready reports whether the core is ready: all runnables run and the core is

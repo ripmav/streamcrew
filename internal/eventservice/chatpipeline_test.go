@@ -3,6 +3,7 @@
 package eventservice_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -10,10 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	chatsvc "github.com/ripmav/streamcrew/internal/chat"
+	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/role"
 	"github.com/ripmav/streamcrew/internal/event"
+	"github.com/ripmav/streamcrew/internal/moderation"
 	"github.com/ripmav/streamcrew/internal/settings"
 )
 
@@ -178,4 +181,122 @@ func TestMutedChatNotJoins(t *testing.T) {
 	assert.Equal(t, []string{"chat.user.new", "chat.user.join"}, f.engine.runs())
 	assert.Empty(t, f.chat.deletes())
 	assert.Empty(t, f.chat.taken())
+}
+
+// TestMutedChatDeleteHoldsNoLock covers code review 2026-10-24, T9:
+// the delete of the muted chat is network I/O to the platform and runs
+// without the service lock; while it blocks, another operation (a join)
+// must go through, not wait behind the delete.
+func TestMutedChatDeleteHoldsNoLock(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, allChatEvents()...)
+	ctx := t.Context()
+	ada := account(platform.Mock, "ada")
+	require.NoError(t, f.service.Message(ctx, message(ada, "m0", "hi")))
+	f.pub.types()
+	f.engine.runs()
+	f.chat.taken()
+
+	entered, release := make(chan struct{}), make(chan struct{})
+	f.chat.setDeleteFn(func(context.Context, platform.Name, connector.Channel, string) error {
+		close(entered)
+		<-release
+		return nil
+	})
+	f.chat.setMuted(true)
+
+	done := make(chan error, 1)
+	go func() { done <- f.service.Message(ctx, message(ada, "m1", "spam")) }()
+	<-entered // the delete is blocked: the lock must be free
+	require.NoError(t, f.service.Join(ctx, platform.Mock, "", account(platform.Mock, "eve")))
+	assert.Equal(t, []string{"chat.user.new", "chat.user.join"}, f.engine.runs())
+	f.pub.types() // the events of the join
+
+	close(release)
+	require.NoError(t, <-done)
+	assert.Equal(t, []string{"mock//m1"}, f.chat.deletes())
+}
+
+// TestModerationCheckHoldsNoLock covers code review 2026-10-24, T9:
+// the moderation check can be network I/O to the platform and runs
+// without the service lock; while it blocks, another operation (a join)
+// must go through, and the blocked message is discarded when the check
+// says no.
+func TestModerationCheckHoldsNoLock(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, allChatEvents()...)
+	ctx := t.Context()
+	ada := account(platform.Mock, "ada")
+	require.NoError(t, f.service.Message(ctx, message(ada, "m0", "hi")))
+	f.pub.types()
+	f.engine.runs()
+	f.chat.taken()
+
+	entered, release := make(chan struct{}), make(chan struct{})
+	f.mod.setCheckFn(func(context.Context, moderation.Message) (moderation.Decision, error) {
+		close(entered)
+		<-release
+		return moderation.Decision{Allow: false}, nil
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- f.service.Message(ctx, message(ada, "m1", "badword")) }()
+	<-entered // the check is blocked: the lock must be free
+	require.NoError(t, f.service.Join(ctx, platform.Mock, "", account(platform.Mock, "eve")))
+	assert.Equal(t, []string{"chat.user.new", "chat.user.join"}, f.engine.runs())
+	f.pub.types() // the events of the join
+
+	close(release)
+	require.NoError(t, <-done)
+	assert.Empty(t, f.pub.types(), "the discarded message fires nothing")
+	assert.Empty(t, f.chat.taken(), "the discarded message is not recorded")
+}
+
+// TestAdditionalChannelRolesStayLocal covers code review 2026-10-24,
+// "Rollen" (spec users-and-roles.md, B24): a badge of an additional
+// channel counts for the message, but it does not land in the identity —
+// not for an existing account, not for a new one; the same badge on the
+// home channel does.
+func TestAdditionalChannelRolesStayLocal(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, allChatEvents()...)
+	ctx := t.Context()
+
+	// an existing account without roles: the additional channel does
+	// not promote it
+	ada := account(platform.Mock, "ada")
+	require.NoError(t, f.service.Message(ctx, message(ada, "m1", "hi")))
+	f.pub.types()
+	f.engine.runs()
+	f.chat.taken()
+	mod := account(platform.Mock, "mod")
+	mod.Roles = role.NewSet(role.Moderator)
+	m := message(mod, "m2", "hi")
+	m.Channel = "other"
+	require.NoError(t, f.service.Message(ctx, m))
+	f.pub.types()
+	f.engine.runs()
+	f.chat.taken()
+	ident, ok := f.store.identityOf(platform.Mock, "mod")
+	require.True(t, ok)
+	assert.False(t, ident.Roles.Has(role.Moderator), "the badge of the additional channel stays out of the identity")
+
+	// a new account whose first message is on the additional channel:
+	// the identity is created without the badge
+	fresh := account(platform.Mock, "fresh")
+	fresh.Roles = role.NewSet(role.Moderator)
+	mf := message(fresh, "m3", "hi")
+	mf.Channel = "other"
+	require.NoError(t, f.service.Message(ctx, mf))
+	ident, ok = f.store.identityOf(platform.Mock, "fresh")
+	require.True(t, ok)
+	assert.False(t, ident.Roles.Has(role.Moderator), "a new account is not created with the badge")
+
+	// the same badge on the home channel lands in the identity
+	home := account(platform.Mock, "home")
+	home.Roles = role.NewSet(role.Moderator)
+	require.NoError(t, f.service.Message(ctx, message(home, "m4", "hi")))
+	ident, ok = f.store.identityOf(platform.Mock, "home")
+	require.True(t, ok)
+	assert.True(t, ident.Roles.Has(role.Moderator), "the badge of the home channel lands in the identity")
 }

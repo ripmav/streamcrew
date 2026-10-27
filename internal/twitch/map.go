@@ -17,6 +17,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/role"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	emotecat "github.com/ripmav/streamcrew/internal/emote"
+	"github.com/ripmav/streamcrew/internal/event"
 )
 
 // Mapper is the mapping of the received EventSub events onto the event
@@ -203,32 +204,32 @@ func (m *Mapper) dispatch(ctx context.Context, e Event) error {
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
 			return err
 		}
-		return m.rec.Event(ctx, connector.Event{
+		ev := connector.Event{
 			Platform: platform.Twitch,
 			Type:     eventtype.TwitchBitsCheer,
-			User:     new(identity(p.user())),
 			Details: eventtype.Details{
-				Bits:    &eventtype.Bits{Amount: p.Bits},
+				Bits:    &eventtype.Bits{Amount: p.Bits, Anonymous: p.IsAnonymous},
 				Message: &eventtype.Message{Text: p.Message},
 			},
-		})
+		}
+		if !p.IsAnonymous {
+			// The anonymous cheer has no user (code review 2026-10-24,
+			// T10); the event then carries the flag only.
+			ev.User = new(identity(p.user()))
+		}
+		return m.rec.Event(ctx, ev)
 	case "channel.moderate":
 		var p moderate
 		if err := jsonv2.Unmarshal(body, &p); err != nil {
 			return err
 		}
 		// channel.moderate v2 names the target per action object
-		// (EventSub Reference "Channel Moderate Event V2").
-		target := p.Ban
-		if target == nil {
-			target = p.Timeout
-		}
-		if target == nil {
+		// (EventSub Reference "Channel Moderate Event V2"); the other
+		// actions (clear, slow, raid, …) have no target and are dropped
+		// with a warning.
+		target, typ := p.target()
+		if target == nil || typ == "" {
 			return fmt.Errorf("eventsub: the moderate action %q has no target", p.Action)
-		}
-		typ := eventtype.ChatUserTimeout
-		if p.Action == "ban" {
-			typ = eventtype.ChatUserBan
 		}
 		ev := connector.Event{
 			Platform: platform.Twitch,
@@ -707,11 +708,42 @@ func (t modTarget) user() chatUser {
 
 // moderate is the payload of channel.moderate v2 (EventSub Reference
 // "Channel Moderate Event V2"): the action under "action", the target
-// in the per-action object.
+// in the per-action object (null for an action without one).
 type moderate struct {
-	Action  string     `json:"action"`
-	Ban     *modTarget `json:"ban"`
-	Timeout *modTarget `json:"timeout"`
+	Action    string     `json:"action"`
+	Ban       *modTarget `json:"ban"`
+	Timeout   *modTarget `json:"timeout"`
+	Unban     *modTarget `json:"unban"`
+	Untimeout *modTarget `json:"untimeout"`
+	Mod       *modTarget `json:"mod"`
+	Unmod     *modTarget `json:"unmod"`
+	VIP       *modTarget `json:"vip"`
+	UnVIP     *modTarget `json:"unvip"`
+}
+
+// target is the per-action target object and the mapped event type of
+// the action; (nil, "") for an action the mapping does not take.
+func (p moderate) target() (*modTarget, event.Type) {
+	switch p.Action {
+	case "ban":
+		return p.Ban, eventtype.ChatUserBan
+	case "timeout":
+		return p.Timeout, eventtype.ChatUserTimeout
+	case "unban":
+		return p.Unban, eventtype.ChatUserUnban
+	case "untimeout":
+		return p.Untimeout, eventtype.ChatUserUntimeout
+	case "mod":
+		return p.Mod, eventtype.ChatUserMod
+	case "unmod":
+		return p.Unmod, eventtype.ChatUserUnmod
+	case "vip":
+		return p.VIP, eventtype.ChatUserVIP
+	case "unvip":
+		return p.UnVIP, eventtype.ChatUserUnVIP
+	default:
+		return nil, ""
+	}
 }
 
 // messageDelete is the payload of channel.chat.message_delete: the

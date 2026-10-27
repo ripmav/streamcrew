@@ -63,7 +63,19 @@ func (s *Service) Message(ctx context.Context, m connector.Incoming) error {
 	if s.closed {
 		return fmt.Errorf("chat message: %w", ErrStopped)
 	}
-	u, err := s.resolve(ctx, m.Author, true)
+	// The badge roles land in the identity only for the home channel
+	// (spec users-and-roles.md, B24): the identity of a user is one per
+	// platform, and a mod badge of an additional channel must not make
+	// the user a moderator of the home channel (code review 2026-10-24,
+	// "Rollen"). The message of an additional channel still carries the
+	// badges for its own checks; for the identity, they are dropped
+	// before the upsert, so even a new account is not created with the
+	// channel's roles.
+	ident := m.Author
+	if m.Channel != "" {
+		ident.Roles = role.NewSet()
+	}
+	u, err := s.resolve(ctx, ident, m.Channel == "")
 	if err != nil {
 		return fmt.Errorf("chat message: %w", err)
 	}
@@ -75,23 +87,43 @@ func (s *Service) Message(ctx context.Context, m connector.Incoming) error {
 	}
 	// The muted chat is the first check of the moderation stage (spec
 	// chat-service.md, B3, B21): it deletes the message and it fires
-	// nothing; messages of the streamer run through (B22, B31).
+	// nothing; messages of the streamer run through (B22, B31). The
+	// delete runs without the lock: it is network I/O to the platform
+	// (code review 2026-10-24, T9).
 	if s.ports.Chat.Muted() && !m.Author.Roles.Has(role.Streamer) {
-		return s.muteDeleteLocked(ctx, m)
+		s.mu.Unlock()
+		if err := s.ports.Chat.Delete(ctx, m.Platform, m.Channel, m.Message.ID); err != nil {
+			s.logger.WarnContext(ctx, "the muted chat could not delete the message",
+				"platform", m.Platform, "channel", m.Channel, "message_id", m.Message.ID, "error", err)
+		}
+		s.mu.Lock()
+		if s.closed {
+			return fmt.Errorf("chat message: %w", ErrStopped)
+		}
+		return nil
 	}
 	// The word filters are the next check of the moderation stage (spec
 	// moderation.md, B1, B4 to B8): a violated message is discarded, like
-	// the muted chat, without events, trigger or history.
-	if d, err := s.ports.Moderation.Check(ctx, moderation.Message{
+	// the muted chat, without events, trigger or history. The check runs
+	// without the lock: it can be network I/O to the platform (code
+	// review 2026-10-24, T9).
+	s.mu.Unlock()
+	d, err := s.ports.Moderation.Check(ctx, moderation.Message{
 		Platform:  m.Platform,
 		Channel:   string(m.Channel),
 		Text:      m.Message.Text,
 		Emotes:    m.Message.Emotes,
 		MessageID: m.Message.ID,
 		User:      u,
-	}); err != nil {
+	})
+	s.mu.Lock()
+	if s.closed {
+		return fmt.Errorf("chat message: %w", ErrStopped)
+	}
+	if err != nil {
 		return fmt.Errorf("chat message: %w", err)
-	} else if !d.Allow {
+	}
+	if !d.Allow {
 		s.logger.DebugContext(ctx, "message discarded by the moderation", "platform", m.Platform)
 		return nil
 	}
@@ -120,18 +152,6 @@ func (s *Service) Message(ctx context.Context, m connector.Incoming) error {
 	// The history is the last stage of the pipeline (spec
 	// chat-service.md, B1, B14).
 	return s.recordLocked(ctx, m, u)
-}
-
-// muteDeleteLocked deletes m because the chat is muted (spec
-// chat-service.md, B21 to B23): the message is discarded without events
-// or triggers; a delete that the platform cannot do is a warning. s.mu is
-// held.
-func (s *Service) muteDeleteLocked(ctx context.Context, m connector.Incoming) error {
-	if err := s.ports.Chat.Delete(ctx, m.Platform, m.Channel, m.Message.ID); err != nil {
-		s.logger.WarnContext(ctx, "the muted chat could not delete the message",
-			"platform", m.Platform, "channel", m.Channel, "message_id", m.Message.ID, "error", err)
-	}
-	return nil
 }
 
 // recordLocked takes m into the chat history (spec chat-service.md, B14,
@@ -330,9 +350,13 @@ func (s *Service) checkEvent(e connector.Event) (eventtype.Descriptor, error) {
 	switch cmp.Or(d.Neutral, d.Type) {
 	case eventtype.ChannelFollow, eventtype.ChannelRaid, eventtype.ChannelSubscribe, eventtype.ChannelResubscribe,
 		eventtype.ChannelSubscriptionGift, eventtype.ChannelSubscriptionMassGift, eventtype.ChatWhisper,
-		eventtype.ChatMessageDelete, eventtype.ChatUserLeave, eventtype.ChatUserTimeout, eventtype.ChatUserBan:
-		// the twitch-specific types without a neutral one: their payload
-		// is decided by phase 4 (spec twitch-events.md)
+		eventtype.ChatMessageDelete, eventtype.ChatUserLeave, eventtype.ChatUserTimeout, eventtype.ChatUserBan,
+		eventtype.ChatUserUnban, eventtype.ChatUserUntimeout, eventtype.ChatUserMod, eventtype.ChatUserUnmod,
+		eventtype.ChatUserVIP, eventtype.ChatUserUnVIP:
+		// the types the platforms hand over: the neutral ones a platform
+		// delivers (the core derives the others itself) and the
+		// twitch-specific ones without a neutral one, whose payload is
+		// decided by phase 4 (spec twitch-events.md)
 	case eventtype.TwitchBitsCheer, eventtype.TwitchSharedChatStart, eventtype.TwitchSharedChatUpdate,
 		eventtype.TwitchSharedChatEnd, eventtype.TwitchHypeTrainStart, eventtype.TwitchHypeTrainProgress,
 		eventtype.TwitchHypeTrainEnd, eventtype.TwitchAdStart, eventtype.TwitchShoutoutReceive,
@@ -555,6 +579,7 @@ func values(t event.Type, d eventtype.Details) map[string]template.Value {
 	}
 	if b := d.Bits; b != nil {
 		v[template.EventCheerBits] = template.NumberValue(decimal.New(b.Amount))
+		v[template.EventAnonymous] = template.TextValue(strconv.FormatBool(b.Anonymous))
 	}
 	if mo := d.Moderation; mo != nil && mo.Message != "" {
 		v[template.EventModerationMessage] = template.TextValue(mo.Message)

@@ -3,7 +3,6 @@
 package tui
 
 import (
-	"context"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -75,8 +74,7 @@ func TestSettingsViewReadOnlyInDaemonMode(t *testing.T) {
 // refused in the read-only state (roadmap 6.5.3).
 func TestSettingsKeyReloads(t *testing.T) {
 	base := startMockCoreServer(t)
-	m := newModel(Options{Server: base, Token: testToken})
-	m.ctx = context.Background()
+	m := newModel(t.Context(), Options{Server: base, Token: testToken})
 
 	_, cmd := m.updateSettingsKey(tea.Key{Code: 'r'})
 	require.NotNil(t, cmd, "r returns the reload command")

@@ -88,3 +88,14 @@ jobs:
           gh release upload "${tag}" \
             "dist/streamcrew-image-${tag}.tar" \
             "dist/streamcrew-image-${tag}.sbom.json" --clobber
+
+      - name: Checksums for the image artifacts
+        # goreleaser ran before the image existed, so the two image
+        # checksums are appended to checksums.txt and the file re-uploaded
+        # (C11 of the code review 2026-10-26).
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(git describe --tags --exact-match)
+          (cd dist && sha256sum "streamcrew-image-${tag}.tar" "streamcrew-image-${tag}.sbom.json" >> checksums.txt)
+          gh release upload "${tag}" "dist/checksums.txt" --clobber

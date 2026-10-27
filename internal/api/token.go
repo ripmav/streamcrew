@@ -3,6 +3,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json/v2"
 	"net"
 	"net/http"
@@ -16,10 +17,10 @@ import (
 // Tokens checks the API access tokens (roadmap 6.2.2).
 type Tokens interface {
 	// Enabled reports whether at least one token is stored; the error is
-	// non-nil when the token file is unreadable or corrupt.
-	Enabled() (bool, error)
+	// non-nil when the token store cannot be read.
+	Enabled(ctx context.Context) (bool, error)
 	// Validate checks a token value and returns the stored token.
-	Validate(value string) (apitoken.Token, bool)
+	Validate(ctx context.Context, value string) (apitoken.Token, bool)
 }
 
 // authLimiter throttles repeated failed authentications per source address
@@ -92,9 +93,20 @@ func sourceIP(remote string) string {
 // request needs a token). It fails closed: with no stored token no request
 // passes, and an unreadable token store refuses everything with 503.
 // Failed authentications are throttled per source address.
+// tokenKey is the context key of the validated token value, which the
+// stream handler rechecks per event so a revocation ends open streams
+// (code review 2026-10-24, S12).
+type tokenKey struct{}
+
+// tokenValue returns the validated token value of the request.
+func tokenValue(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(tokenKey{}).(string)
+	return v, ok
+}
+
 func tokenAuth(tokens Tokens, limiter *authLimiter, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		enabled, err := tokens.Enabled()
+		enabled, err := tokens.Enabled(r.Context())
 		if err != nil {
 			writeConnectError(w, http.StatusServiceUnavailable, "unavailable", "the token store is unreadable")
 			return
@@ -104,7 +116,8 @@ func tokenAuth(tokens Tokens, limiter *authLimiter, next http.Handler) http.Hand
 				"no api tokens are stored; create one with 'streamcrew token create' and pass it with --token")
 			return
 		}
-		tok, ok := tokens.Validate(bearerToken(r))
+		value := bearerToken(r)
+		tok, ok := tokens.Validate(r.Context(), value)
 		if !ok {
 			if limiter.record(sourceIP(r.RemoteAddr)) {
 				writeConnectError(w, http.StatusTooManyRequests, "resource_exhausted", "too many failed authentications, slow down")
@@ -119,7 +132,7 @@ func tokenAuth(tokens Tokens, limiter *authLimiter, next http.Handler) http.Hand
 				"the token lacks the scope "+string(need))
 			return
 		}
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), tokenKey{}, value)))
 	})
 }
 

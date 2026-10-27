@@ -16,6 +16,9 @@ import (
 	"uuid"
 )
 
+// ErrInvalid is wrapped when a text form is no ID.
+var ErrInvalid = errors.New("invalid ID")
+
 // ID identifies an entity or event. The zero value is the nil UUID and means
 // "no ID".
 type ID uuid.UUID
@@ -30,7 +33,7 @@ func New() ID {
 func Parse(s string) (ID, error) {
 	u, err := uuid.Parse(s)
 	if err != nil {
-		return ID{}, fmt.Errorf("parse id %q: %w", s, err)
+		return ID{}, fmt.Errorf("%w: %q", ErrInvalid, s)
 	}
 	return ID(u), nil
 }

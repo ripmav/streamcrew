@@ -109,6 +109,9 @@ func (c apiCounters) Create(ctx context.Context, name, value, step string, reset
 		cc.Step = s
 	}
 	cc.ResetOnStart = resetOnStart
+	if err := cc.CheckReserved(c.a.reserved); err != nil {
+		return api.Counter{}, err
+	}
 	created, err := c.a.store.CreateCounter(ctx, cc)
 	if err != nil {
 		return api.Counter{}, err

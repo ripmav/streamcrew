@@ -336,6 +336,16 @@ func TestMapCheer(t *testing.T) {
 	assert.Equal(t, "8", ev.User.PlatformUserID)
 	assert.Equal(t, int64(100), ev.Details.Bits.Amount)
 	assert.Equal(t, "cheers", ev.Details.Message.Text)
+
+	// An anonymous cheer names no user (code review 2026-10-24, T10):
+	// the event carries the flag, the user is nil.
+	handle(t, m, "channel.cheer", `{"is_anonymous": true, "bits": 50, "message": "cheers"}`)
+	ev = r.lastEvent(t)
+	assert.Equal(t, eventtype.TwitchBitsCheer, ev.Type)
+	assert.Nil(t, ev.User)
+	require.NotNil(t, ev.Details.Bits)
+	assert.True(t, ev.Details.Bits.Anonymous)
+	assert.Equal(t, int64(50), ev.Details.Bits.Amount)
 }
 
 func TestMapModerate(t *testing.T) {
@@ -354,6 +364,32 @@ func TestMapModerate(t *testing.T) {
 	assert.Equal(t, eventtype.ChatUserBan, ev.Type)
 	require.NotNil(t, ev.User)
 	assert.Equal(t, "alice", ev.User.Login)
+
+	// The neutral moderation types the platform delivers beside ban and
+	// timeout (code review 2026-10-24, T8).
+	for _, tc := range []struct {
+		action string
+		want   any
+	}{
+		{"unban", eventtype.ChatUserUnban},
+		{"untimeout", eventtype.ChatUserUntimeout},
+		{"mod", eventtype.ChatUserMod},
+		{"unmod", eventtype.ChatUserUnmod},
+		{"vip", eventtype.ChatUserVIP},
+		{"unvip", eventtype.ChatUserUnVIP},
+	} {
+		handle(t, m, "channel.moderate",
+			`{"action": "`+tc.action+`", "`+tc.action+`": {"user_id": "8", "user_login": "alice", "user_name": "Alice"}}`)
+		ev = r.lastEvent(t)
+		assert.Equal(t, tc.want, ev.Type, tc.action)
+		require.NotNil(t, ev.User)
+		assert.Equal(t, "alice", ev.User.Login)
+	}
+
+	// An action without a target (clear, slow, …) is dropped with a
+	// warning, not mapped.
+	handle(t, m, "channel.moderate", `{"action": "clear"}`)
+	assert.Len(t, r.eventList(), 8, "the unmapped action fires nothing")
 }
 
 func TestMapMessageDelete(t *testing.T) {

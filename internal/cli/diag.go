@@ -14,7 +14,6 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/ripmav/streamcrew/internal/apitoken"
 	"github.com/ripmav/streamcrew/internal/buildinfo"
 	"github.com/ripmav/streamcrew/internal/profile"
 )
@@ -113,7 +112,7 @@ func (c diagBundleCmd) Run(ctx context.Context, e *Env) error {
 		return fail(err)
 	}
 	if err := add("api-tokens.txt", func(w io.Writer) error {
-		tokens, err := apitoken.Open(cfg.DataDir).List()
+		tokens, err := e.tokenList(ctx, cfg)
 		if err != nil {
 			return err
 		}

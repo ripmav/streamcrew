@@ -1,31 +1,26 @@
 // SPDX-License-Identifier: MIT
 
-// Package apitoken manages the API access tokens of the core (roadmap
-// 6.2.2): tokens with scopes, stored as a 0600 JSON file in the data
-// directory. Only the SHA-256 hash of a token is stored; the value itself
-// is shown once on creation. Every operation reads the file fresh, so a
-// running core and the CLI see the same state without synchronization.
+// Package apitoken manages the API access tokens of a profile (ADR-0013
+// §5, roadmap 6.2.2): tokens with scopes, stored only as their SHA-256
+// hash in the profile database. The value itself is shown once on creation.
 package apitoken
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
-	"sync"
 	"time"
 	"uuid"
 )
 
-// FileName is the token file in the data directory.
-const FileName = "api-tokens.json"
+// LegacyFileName is the token file in the data directory, used before the
+// tokens moved to the profile database; it is imported once on start.
+const LegacyFileName = "api-tokens.json"
 
 // Scope is one right of a token.
 type Scope string
@@ -47,18 +42,30 @@ var All = []Scope{Read, Overlay, Control, Admin}
 // ErrInvalidScope is returned for a scope that is not in All.
 var ErrInvalidScope = errors.New("invalid scope")
 
+// ErrNameTaken is returned when a token with the name already exists.
+var ErrNameTaken = errors.New("token name is taken")
+
 // Token is one stored token; SHA256 is the hex hash of the token value.
 type Token struct {
 	// ID names the token.
-	ID string `json:"id"`
-	// Name is the human-readable name chosen on creation.
-	Name string `json:"name"`
+	ID string
+	// Name is the human-readable name chosen on creation, unique.
+	Name string
 	// Scopes are the rights of the token.
-	Scopes []Scope `json:"scopes"`
+	Scopes []Scope
 	// CreatedAt is when the token was created.
-	CreatedAt time.Time `json:"created"`
+	CreatedAt time.Time
 	// SHA256 is the hex hash of the token value.
-	SHA256 string `json:"sha256"`
+	SHA256 string
+}
+
+// legacyToken is the on-disk shape of a token in the legacy file.
+type legacyToken struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Scopes    []Scope   `json:"scopes"`
+	CreatedAt time.Time `json:"created"`
+	SHA256    string    `json:"sha256"`
 }
 
 // rank is the hierarchy: control covers read, admin covers control, and
@@ -78,29 +85,36 @@ func (t Token) Satisfies(scope Scope) bool {
 	return best >= rank[scope]
 }
 
-// file is the on-disk shape.
-type file struct {
-	Version int     `json:"version"`
-	Tokens  []Token `json:"tokens"`
+// Repository stores the tokens of a profile; *store.Store implements it.
+type Repository interface {
+	// APIToken returns the token with the ID; found is false if there is
+	// none.
+	APIToken(ctx context.Context, id string) (Token, bool, error)
+	// APITokenByHash returns the token with the SHA-256 hash of its value;
+	// found is false if there is none.
+	APITokenByHash(ctx context.Context, hash string) (Token, bool, error)
+	// APITokenByName returns the token with the name; found is false if
+	// there is none.
+	APITokenByName(ctx context.Context, name string) (Token, bool, error)
+	// CountAPITokensByName counts the tokens with the name.
+	CountAPITokensByName(ctx context.Context, name string) (int64, error)
+	// ListAPITokens returns the tokens, oldest first.
+	ListAPITokens(ctx context.Context) ([]Token, error)
+	// CreateAPIToken inserts a token; a taken name fails with ErrNameTaken.
+	CreateAPIToken(ctx context.Context, tok Token) error
+	// DeleteAPIToken removes the token with the ID; found is false if
+	// there is none.
+	DeleteAPIToken(ctx context.Context, id string) (bool, error)
 }
 
-// Store manages the token file of one data directory.
+// Store manages the tokens of one profile through its database.
 type Store struct {
-	path string
-	mu   sync.Mutex
-
-	// cached is the last parsed file, keyed by its mtime and size, so the
-	// per-request validation of the api does not re-read and re-parse the
-	// file on every request.
-	cached   file
-	cacheM   time.Time
-	cacheLen int64
+	repo Repository
 }
 
-// Open returns the store of the data directory; the file is created on the
-// first write.
-func Open(dir string) *Store {
-	return &Store{path: filepath.Join(dir, FileName)}
+// New returns the token store of the profile database.
+func New(repo Repository) *Store {
+	return &Store{repo: repo}
 }
 
 // NewValue returns a new token value and its SHA-256 hash (hex).
@@ -116,38 +130,39 @@ func NewValue() (value, hash string, err error) {
 
 // Create adds a token with name and scopes and returns it with its value,
 // which is shown once.
-func (s *Store) Create(name string, scopes []Scope) (Token, string, error) {
+func (s *Store) Create(ctx context.Context, name string, scopes []Scope) (Token, string, error) {
 	value, hash, err := NewValue()
 	if err != nil {
 		return Token{}, "", err
 	}
-	tok, err := s.create(name, scopes, hash)
+	tok, err := s.create(ctx, name, scopes, hash)
 	return tok, value, err
 }
 
 // CreateWith adds a token with name, scopes and the given value; the store
 // hashes the value and never stores it. It backs the bootstrap token the
 // core creates from the value of STREAMCREW_TOKEN.
-func (s *Store) CreateWith(name string, scopes []Scope, value string) (Token, error) {
+func (s *Store) CreateWith(ctx context.Context, name string, scopes []Scope, value string) (Token, error) {
 	if value == "" {
 		return Token{}, errors.New("the token value is required")
 	}
 	sum := sha256.Sum256([]byte(value))
-	return s.create(name, scopes, hex.EncodeToString(sum[:]))
+	return s.create(ctx, name, scopes, hex.EncodeToString(sum[:]))
 }
 
-// create stores the token under the store lock.
-func (s *Store) create(name string, scopes []Scope, hash string) (Token, error) {
+// Import stores a token from the legacy file as is, with its ID and hash
+// (the one-time move of the data directory file into the profile database,
+// S5 of the code review 2026-10-24).
+func (s *Store) Import(ctx context.Context, tok Token) error {
+	return s.repo.CreateAPIToken(ctx, tok)
+}
+
+// create stores the token under the given hash.
+func (s *Store) create(ctx context.Context, name string, scopes []Scope, hash string) (Token, error) {
 	if name == "" {
 		return Token{}, errors.New("name is required")
 	}
 	clean, err := normalizeScopes(scopes)
-	if err != nil {
-		return Token{}, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	f, err := s.read()
 	if err != nil {
 		return Token{}, err
 	}
@@ -158,78 +173,51 @@ func (s *Store) create(name string, scopes []Scope, hash string) (Token, error) 
 		CreatedAt: time.Now().UTC(),
 		SHA256:    hash,
 	}
-	f.Tokens = append(f.Tokens, tok)
-	if err := s.write(f); err != nil {
+	if err := s.repo.CreateAPIToken(ctx, tok); err != nil {
 		return Token{}, err
 	}
 	return tok, nil
 }
 
 // List returns the stored tokens.
-func (s *Store) List() ([]Token, error) {
-	f, err := s.snapshot()
-	if err != nil {
-		return nil, err
+func (s *Store) List(ctx context.Context) ([]Token, error) {
+	return s.repo.ListAPITokens(ctx)
+}
+
+// Revoke removes the token with the ID, or with the name, which the
+// database keeps unique; it reports whether a token was removed.
+func (s *Store) Revoke(ctx context.Context, idOrName string) (bool, error) {
+	if tok, found, err := s.repo.APIToken(ctx, idOrName); err != nil {
+		return false, err
+	} else if found {
+		return s.repo.DeleteAPIToken(ctx, tok.ID)
 	}
-	return f.Tokens, nil
-}
-
-// snapshot returns the parsed token file, locking the store.
-func (s *Store) snapshot() (file, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.read()
-}
-
-// Revoke removes the token with the ID or name; it reports whether the
-// token existed.
-func (s *Store) Revoke(idOrName string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	f, err := s.read()
+	tok, found, err := s.repo.APITokenByName(ctx, idOrName)
 	if err != nil {
 		return false, err
-	}
-	kept := f.Tokens[:0]
-	found := false
-	for _, t := range f.Tokens {
-		if t.ID == idOrName || t.Name == idOrName {
-			found = true
-			continue
-		}
-		kept = append(kept, t)
 	}
 	if !found {
 		return false, nil
 	}
-	f.Tokens = kept
-	if err := s.write(f); err != nil {
-		return false, err
-	}
-	return true, nil
+	return s.repo.DeleteAPIToken(ctx, tok.ID)
 }
 
-// Validate checks a token value and returns the stored token.
-func (s *Store) Validate(value string) (Token, bool) {
-	f, err := s.snapshot()
-	if err != nil {
+// Validate checks a token value and returns the stored token. A store
+// error fails closed: the value does not validate.
+func (s *Store) Validate(ctx context.Context, value string) (Token, bool) {
+	if value == "" {
 		return Token{}, false
 	}
 	sum := sha256.Sum256([]byte(value))
-	hash := hex.EncodeToString(sum[:])
-	for _, t := range f.Tokens {
-		if subtle.ConstantTimeCompare([]byte(t.SHA256), []byte(hash)) == 1 {
-			return t, true
-		}
-	}
-	return Token{}, false
+	tok, found, err := s.repo.APITokenByHash(ctx, hex.EncodeToString(sum[:]))
+	return tok, found && err == nil
 }
 
 // Enabled reports whether at least one token is stored. The error is
-// non-nil when the token file exists but is unreadable or corrupt: the
-// caller must fail closed, not treat the store as empty.
-func (s *Store) Enabled() (bool, error) {
-	tokens, err := s.List()
+// non-nil when the store cannot be read: the caller must fail closed, not
+// treat the store as empty.
+func (s *Store) Enabled(ctx context.Context) (bool, error) {
+	tokens, err := s.repo.ListAPITokens(ctx)
 	return len(tokens) > 0, err
 }
 
@@ -254,61 +242,22 @@ func normalizeScopes(scopes []Scope) ([]Scope, error) {
 	return clean, nil
 }
 
-// read loads the token file; the caller holds s.mu. A missing file is an
-// empty store. The parsed file is cached and re-read only when the mtime or
-// the size changed, so the per-request path is one stat.
-func (s *Store) read() (file, error) {
-	info, statErr := os.Stat(s.path)
-	switch {
-	case statErr == nil:
-		if info.ModTime().Equal(s.cacheM) && info.Size() == s.cacheLen {
-			return s.cached, nil
-		}
-	case !errors.Is(statErr, os.ErrNotExist):
-		return file{}, fmt.Errorf("read tokens: %w", statErr)
+// LegacyLoad parses the legacy token file and returns its tokens; the
+// version must be 1.
+func LegacyLoad(data []byte) ([]Token, error) {
+	var f struct {
+		Version int           `json:"version"`
+		Tokens  []legacyToken `json:"tokens"`
 	}
-	data, err := os.ReadFile(s.path)
-	if errors.Is(err, os.ErrNotExist) {
-		return file{Version: 1}, nil
-	}
-	if err != nil {
-		return file{}, fmt.Errorf("read tokens: %w", err)
-	}
-	var f file
 	if err := json.Unmarshal(data, &f); err != nil {
-		return file{}, fmt.Errorf("read tokens: %w", err)
+		return nil, fmt.Errorf("read tokens: %w", err)
 	}
 	if f.Version != 1 {
-		return file{}, fmt.Errorf("read tokens: unsupported version %d", f.Version)
+		return nil, fmt.Errorf("read tokens: unsupported version %d", f.Version)
 	}
-	s.cached = f
-	if statErr == nil {
-		s.cacheM, s.cacheLen = info.ModTime(), info.Size()
-	} else {
-		s.cacheM, s.cacheLen = time.Time{}, 0
+	out := make([]Token, len(f.Tokens))
+	for i, t := range f.Tokens {
+		out[i] = Token(t)
 	}
-	return f, nil
-}
-
-// write stores the token file atomically with mode 0600.
-func (s *Store) write(f file) error {
-	data, err := json.Marshal(f, jsontext.WithIndent("  "))
-	if err != nil {
-		return fmt.Errorf("write tokens: %w", err)
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".tmp-tokens-*")
-	if err != nil {
-		return fmt.Errorf("write tokens: %w", err)
-	}
-	_, werr := tmp.Write(data)
-	werr = errors.Join(werr, tmp.Chmod(0o600), tmp.Sync(), tmp.Close())
-	if werr == nil {
-		werr = os.Rename(tmp.Name(), s.path)
-	}
-	if werr != nil {
-		_ = os.Remove(tmp.Name())
-		return fmt.Errorf("write tokens: %w", werr)
-	}
-	s.cached, s.cacheM, s.cacheLen = file{}, time.Time{}, 0
-	return nil
+	return out, nil
 }

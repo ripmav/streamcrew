@@ -78,6 +78,12 @@ type Ports struct {
 	// Now is the clock for the participation rules; it defaults to
 	// time.Now. The tests set a fixed time.
 	Now func() time.Time
+	// FollowData returns the time the account with the platform user ID
+	// followed the channel ch (moderation.md, B3, code review
+	// 2026-10-24, T11); it is asked for an account whose follow time
+	// the platform's cache does not carry yet. Nil: the cache only, and
+	// an unknown follow time is not met.
+	FollowData func(ctx context.Context, p platform.Name, ch, platformUserID string) (time.Time, error)
 }
 
 // Strikes changes the strikes of a user in one transaction; the user
@@ -168,7 +174,7 @@ func (s *Service) Check(ctx context.Context, m Message) (Decision, error) {
 		// The participation rules run before the filters (B1, B3): a
 		// failure discards the message without a strike or a follow-up
 		// command.
-		if !s.participation(m, cfg) {
+		if !s.participation(ctx, m, cfg) {
 			s.logger.DebugContext(ctx, "message discarded by the participation rules", "platform", m.Platform)
 			return Decision{Allow: false}, nil
 		}
@@ -188,7 +194,7 @@ func (s *Service) Check(ctx context.Context, m Message) (Decision, error) {
 // rules (B3): the minimum role, the minimum watch time and the minimum
 // follow time. A rule that is not set does not apply; without any rule,
 // everyone may chat (B24).
-func (s *Service) participation(m Message, cfg settings.Moderation) bool {
+func (s *Service) participation(ctx context.Context, m Message, cfg settings.Moderation) bool {
 	ident, ok := m.User.Identity(m.Platform)
 	if !ok {
 		return false
@@ -204,12 +210,34 @@ func (s *Service) participation(m Message, cfg settings.Moderation) bool {
 	// The minimum follow time, in whole days since the follow (B3);
 	// unknown is not met.
 	if cfg.MinFollowDays > 0 {
-		followed := ident.Data.FollowedAt
+		followed := s.followTime(ctx, m, ident, ident.Data.FollowedAt)
 		if followed.IsZero() || wholeDays(followed, s.ports.Now()) < int64(cfg.MinFollowDays) {
 			return false
 		}
 	}
 	return true
+}
+
+// followTime is the follow time of the author for the channel of the
+// message (code review 2026-10-24, T11): a message the moderation
+// rejects fills the platform's cache never, so a new home chatter would
+// be rejected forever — the home channel prefers the cache and falls
+// back to the platform while it carries no follow time; an additional
+// channel always asks, because its home-channel follow is the wrong
+// data there. An answer the platform cannot give stays unknown.
+func (s *Service) followTime(ctx context.Context, m Message, ident user.Identity, cached time.Time) time.Time {
+	if m.Channel == "" && !cached.IsZero() {
+		return cached
+	}
+	if s.ports.FollowData == nil {
+		return time.Time{}
+	}
+	followed, err := s.ports.FollowData(ctx, m.Platform, m.Channel, ident.PlatformUserID)
+	if err != nil {
+		s.logger.DebugContext(ctx, "the follow time is unknown", "platform", m.Platform, "channel", m.Channel, "error", err)
+		return time.Time{}
+	}
+	return followed
 }
 
 // wholeDays is the whole days between t and now; 0 if now is before t.

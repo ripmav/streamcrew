@@ -3,21 +3,24 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/ripmav/streamcrew/internal/apitoken"
+	"github.com/ripmav/streamcrew/internal/config"
+	"github.com/ripmav/streamcrew/internal/store"
 )
 
-// tokenCmd manages the API access tokens of the data directory (roadmap
-// 6.2.2). The tokens protect the API of a running core; the commands work
-// on the token file directly, no running core is needed.
+// tokenCmd manages the API access tokens of the active profile (roadmap
+// 6.2.2, ADR-0013 §5). The tokens live in the profile database: create and
+// revoke need a stopped core, list works while the core runs.
 type tokenCmd struct {
-	Create tokenCreateCmd `cmd:"" help:"Create an API token. The value is printed once."`
-	List   tokenListCmd   `cmd:"" help:"List the API tokens."`
-	Revoke tokenRevokeCmd `cmd:"" help:"Revoke an API token by name or ID."`
+	Create tokenCreateCmd `cmd:"" help:"Create an API token. The value is printed once. Needs a stopped core."`
+	List   tokenListCmd   `cmd:"" help:"List the API tokens. Works while the core runs."`
+	Revoke tokenRevokeCmd `cmd:"" help:"Revoke an API token by ID, or by its name. Needs a stopped core."`
 }
 
 type tokenCreateCmd struct {
@@ -26,11 +29,16 @@ type tokenCreateCmd struct {
 }
 
 // Run creates the token and prints its value, which is shown once.
-func (c tokenCreateCmd) Run(e *Env) error {
+func (c tokenCreateCmd) Run(ctx context.Context, e *Env) (err error) {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
 	}
+	l, err := e.lock(cfg)
+	if err != nil {
+		return err
+	}
+	defer release(l, &err)
 	scopes := make([]apitoken.Scope, len(c.Scopes))
 	for i, s := range c.Scopes {
 		scopes[i] = apitoken.Scope(s)
@@ -42,7 +50,12 @@ func (c tokenCreateCmd) Run(e *Env) error {
 	if name == "" {
 		name = "cli-" + time.Now().Format("20060102-150405")
 	}
-	tok, value, err := apitoken.Open(cfg.DataDir).Create(name, scopes)
+	st, err := e.tokenStore(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	tok, value, err := apitoken.New(st).Create(ctx, name, scopes)
 	if err != nil {
 		return &usageError{err: err}
 	}
@@ -54,12 +67,12 @@ func (c tokenCreateCmd) Run(e *Env) error {
 type tokenListCmd struct{}
 
 // Run lists the API tokens.
-func (c tokenListCmd) Run(e *Env) error {
+func (c tokenListCmd) Run(ctx context.Context, e *Env) error {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
 	}
-	tokens, err := apitoken.Open(cfg.DataDir).List()
+	tokens, err := e.tokenList(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -75,16 +88,26 @@ func (c tokenListCmd) Run(e *Env) error {
 }
 
 type tokenRevokeCmd struct {
-	IDOrName string `arg:"" help:"Name or ID of the token to revoke."`
+	IDOrName string `arg:"" help:"ID of the token to revoke, or its name."`
 }
 
 // Run revokes the token.
-func (c tokenRevokeCmd) Run(e *Env) error {
+func (c tokenRevokeCmd) Run(ctx context.Context, e *Env) (err error) {
 	cfg, err := e.resolve()
 	if err != nil {
 		return err
 	}
-	ok, err := apitoken.Open(cfg.DataDir).Revoke(c.IDOrName)
+	l, err := e.lock(cfg)
+	if err != nil {
+		return err
+	}
+	defer release(l, &err)
+	st, err := e.tokenStore(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	ok, err := apitoken.New(st).Revoke(ctx, c.IDOrName)
 	if err != nil {
 		return err
 	}
@@ -93,6 +116,31 @@ func (c tokenRevokeCmd) Run(e *Env) error {
 	}
 	fmt.Fprintf(e.Stdout, "revoked %s\n", c.IDOrName)
 	return nil
+}
+
+// tokenStore opens the database of the profile, with a backup before
+// migrations, like the other profile commands.
+func (e *Env) tokenStore(ctx context.Context, cfg *config.Config) (*store.Store, error) {
+	id, err := e.profileID(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return e.openProfile(ctx, cfg, id)
+}
+
+// tokenList reads the tokens of the profile read-only, so it works while
+// the core runs.
+func (e *Env) tokenList(ctx context.Context, cfg *config.Config) ([]apitoken.Token, error) {
+	id, err := e.profileID(cfg)
+	if err != nil {
+		return nil, err
+	}
+	ro, err := store.OpenReadOnly(ctx, e.profiles(cfg).Path(id))
+	if err != nil {
+		return nil, err
+	}
+	defer ro.Close()
+	return ro.ListAPITokens(ctx)
 }
 
 // joinScopes renders the scopes of a token, strongest last.

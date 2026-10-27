@@ -151,7 +151,9 @@ func (a UserCommand) Perform(ctx context.Context, run *engine.Run) error {
 	if p.User == nil {
 		return fmt.Errorf("%w: the command needs a user", action.ErrInvalid)
 	}
-	key := run.Command().Name
+	// The key is the ID of the running command, not its name (B127): a
+	// rename (even a case-only one) must not orphan the stored answers.
+	key := run.Command().ID.String()
 	ts := []template.Template{a.Text.Parse(), a.Default.Parse(), a.Confirm.Parse()}
 	rendered, err := a.ports.Templates.RenderEach(ctx, ts, run.Scope())
 	if err != nil {

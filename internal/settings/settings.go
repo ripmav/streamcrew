@@ -127,20 +127,25 @@ func (s *Service) Document(ctx context.Context, section string) (doc []byte, fou
 func (s *Service) DefaultDocument(section string) ([]byte, error) {
 	d, ok := defaultSection(section)
 	if !ok {
-		return nil, fmt.Errorf("unknown settings section %q", section)
+		return nil, fmt.Errorf("%w: unknown settings section %q", ErrInvalid, section)
 	}
 	return s.registry.Encode(d)
 }
+
+// ErrInvalid is wrapped when a settings document cannot be applied: a
+// decode failure, a document type that does not match the section, or an
+// unknown section.
+var ErrInvalid = errors.New("invalid settings document")
 
 // SetDocument validates doc against the section and stores it (roadmap
 // 6.2.1, API). The document must name the section as its type.
 func (s *Service) SetDocument(ctx context.Context, section string, doc []byte) error {
 	v, err := s.registry.Decode(doc)
 	if err != nil {
-		return fmt.Errorf("settings %q: %w", section, err)
+		return fmt.Errorf("%w: settings %q: %w", ErrInvalid, section, err)
 	}
 	if v.DocType() != section {
-		return fmt.Errorf("settings %q: the document has type %q", section, v.DocType())
+		return fmt.Errorf("%w: settings %q: the document has type %q", ErrInvalid, section, v.DocType())
 	}
 	return s.repo.PutSettings(ctx, section, doc)
 }

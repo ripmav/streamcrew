@@ -47,6 +47,9 @@ type Details struct {
 type Bits struct {
 	// Amount is the number of bits cheered; not negative.
 	Amount int64 `json:"amount"`
+	// Anonymous reports whether the cheery stays unknown; the event
+	// then has no user (twitch-events.md, B4).
+	Anonymous bool `json:"anonymous"`
 }
 
 // SharedChat is the session of a shared chat (twitch.shared_chat.*).

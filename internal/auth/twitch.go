@@ -95,7 +95,7 @@ var Scopes = []string{
 	"channel:read:vips",
 	"channel:manage:vips",
 	"moderator:read:followers",
-	"user:manage:whispers",
+	"user:read:whispers",
 	"channel:read:subscriptions",
 	"channel:read:charity",
 	"channel:read:goals",

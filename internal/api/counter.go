@@ -11,7 +11,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	v1alpha1 "github.com/ripmav/streamcrew/api/gen/streamcrew/v1alpha1"
+	"github.com/ripmav/streamcrew/internal/decimal"
+	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/counter"
+	"github.com/ripmav/streamcrew/internal/domain/id"
+	"github.com/ripmav/streamcrew/internal/domain/role"
+	"github.com/ripmav/streamcrew/internal/domain/user"
+	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/store"
 )
 
@@ -47,7 +53,10 @@ type Counters interface {
 }
 
 // apiError maps an error of the application services to a Connect error with
-// the matching gRPC status code.
+// the matching gRPC status code. The sentinels for bad input — decimal
+// syntax, ID and role parsing, unknown statistics, settings documents,
+// reserved counter names, command documents — are client errors, not
+// internal failures.
 func apiError(err error) error {
 	switch {
 	case err == nil:
@@ -58,8 +67,17 @@ func apiError(err error) error {
 		return connect.NewError(connect.CodeAlreadyExists, err.Error()).WithCause(err)
 	case errors.Is(err, ErrRestoreRunning):
 		return connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-	case errors.Is(err, counter.ErrInvalid), errors.Is(err, counter.ErrOverflow):
+	case errors.Is(err, counter.ErrInvalid), errors.Is(err, counter.ErrOverflow),
+		errors.Is(err, counter.ErrReserved),
+		errors.Is(err, decimal.ErrSyntax), errors.Is(err, decimal.ErrRange),
+		errors.Is(err, id.ErrInvalid),
+		errors.Is(err, role.ErrUnknown),
+		errors.Is(err, user.ErrUnknownStat),
+		errors.Is(err, settings.ErrInvalid),
+		errors.Is(err, command.ErrInvalid):
 		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	case errors.Is(err, ErrLoginInProgress):
+		return connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
 	}
 	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 }

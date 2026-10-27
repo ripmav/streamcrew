@@ -19,6 +19,14 @@ type Account struct {
 	UpdatedAt int64
 }
 
+type ApiToken struct {
+	ID        string
+	Name      string
+	Scopes    string
+	CreatedAt int64
+	Sha256    string
+}
+
 type Command struct {
 	ID           string
 	Name         string

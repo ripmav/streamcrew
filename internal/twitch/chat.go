@@ -24,13 +24,23 @@ const (
 	chatBurst = 20                      // messages that may go at once
 )
 
+// The second send limit of the IRC adapter, per channel: one message
+// in 3 seconds (spec twitch-multi-channel.md, B18).
+const (
+	chatRate3  = rate.Limit(1.0 / 3.0)
+	chatBurst3 = 1
+)
+
 // chat is the connector.Chat of the twitch platform (roadmap 4.4): it
 // sends and deletes messages of the channel through Helix. The home
 // channel is operated with the streamer account, the additional channels
 // with the bot account (spec twitch-multi-channel.md, B4).
 type chat struct{ p *Platform }
 
-var _ connector.Chat = chat{}
+var (
+	_ connector.Chat    = chat{}
+	_ connector.Replier = chat{}
+)
 
 // Send implements connector.Chat: it splits a text that is longer than
 // Twitch allows and keeps to the rate limits of the platform through
@@ -41,6 +51,22 @@ var _ connector.Chat = chat{}
 func (c chat) Send(ctx context.Context, m connector.Message) error {
 	if m.Channel != "" && c.p.ircOn {
 		return c.p.ircSend(ctx, m.Channel, m.Text)
+	}
+	if m.From == connector.AccountBot {
+		return c.p.botSend(ctx, m)
+	}
+	return c.p.streamerSend(ctx, m)
+}
+
+// Reply implements connector.Replier (code review 2026-10-24, T5): a
+// reply of an additional channel runs over the IRC session with the
+// reply-parent-msg-id tag; the home channel and the Helix path have no
+// reply parameter, so the reply degrades to a plain message there
+// (shortcut: no reply tag on the Helix path; add it to SendChatMessage
+// when the platform takes one).
+func (c chat) Reply(ctx context.Context, messageID string, m connector.Message) error {
+	if m.Channel != "" && c.p.ircOn {
+		return c.p.ircSendReply(ctx, m.Channel, messageID, m.Text)
 	}
 	if m.From == connector.AccountBot {
 		return c.p.botSend(ctx, m)
@@ -137,6 +163,19 @@ func (p *Platform) ircSend(ctx context.Context, ch connector.Channel, text strin
 		return errors.New("the irc session is not connected")
 	}
 	return s.Send(ctx, ch, text)
+}
+
+// ircSendReply hands the reply to the IRC session of the additional
+// channels (code review 2026-10-24, T5); the session applies the
+// per-channel buckets and the splitting.
+func (p *Platform) ircSendReply(ctx context.Context, ch connector.Channel, replyID, text string) error {
+	p.mu.Lock()
+	s := p.irc
+	p.mu.Unlock()
+	if s == nil {
+		return errors.New("the irc session is not connected")
+	}
+	return s.SendReply(ctx, ch, replyID, text)
 }
 
 // chatLimiter returns the chat send limiter of the channel ch; each

@@ -4,12 +4,16 @@ package twitch
 
 import (
 	"context"
+	"time"
 
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 )
 
-var _ connector.PlatformData = (*Platform)(nil)
+var (
+	_ connector.PlatformData = (*Platform)(nil)
+	_ connector.FollowData   = (*Platform)(nil)
+)
 
 // UserPlatformData implements connector.PlatformData (roadmap 5.2.2,
 // users-and-roles.md, B10): it asks Helix for the follow and the
@@ -44,6 +48,30 @@ func (p *Platform) UserPlatformData(ctx context.Context, platformUserID string) 
 		}
 	}
 	return data, nil
+}
+
+// FollowSince implements connector.FollowData (moderation.md, B3, code
+// review 2026-10-24, T11): the time the account followed the channel,
+// from Helix, with the account that operates the channel (the bot in an
+// additional channel, whose moderator token reads the followers); the
+// zero time if it does not follow it.
+func (p *Platform) FollowSince(ctx context.Context, ch connector.Channel, platformUserID string) (time.Time, error) {
+	_, hc, err := p.accountFor(ctx, ch)
+	if err != nil {
+		return time.Time{}, err
+	}
+	channelID, err := p.channelID(ctx, ch)
+	if err != nil {
+		return time.Time{}, err
+	}
+	followers, err := hc.GetFollowers(ctx, channelID, platformUserID)
+	if err != nil {
+		return time.Time{}, refuse(err)
+	}
+	if len(followers) == 0 {
+		return time.Time{}, nil
+	}
+	return followers[0].FollowedAt, nil
 }
 
 // subTier maps the Helix tier ("1000", "2000", "3000") to the tier number

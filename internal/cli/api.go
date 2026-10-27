@@ -20,15 +20,58 @@ import (
 )
 
 // defaultServer is the local core the API commands talk to when --server is
-// not set.
+// not set and no runtime file exists.
 const defaultServer = "http://127.0.0.1:8740"
 
-// server is the address of the core the API commands talk to.
+// dataDir is the data directory the CLI uses for the local core's files.
+func (e *Env) dataDir() string {
+	if e.Config != nil {
+		return e.Config.DataDir
+	}
+	return e.Defaults.DataDir
+}
+
+// server is the address of the core the API commands talk to: --server, the
+// address of the runtime file of the data directory, or the local default
+// (ADR-0010 §4).
 func (e *Env) server() string {
 	if e.Server != "" {
 		return e.Server
 	}
+	if dataDir := e.dataDir(); dataDir != "" {
+		if data, err := os.ReadFile(config.RuntimePath(dataDir)); err == nil {
+			var info struct {
+				Address string `json:"address"`
+			}
+			if jsonv2.Unmarshal(data, &info) == nil && info.Address != "" {
+				return baseFromAddress(info.Address)
+			}
+		}
+	}
 	return defaultServer
+}
+
+// baseFromAddress converts the listen address of the core to a base URL:
+// host:port becomes http://host:port, unix:/path stays for the unix dialer.
+func baseFromAddress(addr string) string {
+	if strings.HasPrefix(addr, "unix:") {
+		return addr
+	}
+	return "http://" + addr
+}
+
+// httpClientFor returns the HTTP client and the base URL for the core at
+// base: a unix socket gets a unix dialer, everything else the default client.
+func httpClientFor(base string) (*http.Client, string) {
+	if after, ok := strings.CutPrefix(base, "unix:"); ok {
+		return &http.Client{Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "unix", after)
+			},
+		}}, "http://core"
+	}
+	return http.DefaultClient, base
 }
 
 // connectClient returns the connect client for the API of the core with the
@@ -38,7 +81,8 @@ func (e *Env) connectClient() *connect.Client {
 	if token := e.token(); token != "" {
 		interceptors = append(interceptors, bearerInterceptor(token))
 	}
-	transport := connecthttp.NewTransport(http.DefaultClient, e.server(), connecthttp.WithReadMaxBytes(0))
+	client, base := httpClientFor(e.server())
+	transport := connecthttp.NewTransport(client, base, connecthttp.WithReadMaxBytes(0))
 	return connect.NewClient(transport, interceptors...)
 }
 
@@ -56,13 +100,7 @@ func (e *Env) token() string {
 	if e.Server != "" && !e.serverIsLocal() {
 		return ""
 	}
-	dataDir := ""
-	if e.Config != nil {
-		dataDir = e.Config.DataDir
-	}
-	if dataDir == "" {
-		dataDir = e.Defaults.DataDir
-	}
+	dataDir := e.dataDir()
 	if dataDir == "" {
 		return ""
 	}
@@ -98,14 +136,7 @@ func (e *Env) serverIsLocal() bool {
 	if ip := net.ParseIP(host); ip != nil {
 		return ip.IsLoopback()
 	}
-	dataDir := ""
-	if e.Config != nil {
-		dataDir = e.Config.DataDir
-	}
-	if dataDir == "" {
-		dataDir = e.Defaults.DataDir
-	}
-	if dataDir != "" {
+	if dataDir := e.dataDir(); dataDir != "" {
 		if data, err := os.ReadFile(config.RuntimePath(dataDir)); err == nil {
 			var info struct {
 				Address string `json:"address"`

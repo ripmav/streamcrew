@@ -94,6 +94,16 @@ func TestAPIServesTheCounterAndSettings(t *testing.T) {
 	_, err = counterClient.Get(t.Context(), &v1alpha1.GetCounterRequest{Name: name})
 	assert.Error(t, err, "the counter is gone")
 
+	// A reserved name collides with a built-in identifier (B7) and a bad
+	// decimal is a syntax error: both are client errors, not 500s
+	// (Code-Review 2026-10-24, U4, U5).
+	_, err = counterClient.Create(t.Context(), &v1alpha1.CreateCounterRequest{Name: "date"})
+	require.Error(t, err, "the reserved name date must be refused")
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	_, err = counterClient.Create(t.Context(), &v1alpha1.CreateCounterRequest{Name: "deaths", Value: "abc"})
+	require.Error(t, err, "a non-decimal value must be refused")
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
 	// Settings: the sections are listed, a stored section is read back, and a
 	// never-saved section returns its defaults.
 	secs, err := settingsClient.ListSections(t.Context(), &v1alpha1.ListSectionsRequest{})
@@ -676,13 +686,16 @@ func TestAPITokensProtectTheAPI(t *testing.T) {
 	_, err = localClient.List(ctx, &v1alpha1.ListCountersRequest{})
 	require.NoError(t, err)
 
-	// With more tokens the api stays protected.
-	s := apitoken.Open(cfg.DataDir)
-	_, readValue, err := s.Create("read", []apitoken.Scope{apitoken.Read})
+	// With more tokens the api stays protected; the tokens go into the
+	// profile database of the running core (S5 of the code review
+	// 2026-10-24).
+	ts := apitoken.New(a.Store())
+	// "admin" is taken by the local admin token of the core.
+	_, readValue, err := ts.Create(ctx, "read", []apitoken.Scope{apitoken.Read})
 	require.NoError(t, err)
-	_, adminValue, err := s.Create("admin", []apitoken.Scope{apitoken.Admin})
+	_, adminValue, err := ts.Create(ctx, "power", []apitoken.Scope{apitoken.Admin})
 	require.NoError(t, err)
-	_, overlayValue, err := s.Create("overlay", []apitoken.Scope{apitoken.Overlay})
+	_, overlayValue, err := ts.Create(ctx, "overlay", []apitoken.Scope{apitoken.Overlay})
 	require.NoError(t, err)
 
 	// Without or with an invalid token: unauthenticated.

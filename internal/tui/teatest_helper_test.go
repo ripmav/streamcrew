@@ -27,7 +27,7 @@ import (
 // output is asserted.
 func newTestModel(t *testing.T, opts Options) *teatest.TestModel {
 	t.Helper()
-	return teatest.NewTestModel(t, newModel(opts), teatest.WithInitialTermSize(120, 40))
+	return teatest.NewTestModel(t, newModel(t.Context(), opts), teatest.WithInitialTermSize(120, 40))
 }
 
 // newTestModelWithCore drives the model against an in-process mock core and

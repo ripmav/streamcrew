@@ -79,9 +79,9 @@ func (u apiUsers) List(ctx context.Context, prefix, stat string, limit int) ([]a
 		limit = apiUserListLimit
 	}
 	if stat != "" {
-		s := user.Stat(stat)
-		if !s.Valid() {
-			return nil, fmt.Errorf("unknown statistic %q", stat)
+		s, err := user.ParseStat(stat)
+		if err != nil {
+			return nil, err
 		}
 		ranked, err := u.a.store.TopUsers(ctx, s, limit)
 		if err != nil {

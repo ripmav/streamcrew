@@ -133,7 +133,7 @@ func importExampleCommands(t *testing.T, base string) {
 // TestStreamEventsFillTheViews routes stream events into the view buffers.
 func TestStreamEventsFillTheViews(t *testing.T) {
 	t.Parallel()
-	m := newModel(Options{Server: "http://127.0.0.1:1"})
+	m := newModel(t.Context(), Options{Server: "http://127.0.0.1:1"})
 
 	m.handleEvent(&v1alpha1.Event{
 		Type:     "chat.message",

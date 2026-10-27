@@ -87,6 +87,12 @@ const (
 	ChatUserFirstMessage event.Type = "chat.user.first_message"
 	ChatUserTimeout      event.Type = "chat.user.timeout"
 	ChatUserBan          event.Type = "chat.user.ban"
+	ChatUserUnban        event.Type = "chat.user.unban"
+	ChatUserUntimeout    event.Type = "chat.user.untimeout"
+	ChatUserMod          event.Type = "chat.user.mod"
+	ChatUserUnmod        event.Type = "chat.user.unmod"
+	ChatUserVIP          event.Type = "chat.user.vip"
+	ChatUserUnVIP        event.Type = "chat.user.unvip"
 )
 
 // Twitch (roadmap phase 4).
@@ -164,6 +170,12 @@ func All() []Descriptor {
 		neutral(ChatUserFirstMessage, PerUser),
 		neutral(ChatUserTimeout, Always),
 		neutral(ChatUserBan, Always),
+		neutral(ChatUserUnban, Always),
+		neutral(ChatUserUntimeout, Always),
+		neutral(ChatUserMod, Always),
+		neutral(ChatUserUnmod, Always),
+		neutral(ChatUserVIP, Always),
+		neutral(ChatUserUnVIP, Always),
 
 		twitch(TwitchStreamStart, ChannelStreamStart, PerSession),
 		twitch(TwitchStreamStop, ChannelStreamStop, PerSession),
