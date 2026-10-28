@@ -29,6 +29,8 @@ func TestBundleCarriesTheRuntimeMarkers(t *testing.T) {
 		"sandbox",            // the iframe sandbox (B12)
 		"500",                // the batch window in ms (B8)
 		"300",                // the stagger and the default animation in ms (B8, B10)
+		"URLSearchParams(location.search).get(\"token\")", // the token the page was loaded with (B5)
+		"\"token=\"", // the token goes into the WS and media URLs (B5)
 	} {
 		assert.True(t, strings.Contains(web.Bundle, marker), "the bundle misses %q", marker)
 	}

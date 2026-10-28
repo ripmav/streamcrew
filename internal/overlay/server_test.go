@@ -162,12 +162,22 @@ func TestOverlayTokenProtectsTheEndpoints(t *testing.T) {
 	_ = resp.Body.Close()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
-	// The WebSocket: the upgrade is refused.
+	// The WebSocket: the upgrade is refused without the token, and the
+	// runtime's URL with the token upgrades (B5).
 	_, resp, dialErr := websocket.Dial(context.Background(), base(t, srv)+"/overlay/default/ws", nil)
 	if resp != nil {
 		_ = resp.Body.Close()
 	}
 	require.Error(t, dialErr)
+	// On a failed dial the response body is the error page and is
+	// closed here; on success it is the connection itself and is
+	// closed with the conn below.
+	conn, resp, err := websocket.Dial(context.Background(), base(t, srv)+"/overlay/default/ws?token=secret", nil)
+	if resp != nil && err != nil {
+		_ = resp.Body.Close()
+	}
+	require.NoError(t, err)
+	_ = conn.Close(websocket.StatusNormalClosure, "")
 }
 
 // TestOverlayWSHandshakeAndStateSync covers B3, B4, B7 and B49: the

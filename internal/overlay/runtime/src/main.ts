@@ -340,9 +340,17 @@ const MAX_BACKOFF_MS = 30000;
 let backoff = MIN_BACKOFF_MS;
 let closedByUs = false;
 
+// withToken appends the token the page was loaded with (B5): the
+// WebSocket and the media URLs need the same query parameter.
+function withToken(url: string): string {
+  const token = new URLSearchParams(location.search).get("token");
+  if (!token) return url;
+  return url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
+}
+
 function connect(): void {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const url = `${proto}//${location.host}/overlay/${encodeURIComponent(cfg.id)}/ws`;
+  const url = withToken(`${proto}//${location.host}/overlay/${encodeURIComponent(cfg.id)}/ws`);
   const socket = new WebSocket(url);
   ws = socket;
   socket.onopen = () => {
