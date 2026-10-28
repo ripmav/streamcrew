@@ -51,6 +51,21 @@ const (
 	OverlayGoalSegmentCompleted event.Type = "overlay.goal.segment_completed"
 )
 
+// OBS, the events of the OBS Studio connection (spec overlays.md, B44):
+// they run as bus events regardless of who caused the change.
+const (
+	ObsStreamStarted           event.Type = "obs.stream.started"
+	ObsStreamStopped           event.Type = "obs.stream.stopped"
+	ObsRecordingStarted        event.Type = "obs.recording.started"
+	ObsRecordingStopped        event.Type = "obs.recording.stopped"
+	ObsReplaySaved             event.Type = "obs.replay.saved"
+	ObsSceneChanged            event.Type = "obs.scene.changed"
+	ObsTransitionStarted       event.Type = "obs.transition.started"
+	ObsTransitionEnded         event.Type = "obs.transition.ended"
+	ObsSourceVisibilityChanged event.Type = "obs.source.visibility_changed"
+	ObsFilterVisibilityChanged event.Type = "obs.filter.visibility_changed"
+)
+
 // Application.
 const (
 	AppStarted  event.Type = "app.started"
@@ -160,6 +175,17 @@ func All() []Descriptor {
 
 		neutral(OverlayGoalProgress, Always),
 		neutral(OverlayGoalSegmentCompleted, Always),
+
+		neutral(ObsStreamStarted, Always),
+		neutral(ObsStreamStopped, Always),
+		neutral(ObsRecordingStarted, Always),
+		neutral(ObsRecordingStopped, Always),
+		neutral(ObsReplaySaved, Always),
+		neutral(ObsSceneChanged, Always),
+		neutral(ObsTransitionStarted, Always),
+		neutral(ObsTransitionEnded, Always),
+		neutral(ObsSourceVisibilityChanged, Always),
+		neutral(ObsFilterVisibilityChanged, Always),
 
 		neutral(ChannelStreamStart, PerSession),
 		neutral(ChannelStreamStop, PerSession),

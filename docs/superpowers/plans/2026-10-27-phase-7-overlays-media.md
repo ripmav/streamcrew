@@ -141,16 +141,16 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
 
 ### 3.4 7.4 OBS Studio — `feat/phase-7.4-obs`
 
-- [ ] `internal/obs` auf `goobs` v1.11.1 (obs-websocket v5.7): Verbindung (Start +
+- [x] `internal/obs` auf `goobs` v1.11.1 (obs-websocket v5.7): Verbindung (Start +
   Reconnect-Loop alle 5 s nach dem ersten Erfolg, kein Retry vor dem ersten Erfolg),
   Szenen, Quellen, Filter, Stream, Aufnahme, Replay-Buffer
-- [ ] OBS-Events auf den Bus: `obs.stream.*`, `obs.recording.*`, `obs.replay.saved`,
+- [x] OBS-Events auf den Bus: `obs.stream.*`, `obs.recording.*`, `obs.replay.saved`,
   `obs.scene.changed`, `obs.transition.*`, `obs.source.visibility_changed`,
   `obs.filter.visibility_changed` (Details; in `All()`)
-- [ ] StreamingSoftware-Action: Typ `streaming_software`, Kinds `set_scene`,
+- [x] StreamingSoftware-Action: Typ `streaming_software`, Kinds `set_scene`,
   `start/stop_stream`, `start/stop_recording`, `save_replay`, `set_source`, `set_filter`
-- [ ] Config: `obs-host`, `obs-port`, `obs-password` (Restart-only)
-- [ ] Tests (Fake-OBS-Server mit obs-websocket-v5-Verhandlung), Test-Matrizen, Roadmap 7.4 abhaken
+- [x] Config: `obs-host`, `obs-port`, `obs-password` (Restart-only)
+- [x] Tests (Fake-OBS-Server mit obs-websocket-v5-Verhandlung), Test-Matrizen, Roadmap 7.4 abhaken
 
 ### 3.5 7.5 Weitere Widgets (P2/P3) — `feat/phase-7.5-more-widgets`
 

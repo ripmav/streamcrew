@@ -32,9 +32,9 @@ func startCore(t *testing.T) string {
 		Mode:            config.ModeDaemon,
 		Listen:          "127.0.0.1:0",
 		ShutdownTimeout: 5 * time.Second,
-		Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},
-		Log:             config.LogConfig{Level: "info", Format: "text", MaxSize: 1, MaxFiles: 1},
-		BootstrapToken:  testToken,
+		ObsPort:         4455, Stream: config.StreamConfig{Buffer: 1024, CatchUp: 256},
+		Log:            config.LogConfig{Level: "info", Format: "text", MaxSize: 1, MaxFiles: 1},
+		BootstrapToken: testToken,
 	}
 	require.NoError(t, cfg.Resolve())
 	mgr := profile.NewManager(dir)

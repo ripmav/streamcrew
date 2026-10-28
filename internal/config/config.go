@@ -83,6 +83,17 @@ type Config struct {
 	// Changes need a restart.
 	TTSPiperModel string `name:"tts-piper-model" type:"path" placeholder:"FILE" help:"The onnx model of the piper TTS provider (roadmap 7.3); needed only for the provider piper. Changes need a restart."`
 
+	// ObsHost is the host of the OBS obs-websocket (roadmap 7.4, spec
+	// overlays.md, B43). Changes need a restart.
+	ObsHost string `name:"obs-host" default:"127.0.0.1" placeholder:"HOST" help:"The host of the OBS obs-websocket (roadmap 7.4). Default: ${default}. Changes need a restart."`
+	// ObsPort is the port of the OBS obs-websocket (roadmap 7.4, spec
+	// overlays.md, B43). Changes need a restart.
+	ObsPort int `name:"obs-port" default:"4455" placeholder:"PORT" help:"The port of the OBS obs-websocket (roadmap 7.4). Default: ${default}. Changes need a restart."`
+	// ObsPassword is the password of the OBS obs-websocket (roadmap 7.4,
+	// spec overlays.md, B43); empty for a connection without a password.
+	// Changes need a restart.
+	ObsPassword string `name:"obs-password" placeholder:"PASSWORD" help:"The password of the OBS obs-websocket (roadmap 7.4); empty for a connection without a password. Changes need a restart."`
+
 	// Grant, Revoke, FileRoot and OutboundAllow are the rights of
 	// Code-ADR-0019. Changes of them in the configuration file apply
 	// without a restart (Watcher).
@@ -272,6 +283,9 @@ func (c *Config) Resolve() error {
 	}
 	if c.ShutdownTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("--shutdown-timeout: must be positive, got %s", c.ShutdownTimeout))
+	}
+	if c.ObsPort < 1 || c.ObsPort > 65535 {
+		errs = append(errs, fmt.Errorf("--obs-port: must be a port, 1 to 65535, got %d", c.ObsPort))
 	}
 	errs = append(errs, c.Stream.check()...)
 	errs = append(errs, c.Twitch.check()...)

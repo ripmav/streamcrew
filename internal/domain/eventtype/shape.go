@@ -111,6 +111,19 @@ func shapes() map[event.Type]Shape {
 		// effect has one (B23, A2).
 		OverlayGoalProgress:         userOptional,
 		OverlayGoalSegmentCompleted: userOptional,
+
+		// The OBS events (spec overlays.md, B44) come from the OBS
+		// connection, not from a platform event, so they name no user.
+		ObsStreamStarted:           none,
+		ObsStreamStopped:           none,
+		ObsRecordingStarted:        none,
+		ObsRecordingStopped:        none,
+		ObsReplaySaved:             none,
+		ObsSceneChanged:            none,
+		ObsTransitionStarted:       none,
+		ObsTransitionEnded:         none,
+		ObsSourceVisibilityChanged: none,
+		ObsFilterVisibilityChanged: none,
 	}
 }
 

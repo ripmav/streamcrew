@@ -153,6 +153,8 @@ type Schema struct {
 	Pattern string `json:"pattern,omitempty"`
 	// OneOf are alternatives of which exactly one must match.
 	OneOf []*Schema `json:"oneOf,omitempty"`
+	// AnyOf are alternatives of which at least one must match.
+	AnyOf []*Schema `json:"anyOf,omitempty"`
 	// Default is the value a new action has (Code-ADR-0013, point 4).
 	Default jsontext.Value `json:"default,omitzero"`
 	// UI is the hint for generic editors.
@@ -278,6 +280,9 @@ func Object(props ...Property) *Schema {
 type Variant struct {
 	Kind  string
 	Props []Property
+	// AnyOf are alternatives of which at least one must match, beside the
+	// members, e.g. that a kind with optional members changes something.
+	AnyOf []*Schema
 }
 
 // Kinds returns a document schema whose member "kind" picks one of the
@@ -286,7 +291,7 @@ type Variant struct {
 func Kinds(common []Property, variants ...Variant) *Schema {
 	alts := make([]Alternative, len(variants))
 	for i, v := range variants {
-		alts[i] = Alternative{Values: []string{v.Kind}, Props: v.Props}
+		alts[i] = Alternative{Values: []string{v.Kind}, Props: v.Props, AnyOf: v.AnyOf}
 	}
 	s := pick(header(), KeyKind, common, alts)
 	s.Dialect = Draft
@@ -298,6 +303,9 @@ func Kinds(common []Property, variants ...Variant) *Schema {
 type Alternative struct {
 	Values []string
 	Props  []Property
+	// AnyOf are alternatives of which at least one must match, beside the
+	// members.
+	AnyOf []*Schema
 }
 
 // Pick returns a closed object whose member key chooses one of alts by its
@@ -341,7 +349,9 @@ func pick(before []Property, key string, after []Property, alts []Alternative) *
 		if len(a.Values) == 1 {
 			k = &Schema{Const: Quote(a.Values[0])}
 		}
-		s.OneOf = append(s.OneOf, Object(slices.Concat(before, []Property{{Name: key, Schema: k, Required: true}}, after, a.Props)...))
+		alt := Object(slices.Concat(before, []Property{{Name: key, Schema: k, Required: true}}, after, a.Props)...)
+		alt.AnyOf = a.AnyOf
+		s.OneOf = append(s.OneOf, alt)
 		for _, p := range a.Props {
 			if _, dup := s.Properties.Lookup(p.Name); !dup {
 				s.Properties = append(s.Properties, Property{Name: p.Name, Schema: p.Schema.Clone()})
@@ -558,6 +568,10 @@ func (s *Schema) Clone() *Schema {
 	c.OneOf = slices.Clone(s.OneOf)
 	for i := range c.OneOf {
 		c.OneOf[i] = c.OneOf[i].Clone()
+	}
+	c.AnyOf = slices.Clone(s.AnyOf)
+	for i := range c.AnyOf {
+		c.AnyOf[i] = c.AnyOf[i].Clone()
 	}
 	c.Const = slices.Clone(s.Const)
 	c.Default = slices.Clone(s.Default)

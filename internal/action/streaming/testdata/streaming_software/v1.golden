@@ -1,0 +1,7 @@
+{
+  "type": "streaming_software",
+  "schemaVersion": 1,
+  "enabled": true,
+  "kind": "set_scene",
+  "scene": "Cut"
+}

@@ -16,6 +16,7 @@ import (
 	overlayaction "github.com/ripmav/streamcrew/internal/action/overlay"
 	soundaction "github.com/ripmav/streamcrew/internal/action/sound"
 	streamaction "github.com/ripmav/streamcrew/internal/action/stream"
+	streamingaction "github.com/ripmav/streamcrew/internal/action/streaming"
 	ttsaction "github.com/ripmav/streamcrew/internal/action/tts"
 	twitchaction "github.com/ripmav/streamcrew/internal/action/twitch"
 	"github.com/ripmav/streamcrew/internal/action/usercommand"
@@ -46,6 +47,7 @@ func ActionCatalog(granted capability.Source) (*action.Registry, error) {
 		users.Catalog(),
 		values.Catalog(),
 		streamaction.Catalog(),
+		streamingaction.Catalog(),
 		commandadmin.Catalog(),
 		usercommand.Catalog(),
 	)...)

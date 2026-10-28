@@ -28,6 +28,7 @@ func base(t *testing.T) config.Config {
 		Mode:            config.ModeServer,
 		Listen:          "127.0.0.1:8740",
 		ShutdownTimeout: 15 * time.Second,
+		ObsPort:         4455,
 		Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},
 		Log:             config.LogConfig{Level: "debug", Format: "text", MaxSize: 10, MaxFiles: 3},
 	}
