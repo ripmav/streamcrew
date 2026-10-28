@@ -107,10 +107,28 @@ func shapes() map[event.Type]Shape {
 		ChatUserUnmod:        user,
 		ChatUserVIP:          user,
 		ChatUserUnVIP:        user,
-		// The overlay goal events name the user of the effect, if the
-		// effect has one (B23, A2).
+		// The overlay widget events name the user of the effect, if the
+		// effect has one (B23, A2); the timer completion and the new
+		// boss have none.
 		OverlayGoalProgress:         userOptional,
 		OverlayGoalSegmentCompleted: userOptional,
+		OverlayTimerAdjusted:        userOptional,
+		OverlayTimerCompleted:       none,
+		OverlayBossDamage:           user,
+		OverlayBossHeal:             user,
+		OverlayBossNew:              none,
+		OverlayWheelSpun:            user,
+
+		// The game queue events name the user of the entry (spec
+		// overlays.md, B36).
+		GameQueueJoined:   user,
+		GameQueueLeft:     user,
+		GameQueuePosition: user,
+
+		// The Discord voice events name no core user: the Discord name
+		// is a value of the details (spec overlays.md, B37).
+		DiscordVoiceJoined: none,
+		DiscordVoiceLeft:   none,
 
 		// The OBS events (spec overlays.md, B44) come from the OBS
 		// connection, not from a platform event, so they name no user.

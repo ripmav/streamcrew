@@ -84,6 +84,18 @@ style.textContent = `
   .sc-widget .sc-goal-fill { height: 100%; background: #4caf50; }
   .sc-widget ul { list-style: none; margin: 0; padding: 0; }
   .sc-widget li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sc-widget .sc-boss-bar { height: 10px; background: rgba(255,255,255,.25); border-radius: 5px; margin: .25rem 0; overflow: hidden; }
+  .sc-widget .sc-boss-fill { height: 100%; background: #e53935; }
+  .sc-widget.sc-disabled { display: none; }
+  .sc-widget .sc-poll-winner { font-weight: 700; }
+  .sc-widget .sc-wheel-spin { margin-top: .25rem; font-weight: 700; }
+  .sc-widget .sc-wheel-landed { outline: 2px solid #fff; border-radius: .25rem; }
+  .sc-item.sc-emote-effect { display: flex; flex-wrap: wrap; gap: 2px; }
+  .sc-item.sc-emote-effect img, .sc-widget .sc-emote { display: inline-block; }
+  .sc-item.sc-emote-effect.sc-effect-rain img, .sc-widget .sc-emote.rain { animation: sc-rain 4s linear infinite; }
+  .sc-item.sc-emote-effect.sc-effect-burst img, .sc-widget .sc-emote.burst { animation: sc-burst .8s ease-out; }
+  @keyframes sc-rain { from { transform: translateY(-30%); opacity: 0; } 10% { opacity: 1; } to { transform: translateY(120vh); } }
+  @keyframes sc-burst { 0% { transform: scale(.2); opacity: 0; } 30% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); } }
   @keyframes sc-fade { from { opacity: 0; } to { opacity: 1; } }
   @keyframes sc-slide-left { from { transform: translateX(-40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
   @keyframes sc-slide-right { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -382,10 +394,34 @@ function renderContent(el: HTMLElement, entry: Entry): void {
       perSecond.add(entry.render);
       break;
     }
-    case "emote_effect":
+    case "emote_effect": {
+      // The emote effect shows the emotes with the effect (B35); an
+      // empty image is a name the core kept as text, e.g. an emoji.
+      // shortcut: rain, burst and random share the layout; the effects
+      // differ only by the CSS class.
+      el.classList.add("sc-emote-effect", "sc-effect-" + (c.effect ?? "random"));
+      const size = Number(c.width ?? 64);
+      for (const e of c.emotes ?? []) {
+        for (let i = 0; i < Number(e.shown ?? 1); i++) {
+          if (e.image) {
+            const img = document.createElement("img");
+            img.src = e.image;
+            img.alt = e.code;
+            if (size > 0) img.style.width = `${size}px`;
+            el.appendChild(img);
+          } else {
+            const span = document.createElement("span");
+            span.textContent = e.code;
+            if (size > 0) span.style.fontSize = `${size}px`;
+            el.appendChild(span);
+          }
+        }
+      }
+      break;
+    }
     default: {
-      // Rendered from roadmap 7.5; the placeholder keeps the item
-      // visible in the meantime.
+      // The kinds without a renderer yet; the placeholder keeps the item
+      // visible.
       el.classList.add("sc-placeholder");
       el.textContent = data.kind;
       break;
@@ -519,9 +555,174 @@ function renderWidget(el: HTMLElement, entry: Entry): void {
       el.appendChild(ul);
       break;
     }
+    case "persistent_timer": {
+      // The persistent timer counts down permanently and is persisted
+      // (B29); completed and disable_on_completion it is hidden.
+      if (st.disabled) {
+        el.classList.add("sc-disabled");
+        break;
+      }
+      const span = document.createElement("span");
+      span.style.fontVariantNumeric = "tabular-nums";
+      el.appendChild(span);
+      const format = st.format ?? "MM:SS";
+      entry.render = () => {
+        const now = serverNow();
+        const rest = st.paused ? Number(st.pausedMs ?? 0) : Number(st.deadline ?? 0) - now;
+        const r = Math.max(0, rest);
+        span.textContent = st.completed ? "done" : formatTimer(format, r, r);
+      };
+      perSecond.add(entry.render);
+      break;
+    }
+    case "stream_boss": {
+      // The stream boss shows the boss and its health of the max (B30).
+      const boss = document.createElement("div");
+      boss.textContent = st.boss || "Boss";
+      el.appendChild(boss);
+      const max = Number(st.max_health ?? 0);
+      const health = Number(st.health ?? 0);
+      const bar = document.createElement("div");
+      bar.className = "sc-boss-bar";
+      const fill = document.createElement("div");
+      fill.className = "sc-boss-fill";
+      fill.style.width = max > 0 ? `${Math.max(0, Math.min(100, (health / max) * 100))}%` : "0%";
+      bar.appendChild(fill);
+      el.appendChild(bar);
+      const hp = document.createElement("small");
+      hp.textContent = `${health}/${max}`;
+      el.appendChild(hp);
+      break;
+    }
+    case "end_credits": {
+      // The end credits show the collected sections (B31); playing the
+      // runtime rolls them.
+      // shortcut: the credits show the sections as a list; the rolling
+      // animation is a simple fade of the whole widget.
+      const sections = (st.sections ?? {}) as Record<string, any[]>;
+      for (const [section, entries] of Object.entries(sections)) {
+        if (!entries || entries.length === 0) continue;
+        const div = document.createElement("div");
+        const title = document.createElement("div");
+        title.textContent = section;
+        div.appendChild(title);
+        const ul = document.createElement("ul");
+        for (const e of entries) {
+          const li = document.createElement("li");
+          li.textContent = e.user ? e.user : e.text ?? "";
+          ul.appendChild(li);
+        }
+        div.appendChild(ul);
+        el.appendChild(div);
+      }
+      if (st.playing) el.classList.add("sc-credits-playing");
+      break;
+    }
+    case "leaderboard": {
+      // The leaderboard shows the ranked entries (B32).
+      const ol = document.createElement("ol");
+      for (const [i, e] of (st.entries ?? []).entries()) {
+        const li = document.createElement("li");
+        li.textContent = `${e.name}: ${e.value}`;
+        ol.appendChild(li);
+      }
+      el.appendChild(ol);
+      break;
+    }
+    case "wheel": {
+      // The wheel shows the outcomes and the last spin (B33).
+      const ul = document.createElement("ul");
+      for (const o of st.outcomes ?? []) {
+        const li = document.createElement("li");
+        li.textContent = `${o.name} (${o.probability})`;
+        ul.appendChild(li);
+      }
+      el.appendChild(ul);
+      const spin = st.spin;
+      if (spin) {
+        const div = document.createElement("div");
+        div.className = "sc-wheel-spin";
+        div.textContent = spin.name;
+        el.appendChild(div);
+        // The spin highlights the outcome for the duration, then the
+        // state update clears it.
+        setTimeout(() => {
+          const n = el.querySelector(".sc-wheel-spin");
+          if (n) n.classList.add("sc-wheel-landed");
+        }, Number(spin.duration ?? 4) * 1000);
+      }
+      break;
+    }
+    case "poll": {
+      // The poll shows the active vote: the name and the outcomes with
+      // their votes or points (B34).
+      const kind = st.kind;
+      if (st.name) {
+        const title = document.createElement("div");
+        title.textContent = st.name;
+        el.appendChild(title);
+      }
+      const ul = document.createElement("ul");
+      for (const o of st.outcomes ?? []) {
+        const li = document.createElement("li");
+        const value = kind === "prediction" ? o.points ?? 0 : o.votes ?? 0;
+        li.textContent = `${o.name}: ${value}${o.color ? ` (${o.color})` : ""}`;
+        if (st.winner && o.name === st.winner) li.classList.add("sc-poll-winner");
+        ul.appendChild(li);
+      }
+      el.appendChild(ul);
+      break;
+    }
+    case "persistent_emote_effect": {
+      // The persistent emote effect shows the emotes of the triggered
+      // combo (B35); rain, burst and random are shown as the emote image.
+      // The effect is a one-shot push without a sync state, so the
+      // runtime clears it after its duration; a newer push invalidates
+      // the pending clear by token.
+      // shortcut: the effect shows the emote image; the rain/burst/random
+      // animation is a simple repeat of the image.
+      if (st.image) {
+        const count = Number(st.per_emote_shown ?? 1);
+        for (let i = 0; i < count; i++) {
+          const img = document.createElement("img");
+          img.className = "sc-emote " + (st.effect ?? "random");
+          img.src = st.image;
+          img.alt = st.code ?? "";
+          el.appendChild(img);
+        }
+        const token = Math.random().toString(36);
+        el.dataset.scEmoteToken = token;
+        setTimeout(() => {
+          if (el.dataset.scEmoteToken === token) el.textContent = "";
+        }, Number(st.duration_ms ?? 0));
+      }
+      break;
+    }
+    case "game_queue": {
+      // The game queue shows the entries with their position (B36).
+      const ol = document.createElement("ol");
+      for (const e of st.entries ?? []) {
+        const li = document.createElement("li");
+        li.textContent = e.user;
+        ol.appendChild(li);
+      }
+      el.appendChild(ol);
+      break;
+    }
+    case "discord_voice": {
+      // The discord voice lists the occupants of the channel (B37).
+      const ul = document.createElement("ul");
+      for (const o of st.occupants ?? []) {
+        const li = document.createElement("li");
+        li.textContent = o.name;
+        ul.appendChild(li);
+      }
+      el.appendChild(ul);
+      break;
+    }
     default: {
-      // The kinds of 7.5 and the states the service does not fill yet;
-      // the placeholder keeps the widget visible.
+      // The kinds without a state yet; the placeholder keeps the widget
+      // visible.
       const label = document.createElement("span");
       label.textContent = name;
       el.appendChild(label);

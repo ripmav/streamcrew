@@ -154,23 +154,23 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
 
 ### 3.5 7.5 Weitere Widgets (P2/P3) — `feat/phase-7.5-more-widgets`
 
-- [ ] `persistent_timer` (persistiert, Ereignis-Beträge additiv/multiplikativ, Pause,
+- [x] `persistent_timer` (persistiert, Ereignis-Beträge additiv/multiplikativ, Pause,
   Display-Format DD/hh/MM/mm/SS/ss, Events `overlay.timer.*`)
-- [ ] `stream_boss` (Health, Overkill-, Kill-Bonus, Self-Heal, Compound, Ereignis-Schaden,
+- [x] `stream_boss` (Health, Overkill-, Kill-Bonus, Self-Heal, Compound, Ereignis-Schaden,
   Events `overlay.boss.*`)
-- [ ] `end_credits` (Sektionen aus Feed/Sitzung, Custom per Action, `play_credits`)
-- [ ] `leaderboard` (Statistiktypen aus den Nutzer-Statistiken, Live-Update)
-- [ ] `wheel` (Outcomes, Equal/Set-Probability, Modifiers mit Summe 0, Spin → Event
+- [x] `end_credits` (Sektionen aus Feed/Sitzung, Custom per Action, `play_credits`)
+- [x] `leaderboard` (Statistiktypen aus den Nutzer-Statistiken, Live-Update)
+- [x] `wheel` (Outcomes, Equal/Set-Probability, Modifiers mit Summe 0, Spin → Event
   `overlay.wheel.spun` + Outcome-Command)
-- [ ] `poll` (aktive Twitch-Polls/-Vorhersagen live, aus den Twitch-Events)
-- [ ] `emote_effect` voll (Emote-Auflösung über die Kataloge, Effekte rain/burst/random,
+- [x] `poll` (aktive Twitch-Polls/-Vorhersagen live, aus den Twitch-Events)
+- [x] `emote_effect` voll (Emote-Auflösung über die Kataloge, Effekte rain/burst/random,
   Per-Emote/Max-Anzahl) und `persistent_emote_effect` (Combo-Count + Timeframe im Chat)
-- [ ] `game_queue` (Queue-Service join/leave/position, persistiert, Events `gamequeue.*`,
+- [x] `game_queue` (Queue-Service join/leave/position, persistiert, Events `gamequeue.*`,
   Widget zeigt die Liste)
-- [ ] `discord_voice` (discordgo-Gateway ohne Voice: VOICE_STATE_UPDATE des konfigurierten
+- [x] `discord_voice` (discordgo-Gateway ohne Voice: VOICE_STATE_UPDATE des konfigurierten
   Kanals, Events `discord.voice.*`, Widget listet die Besetzten; Beschränkung dokumentiert)
-- [ ] Config: `discord-token` (Env), `discord-voice-channel` (Restart-only)
-- [ ] Tests, Test-Matrizen, Roadmap 7.5 + Exit-Kriterien M3 abhaken, Änderungshistorie
+- [x] Config: `discord-token` (Env), `discord-voice-channel` (Restart-only)
+- [x] Tests, Test-Matrizen, Roadmap 7.5 + Exit-Kriterien M3 abhaken, Änderungshistorie
 
 ## 4. Testing
 

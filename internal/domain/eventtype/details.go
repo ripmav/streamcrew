@@ -41,6 +41,22 @@ type Details struct {
 	// CustomPowerUp is the redemption of
 	// twitch.custom_power_up.redeem.
 	CustomPowerUp *CustomPowerUp `json:"custom_power_up,omitempty"`
+	// OverlayTimer is the change of overlay.timer.adjusted (spec
+	// overlays.md, B29).
+	OverlayTimer *OverlayTimer `json:"overlay_timer,omitempty"`
+	// OverlayBoss is the health of the stream boss of
+	// overlay.boss.damage, overlay.boss.heal and overlay.boss.new
+	// (spec overlays.md, B30).
+	OverlayBoss *OverlayBoss `json:"overlay_boss,omitempty"`
+	// OverlayWheel is the outcome of overlay.wheel.spun (spec
+	// overlays.md, B33).
+	OverlayWheel *OverlayWheel `json:"overlay_wheel,omitempty"`
+	// GameQueue is the position of the gamequeue events (spec
+	// overlays.md, B36).
+	GameQueue *GameQueue `json:"game_queue,omitempty"`
+	// DiscordVoice is the name and the channel of the
+	// discord.voice events (spec overlays.md, B37).
+	DiscordVoice *DiscordVoice `json:"discord_voice,omitempty"`
 	// GoalProgress is the progress of overlay.goal.progress.
 	GoalProgress *GoalProgress `json:"goal_progress,omitempty"`
 	// GoalSegment is the completed segment of
@@ -107,6 +123,50 @@ type ObsFilter struct {
 	Filter string `json:"filter"`
 	// Visible is whether the filter is enabled now.
 	Visible bool `json:"visible"`
+}
+
+// OverlayTimer is the changed amount of the persistent timer of
+// overlay.timer.adjusted (spec overlays.md, B29), in seconds; it may be
+// negative.
+type OverlayTimer struct {
+	// AmountChanged is the amount the change added to the remaining
+	// time, in seconds; negative for a removal.
+	AmountChanged int64 `json:"amount_changed"`
+}
+
+// OverlayBoss is the health of the stream boss of overlay.boss.damage,
+// overlay.boss.heal and overlay.boss.new (spec overlays.md, B30).
+type OverlayBoss struct {
+	// Health is the health after the change; for overlay.boss.new the
+	// health of the new boss.
+	Health int64 `json:"health"`
+	// Amount is the health changed by the damage or the heal; zero for
+	// overlay.boss.new.
+	Amount int64 `json:"amount,omitempty"`
+}
+
+// OverlayWheel is the outcome of the finished spin of
+// overlay.wheel.spun (spec overlays.md, B33).
+type OverlayWheel struct {
+	// Outcome is the name of the outcome the spin landed on.
+	Outcome string `json:"outcome"`
+}
+
+// GameQueue is the entry of the gamequeue events (spec overlays.md,
+// B36).
+type GameQueue struct {
+	// Position is the position of the user in the queue, 1-based; for
+	// gamequeue.left the position the user left.
+	Position int `json:"position"`
+}
+
+// DiscordVoice is the occupant of the discord.voice events (spec
+// overlays.md, B37).
+type DiscordVoice struct {
+	// Name is the Discord name of the occupant, as Discord names it.
+	Name string `json:"name"`
+	// Channel is the name of the voice channel, as configured.
+	Channel string `json:"channel"`
 }
 
 // GoalProgress is the progress of the overlay goal widget (spec

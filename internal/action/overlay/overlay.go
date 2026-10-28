@@ -24,6 +24,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/schema"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
+	"github.com/ripmav/streamcrew/internal/emote"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/overlay"
 	"github.com/ripmav/streamcrew/internal/polydoc"
@@ -81,14 +82,29 @@ const (
 	// OpAddToEventList adds a dynamic entry of the user of the call to
 	// the event_list widget (B27, B38).
 	OpAddToEventList WidgetOp = "add_to_event_list"
+	// OpAddToCredits adds a custom entry of the section to the end_credits
+	// widget (B31, B38); the section comes from the data, the text from
+	// the text member.
+	OpAddToCredits WidgetOp = "add_to_credits"
+	// OpPlayCredits starts the sequence of the end_credits widget (B31,
+	// B38): the sections go to the runtime, which rolls them.
+	OpPlayCredits WidgetOp = "play_credits"
+	// OpSpinWheel runs the spin of the wheel widget (B33, B38): it draws
+	// the outcome server-side and publishes overlay.wheel.spun.
+	OpSpinWheel WidgetOp = "spin_wheel"
+	// OpDamageStreamBoss applies the damage to the stream_boss widget
+	// (B30, B38): the amount may be negative for a healing, and the data
+	// member force forces the damage.
+	OpDamageStreamBoss WidgetOp = "damage_stream_boss"
 )
 
-// Ops returns the operations of the kind widget of 7.2, in the order
-// editors show them.
+// Ops returns the operations of the kind widget of 7.2 and 7.5, in the
+// order editors show them.
 func Ops() []WidgetOp {
 	return []WidgetOp{
 		OpShow, OpHide, OpUpdate, OpAddToGoal, OpAddToTimer,
-		OpPauseTimer, OpAddToEventList,
+		OpPauseTimer, OpAddToEventList, OpAddToCredits, OpPlayCredits,
+		OpSpinWheel, OpDamageStreamBoss,
 	}
 }
 
@@ -97,15 +113,15 @@ func (o WidgetOp) Valid() bool {
 	return slices.Contains(Ops(), o)
 }
 
-// ItemKinds are the item kinds the kind item shows (B13); emote_effect is
-// 7.5 and a clear error here.
+// ItemKinds are the item kinds the kind item shows (B13, B35).
 //
 //nolint:gochecknoglobals // static table of item kinds
 var ItemKinds = []string{
 	"text", "image", "video", "audio", "html", "youtube", "clip", "timer",
+	"emote_effect",
 }
 
-// ValidItemKind reports whether k is an item kind of 7.2.
+// ValidItemKind reports whether k is an item kind.
 func ValidItemKind(k string) bool { return slices.Contains(ItemKinds, k) }
 
 // Clips resolves the latest clip of a user for the item kind clip
@@ -140,6 +156,18 @@ type Widgets interface {
 	// AddToEventList adds a dynamic entry of the user with the name and
 	// the text to the event_list widget (B27, B38).
 	AddToEventList(ctx context.Context, widgetID, user, text string) error
+	// AddToCredits adds a custom entry of the section with the text to
+	// the end_credits widget (B31, B38).
+	AddToCredits(ctx context.Context, widgetID, section, text string) error
+	// PlayCredits starts the sequence of the end_credits widget (B31,
+	// B38).
+	PlayCredits(ctx context.Context, widgetID string) error
+	// SpinWheel runs the spin of the wheel widget, as the effect of the
+	// user (B33, B38).
+	SpinWheel(ctx context.Context, widgetID string, u *user.User) error
+	// DamageStreamBoss applies the damage to the stream_boss widget (B30,
+	// B38): amount may be negative for a healing, force forces the damage.
+	DamageStreamBoss(ctx context.Context, widgetID string, amount int64, force bool, u *user.User) error
 }
 
 // Service is the overlay service the action runs on (B18, B21, B22).
@@ -167,6 +195,9 @@ type Ports struct {
 	Widgets Widgets
 	// Clips resolve the latest clip of the item kind clip (B13, B16).
 	Clips Clips
+	// Emotes lists the emotes of the home channel, which the item kind
+	// emote_effect resolves to image URLs (B35).
+	Emotes func(ctx context.Context) []emote.Emote
 	// Logger records the operations and their results.
 	Logger *slog.Logger
 }
@@ -187,6 +218,8 @@ func Descriptors(p Ports) ([]action.Descriptor, error) {
 		return nil, errors.New("overlay action types: no widget operations")
 	case p.Clips == nil:
 		return nil, errors.New("overlay action types: no clip resolver")
+	case p.Emotes == nil:
+		return nil, errors.New("overlay action types: no emote list")
 	case p.Logger == nil:
 		return nil, errors.New("overlay action types: no logger")
 	}
@@ -301,6 +334,15 @@ func contentSchema() *schema.Schema {
 			{Name: "duration", Schema: schema.Duration(), Required: true},
 			{Name: "direction", Schema: schema.Choice("down", "up")},
 			{Name: "format", Schema: schema.Text(schema.UIText)},
+		}},
+		schema.Alternative{Values: []string{"emote_effect"}, Props: []schema.Property{
+			{Name: "emotes", Schema: schema.List(schema.NonEmpty(schema.UITemplate), 1), Required: true},
+			{Name: "effect", Schema: schema.Choice("rain", "burst", "random")},
+			{Name: "width", Schema: number(0)},
+			{Name: "height", Schema: number(0)},
+			{Name: "perEmoteShown", Schema: &schema.Schema{Type: "integer", Minimum: new(0.0)}},
+			{Name: "maxShown", Schema: &schema.Schema{Type: "integer", Minimum: new(0.0)}},
+			{Name: "allowEmoji", Schema: schema.Switch()},
 		}},
 	)
 }
@@ -440,6 +482,20 @@ type itemContent struct {
 	// Format is the display format of the kind timer (B17); empty for
 	// MM:SS.
 	Format string `json:"format"`
+	// Emotes are the names of the kind emote_effect; at least one.
+	Emotes []string `json:"emotes"`
+	// Effect is the effect of the kind emote_effect: rain, burst or
+	// random; empty for random.
+	Effect string `json:"effect"`
+	// PerEmoteShown is the count shown per emote of the kind
+	// emote_effect; 0 for one.
+	PerEmoteShown int `json:"perEmoteShown"`
+	// MaxShown is the overall cap of shown emotes of the kind
+	// emote_effect; 0 for no cap.
+	MaxShown int `json:"maxShown"`
+	// AllowEmoji shows the names of the kind emote_effect that are not in
+	// the emote catalog as text, e.g. emoji; by default they are dropped.
+	AllowEmoji bool `json:"allowEmoji"`
 }
 
 // contentMembers are the members of each item kind (B13); a member the
@@ -447,14 +503,15 @@ type itemContent struct {
 //
 //nolint:gochecknoglobals // static table of content members
 var contentMembers = map[string][]string{
-	"text":    {"text", "maxWidth"},
-	"image":   {"src", "width", "height"},
-	"video":   {"src", "start", "volume", "loop"},
-	"audio":   {"src", "volume"},
-	"html":    {"html"},
-	"youtube": {"url", "width", "height", "start", "volume"},
-	"clip":    {"url", "user"},
-	"timer":   {"duration", "direction", "format"},
+	"text":         {"text", "maxWidth"},
+	"image":        {"src", "width", "height"},
+	"video":        {"src", "start", "volume", "loop"},
+	"audio":        {"src", "volume"},
+	"html":         {"html"},
+	"youtube":      {"url", "width", "height", "start", "volume"},
+	"clip":         {"url", "user"},
+	"timer":        {"duration", "direction", "format"},
+	"emote_effect": {"emotes", "effect", "width", "height", "perEmoteShown", "maxShown", "allowEmoji"},
 }
 
 // itemInvalid names the invalid member of the kind item; nil if it is
@@ -581,6 +638,19 @@ func contentValuesInvalid(c *itemContent) error {
 		case c.Direction != "" && c.Direction != "down" && c.Direction != "up":
 			return field("content.direction", fmt.Errorf("%w: unknown direction %q", action.ErrInvalid, c.Direction))
 		}
+	case "emote_effect":
+		switch {
+		case len(c.Emotes) < 1:
+			return field("content.emotes", fmt.Errorf("%w: the emote effect needs an emote", action.ErrInvalid))
+		case c.Effect != "" && c.Effect != "rain" && c.Effect != "burst" && c.Effect != "random":
+			return field("content.effect", fmt.Errorf("%w: unknown effect %q", action.ErrInvalid, c.Effect))
+		case c.Width < 0 || c.Height < 0:
+			return field("content.width", fmt.Errorf("%w: the size must be 0 or more", action.ErrInvalid))
+		case c.PerEmoteShown < 0:
+			return field("content.perEmoteShown", fmt.Errorf("%w: the count per emote must be 0 or more", action.ErrInvalid))
+		case c.MaxShown < 0:
+			return field("content.maxShown", fmt.Errorf("%w: the maximum count must be 0 or more", action.ErrInvalid))
+		}
 	}
 	return nil
 }
@@ -594,17 +664,17 @@ func (t Overlay) widgetInvalid() error {
 		return field("widget", fmt.Errorf("%w: an empty widget ID", action.ErrInvalid))
 	case !o.Op.Valid():
 		return field("op", fmt.Errorf("%w: unknown operation %q", action.ErrInvalid, o.Op))
-	case o.Op == OpAddToGoal || o.Op == OpAddToTimer:
+	case o.Op == OpAddToGoal || o.Op == OpAddToTimer || o.Op == OpDamageStreamBoss:
 		if o.Amount.IsZero() {
 			return field("amount", fmt.Errorf("%w: the operation %s needs an amount", action.ErrInvalid, o.Op))
 		}
 		return field("amount", o.Amount.Validate(amountRange()))
 	case !o.Amount.IsZero():
-		return field("amount", fmt.Errorf("%w: only add_to_goal and add_to_timer take an amount", action.ErrInvalid))
-	case o.Op != OpAddToEventList && o.Text != "":
-		return field("text", fmt.Errorf("%w: only add_to_event_list takes a text", action.ErrInvalid))
-	case o.Op != OpUpdate && o.Data != nil:
-		return field("data", fmt.Errorf("%w: only update takes data", action.ErrInvalid))
+		return field("amount", fmt.Errorf("%w: only add_to_goal, add_to_timer and damage_stream_boss take an amount", action.ErrInvalid))
+	case !slices.Contains([]WidgetOp{OpAddToEventList, OpAddToCredits}, o.Op) && o.Text != "":
+		return field("text", fmt.Errorf("%w: only add_to_event_list and add_to_credits take a text", action.ErrInvalid))
+	case !slices.Contains([]WidgetOp{OpUpdate, OpAddToCredits, OpDamageStreamBoss}, o.Op) && o.Data != nil:
+		return field("data", fmt.Errorf("%w: only update, add_to_credits and damage_stream_boss take data", action.ErrInvalid))
 	default:
 		return nil
 	}
@@ -747,9 +817,69 @@ func (t Overlay) renderedContent(ctx context.Context, run *engine.Run) (any, str
 			format = "MM:SS"
 		}
 		return map[string]any{"duration": c.Duration, "direction": direction, "format": format}, "timer", nil
+	case "emote_effect":
+		return t.emoteEffectContent(ctx, run, c)
 	default:
 		return nil, "", fmt.Errorf("%w: unknown item kind %q", action.ErrInvalid, c.Kind)
 	}
+}
+
+// emoteEffectContent is the content of the item kind emote_effect (B35):
+// the names resolved to image URLs over the emote catalog, the unknown
+// dropped, or kept as text while allow_emoji.
+func (t Overlay) emoteEffectContent(ctx context.Context, run *engine.Run, c *itemContent) (any, string, error) {
+	ports := t.ports
+	render := func(s action.Template) (string, error) {
+		return ports.Templates.Render(ctx, s.Parse(), run.Scope(), template.Text)
+	}
+	effect := c.Effect
+	if effect == "" {
+		effect = "random"
+	}
+	images := map[string]string{}
+	for _, e := range ports.Emotes(ctx) {
+		images[e.Code] = e.Image
+	}
+	perEmote := max(c.PerEmoteShown, 1)
+	emotes := make([]map[string]any, 0, len(c.Emotes))
+	shown := 0
+	for _, name := range c.Emotes {
+		n, err := render(action.Template(name))
+		if err != nil {
+			return nil, "", err
+		}
+		if n == "" {
+			continue
+		}
+		image, ok := images[n]
+		if !ok && !c.AllowEmoji {
+			// The name is not in the catalog and emojis are not
+			// allowed: it is dropped (B35).
+			continue
+		}
+		count := perEmote
+		if c.MaxShown > 0 {
+			if left := c.MaxShown - shown; count > left {
+				count = left
+			}
+			if count <= 0 {
+				break
+			}
+		}
+		emotes = append(emotes, map[string]any{"code": n, "image": image, "shown": count})
+		shown += count
+	}
+	if len(emotes) == 0 {
+		return nil, "", fmt.Errorf("%w: no emote of the effect was found", action.ErrInvalid)
+	}
+	data := map[string]any{"effect": effect, "emotes": emotes}
+	if c.Width > 0 {
+		data["width"] = c.Width
+	}
+	if c.Height > 0 {
+		data["height"] = c.Height
+	}
+	return data, "emote_effect", nil
 }
 
 // clipContent is the content of the item kind clip (B13, B15, B16): the
@@ -826,6 +956,57 @@ func (t Overlay) widget(ctx context.Context, run *engine.Run) error {
 			}
 		}
 		return field("widget", ports.Widgets.AddToEventList(ctx, o.Widget, displayName(sc.User, sc.Platform), text))
+	case OpAddToCredits:
+		var doc struct {
+			Section string `json:"section"`
+		}
+		if o.Data != nil {
+			data, err := json.Marshal(o.Data)
+			if err != nil {
+				return field("data", fmt.Errorf("%w: the data is not a JSON document", action.ErrInvalid))
+			}
+			if err := json.Unmarshal(data, &doc, json.RejectUnknownMembers(true)); err != nil {
+				return field("data", fmt.Errorf("%w: the data: %w", action.ErrInvalid, err))
+			}
+		}
+		if doc.Section == "" {
+			return field("data", fmt.Errorf("%w: add_to_credits needs the section in the data", action.ErrInvalid))
+		}
+		text := ""
+		if o.Text != "" {
+			var err error
+			text, err = ports.Templates.Render(ctx, o.Text.Parse(), sc, template.Text)
+			if err != nil {
+				return field("text", err)
+			}
+		}
+		return field("widget", ports.Widgets.AddToCredits(ctx, o.Widget, doc.Section, text))
+	case OpPlayCredits:
+		return field("widget", ports.Widgets.PlayCredits(ctx, o.Widget))
+	case OpSpinWheel:
+		return field("widget", ports.Widgets.SpinWheel(ctx, o.Widget, sc.User))
+	case OpDamageStreamBoss:
+		v, err := o.Amount.Eval(ctx, ports.Templates, sc, amountRange())
+		if err != nil {
+			return field("amount", err)
+		}
+		amount, err := v.Int64()
+		if err != nil {
+			return field("amount", err)
+		}
+		var doc struct {
+			Force bool `json:"force"`
+		}
+		if o.Data != nil {
+			data, err := json.Marshal(o.Data)
+			if err != nil {
+				return field("data", fmt.Errorf("%w: the data is not a JSON document", action.ErrInvalid))
+			}
+			if err := json.Unmarshal(data, &doc, json.RejectUnknownMembers(true)); err != nil {
+				return field("data", fmt.Errorf("%w: the data: %w", action.ErrInvalid, err))
+			}
+		}
+		return field("widget", ports.Widgets.DamageStreamBoss(ctx, o.Widget, amount, doc.Force, sc.User))
 	default:
 		return field("op", fmt.Errorf("%w: unknown operation %q", action.ErrInvalid, o.Op))
 	}

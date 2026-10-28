@@ -54,6 +54,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/connector"
 	"github.com/ripmav/streamcrew/internal/connector/mock"
+	"github.com/ripmav/streamcrew/internal/discord"
 	"github.com/ripmav/streamcrew/internal/domain/command"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
@@ -73,6 +74,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/obs"
 	"github.com/ripmav/streamcrew/internal/overlay"
 	"github.com/ripmav/streamcrew/internal/overlaywidgets"
+	"github.com/ripmav/streamcrew/internal/poll"
 	"github.com/ripmav/streamcrew/internal/preset"
 	"github.com/ripmav/streamcrew/internal/profile"
 	"github.com/ripmav/streamcrew/internal/prompt"
@@ -166,6 +168,14 @@ type App struct {
 	overlay      *overlay.Server
 	// widgets runs the P1 widgets of the overlay (roadmap 7.2).
 	widgets *overlaywidgets.Service
+	// poll holds the state of the active poll or prediction of the
+	// profile (roadmap 7.5, spec overlays.md, B34): the twitch action
+	// feeds it, the poll widget shows it.
+	poll *poll.Service
+	// discord runs the Discord gateway connection of the discord_voice
+	// widget (roadmap 7.5, spec overlays.md, B37, A3); inactive without
+	// a token and a channel.
+	discord *discord.Service
 	// mediaDir is the media directory of the profile (roadmap 7.1, B6);
 	// the overlay server serves it and the media and tts services of
 	// 7.3 play and generate under it (ADR-0020).
@@ -656,12 +666,29 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if err != nil {
 		return a, err
 	}
+	// The discord service (roadmap 7.5, spec overlays.md, B37, A3): the
+	// gateway connection for the discord_voice widget; the token is
+	// environment only (ADR-0019 §9), inactive without it or the
+	// channel.
+	a.discord = discord.New(discord.Ports{
+		Token:   os.Getenv("STREAMCREW_DISCORD_TOKEN"),
+		Channel: cfg.DiscordVoiceChannel,
+		Bus:     a.bus,
+		Logger:  component(logger, "discord"),
+	})
+	// The poll service (roadmap 7.5, spec overlays.md, B34): the state
+	// of the active poll or prediction, fed by the twitch action.
+	a.poll = poll.New()
 	// The widget service (roadmap 7.2, spec overlays.md, B19 to B28):
 	// it runs the P1 widgets and fills the state of the runtimes in the
 	// state sync of the overlay server (B4, B20).
 	if a.widgets, err = a.newOverlayWidgets(component(logger, "widgets")); err != nil {
 		return a, err
 	}
+	// The poll widget shows the active vote live (B34).
+	a.poll.OnChange(func(ctx context.Context, st poll.State) {
+		_ = a.widgets.SetPollState(ctx, st)
+	})
 	a.overlay.Service().SetStateProvider(a.widgets.StateForSync)
 	// The media and the tts services (roadmap 7.3, ADR-0020): the sinks
 	// the sound and text_to_speech actions play on, and the providers
@@ -683,6 +710,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		a.sup.Add("overlay", a.overlay),
 		a.sup.Add("widgets", a.widgets),
 		a.sup.Add("obs", a.obs),
+		a.sup.Add("discord", a.discord),
 		a.sup.Add("events", a.events),
 		a.sup.Add("timer", a.timer),
 		a.sup.Add("users", a.userSvc),
@@ -898,6 +926,7 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches,
 		Overlay:   overlayActionOps{app: a},
 		Widgets:   overlayActionOps{app: a},
 		Clips:     overlayActionOps{app: a},
+		Emotes:    a.homeEmotes,
 		Logger:    component(a.logger, "action"),
 	}))
 	add(soundaction.Descriptors(soundaction.Ports{

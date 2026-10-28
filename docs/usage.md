@@ -348,9 +348,13 @@ gibt die fünf Kinds `label`, `goal`, `timer`, `event_list` und `chat`:
 Die Aktionen des Typs `overlay` mit dem Kind `widget` wirken auf diese
 Widgets: `show`/`hide` (Sichtbarkeit), `update` (Zustandsdaten; beim
 `timer` eine neue Dauer oder ein Reset), `add_to_goal` (Betrag, negativ
-erlaubt), `add_to_timer`, `pause_timer` und `add_to_event_list`.
-Operationen der 7.5-Widgets (`add_to_credits`, `play_credits`,
-`spin_wheel`, `damage_stream_boss`) sind ein klarer Fehler.
+erlaubt), `add_to_timer`, `pause_timer` und `add_to_event_list` — und
+auf die 7.5-Widgets: `add_to_credits` (Sektion in `data`, Eintrag als
+`text`), `play_credits`, `spin_wheel` (der User der Ausführung kommt
+mit dem Ereignis) und `damage_stream_boss` (Betrag, negativ erlaubt;
+`data.force` übergeht den Self-Heal). Die 7.5-Widgets sind unter
+[Weitere Widgets (Roadmap 7.5)](#weitere-widgets-roadmap-75)
+dokumentiert.
 
 **Ausfall:** Der Overlay-Server ist nicht-kritisch — sein Ausfall
 beendet den Core nicht, die API bleibt erreichbar.
@@ -461,6 +465,100 @@ greift), kein Stillstand (B55):
 | `save_replay` | — | Speichert den Replay-Buffer; der Pfad kommt mit `obs.replay.saved`. |
 | `set_source` | `source` plus mindestens eines von `visible`, `x`, `y` | Sichtbarkeit und/oder Position einer Quelle der aktuellen Szene (Rest des Transform bleibt, wie er ist). |
 | `set_filter` | `input`, `filter`, `show` | Sichtbarkeit eines Filters einer Quelle. |
+
+## Weitere Widgets (Roadmap 7.5)
+
+Neun weitere Widget-Kinds (spec [overlays.md](spec/overlays.md)
+B29–B37) im selben Dienst wie die 7.2-Widgets — Definition in der
+Profil-Sektion `overlay`, Zustand zum Teil im Profil persistiert
+(`overlay_widget_state`):
+
+- `persistent_timer` (B29): zählt permanent ab und bleibt im Profil
+  (Stream-a-thons). Startdauer `initial`, Anzeigeformat `format`
+  (B17). Zeit ändert sich über `add_to_timer` (negativ erlaubt) und
+  Ereignis-Beträge `event_amounts` (Sekunden pro Ereignistyp, z. B.
+  `{"channel.follow": 60}`; multiplikative Beträge ab Phase 9).
+  Ausgeblendet wird der Timer eingefroren und setzt sichtbar fort;
+  `reset_on_enable` setzt ihn beim erneuten Einblenden auf den
+  Anfangswert, `disable_on_completion` blendet ihn bei Erreichen von 0
+  aus, `allow_adjustment_while_paused` lässt die Ereignis-Beträge auch
+  den eingefrorenen Timer erreichen. Der Core veröffentlicht
+  `overlay.timer.adjusted` (geänderter Betrag) und
+  `overlay.timer.completed`.
+- `stream_boss` (B30): ein Boss mit Health (Stand im Arbeitsspeicher).
+  Schaden über `damage_stream_boss` (negativ = Heilung; `force`
+  übergeht den Self-Heal) oder Ereignis-Beträge `event_amounts`
+  (z. B. `{"channel.follow": 10}`). Schädigt der Boss sich selbst,
+  heilt er mit `self_heal_multiplier` (Default 1). Nach einem Kill
+  würfelt der Core einen neuen Boss aus den letzten Feed-Nutzern; die
+  neue Health ist `base_health` plus `kill_bonus_health` plus
+  Overkill mit `overkill_bonus_multiplier`, und `compound` (Default
+  an) bildet sie zum neuen Maximum. Ereignisse:
+  `overlay.boss.damage`/`overlay.boss.heal` (Details `health`,
+  `amount` — die vorzeichenbehaftete Health-Änderung) und
+  `overlay.boss.new`.
+- `end_credits` (B31): sammelt, solange das Widget sichtbar ist,
+  `chatters`, `new_followers`, `new_subscribers`, `resubscribers`,
+  `gifted_subscriptions`, `all_subscriptions`, `raids`, `twitch_bits`
+  plus eigene `custom_sections`. Gesperrte und gebannte Nutzer
+  verschwinden aus allen Sektionen, der Stream-Start leert sie.
+  `add_to_credits` (Sektion in `data` plus `text`) ergänzt einen
+  Eintrag, `play_credits` startet die Wiedergabe (die Runtime zeigt
+  die Liste; eine Roll-Animation folgt).
+- `leaderboard` (B32): die Top-N einer Statistik (`stat`
+  `watch_time`, `messages` oder `commands`, `count` Default 10) aus
+  den Nutzer-Statistiken; aktualisiert sich bei den Ereignissen, die
+  die Statistik bewegen.
+- `wheel` (B33): Räder mit Outcomes; `equal_probability` (Default)
+  oder je Outcome `probability` (dezimal, Summe 100). Je Outcome
+  `modifier` (ganze Prozentpunkte, Summe 0): trifft die Landung ein
+  Outcome mit negativem Modifier, verschieben sich alle
+  Wahrscheinlichkeiten um die Modifier; mit positivem werden sie
+  zurückgesetzt. `spin_wheel` würfelt serverseitig, die Runtime
+  dreht (4 s) und der Core veröffentlicht `overlay.wheel.spun`
+  (Outcome, User) — das Outcome-Command läuft als Ereignis-Command
+  auf diesem Bus-Ereignis.
+- `poll` (B34): zeigt die aktive Twitch-Umfrage oder -Vorhersage
+  live. Der Core erfasst die Umfragen und Vorhersagen, die die
+  `twitch`-Aktion (Helix) erzeugt, und meldet ihren Status an die
+  sichtbaren Widgets; ein (Re-)Connect der Runtime bekommt den Stand
+  im State-Sync. Es gibt keine Bus-Events dafür — die Katalog-Typen
+  `twitch.poll.*`/`twitch.prediction.*` bleiben verworfen
+  ([twitch-events.md](spec/twitch-events.md) B22).
+- `persistent_emote_effect` (B35): löst einen Emote-Effekt aus, wenn
+  ein Emote-Code `combo_count`-mal (Default 3) innerhalb von
+  `combo_timeframe` Sekunden (Default 10) im Chat kommt
+  (`ignore_duplicates` zählt pro Nachricht einmal). Die Codes löst
+  der Core über den Emote-Katalog auf; unbekannte fallen weg. Effekte
+  `rain`, `burst`, `random`, Dauer `duration`, Anzahl pro Emote
+  `per_emote_shown`, Obergrenze `max_shown` (0 = keine).
+- `game_queue` (B36): eine Queue je Profil, persistiert in
+  `overlay_widget_state` (fester Schlüssel). `join`/`leave`
+  (Phase 8.3, Chatspiele) ändern sie und der Core veröffentlicht
+  `gamequeue.joined`/`gamequeue.left`/`gamequeue.position`
+  (Position ab 1); das Widget zeigt die Liste. Größe `max_size`
+  (Default 10).
+- `discord_voice` (B37): listet die Besetzung eines konfigurierten
+  Discord-Voice-Kanals (`discord-voice-channel`, nur zum Start ⟳).
+  Der Discord-Token kommt **nur** aus der Umgebungsvariablen
+  `STREAMCREW_DISCORD_TOKEN` (kein Config-Key, ADR-0019 §9); ohne
+  Token oder Kanal läuft der Service inaktiv (info-Log). Beim
+  Beitreten und Verlassen eines Nutzers veröffentlicht der Core
+  `discord.voice.joined`/`discord.voice.left` (Name, Kanal) und
+  aktualisiert die sichtbaren Widgets. **Beschränkung (A3):** der
+  Core tritt dem Voice-Kanal nicht bei, daher erkennt er weder
+  Sprechen noch Stummschaltung — die Besetzung ist der Umfang von
+  7.5.
+
+Das Item-Kind `emote_effect` der `overlay`-Aktion (B35) zeigt eine
+Liste von Emotes mit Effekt: `emotes` (Namen, mind. 1, templatebar),
+`effect` (`rain`, `burst` oder `random`, Default `random`),
+`width`/`height`, `perEmoteShown` (Default 1) und `maxShown`
+(0 = keine Obergrenze). Die Namen löst der Core über den
+Emote-Katalog auf; `allowEmoji` lässt unbekannte Namen als Text
+stehen (z. B. Emoji), sonst fallen sie weg — ohne einen auflösbaren
+Emote ist das Item ein klarer Fehler. Die Anzeigedauer ist die
+`duration` des Items.
 
 ## Logs im Stream (read-only)
 

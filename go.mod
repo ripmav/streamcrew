@@ -7,6 +7,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.6
 	connectrpc.com/connect/v2 v2.0.2
 	github.com/alecthomas/kong v1.16.1
+	github.com/bwmarrin/discordgo v0.29.0
 	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20261025003702-835ad0048169
 	github.com/cockroachdb/apd/v3 v3.2.3
 	github.com/coder/websocket v1.8.15
@@ -43,6 +44,7 @@ require (
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/ebitengine/purego v0.11.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jfreymuth/pulse v0.1.3 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
@@ -54,6 +56,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	modernc.org/libc v1.79.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

@@ -10,8 +10,10 @@ import (
 
 	overlayaction "github.com/ripmav/streamcrew/internal/action/overlay"
 	"github.com/ripmav/streamcrew/internal/config"
+	"github.com/ripmav/streamcrew/internal/discord"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
+	"github.com/ripmav/streamcrew/internal/emote"
 	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/overlay"
 	"github.com/ripmav/streamcrew/internal/overlaywidgets"
@@ -58,17 +60,20 @@ func newOverlayServer(ctx context.Context, cfg config.Config, a *App, mediaDir s
 // overlay service.
 func (a *App) newOverlayWidgets(logger *slog.Logger) (*overlaywidgets.Service, error) {
 	return overlaywidgets.New(overlaywidgets.Ports{
-		Overlay:      a.overlay.Service(),
-		Bus:          a.bus,
-		Section:      a.overlaySection,
-		Feed:         a.store,
-		State:        a.store,
-		Templates:    a.templates,
-		Scope:        a.widgetScope,
-		StreamStates: streamStates{set: a.platforms},
-		SessionStats: a.store,
-		Locale:       a.widgetLocale,
-		Logger:       logger,
+		Overlay:          a.overlay.Service(),
+		Bus:              a.bus,
+		Section:          a.overlaySection,
+		Feed:             a.store,
+		State:            a.store,
+		Templates:        a.templates,
+		Scope:            a.widgetScope,
+		StreamStates:     streamStates{set: a.platforms},
+		SessionStats:     a.store,
+		Locale:           a.widgetLocale,
+		TopUsers:         a.store.TopUsers,
+		Emotes:           a.homeEmotes,
+		DiscordOccupants: func(context.Context) []discord.Occupant { return a.discord.Occupants() },
+		Logger:           logger,
 	})
 }
 
@@ -124,6 +129,19 @@ func (a *App) widgetLocale(ctx context.Context) (template.Locale, error) {
 	return a.formatLocale(ctx, l.Locale), nil
 }
 
+// homeEmotes lists the emotes of the home channel for the emote effect
+// (B35); it reads the catalog cache.
+func (a *App) homeEmotes(ctx context.Context) []emote.Emote {
+	if a.emotes == nil {
+		return nil
+	}
+	st, err := twitchStreamAuth{s: a.auth}.Streamer(ctx)
+	if err != nil || st.Login == "" {
+		return nil
+	}
+	return a.emotes.List(st.Login)
+}
+
 // overlayActionOps implements the ports of the overlay action
 // (action/overlay): the overlay service and the widget service, resolved
 // per call, so the action registry can be built before the overlay
@@ -177,10 +195,30 @@ func (o overlayActionOps) AddToEventList(ctx context.Context, widgetID, user, te
 	return o.app.widgets.AddToEventList(ctx, widgetID, user, text)
 }
 
+// AddToCredits implements overlayaction.Widgets.
+func (o overlayActionOps) AddToCredits(ctx context.Context, widgetID, section, text string) error {
+	return o.app.widgets.AddToCredits(ctx, widgetID, section, text)
+}
+
+// PlayCredits implements overlayaction.Widgets.
+func (o overlayActionOps) PlayCredits(ctx context.Context, widgetID string) error {
+	return o.app.widgets.PlayCredits(ctx, widgetID)
+}
+
+// SpinWheel implements overlayaction.Widgets.
+func (o overlayActionOps) SpinWheel(ctx context.Context, widgetID string, u *user.User) error {
+	return o.app.widgets.SpinWheel(ctx, widgetID, u)
+}
+
+// DamageStreamBoss implements overlayaction.Widgets.
+func (o overlayActionOps) DamageStreamBoss(ctx context.Context, widgetID string, amount int64, force bool, u *user.User) error {
+	return o.app.widgets.DamageStreamBoss(ctx, widgetID, amount, force, u)
+}
+
 // LatestClip implements overlayaction.Clips: the latest clip of the
 // channel with the login, via Helix (B13, B16).
 func (o overlayActionOps) LatestClip(ctx context.Context, login string) (overlayaction.Clip, error) {
-	c, _, err := twitchOps(o).client(ctx)
+	c, _, err := twitchOps{app: o.app, poll: o.app.poll}.client(ctx)
 	if err != nil {
 		return overlayaction.Clip{}, err
 	}

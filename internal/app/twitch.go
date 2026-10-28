@@ -15,6 +15,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/dryrun"
 	"github.com/ripmav/streamcrew/internal/emote"
 	"github.com/ripmav/streamcrew/internal/helix"
+	"github.com/ripmav/streamcrew/internal/poll"
 	"github.com/ripmav/streamcrew/internal/twitch"
 )
 
@@ -28,7 +29,8 @@ type twitchStreamAuth struct {
 // Helix implementation switched with the dry-run recording at runtime
 // (roadmap 6.5).
 func (a *App) twitchOps() twitchaction.Ops {
-	return dryrun.NewSwitchOps(twitchOps{app: a}, dryrun.NewOps(component(a.logger, "dryrun")), &a.dryRun)
+	return dryrun.NewSwitchOps(twitchOps{app: a, poll: a.poll},
+		dryrun.NewOps(component(a.logger, "dryrun")), &a.dryRun)
 }
 
 // Streamer implements twitch.Auth.
@@ -94,7 +96,49 @@ func (a twitchStreamAuth) ClientID(ctx context.Context) (string, error) {
 // operation is bound to the streamer account (roadmap 4.4); the account ID
 // and a Helix client are resolved per call from the auth service.
 type twitchOps struct {
-	app *App
+	app  *App
+	poll *poll.Service
+}
+
+// feedPoll sets the state of the active poll (spec overlays.md, B34);
+// without the service (tests) the state is not tracked.
+func (o twitchOps) feedPoll(ctx context.Context, p *helix.Poll, winner string) {
+	if o.poll == nil || p == nil {
+		return
+	}
+	out := make([]poll.Outcome, len(p.Outcomes))
+	for i, r := range p.Outcomes {
+		out[i] = poll.Outcome{Name: r.Choice, Votes: r.Votes}
+	}
+	o.poll.Update(ctx, poll.State{
+		Kind:     poll.KindPoll,
+		Name:     p.Title,
+		Outcomes: out,
+		Ended:    p.Status != helix.PollVoting,
+		Winner:   winner,
+	})
+}
+
+// feedPrediction sets the state of the active prediction (spec
+// overlays.md, B34); without the service (tests) the state is not
+// tracked.
+func (o twitchOps) feedPrediction(ctx context.Context, p *helix.Prediction, winner string) {
+	if o.poll == nil || p == nil {
+		return
+	}
+	out := []poll.Outcome{{Name: p.OutcomeA}, {Name: p.OutcomeB}}
+	for i, r := range p.Predictions {
+		if i < len(out) {
+			out[i].Points = r.TotalPoints
+			out[i].Color = r.Color
+		}
+	}
+	o.poll.Update(ctx, poll.State{
+		Kind:     poll.KindPrediction,
+		Outcomes: out,
+		Ended:    p.Status != helix.PredictionLocked,
+		Winner:   winner,
+	})
 }
 
 // twitchEmotes lists the emotes of the streamer's channel via Helix
@@ -213,6 +257,7 @@ func (o twitchOps) CreatePoll(ctx context.Context, in twitchaction.PollInput) (s
 	if poll == nil {
 		return "", errors.New("the poll was not created")
 	}
+	o.feedPoll(ctx, poll, "")
 	return poll.ID, nil
 }
 
@@ -234,6 +279,7 @@ func (o twitchOps) PollStatus(ctx context.Context, pollID string) (twitchaction.
 		}
 	}
 	ended := poll.Status != helix.PollVoting
+	o.feedPoll(ctx, poll, winner)
 	return twitchaction.PollStatus{Ended: ended, Winner: winner}, nil
 }
 
@@ -254,6 +300,7 @@ func (o twitchOps) CreatePrediction(ctx context.Context, in twitchaction.Predict
 	if pred == nil {
 		return "", errors.New("the prediction was not created")
 	}
+	o.feedPrediction(ctx, pred, "")
 	return pred.ID, nil
 }
 
@@ -274,6 +321,7 @@ func (o twitchOps) PredictionStatus(ctx context.Context, id string) (twitchactio
 			winner = pred.OutcomeB
 		}
 	}
+	o.feedPrediction(ctx, pred, winner)
 	return twitchaction.PredictionStatus{Ended: ended, Winner: winner}, nil
 }
 

@@ -40,10 +40,24 @@ type Prediction struct {
 	// points wagered.
 	TotalBets  int64 `json:"total_bets"`
 	TotalCoins int64 `json:"total_coins"`
+	// Predictions are the wagers per outcome, in the order of
+	// OutcomeA and OutcomeB.
+	Predictions []PredictionOutcome `json:"predictions"`
 	// StartedAt is the start of the prediction; EndedAt its end, nil
 	// while it runs.
 	StartedAt *time.Time `json:"started_at"`
 	EndedAt   *time.Time `json:"ended_at"`
+}
+
+// PredictionOutcome is the wager on one outcome of a prediction
+// (Helix GET /predictions).
+type PredictionOutcome struct {
+	// Color is the color of the outcome.
+	Color string `json:"color"`
+	// UserBets is the number of bets on the outcome.
+	UserBets int64 `json:"user_bets"`
+	// TotalPoints is the channel points wagered on the outcome.
+	TotalPoints int64 `json:"total_points"`
 }
 
 // PredictionInput is the body of CreatePrediction (Helix
