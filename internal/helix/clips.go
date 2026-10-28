@@ -31,8 +31,8 @@ type Clip struct {
 	// CreatedAt is the time the clip was made.
 	CreatedAt time.Time `json:"created_at"`
 	// Duration is the length of the clip in seconds, with fractions;
-	// empty if the API does not name one.
-	Duration string `json:"duration,omitempty"`
+	// 0 if the API does not name one.
+	Duration float64 `json:"duration,omitzero"`
 }
 
 // ListClips lists the latest clips of the channel (Helix

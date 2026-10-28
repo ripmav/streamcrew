@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"time"
 
 	overlayaction "github.com/ripmav/streamcrew/internal/action/overlay"
@@ -199,6 +198,5 @@ func (o overlayActionOps) LatestClip(ctx context.Context, login string) (overlay
 	if clip == nil {
 		return overlayaction.Clip{}, fmt.Errorf("the channel %s has no clip", login)
 	}
-	seconds, _ := strconv.ParseFloat(clip.Duration, 64) // 0 if the API names no duration
-	return overlayaction.Clip{URL: clip.URL, Duration: time.Duration(seconds * float64(time.Second))}, nil
+	return overlayaction.Clip{URL: clip.URL, Duration: time.Duration(clip.Duration * float64(time.Second))}, nil
 }
