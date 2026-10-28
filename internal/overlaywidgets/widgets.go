@@ -1568,7 +1568,7 @@ func (s *Service) SetPollState(ctx context.Context, st poll.State) error {
 
 // StateForPoll returns the active vote for the state sync (B4); nil
 // without one.
-func (s *Service) StateForPoll(ctx context.Context, w settings.OverlayWidget) any {
+func (s *Service) StateForPoll(_ context.Context, _ settings.OverlayWidget) any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.hasPoll {
@@ -1598,7 +1598,7 @@ func (s *Service) refreshDiscordVoice(ctx context.Context) {
 
 // StateForDiscordVoice returns the current occupants for the state sync
 // (B4, B37).
-func (s *Service) StateForDiscordVoice(ctx context.Context, w settings.OverlayWidget) any {
+func (s *Service) StateForDiscordVoice(ctx context.Context, _ settings.OverlayWidget) any {
 	return map[string]any{"occupants": s.ports.DiscordOccupants(ctx)}
 }
 
@@ -1990,7 +1990,7 @@ func (s *Service) persistentTimerConfig(ctx context.Context, w settings.OverlayW
 		c.Format = "MM:SS"
 	}
 	for typ, sec := range c.EventAmounts {
-		c.eventAmounts[string(typ)] = time.Duration(sec) * time.Second
+		c.eventAmounts[typ] = time.Duration(sec) * time.Second
 	}
 	return &c
 }
@@ -2221,7 +2221,7 @@ func (s *Service) streamBossConfig(ctx context.Context, w settings.OverlayWidget
 
 // streamBossState returns the running state of the boss, started with the
 // configured base health if there is none yet.
-func (s *Service) streamBossState(ctx context.Context, w settings.OverlayWidget, cfg *streamBossConfig) *streamBossState {
+func (s *Service) streamBossState(_ context.Context, w settings.OverlayWidget, cfg *streamBossConfig) *streamBossState {
 	s.mu.Lock()
 	st := s.bosses[w.ID]
 	s.mu.Unlock()
@@ -2329,6 +2329,7 @@ func (s *Service) streamBossNew(ctx context.Context, w settings.OverlayWidget, c
 	candidates := s.streamBossCandidates(ctx, dead)
 	next := ""
 	if len(candidates) > 0 {
+		//nolint:gosec // not a cryptographic source, but the random name of the next boss
 		next = candidates[rand.Intn(len(candidates))]
 	}
 	base := cfg.BaseHealth
@@ -2385,7 +2386,7 @@ func (s *Service) pushBoss(ctx context.Context, w settings.OverlayWidget) {
 
 // StateForStreamBoss returns the state of the stream boss for the state
 // sync (B4); nil without a running boss.
-func (s *Service) StateForStreamBoss(ctx context.Context, w settings.OverlayWidget) any {
+func (s *Service) StateForStreamBoss(_ context.Context, w settings.OverlayWidget) any {
 	s.mu.Lock()
 	st := s.bosses[w.ID]
 	s.mu.Unlock()
@@ -2570,7 +2571,7 @@ func (s *Service) pushGameQueue(ctx context.Context) {
 }
 
 // StateForGameQueue returns the queue for the state sync (B4, B36).
-func (s *Service) StateForGameQueue(ctx context.Context, w settings.OverlayWidget) any {
+func (s *Service) StateForGameQueue(ctx context.Context, _ settings.OverlayWidget) any {
 	entries := s.gameQueueEntries(ctx)
 	for i := range entries {
 		entries[i].Position = i + 1
@@ -2625,7 +2626,7 @@ func endCreditsNew(cfg *endCreditsConfig) *endCreditsState {
 
 // endCreditsLoad returns the collected state of the widget, started fresh
 // if there is none (B31).
-func (s *Service) endCreditsLoad(ctx context.Context, widgetID string, cfg *endCreditsConfig) *endCreditsState {
+func (s *Service) endCreditsLoad(_ context.Context, widgetID string, cfg *endCreditsConfig) *endCreditsState {
 	s.mu.Lock()
 	st := s.credits[widgetID]
 	s.mu.Unlock()
@@ -2665,7 +2666,7 @@ func (s *Service) endCreditsCollect(ctx context.Context, env event.Envelope) {
 
 // endCreditsAdd adds the user of the event to the section it belongs to
 // (B31); a ban removes the user from every section.
-func (s *Service) endCreditsAdd(ctx context.Context, typ event.Type, st *endCreditsState, p eventtype.Payload) {
+func (s *Service) endCreditsAdd(_ context.Context, typ event.Type, st *endCreditsState, p eventtype.Payload) {
 	switch typ {
 	case eventtype.ChatMessage:
 		s.endCreditsUser(st, "chatters", p.User)
@@ -2993,7 +2994,7 @@ func (s *Service) emoteImages(ctx context.Context) map[string]string {
 
 // StateForEmoteEffect returns nil: the emote effect has no persistent
 // state to sync, the effect is a one-shot push (B4, B35).
-func (s *Service) StateForEmoteEffect(ctx context.Context, w settings.OverlayWidget) any { return nil }
+func (s *Service) StateForEmoteEffect(_ context.Context, _ settings.OverlayWidget) any { return nil }
 
 // weightedPick draws an index with the weights of probs; a non-positive
 // weight never wins, and a zero total falls back to a uniform draw.
@@ -3005,8 +3006,10 @@ func weightedPick(probs []float64) int {
 		}
 	}
 	if total <= 0 {
+		//nolint:gosec // not a cryptographic source, but the spin draw of the wheel
 		return rand.Intn(len(probs))
 	}
+	//nolint:gosec // not a cryptographic source, but the spin draw of the wheel
 	r := rand.Float64() * total
 	acc := 0.0
 	for i, p := range probs {

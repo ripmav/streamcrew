@@ -95,7 +95,7 @@ func newFakeGateway(t *testing.T) *fakeGateway {
 	// The gateway answer is the socket as a ws:// URL, as Discord
 	// answers it.
 	wsURL := strings.Replace(ws.URL, "http://", "ws://", 1)
-	f.gateway = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	f.gateway = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"url": wsURL})
 	})).URL + "/gateway"
 	return f

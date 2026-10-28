@@ -155,7 +155,7 @@ func (s *Service) onReady(*discordgo.Session, *discordgo.Ready) {
 // onGuildCreate reseeds the occupants of the configured channel from the
 // initial voice states, without publishing events (B37).
 func (s *Service) onGuildCreate(_ *discordgo.Session, g *discordgo.GuildCreate) {
-	for _, vs := range g.Guild.VoiceStates {
+	for _, vs := range g.VoiceStates {
 		s.seed(vs)
 	}
 }

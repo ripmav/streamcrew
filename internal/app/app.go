@@ -671,6 +671,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	// environment only (ADR-0019 §9), inactive without it or the
 	// channel.
 	a.discord = discord.New(discord.Ports{
+		//nolint:forbidigo // the discord token is read from the environment at start (ADR-0019 §9), not core configuration
 		Token:   os.Getenv("STREAMCREW_DISCORD_TOKEN"),
 		Channel: cfg.DiscordVoiceChannel,
 		Bus:     a.bus,
