@@ -158,7 +158,13 @@ func (f *fixture) sectionNow() settings.Overlay {
 
 // scope returns the profile scope for the label render and the goal reset.
 func (f *fixture) scope(context.Context) (*template.Scope, error) {
-	return &template.Scope{Platform: platform.Twitch, Location: time.UTC, ArgDelimiter: " "}, nil
+	f.mu.Lock()
+	loc := f.loc
+	f.mu.Unlock()
+	if loc == nil {
+		loc = time.UTC
+	}
+	return &template.Scope{Platform: platform.Twitch, Location: loc, ArgDelimiter: " "}, nil
 }
 
 // locale returns the locale of the profile.
