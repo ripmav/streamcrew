@@ -83,7 +83,29 @@ func TestDefaultsWhenNeverSaved(t *testing.T) {
 
 	o, err := settings.Load(t.Context(), svc, settings.DefaultOverlay())
 	require.NoError(t, err)
-	assert.Equal(t, settings.Overlay{Endpoints: []settings.OverlayEndpoint{{ID: "default", Name: "Default"}}}, o, "B2")
+	assert.Equal(t, settings.Overlay{}, o, "B2: the default endpoint exists without an entry")
+}
+
+// TestOverlayDefaultRoundTripCoversB2: the overlay defaults pass their own
+// validation, and a widget added to the defaults saves and loads back.
+func TestOverlayDefaultRoundTripCoversB2(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc, _ := newService(t)
+	o := settings.DefaultOverlay()
+	require.NoError(t, o.Validate())
+	o.Widgets = append(o.Widgets, settings.OverlayWidget{
+		ID:       "w1",
+		Kind:     "label",
+		Name:     "Label",
+		Position: settings.Position{Model: settings.PositionSimple, Point: "top"},
+	})
+	require.NoError(t, settings.Save(ctx, svc, o))
+	got, err := settings.Load(ctx, svc, settings.DefaultOverlay())
+	require.NoError(t, err)
+	require.NoError(t, got.Validate())
+	assert.Empty(t, got.Endpoints)
+	assert.Equal(t, o.Widgets, got.Widgets)
 }
 
 func TestSaveAndLoad(t *testing.T) {

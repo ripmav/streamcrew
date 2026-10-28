@@ -783,12 +783,11 @@ var KnownWidgetKinds = []string{
 	"wheel", "poll", "persistent_emote_effect", "game_queue", "discord_voice",
 }
 
-// DefaultOverlay returns the defaults of B2 and B19: the default
-// endpoint and no widgets.
+// DefaultOverlay returns the defaults of B2 and B19: no endpoints
+// entries (the default endpoint exists without an entry) and no
+// widgets.
 func DefaultOverlay() Overlay {
-	return Overlay{
-		Endpoints: []OverlayEndpoint{{ID: DefaultEndpointID, Name: "Default"}},
-	}
+	return Overlay{}
 }
 
 // DocType implements polydoc.Document.
