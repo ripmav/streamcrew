@@ -5,6 +5,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ripmav/streamcrew/internal/capability"
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/media"
 	"github.com/ripmav/streamcrew/internal/netguard"
@@ -66,6 +68,32 @@ func (b ttsBrowser) Speak(ctx context.Context, s ttspkg.Speech) (<-chan struct{}
 		Rate:   s.Rate,
 		Pitch:  s.Pitch,
 	})
+}
+
+// mediaSinks resolves the media service of the core at the call
+// (Review 345-1): the sound and text_to_speech actions are wired before
+// the service is built, and a direct value would hold a nil *media.Service
+// in the port interface, which panics on the call instead of an error.
+type mediaSinks struct{ a *App }
+
+// Play implements the sinks port of the media actions.
+func (m mediaSinks) Play(ctx context.Context, name, file string, volume float64, rights capability.Source) (<-chan struct{}, error) {
+	if m.a.media == nil {
+		return nil, errors.New("media: the media service is not built")
+	}
+	return m.a.media.Play(ctx, name, file, volume, rights)
+}
+
+// ttsService resolves the tts service of the core at the call
+// (Review 345-1); see mediaSinks.
+type ttsService struct{ a *App }
+
+// Generate implements the tts port of the text_to_speech action.
+func (t ttsService) Generate(ctx context.Context, provider ttspkg.Name, s ttspkg.Speech) (string, error) {
+	if t.a.tts == nil {
+		return "", errors.New("tts: the tts service is not built")
+	}
+	return t.a.tts.Generate(ctx, provider, s)
 }
 
 // piperRun runs the piper process of the tts package (B41): the text

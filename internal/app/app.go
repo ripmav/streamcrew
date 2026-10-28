@@ -879,16 +879,16 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches,
 	}))
 	add(soundaction.Descriptors(soundaction.Ports{
 		Media:       mediaFiles{a: a},
-		Sinks:       a.media,
+		Sinks:       mediaSinks{a: a},
 		Rights:      a.rights,
 		DefaultSink: a.cfg.AudioSink,
 		Logger:      component(a.logger, "action"),
 	}))
 	add(ttsaction.Descriptors(ttsaction.Ports{
 		Templates:       a.templates,
-		TTS:             a.tts,
+		TTS:             ttsService{a: a},
 		Browser:         ttsBrowser{a: a},
-		Sinks:           a.media,
+		Sinks:           mediaSinks{a: a},
 		Rights:          a.rights,
 		DefaultSink:     a.cfg.AudioSink,
 		DefaultProvider: a.cfg.TTSProvider,
