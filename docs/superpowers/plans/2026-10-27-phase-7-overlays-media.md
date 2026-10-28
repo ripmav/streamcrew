@@ -45,7 +45,7 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
                               ▼                     audio: overlay-Item ◄── media.Sink ──► │
                         OBS Browserquelle            (local: Build-Tag, ADR-0020)          │
                                                                                            │
-                              obs.Service (goobs, obs-websocket v5) ──► Bus (obs.*-Events) │
+                            obs.Service (eigener v5-Client, coder/websocket) ──► Bus (obs.*-Events) │
 ```
 
 - **Eigener Overlay-Server** (ADR-0019): eigener `http.Server` neben dem API-Server, eigener
@@ -67,7 +67,7 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
   `local` (Build-Tag `localaudio`, `ebitengine/oto/v3`, Geräteauswahl); `agent` ist vorbereitet
   (Port), die Umsetzung mit Phase 9.6. TTS-Provider: `browser` (Web Speech API im Overlay,
   Default), `google`, `azure`, `piper` (externer Prozess).
-- **OBS** (7.4): `internal/obs` über `github.com/andreykaipov/goobs` (obs-websocket v5.7);
+- **OBS** (7.4): `internal/obs` mit eigenem obs-websocket-v5-Client auf `github.com/coder/websocket` (Code-ADR-0015; die `goobs`-Kandidatin fällt an der Lizenz-Allowlist für `hashicorp/logutils` (MPL-2.0, Code-ADR-0001) weg);
   Szenen, Quellen, Filter, Stream/Aufnahme/Replay; OBS-Events auf den Bus.
 - **Sicherheit**: Overlay-Endpunkte nur lesend, optionaler URL-Token (`overlay-token`);
   eigene HTML-Items in sandboxed iframes ohne Skripte (Plan §6.15); Medien nur unter
@@ -141,7 +141,7 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
 
 ### 3.4 7.4 OBS Studio — `feat/phase-7.4-obs`
 
-- [x] `internal/obs` auf `goobs` v1.11.1 (obs-websocket v5.7): Verbindung (Start +
+- [x] `internal/obs` mit eigenem obs-websocket-v5-Client auf `coder/websocket` (Code-ADR-0015; `goobs` fällt an der Lizenz-Allowlist für `logutils`/MPL-2.0 weg): Verbindung (Start +
   Reconnect-Loop alle 5 s nach dem ersten Erfolg, kein Retry vor dem ersten Erfolg),
   Szenen, Quellen, Filter, Stream, Aufnahme, Replay-Buffer
 - [x] OBS-Events auf den Bus: `obs.stream.*`, `obs.recording.*`, `obs.replay.saved`,
@@ -179,7 +179,7 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
 - Runtime: Bundle-Regenerierungs-Check in der CI (Code-ADR-0016), dazu ein Smoke-Test, dass
   das eingebettete Bündel die erwarteten Markierungen enthält (kein Headless-Browser in der CI).
 - Medien: Fake-Sinks; TTS-Provider gegen httptest-Fakes (Google/Azure), Piper-Prozess-Fake.
-- OBS: Fake-Server, der die obs-websocket-v5-Identifizierung spricht (goobs-Client dagegen).
+- OBS: Fake-Server, der die obs-websocket-v5-Identifizierung spricht (eigener v5-Client dagegen).
 - Jedes Testfile bekommt eine Test-Matrix in `docs/tests/`.
 
 ## 5. Risiken und Grenzen

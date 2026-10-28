@@ -3,11 +3,9 @@
 package obs
 
 import (
-	"bufio"
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net"
 	"net/http"
 	"strconv"
@@ -15,8 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andreykaipov/goobs/api/closecodes"
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -24,22 +21,13 @@ import (
 	"github.com/ripmav/streamcrew/internal/event"
 )
 
-// wire is the obs-websocket v5 message on the connection: the opcode in
-// op and the data of the opcode in d.
-type wire struct {
-	Op int             `json:"op"`
-	D  json.RawMessage `json:"d"`
-}
-
 // fakeObs speaks obs-websocket v5 for the tests: the
 // Hello/Identify/Identified negotiation, the requests of the service and
-// the events of the connection. It is a gorilla server, because it
-// emulates the protocol goobs speaks, not streamcrew's own
-// connections (Code-ADR-0015 covers the latter).
+// the events of the connection.
 type fakeObs struct {
 	ln       net.Listener
+	srv      *http.Server
 	password string
-	upgrader websocket.Upgrader
 
 	mu        sync.Mutex
 	wmu       sync.Mutex // serializes the writes of the fake
@@ -50,7 +38,7 @@ type fakeObs struct {
 	record    bool
 	items     map[int]string // scene item ID -> source name
 	itemID    int
-	transform json.RawMessage
+	transform jsontext.Value
 	ws        *websocket.Conn
 }
 
@@ -58,26 +46,18 @@ type fakeObs struct {
 // authentication is checked.
 func newFakeObs(t *testing.T, password string) *fakeObs {
 	t.Helper()
-	var lc net.ListenConfig
-	ln, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
-	require.NoError(t, err)
 	f := &fakeObs{
-		ln:       ln,
 		password: password,
 		scene:    "Scene",
 		items:    map[int]string{},
-		upgrader: websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }},
 	}
-	go func() {
-		for {
-			raw, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			go f.serve(raw)
-		}
-	}()
-	t.Cleanup(func() { _ = ln.Close() })
+	f.srv = &http.Server{ReadHeaderTimeout: time.Second, Handler: http.HandlerFunc(f.handle)}
+	var lc net.ListenConfig
+	ln, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	f.ln = ln
+	go func() { _ = f.srv.Serve(ln) }()
+	t.Cleanup(func() { _ = f.srv.Close() })
 	return f
 }
 
@@ -101,7 +81,7 @@ func (f *fakeObs) drop() {
 	ws := f.ws
 	f.mu.Unlock()
 	if ws != nil {
-		_ = ws.Close()
+		_ = ws.Close(websocket.StatusInternalError, "drop")
 	}
 }
 
@@ -124,10 +104,10 @@ func (f *fakeObs) streamState(active bool) {
 
 // lastTransform returns the requestData of the last
 // SetSceneItemTransform of the connection.
-func (f *fakeObs) lastTransform() json.RawMessage {
+func (f *fakeObs) lastTransform() jsontext.Value {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append(json.RawMessage(nil), f.transform...)
+	return append(jsontext.Value(nil), f.transform...)
 }
 
 // sendEvent pushes the OBS event of the type with the data to the client.
@@ -139,52 +119,55 @@ func (f *fakeObs) sendEvent(typ string, data any) {
 		return
 	}
 	ev := map[string]any{"eventType": typ, "eventIntent": 0, "eventData": data}
-	_ = f.write(ws, wire{Op: 5, D: mustJSON(ev)})
+	_ = f.write(context.Background(), ws, wire{Op: opEvent, D: mustMarshal(ev)})
 }
 
-// serve runs one connection: the negotiation, then the requests and the
-// responses.
-func (f *fakeObs) serve(raw net.Conn) {
-	req, err := http.ReadRequest(bufio.NewReader(raw))
+// handle runs one connection: the negotiation, then the requests and
+// the responses.
+func (f *fakeObs) handle(w http.ResponseWriter, r *http.Request) {
+	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return
 	}
-	conn, err := f.upgrader.Upgrade(&hijackWriter{conn: raw}, req, nil)
-	if err != nil {
+	if !f.negotiate(r.Context(), conn) {
 		return
 	}
-	defer conn.Close()
-	if !f.negotiate(conn) {
-		return
-	}
-	f.serveConn(conn)
+	defer conn.Close(websocket.StatusNormalClosure, "bye")
+	f.serveConn(r.Context(), conn)
 }
 
 // negotiate runs the Hello/Identify/Identified exchange of obs-websocket
 // v5; a wrong authentication closes the connection with the
 // AuthenticationFailed code, so that the client fails at once.
-func (f *fakeObs) negotiate(conn *websocket.Conn) bool {
+func (f *fakeObs) negotiate(ctx context.Context, conn *websocket.Conn) bool {
 	salt, challenge := "test-salt", "test-challenge"
-	_ = f.write(conn, wire{Op: 0, D: mustJSON(map[string]any{
+	_ = f.write(ctx, conn, wire{Op: opHello, D: mustMarshal(map[string]any{
 		"obsWebSocketVersion": "v5.7",
 		"rpcVersion":          1,
 		"authentication":      map[string]string{"challenge": challenge, "salt": salt},
 	})})
-	var msg wire
-	if err := conn.ReadJSON(&msg); err != nil || msg.Op != 1 {
+	msg, err := f.read(ctx, conn)
+	if err != nil || msg.Op != opIdentify {
 		return false
 	}
 	var identify struct {
-		Authentication string `json:"authentication"`
+		Authentication *string `json:"authentication"`
 	}
-	if err := json.Unmarshal(msg.D, &identify); err != nil ||
-		identify.Authentication != authSecret(f.password, salt, challenge) {
-		_ = conn.WriteControl(websocket.CloseMessage,
-			websocket.FormatCloseMessage(int(closecodes.AuthenticationFailed), ""),
-			time.Now().Add(time.Second))
+	if err := json.Unmarshal(msg.D, &identify); err != nil {
 		return false
 	}
-	_ = f.write(conn, wire{Op: 2, D: json.RawMessage(`{"negotiatedRpcVersion":1}`)})
+	var want, got string
+	if f.password != "" {
+		want = authSecret(f.password, salt, challenge)
+	}
+	if identify.Authentication != nil {
+		got = *identify.Authentication
+	}
+	if got != want {
+		_ = conn.Close(authFailedClose, "")
+		return false
+	}
+	_ = f.write(ctx, conn, wire{Op: opIdentified, D: jsontext.Value(`{"negotiatedRpcVersion":1}`)})
 	f.mu.Lock()
 	f.conns++
 	f.ws = conn
@@ -193,25 +176,38 @@ func (f *fakeObs) negotiate(conn *websocket.Conn) bool {
 }
 
 // serveConn answers the requests of the connection until it closes.
-func (f *fakeObs) serveConn(conn *websocket.Conn) {
+func (f *fakeObs) serveConn(ctx context.Context, conn *websocket.Conn) {
 	for {
-		var msg wire
-		if err := conn.ReadJSON(&msg); err != nil {
+		msg, err := f.read(ctx, conn)
+		if err != nil {
 			return
 		}
-		if msg.Op != 6 {
+		if msg.Op != opRequest {
 			continue
 		}
-		f.answer(conn, msg.D)
+		f.answer(ctx, conn, msg.D)
 	}
 }
 
+// read receives one message of the connection.
+func (f *fakeObs) read(ctx context.Context, conn *websocket.Conn) (*wire, error) {
+	_, data, err := conn.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var msg wire
+	if err := json.Unmarshal(data, &msg); err != nil {
+		return nil, err
+	}
+	return &msg, nil
+}
+
 // answer replies to the request with the response of the fake state.
-func (f *fakeObs) answer(conn *websocket.Conn, raw json.RawMessage) {
+func (f *fakeObs) answer(ctx context.Context, conn *websocket.Conn, raw jsontext.Value) {
 	var req struct {
-		Type string          `json:"requestType"`
-		ID   string          `json:"requestId"`
-		Data json.RawMessage `json:"requestData"`
+		Type string         `json:"requestType"`
+		ID   string         `json:"requestId"`
+		Data jsontext.Value `json:"requestData"`
 	}
 	if err := json.Unmarshal(raw, &req); err != nil {
 		return
@@ -219,31 +215,31 @@ func (f *fakeObs) answer(conn *websocket.Conn, raw json.RawMessage) {
 	f.mu.Lock()
 	f.requests = append(f.requests, req.Type)
 	if req.Type == "SetSceneItemTransform" {
-		f.transform = append(json.RawMessage(nil), req.Data...)
+		f.transform = append(jsontext.Value(nil), req.Data...)
 	}
 	f.mu.Unlock()
 
-	data := json.RawMessage(`{}`)
+	data := jsontext.Value(`{}`)
 	switch req.Type {
 	case "GetStreamStatus":
-		data = mustJSON(f.streamResponse())
+		data = mustMarshal(f.streamResponse())
 	case "GetRecordStatus":
-		data = mustJSON(f.recordResponse())
+		data = mustMarshal(f.recordResponse())
 	case "GetCurrentProgramScene":
-		data = mustJSON(map[string]any{"sceneName": f.sceneLocked()})
+		data = mustMarshal(map[string]any{"sceneName": f.sceneLocked()})
 	case "GetSceneItemList":
 		data = f.itemList()
 	case "GetSceneItemSource":
 		data = f.itemSource(req.Data)
 	case "GetSceneItemTransform":
-		data = mustJSON(map[string]any{"sceneItemTransform": map[string]any{
+		data = mustMarshal(map[string]any{"sceneItemTransform": map[string]any{
 			"positionX": 100.0, "positionY": 200.0,
 		}})
 	}
-	_ = f.write(conn, wire{Op: 7, D: mustJSON(map[string]any{
+	_ = f.write(ctx, conn, wire{Op: opResponse, D: mustMarshal(map[string]any{
 		"requestType":   req.Type,
 		"requestId":     req.ID,
-		"requestStatus": map[string]any{"code": 100, "result": true},
+		"requestStatus": map[string]any{"code": statusSuccess, "result": true},
 		"responseData":  data,
 	})})
 }
@@ -266,27 +262,27 @@ func (f *fakeObs) recordResponse() map[string]any {
 	return map[string]any{"outputActive": f.record}
 }
 
-func (f *fakeObs) itemList() json.RawMessage {
+func (f *fakeObs) itemList() jsontext.Value {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	items := []map[string]any{}
 	for id, name := range f.items {
 		items = append(items, map[string]any{"sceneItemId": id, "sourceName": name})
 	}
-	return mustJSON(map[string]any{"sceneItems": items})
+	return mustMarshal(map[string]any{"sceneItems": items})
 }
 
-func (f *fakeObs) itemSource(raw json.RawMessage) json.RawMessage {
+func (f *fakeObs) itemSource(raw jsontext.Value) jsontext.Value {
 	var d struct {
 		SceneItemID int `json:"sceneItemId"`
 	}
 	if err := json.Unmarshal(raw, &d); err != nil {
-		return json.RawMessage(`{}`)
+		return jsontext.Value(`{}`)
 	}
 	f.mu.Lock()
 	name := f.items[d.SceneItemID]
 	f.mu.Unlock()
-	return mustJSON(map[string]any{"sourceName": name})
+	return mustMarshal(map[string]any{"sourceName": name})
 }
 
 // requestsSeen returns the request names of the connection, in order.
@@ -297,57 +293,14 @@ func (f *fakeObs) requestsSeen() []string {
 }
 
 // write serializes the writes of the fake to the connection.
-func (f *fakeObs) write(conn *websocket.Conn, v any) error {
+func (f *fakeObs) write(ctx context.Context, conn *websocket.Conn, v wire) error {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
 	f.wmu.Lock()
 	defer f.wmu.Unlock()
-	return conn.WriteJSON(v)
-}
-
-// hijackWriter is a minimal http.ResponseWriter over a raw connection that
-// implements http.Hijacker, so that the websocket upgrader can take over
-// the connection.
-type hijackWriter struct {
-	conn   net.Conn
-	header http.Header
-}
-
-// Header implements http.ResponseWriter.
-func (h *hijackWriter) Header() http.Header {
-	if h.header == nil {
-		h.header = http.Header{}
-	}
-	return h.header
-}
-
-// Write implements http.ResponseWriter.
-func (h *hijackWriter) Write([]byte) (int, error) { return 0, nil }
-
-// WriteHeader implements http.ResponseWriter.
-func (h *hijackWriter) WriteHeader(int) {}
-
-// Flush implements http.Flusher.
-func (h *hijackWriter) Flush() {}
-
-// Hijack implements http.Hijacker.
-func (h *hijackWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	return h.conn, bufio.NewReadWriter(bufio.NewReader(h.conn), bufio.NewWriter(h.conn)), nil
-}
-
-// authSecret is the authentication string of obs-websocket v5 for the
-// password with the salt and the challenge (protocol.md, Identify).
-func authSecret(password, salt, challenge string) string {
-	hash := sha256.Sum256([]byte(password + salt))
-	secret := base64.StdEncoding.EncodeToString(hash[:])
-	auth := sha256.Sum256([]byte(secret + challenge))
-	return base64.StdEncoding.EncodeToString(auth[:])
-}
-
-func mustJSON(v any) json.RawMessage {
-	b, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	return b
+	return conn.Write(ctx, websocket.MessageText, data)
 }
 
 // waitUntil polls cond until it holds or the deadline runs out.

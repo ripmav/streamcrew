@@ -419,7 +419,8 @@ CI nicht (kein Audiogerät auf den Runnern).
 ## OBS Studio (Roadmap 7.4)
 
 Der Core verbindet sich mit OBS Studio über dessen obs-websocket-v5-
-Schnittstelle (`goobs`; spec [overlays.md](spec/overlays.md) B42–B45):
+Schnittstelle (eigener Client auf `coder/websocket`, Code-ADR-0015;
+[overlays.md](spec/overlays.md) B42–B45):
 Er liest den Zustand und die Ereignisse der Verbindung und führt die
 Operationen der `streaming_software`-Aktion darauf aus.
 

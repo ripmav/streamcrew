@@ -1,30 +1,15 @@
 // SPDX-License-Identifier: MIT
 
-// Package obs is the OBS Studio connection of the core (roadmap 7.4,
-// spec overlays.md, B42 to B45): the obs-websocket v5 client (goobs),
-// the events of the connection on the bus (B44) and the operations the
-// streaming_software action runs (B42, B55). The connection starts with
-// the core; without an OBS server at the start it is a clear, logged
-// fact, not an error of the core, and it is given up (no retries). A
-// dropped connection reconnects every five seconds (B43).
 package obs
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
-	"strconv"
 	"sync"
 	"time"
-
-	"github.com/andreykaipov/goobs"
-	"github.com/andreykaipov/goobs/api/events"
-	"github.com/andreykaipov/goobs/api/requests/filters"
-	"github.com/andreykaipov/goobs/api/requests/sceneitems"
-	"github.com/andreykaipov/goobs/api/requests/scenes"
-	"github.com/gorilla/websocket"
 
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/event"
@@ -70,7 +55,7 @@ type Service struct {
 	ports Ports
 
 	mu   sync.Mutex
-	conn *goobs.Client
+	conn *client
 	// The state of the connection for the "once per change" of B44:
 	// the last seen stream and record state and the last program
 	// scene, seeded at every (re)connection.
@@ -110,10 +95,6 @@ func (s *Service) Run(ctx context.Context) error {
 	defer s.setClient(nil)
 	// The loop body runs one session; a dropped connection reconnects
 	// after the interval (B43), a failing reconnect tries again.
-	// shortcut: a drop in the middle of an in-flight request stalls the
-	// reconnection until the response timeout of ten seconds, because
-	// goobs holds its client mutex until the timer fires — the next try
-	// succeeds, so the stall is bounded, not lost.
 	for s.session(ctx, client) {
 		select {
 		case <-ctx.Done():
@@ -144,49 +125,38 @@ func (s *Service) giveUp(ctx context.Context, err error) {
 		"host", s.ports.Host, "port", s.ports.Port, "error", err)
 }
 
-// connect dials and identifies against the OBS server (B43); the
-// response timeout of the client keeps a dead connection from holding a
-// request for longer than ten seconds.
-func (s *Service) connect(_ context.Context) (*goobs.Client, error) {
-	endpoint := net.JoinHostPort(s.ports.Host, strconv.Itoa(s.ports.Port))
-	client, err := goobs.New(endpoint,
-		goobs.WithPassword(s.ports.Password),
-		goobs.WithResponseTimeoutDuration(10*time.Second),
-		goobs.WithDialer(&websocket.Dialer{NetDialContext: s.ports.Dialer.DialContext}),
-		goobs.WithLogger(slogLogger{logger: s.ports.Logger}),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("obs %s: %w", endpoint, err)
-	}
-	return client, nil
+// connect dials and identifies against the OBS server (B43).
+func (s *Service) connect(ctx context.Context) (*client, error) {
+	return dial(ctx, s.ports.Host, s.ports.Port, s.ports.Password, s.ports.Dialer, s.ports.Logger)
 }
 
 // ready seeds the connection state with the current OBS state (B44:
 // "once per change" needs the starting point, and a reconnect must not
 // repeat the state it inherits); it reports whether the seed worked and
-// disconnects the client if it did not.
-func (s *Service) ready(ctx context.Context, client *goobs.Client) bool {
-	err := s.seed(ctx, client)
+// closes the connection if it did not.
+func (s *Service) ready(ctx context.Context, c *client) bool {
+	err := s.seed(ctx, c)
 	if err != nil {
 		s.ports.Logger.WarnContext(ctx, "the OBS state is unavailable", "error", err)
-		_ = client.Disconnect()
+		c.close()
 		return false
 	}
 	return true
 }
 
 // seed reads the current stream, record and scene state of OBS (B44).
-func (s *Service) seed(_ context.Context, client *goobs.Client) error {
-	stream, err := client.Stream.GetStreamStatus()
-	if err != nil {
+func (s *Service) seed(ctx context.Context, c *client) error {
+	var stream, record struct {
+		OutputActive bool `json:"outputActive"`
+	}
+	if err := c.request(ctx, "GetStreamStatus", nil, &stream); err != nil {
 		return fmt.Errorf("the stream status: %w", err)
 	}
-	record, err := client.Record.GetRecordStatus()
-	if err != nil {
+	if err := c.request(ctx, "GetRecordStatus", nil, &record); err != nil {
 		return fmt.Errorf("the record status: %w", err)
 	}
-	scene, err := client.Scenes.GetCurrentProgramScene()
-	if err != nil {
+	var scene sceneChangedEvent
+	if err := c.request(ctx, "GetCurrentProgramScene", nil, &scene); err != nil {
 		return fmt.Errorf("the current scene: %w", err)
 	}
 	s.mu.Lock()
@@ -199,55 +169,53 @@ func (s *Service) seed(_ context.Context, client *goobs.Client) error {
 
 // setClient sets or clears the active connection; the operations of
 // the action use it (B55).
-func (s *Service) setClient(client *goobs.Client) {
+func (s *Service) setClient(c *client) {
 	s.mu.Lock()
-	s.conn = client
+	s.conn = c
 	s.mu.Unlock()
 }
 
-// session runs the connection of client until it drops or ctx ends;
-// it reports whether the connection dropped, so that Run reconnects
-// (B43).
-func (s *Service) session(ctx context.Context, client *goobs.Client) bool {
-	done := make(chan struct{})
+// session runs the connection of client until it ends; it reports
+// whether the connection dropped, so that Run reconnects (B43). The
+// consumer of the events runs until the reader of the connection ends.
+func (s *Service) session(ctx context.Context, c *client) bool {
 	go func() {
-		// Listen returns when the client closes its events, that is when
-		// the connection dropped.
-		client.Listen(func(e any) { s.handleEvent(ctx, client, e) })
-		close(done)
+		for ev := range c.events {
+			s.handleEvent(ctx, c, ev)
+		}
 	}()
+	// The reader ends when the connection drops or the context ends
+	// (its read fails on both).
+	<-c.done
 	select {
 	case <-ctx.Done():
-		// The core is shutting down; the process exit closes the
-		// connection. shortcut: the client's Disconnect is not safe to
-		// call while the connection delivers events (goobs closes its
-		// opcode channel under the reader's send), and the remaining
-		// library goroutines are cleaned up by the exit.
+		// The core is shutting down; the process exit ends the
+		// connection.
 		return false
-	case <-done:
-		select {
-		case <-ctx.Done():
-			return false
-		default:
-			return true
-		}
+	default:
+		c.close()
+		return true
 	}
 }
 
 // handleEvent runs one OBS event of the connection as a bus event
 // (B44), regardless of who caused the change.
-func (s *Service) handleEvent(ctx context.Context, client *goobs.Client, e any) {
-	switch ev := e.(type) {
-	case *events.StreamStateChanged:
-		s.stateChanged(ctx, ev.OutputState, "streaming", &s.streamActive, func(active bool) {
+func (s *Service) handleEvent(ctx context.Context, c *client, ev *eventMsg) {
+	switch ev.Type {
+	case "StreamStateChanged":
+		var d streamStateEvent
+		_ = json.Unmarshal(ev.Data, &d)
+		s.stateChanged(ctx, d.OutputState, "streaming", &s.streamActive, func(active bool) {
 			typ := eventtype.ObsStreamStopped
 			if active {
 				typ = eventtype.ObsStreamStarted
 			}
 			s.publish(ctx, typ, eventtype.Payload{})
 		})
-	case *events.RecordStateChanged:
-		s.stateChanged(ctx, ev.OutputState, "recording", &s.recordActive, func(active bool) {
+	case "RecordStateChanged":
+		var d recordStateEvent
+		_ = json.Unmarshal(ev.Data, &d)
+		s.stateChanged(ctx, d.OutputState, "recording", &s.recordActive, func(active bool) {
 			typ := eventtype.ObsRecordingStopped
 			if active {
 				typ = eventtype.ObsRecordingStarted
@@ -256,38 +224,48 @@ func (s *Service) handleEvent(ctx context.Context, client *goobs.Client, e any) 
 			// The path is the value of obs.recording.stopped (B44); the
 			// start carries none.
 			if !active {
-				p.Details.ObsFile = &eventtype.ObsFile{Path: ev.OutputPath}
+				p.Details.ObsFile = &eventtype.ObsFile{Path: d.OutputPath}
 			}
 			s.publish(ctx, typ, p)
 		})
-	case *events.ReplayBufferSaved:
+	case "ReplayBufferSaved":
+		var d replaySavedEvent
+		_ = json.Unmarshal(ev.Data, &d)
 		s.publish(ctx, eventtype.ObsReplaySaved, eventtype.Payload{
-			Details: eventtype.Details{ObsFile: &eventtype.ObsFile{Path: ev.SavedReplayPath}},
+			Details: eventtype.Details{ObsFile: &eventtype.ObsFile{Path: d.SavedReplayPath}},
 		})
-	case *events.CurrentProgramSceneChanged:
+	case "CurrentProgramSceneChanged":
+		var d sceneChangedEvent
+		_ = json.Unmarshal(ev.Data, &d)
 		s.mu.Lock()
-		previous, current := s.lastScene, ev.SceneName
+		previous, current := s.lastScene, d.SceneName
 		s.lastScene = current
 		s.mu.Unlock()
 		s.publish(ctx, eventtype.ObsSceneChanged, eventtype.Payload{
 			Details: eventtype.Details{ObsScene: &eventtype.ObsScene{Scene: current, Previous: previous}},
 		})
-	case *events.SceneTransitionStarted:
-		s.publish(ctx, eventtype.ObsTransitionStarted, eventtype.Payload{
-			Details: eventtype.Details{ObsTransition: &eventtype.ObsTransition{Name: ev.TransitionName}},
+	case "SceneTransitionStarted", "SceneTransitionEnded":
+		var d transitionEvent
+		_ = json.Unmarshal(ev.Data, &d)
+		typ := eventtype.ObsTransitionStarted
+		if ev.Type == "SceneTransitionEnded" {
+			typ = eventtype.ObsTransitionEnded
+		}
+		s.publish(ctx, typ, eventtype.Payload{
+			Details: eventtype.Details{ObsTransition: &eventtype.ObsTransition{Name: d.TransitionName}},
 		})
-	case *events.SceneTransitionEnded:
-		s.publish(ctx, eventtype.ObsTransitionEnded, eventtype.Payload{
-			Details: eventtype.Details{ObsTransition: &eventtype.ObsTransition{Name: ev.TransitionName}},
-		})
-	case *events.SceneItemEnableStateChanged:
-		s.sourceVisibility(ctx, client, ev)
-	case *events.SourceFilterEnableStateChanged:
+	case "SceneItemEnableStateChanged":
+		var d itemEnabledEvent
+		_ = json.Unmarshal(ev.Data, &d)
+		s.sourceVisibility(ctx, c, d)
+	case "SourceFilterEnableStateChanged":
+		var d filterEnabledEvent
+		_ = json.Unmarshal(ev.Data, &d)
 		s.publish(ctx, eventtype.ObsFilterVisibilityChanged, eventtype.Payload{
 			Details: eventtype.Details{ObsFilter: &eventtype.ObsFilter{
-				Source:  ev.SourceName,
-				Filter:  ev.FilterName,
-				Visible: ev.FilterEnabled,
+				Source:  d.SourceName,
+				Filter:  d.FilterName,
+				Visible: d.FilterEnabled,
 			}},
 		})
 	}
@@ -318,18 +296,22 @@ func (s *Service) stateChanged(_ context.Context, state, activeState string, act
 // event names the scene item, not the source, so the source name comes
 // from the item; without the item (it left in between) the event is
 // dropped with a debug log.
-func (s *Service) sourceVisibility(ctx context.Context, client *goobs.Client, ev *events.SceneItemEnableStateChanged) {
-	res, err := client.SceneItems.GetSceneItemSource(sceneitems.NewGetSceneItemSourceParams().
-		WithSceneName(ev.SceneName).WithSceneItemId(ev.SceneItemId))
-	if err != nil {
+func (s *Service) sourceVisibility(ctx context.Context, c *client, ev itemEnabledEvent) {
+	var d struct {
+		SourceName string `json:"sourceName"`
+	}
+	if err := c.request(ctx, "GetSceneItemSource", map[string]any{
+		"sceneName":   ev.SceneName,
+		"sceneItemId": ev.SceneItemID,
+	}, &d); err != nil {
 		s.ports.Logger.DebugContext(ctx, "the source of the changed scene item is unavailable",
-			"scene", ev.SceneName, "scene_item", ev.SceneItemId, "error", err)
+			"scene", ev.SceneName, "scene_item", ev.SceneItemID, "error", err)
 		return
 	}
 	s.publish(ctx, eventtype.ObsSourceVisibilityChanged, eventtype.Payload{
 		Details: eventtype.Details{ObsSource: &eventtype.ObsSource{
 			Scene:   ev.SceneName,
-			Source:  res.SourceName,
+			Source:  d.SourceName,
 			Visible: ev.SceneItemEnabled,
 		}},
 	})
@@ -356,7 +338,7 @@ func (s *Service) Connected() bool {
 }
 
 // client returns the active connection or ErrNotConnected (B55).
-func (s *Service) client() (*goobs.Client, error) {
+func (s *Service) client() (*client, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.conn == nil {
@@ -366,60 +348,60 @@ func (s *Service) client() (*goobs.Client, error) {
 }
 
 // SetScene sets the current program scene to name (B42).
-func (s *Service) SetScene(_ context.Context, name string) error {
-	client, err := s.client()
+func (s *Service) SetScene(ctx context.Context, name string) error {
+	c, err := s.client()
 	if err != nil {
 		return err
 	}
-	if _, err := client.Scenes.SetCurrentProgramScene(scenes.NewSetCurrentProgramSceneParams().WithSceneName(name)); err != nil {
+	if err := c.request(ctx, "SetCurrentProgramScene", map[string]any{"sceneName": name}, nil); err != nil {
 		return fmt.Errorf("obs: the scene %q: %w", name, err)
 	}
 	return nil
 }
 
 // StartStream starts the stream output of OBS (B42).
-func (s *Service) StartStream(_ context.Context) error {
-	client, err := s.client()
+func (s *Service) StartStream(ctx context.Context) error {
+	c, err := s.client()
 	if err != nil {
 		return err
 	}
-	if _, err := client.Stream.StartStream(); err != nil {
+	if err := c.request(ctx, "StartStream", nil, nil); err != nil {
 		return fmt.Errorf("obs: start the stream: %w", err)
 	}
 	return nil
 }
 
 // StopStream stops the stream output of OBS (B42).
-func (s *Service) StopStream(_ context.Context) error {
-	client, err := s.client()
+func (s *Service) StopStream(ctx context.Context) error {
+	c, err := s.client()
 	if err != nil {
 		return err
 	}
-	if _, err := client.Stream.StopStream(); err != nil {
+	if err := c.request(ctx, "StopStream", nil, nil); err != nil {
 		return fmt.Errorf("obs: stop the stream: %w", err)
 	}
 	return nil
 }
 
 // StartRecording starts the record output of OBS (B42).
-func (s *Service) StartRecording(_ context.Context) error {
-	client, err := s.client()
+func (s *Service) StartRecording(ctx context.Context) error {
+	c, err := s.client()
 	if err != nil {
 		return err
 	}
-	if _, err := client.Record.StartRecord(); err != nil {
+	if err := c.request(ctx, "StartRecord", nil, nil); err != nil {
 		return fmt.Errorf("obs: start the recording: %w", err)
 	}
 	return nil
 }
 
 // StopRecording stops the record output of OBS (B42).
-func (s *Service) StopRecording(_ context.Context) error {
-	client, err := s.client()
+func (s *Service) StopRecording(ctx context.Context) error {
+	c, err := s.client()
 	if err != nil {
 		return err
 	}
-	if _, err := client.Record.StopRecord(); err != nil {
+	if err := c.request(ctx, "StopRecord", nil, nil); err != nil {
 		return fmt.Errorf("obs: stop the recording: %w", err)
 	}
 	return nil
@@ -427,12 +409,12 @@ func (s *Service) StopRecording(_ context.Context) error {
 
 // SaveReplay saves the replay buffer of OBS (B42); the path of the
 // saved file arrives with obs.replay.saved (B44).
-func (s *Service) SaveReplay(_ context.Context) error {
-	client, err := s.client()
+func (s *Service) SaveReplay(ctx context.Context) error {
+	c, err := s.client()
 	if err != nil {
 		return err
 	}
-	if _, err := client.Outputs.SaveReplayBuffer(); err != nil {
+	if err := c.request(ctx, "SaveReplayBuffer", nil, nil); err != nil {
 		return fmt.Errorf("obs: save the replay buffer: %w", err)
 	}
 	return nil
@@ -441,55 +423,70 @@ func (s *Service) SaveReplay(_ context.Context) error {
 // SetSource changes the scene item of source in the current program
 // scene (B42): the visibility, the position, or both; a source that is
 // not in the scene is a clear error.
-func (s *Service) SetSource(_ context.Context, ch Source) error {
-	client, err := s.client()
+func (s *Service) SetSource(ctx context.Context, ch Source) error {
+	c, err := s.client()
 	if err != nil {
 		return err
 	}
-	scene, err := client.Scenes.GetCurrentProgramScene()
-	if err != nil {
+	var scene sceneChangedEvent
+	if err := c.request(ctx, "GetCurrentProgramScene", nil, &scene); err != nil {
 		return fmt.Errorf("obs: the current scene: %w", err)
 	}
-	items, err := client.SceneItems.GetSceneItemList(sceneitems.NewGetSceneItemListParams().WithSceneName(scene.SceneName))
-	if err != nil {
+	var items struct {
+		SceneItems []struct {
+			SceneItemID int    `json:"sceneItemId"`
+			SourceName  string `json:"sourceName"`
+		} `json:"sceneItems"`
+	}
+	if err := c.request(ctx, "GetSceneItemList", map[string]any{"sceneName": scene.SceneName}, &items); err != nil {
 		return fmt.Errorf("obs: the items of the scene %q: %w", scene.SceneName, err)
 	}
-	var id *int
+	var id int
+	found := false
 	for _, item := range items.SceneItems {
 		if item.SourceName == ch.Source {
-			id = &item.SceneItemID
+			id, found = item.SceneItemID, true
 			break
 		}
 	}
-	if id == nil {
+	if !found {
 		return fmt.Errorf("obs: the source %q is not in the scene %q", ch.Source, scene.SceneName)
 	}
 	if ch.Visible != nil {
-		if _, err := client.SceneItems.SetSceneItemEnabled(sceneitems.NewSetSceneItemEnabledParams().
-			WithSceneName(scene.SceneName).WithSceneItemId(*id).WithSceneItemEnabled(*ch.Visible)); err != nil {
+		if err := c.request(ctx, "SetSceneItemEnabled", map[string]any{
+			"sceneName":        scene.SceneName,
+			"sceneItemId":      id,
+			"sceneItemEnabled": *ch.Visible,
+		}, nil); err != nil {
 			return fmt.Errorf("obs: the visibility of the source %q: %w", ch.Source, err)
 		}
 	}
 	if ch.X != nil || ch.Y != nil {
 		// The position changes only the position; the rest of the
 		// transform (rotation, scale, bounds) stays as it is.
-		transform, err := client.SceneItems.GetSceneItemTransform(sceneitems.NewGetSceneItemTransformParams().
-			WithSceneName(scene.SceneName).WithSceneItemId(*id))
-		if err != nil {
+		var tr struct {
+			SceneItemTransform *transform `json:"sceneItemTransform"`
+		}
+		if err := c.request(ctx, "GetSceneItemTransform", map[string]any{
+			"sceneName":   scene.SceneName,
+			"sceneItemId": id,
+		}, &tr); err != nil {
 			return fmt.Errorf("obs: the transform of the source %q: %w", ch.Source, err)
 		}
-		if transform.SceneItemTransform == nil {
+		if tr.SceneItemTransform == nil {
 			return fmt.Errorf("obs: the source %q has no transform", ch.Source)
 		}
 		if ch.X != nil {
-			transform.SceneItemTransform.PositionX = *ch.X
+			tr.SceneItemTransform.PositionX = *ch.X
 		}
 		if ch.Y != nil {
-			transform.SceneItemTransform.PositionY = *ch.Y
+			tr.SceneItemTransform.PositionY = *ch.Y
 		}
-		if _, err := client.SceneItems.SetSceneItemTransform(sceneitems.NewSetSceneItemTransformParams().
-			WithSceneName(scene.SceneName).WithSceneItemId(*id).
-			WithSceneItemTransform(transform.SceneItemTransform)); err != nil {
+		if err := c.request(ctx, "SetSceneItemTransform", map[string]any{
+			"sceneName":          scene.SceneName,
+			"sceneItemId":        id,
+			"sceneItemTransform": tr.SceneItemTransform,
+		}, nil); err != nil {
 			return fmt.Errorf("obs: the position of the source %q: %w", ch.Source, err)
 		}
 	}
@@ -497,26 +494,17 @@ func (s *Service) SetSource(_ context.Context, ch Source) error {
 }
 
 // SetFilter sets the visibility of the filter of the source (B42).
-func (s *Service) SetFilter(_ context.Context, source, filter string, visible bool) error {
-	client, err := s.client()
+func (s *Service) SetFilter(ctx context.Context, source, filter string, visible bool) error {
+	c, err := s.client()
 	if err != nil {
 		return err
 	}
-	if _, err := client.Filters.SetSourceFilterEnabled(filters.NewSetSourceFilterEnabledParams().
-		WithSourceName(source).WithFilterName(filter).WithFilterEnabled(visible)); err != nil {
+	if err := c.request(ctx, "SetSourceFilterEnabled", map[string]any{
+		"sourceName":    source,
+		"filterName":    filter,
+		"filterEnabled": visible,
+	}, nil); err != nil {
 		return fmt.Errorf("obs: the filter %q of the source %q: %w", filter, source, err)
 	}
 	return nil
-}
-
-// slogLogger adapts the slog logger to the logger interface of goobs;
-// the connection diagnostics of the library stay at the debug level,
-// the facts the service publishes itself.
-type slogLogger struct{ logger *slog.Logger }
-
-// Printf implements the logger interface of goobs. The message of the
-// library is dynamic, so it goes in an attribute, not the msg (sloglint
-// static-msg).
-func (s slogLogger) Printf(format string, args ...any) {
-	s.logger.Debug("goobs", "message", fmt.Sprintf(format, args...))
 }

@@ -907,7 +907,7 @@ Gesetzt heißt: durch `starting.md` oder die globalen Regeln vorgegeben. Kandida
 | Dezimalzahlen | `github.com/cockroachdb/apd/v3` | gesetzt | alle Zahlen in Ausdrücken, Templates, Actions und Countern; bis 34 gültige Stellen, exakt, wo es geht, sonst gerundet; gekapselt in `internal/decimal` ([Code-ADR-0020](adr/code/0020-dezimalzahlen.md)) |
 | Scripting | `dop251/goja` | Kandidat | reines Go, sandboxfähig (ADR-0017) |
 | YouTube | `google.golang.org/api/youtube/v3`, `google.golang.org/grpc` für `streamList` | Kandidat | offizielle Clients bzw. Proto |
-| OBS | `andreykaipov/goobs` | Kandidat | obs-websocket v5 |
+| OBS | eigener Client auf `github.com/coder/websocket` | gesetzt | obs-websocket v5; die `goobs`-Kandidatin fällt an der Lizenz-Allowlist für ihre Abhängigkeit `hashicorp/logutils` (MPL-2.0, Code-ADR-0001) |
 | Socket.IO | `zishang520/socket.io` (v4-Client) | Kandidat | Spike nötig |
 | MCP | `github.com/modelcontextprotocol/go-sdk` | Kandidat | offizielles SDK, v1.x |
 | Seriell | `go.bug.st/serial` | Kandidat | P2 |
