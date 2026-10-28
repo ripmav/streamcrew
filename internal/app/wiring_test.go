@@ -20,6 +20,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/connector/mock"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
+	"github.com/ripmav/streamcrew/internal/obs"
 )
 
 // exampleCommands are the example commands as code (roadmap 3.6, M1): a
@@ -262,6 +263,116 @@ func TestSoundActionRunsAgainstTheBuiltServices(t *testing.T) {
 	mu.Unlock()
 	require.True(t, found, "the completed instance of the sound command")
 	assert.Empty(t, completed.Errors, "the sound action must not fail")
+
+	cancel()
+	require.NoError(t, <-errc)
+}
+
+// streamingCommands is a chat command that switches the OBS scene
+// (roadmap 7.4, B42).
+const streamingCommands = `apiVersion: streamcrew/v1alpha1
+kind: ChatCommand
+metadata: {name: SwitchScene}
+spec:
+  triggers: [switchscene]
+  actions:
+    - {type: streaming_software, kind: "set_scene", scene: "Main"}
+`
+
+// TestStreamingActionRunsAgainstTheBuiltService covers the wiring of
+// roadmap 7.4 (Review 346-N1): the OBS service is built before the
+// action wiring, so the port carries the service, not a nil pointer;
+// without a running OBS the action answers the clear error of B55
+// instead of panicking.
+func TestStreamingActionRunsAgainstTheBuiltService(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	cfg := testConfig(t)
+
+	// Create the profile and find its path.
+	first, err := app.New(ctx, cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
+	require.NoError(t, err)
+	path := first.Profile().Path
+	require.NoError(t, first.Close())
+
+	// Import the command as code.
+	rights, err := cfg.Rights()
+	require.NoError(t, err)
+	file := filepath.Join(t.TempDir(), "streaming.v1alpha1.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(streamingCommands), 0o600))
+	report, err := app.ImportCommandFiles(ctx, path, nil, rights, []string{file})
+	require.NoError(t, err)
+	require.True(t, report.Imported, "%+v", report)
+
+	// The core on the profile with the mock platform; no OBS runs.
+	var mp *mock.Platform
+	a, err := app.New(ctx, cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil),
+		app.WithPlatform(func(_ context.Context, b app.PlatformBuilder) (connector.Platform, error) {
+			mp, err = mock.New(b.Receiver, mock.WithLogger(b.Logger), mock.WithPublisher(b.Publisher))
+			return mp, err
+		}))
+	require.NoError(t, err)
+
+	var (
+		mu   sync.Mutex
+		seen []event.Envelope
+	)
+	sub := a.Bus().Subscribe(ctx, event.WithPrefixes("command.instance.", "mock."), event.WithBuffer(256))
+	go func() {
+		for e := range sub.C() {
+			mu.Lock()
+			seen = append(seen, e)
+			mu.Unlock()
+		}
+	}()
+	waitFor := func(what string, fn func(event.Envelope) bool) {
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			mu.Lock()
+			found := slices.ContainsFunc(seen, fn)
+			mu.Unlock()
+			if found {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("no event: %s", what)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	errc := make(chan error, 1)
+	go func() { errc <- a.Run(runCtx) }()
+	require.Eventually(t, a.Ready, 10*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return mp.Status().Connected() },
+		5*time.Second, 10*time.Millisecond, "the mock platform to connect")
+
+	// The simulated user triggers the streaming command; the action runs
+	// on the built service and answers the clear error of B55.
+	sent, err := mp.Say(ctx, "alice", "!switchscene")
+	require.NoError(t, err)
+	assert.Equal(t, mock.Delivered, sent.Delivery)
+	waitFor("the streaming command to complete",
+		func(e event.Envelope) bool { return instanceNamed(e, "SwitchScene") })
+
+	// Before the fix the nil service panicked inside the engine (caught,
+	// "action panicked"); the action error must be the not-connected
+	// error of the obs service.
+	var completed engine.Instance
+	found := false
+	mu.Lock()
+	for _, e := range seen {
+		if instanceNamed(e, "SwitchScene") {
+			completed, found = event.Payload[engine.Instance](e)
+			break
+		}
+	}
+	mu.Unlock()
+	require.True(t, found, "the completed instance of the streaming command")
+	require.Len(t, completed.Errors, 1, "the action must fail once")
+	assert.Contains(t, completed.Errors[0].Message, obs.ErrNotConnected.Error())
 
 	cancel()
 	require.NoError(t, <-errc)

@@ -482,6 +482,22 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		template.WithSources(globals, template.CounterSource(a.store), template.CommandSource(a.store)),
 	)
 
+	// The obs service is built before the action wiring, so the OBS port
+	// of the streaming_software action carries the service, not a nil
+	// pointer (Review 346-N1); it runs with the supervisor like the other
+	// services.
+	a.obs = obs.New(obs.Ports{
+		Host:     cfg.ObsHost,
+		Port:     cfg.ObsPort,
+		Password: cfg.ObsPassword,
+		Bus:      a.bus,
+		Dialer: netguard.Dialer{
+			Protect:   cfg.Mode == config.ModeServer,
+			Allowlist: a.rights.Outbound,
+		},
+		Logger: component(logger, "obs"),
+	})
+
 	// The command service decodes commands with the types that have ports,
 	// so that the engine runs the actions it loads (Code-ADR-0013, point 3).
 	// The command action switches through the service, which the late port
@@ -654,20 +670,6 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if a.tts, err = a.newTTS(cfg, component(logger, "tts")); err != nil {
 		return a, err
 	}
-	// The obs service (roadmap 7.4, spec overlays.md, B43, B44): the
-	// connection to OBS Studio and its events on the bus; the
-	// streaming_software action runs the operations on it.
-	a.obs = obs.New(obs.Ports{
-		Host:     cfg.ObsHost,
-		Port:     cfg.ObsPort,
-		Password: cfg.ObsPassword,
-		Bus:      a.bus,
-		Dialer: netguard.Dialer{
-			Protect:   cfg.Mode == config.ModeServer,
-			Allowlist: a.rights.Outbound,
-		},
-		Logger: component(logger, "obs"),
-	})
 	if cfg.OverlayPublicInsecure() {
 		logger.WarnContext(ctx, "the overlay listens on a public address without a token",
 			"listen", cfg.OverlayListen,
