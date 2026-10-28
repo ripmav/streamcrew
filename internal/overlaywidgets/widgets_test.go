@@ -1154,6 +1154,40 @@ func TestWidgetEndCredits(t *testing.T) {
 	})
 }
 
+// TestEndCreditsConcurrentAccess covers Review 347-1: the bus
+// goroutine (chat events) and the action goroutines (AddToCredits, the
+// state sync) run in parallel on the collected sections; without the
+// lock this is a concurrent map write, which the -race detector
+// reports.
+func TestEndCreditsConcurrentAccess(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("e1", overlaywidgets.KindEndCredits, map[string]any{"custom_sections": []string{"thanks"}}),
+		}})
+		defer f.stop()
+		f.attach(t)
+		w := widget("e1", overlaywidgets.KindEndCredits, map[string]any{"custom_sections": []string{"thanks"}})
+
+		var wg sync.WaitGroup
+		for i := range 100 {
+			wg.Add(1)
+			go func(n int) {
+				defer wg.Done()
+				name := fmt.Sprintf("user%03d", n)
+				if err := f.svc.AddToCredits(f.ctx, "e1", "thanks", name); err != nil {
+					t.Errorf("AddToCredits: %v", err)
+				}
+				f.publish(t, eventtype.ChatMessage, twitchUser(t, name),
+					eventtype.Details{Message: &eventtype.Message{Text: "hi"}})
+				f.svc.StateForEndCredits(f.ctx, w)
+			}(i)
+		}
+		wg.Wait()
+		synctest.Wait() // the bus goroutine processed every event
+	})
+}
+
 // TestWidgetLeaderboard covers B32: the statistic mapping, the count
 // default, and an unknown statistic that pushes nothing.
 func TestWidgetLeaderboard(t *testing.T) {

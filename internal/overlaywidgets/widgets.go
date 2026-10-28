@@ -2699,13 +2699,16 @@ func (s *Service) endCreditsUser(st *endCreditsState, section string, u *user.Us
 		return
 	}
 	name := userName(*u)
+	s.mu.Lock()
 	entries := st.sections[section]
 	for _, e := range entries {
 		if e.User == name {
+			s.mu.Unlock()
 			return
 		}
 	}
 	st.sections[section] = append(entries, endCreditsEntry{User: name})
+	s.mu.Unlock()
 }
 
 // endCreditsRemove removes the user from every section (B31).
@@ -2714,6 +2717,7 @@ func (s *Service) endCreditsRemove(st *endCreditsState, u *user.User) {
 		return
 	}
 	name := userName(*u)
+	s.mu.Lock()
 	for section, entries := range st.sections {
 		next := entries[:0]
 		for _, e := range entries {
@@ -2723,6 +2727,7 @@ func (s *Service) endCreditsRemove(st *endCreditsState, u *user.User) {
 		}
 		st.sections[section] = next
 	}
+	s.mu.Unlock()
 }
 
 // endCreditsClear clears the collected data of the visible end credits on
@@ -2741,10 +2746,12 @@ func (s *Service) endCreditsClear(ctx context.Context) {
 			continue
 		}
 		st := s.endCreditsLoad(ctx, w.ID, cfg)
+		s.mu.Lock()
 		st.sections = map[string][]endCreditsEntry{}
 		for _, name := range append(endCreditsSections, cfg.CustomSections...) {
 			st.sections[name] = nil
 		}
+		s.mu.Unlock()
 		if s.visible(w) {
 			s.pushCredits(ctx, w, st)
 		}
@@ -2776,7 +2783,9 @@ func (s *Service) AddToCredits(ctx context.Context, widgetID, section, text stri
 		return fmt.Errorf("%w: the section %q is unknown", ErrUnknownWidget, section)
 	}
 	st := s.endCreditsLoad(ctx, w.ID, cfg)
+	s.mu.Lock()
 	st.sections[section] = append(st.sections[section], endCreditsEntry{Text: text})
+	s.mu.Unlock()
 	s.pushCredits(ctx, w, st)
 	return nil
 }
@@ -2793,7 +2802,7 @@ func (s *Service) PlayCredits(ctx context.Context, widgetID string) error {
 		return fmt.Errorf("%w: the end credits have no valid configuration", ErrUnknownWidget)
 	}
 	st := s.endCreditsLoad(ctx, w.ID, cfg)
-	s.push(ctx, w, s.creditsState(cfg, st, true))
+	s.push(ctx, w, s.creditsState(cfg, s.creditsSnapshot(st), true))
 	return nil
 }
 
@@ -2803,18 +2812,31 @@ func (s *Service) pushCredits(ctx context.Context, w settings.OverlayWidget, st 
 	if cfg == nil {
 		return
 	}
-	s.push(ctx, w, s.creditsState(cfg, st, false))
+	s.push(ctx, w, s.creditsState(cfg, s.creditsSnapshot(st), false))
+}
+
+// creditsSnapshot copies the collected sections under the lock (Review
+// 347-1): the bus goroutine and the actions write the sections in
+// parallel, and a concurrent map write would end the process.
+func (s *Service) creditsSnapshot(st *endCreditsState) map[string][]endCreditsEntry {
+	s.mu.Lock()
+	sections := make(map[string][]endCreditsEntry, len(st.sections))
+	for name, entries := range st.sections {
+		sections[name] = append([]endCreditsEntry(nil), entries...)
+	}
+	s.mu.Unlock()
+	return sections
 }
 
 // creditsState is the runtime state of the end credits: the sections in
 // order; playing is the roll flag (B31).
-func (s *Service) creditsState(cfg *endCreditsConfig, st *endCreditsState, playing bool) map[string]any {
+func (s *Service) creditsState(cfg *endCreditsConfig, sections map[string][]endCreditsEntry, playing bool) map[string]any {
 	names := append(append([]string{}, endCreditsSections...), cfg.CustomSections...)
-	sections := map[string]any{}
+	out := map[string]any{}
 	for _, name := range names {
-		sections[name] = st.sections[name]
+		out[name] = sections[name]
 	}
-	return map[string]any{"sections": sections, "playing": playing}
+	return map[string]any{"sections": out, "playing": playing}
 }
 
 // StateForEndCredits returns the collected data for the state sync (B4).
@@ -2823,11 +2845,13 @@ func (s *Service) StateForEndCredits(ctx context.Context, w settings.OverlayWidg
 	if cfg == nil {
 		return nil
 	}
+	s.mu.Lock()
 	st := s.credits[w.ID]
+	s.mu.Unlock()
 	if st == nil {
 		st = endCreditsNew(cfg)
 	}
-	return s.creditsState(cfg, st, false)
+	return s.creditsState(cfg, s.creditsSnapshot(st), false)
 }
 
 // ---------- persistent_emote_effect (B35) ----------
