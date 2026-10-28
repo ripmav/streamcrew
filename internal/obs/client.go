@@ -54,6 +54,30 @@ const (
 	requestTimeout = 10 * time.Second
 )
 
+// The output states of obs-websocket v5 (protocol.md,
+// OBS_WEBSOCKET_OUTPUT_*): the values of outputState in the
+// StreamStateChanged and RecordStateChanged events. Only OutputStarted
+// and OutputStopped are state changes for the service; the other states
+// are ignored (B44).
+const (
+	// OutputStarting is the output is starting.
+	OutputStarting = "OBS_WEBSOCKET_OUTPUT_STARTING"
+	// OutputStarted is the output is running; the "on" state.
+	OutputStarted = "OBS_WEBSOCKET_OUTPUT_STARTED"
+	// OutputStopping is the output is stopping.
+	OutputStopping = "OBS_WEBSOCKET_OUTPUT_STOPPING"
+	// OutputStopped is the output is stopped; the "off" state.
+	OutputStopped = "OBS_WEBSOCKET_OUTPUT_STOPPED"
+	// OutputPaused is the output is paused.
+	OutputPaused = "OBS_WEBSOCKET_OUTPUT_PAUSED"
+	// OutputResumed is the output is resumed.
+	OutputResumed = "OBS_WEBSOCKET_OUTPUT_RESUMED"
+	// OutputReconnecting is the output is reconnecting.
+	OutputReconnecting = "OBS_WEBSOCKET_OUTPUT_RECONNECTING"
+	// OutputReconnected is the output is reconnected.
+	OutputReconnected = "OBS_WEBSOCKET_OUTPUT_RECONNECTED"
+)
+
 // wire is one obs-websocket v5 message: the opcode in op and the data
 // of the opcode in d.
 type wire struct {

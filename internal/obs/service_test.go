@@ -478,8 +478,8 @@ func TestRunReconnectsAfterADrop(t *testing.T) {
 
 // TestRunSeedsTheState checks that the seed of the connection takes the
 // current OBS state, so that an unchanged state publishes nothing (B44):
-// the stream is on before the connection, and the "streaming" state is
-// the seed, not a change.
+// the stream is on before the connection, and the started state is the
+// seed, not a change.
 func TestRunSeedsTheState(t *testing.T) {
 	t.Parallel()
 	fake := newFakeObs(t, "")
@@ -493,10 +493,10 @@ func TestRunSeedsTheState(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- s.Run(ctx) }()
 	waitUntil(t, func() bool { return s.Connected() })
-	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": "streaming"})
+	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": OutputStarted})
 	time.Sleep(100 * time.Millisecond)
 	assert.Zero(t, c.count(eventtype.ObsStreamStarted), "the seed is not a change")
-	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": "stopped"})
+	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": OutputStopped})
 	waitUntil(t, func() bool { return c.count(eventtype.ObsStreamStopped) == 1 })
 	cancel()
 	require.NoError(t, <-done)
@@ -519,17 +519,20 @@ func TestRunPublishesTheOBSEvents(t *testing.T) {
 	go func() { done <- s.Run(ctx) }()
 	waitUntil(t, func() bool { return s.Connected() })
 
-	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": "starting"})
-	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": "streaming"})
+	// OutputStarting is not a change (B44): no event until OutputStarted.
+	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": OutputStarting})
+	time.Sleep(100 * time.Millisecond)
+	assert.Zero(t, c.count(eventtype.ObsStreamStarted), "starting is not a change")
+	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": OutputStarted})
 	waitUntil(t, func() bool { return c.has(eventtype.ObsStreamStarted) >= 0 })
 
-	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": "stopping"})
-	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": "stopped"})
+	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": OutputStopping})
+	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": OutputStopped})
 	waitUntil(t, func() bool { return c.has(eventtype.ObsStreamStopped) >= 0 })
 
-	fake.sendEvent("RecordStateChanged", map[string]any{"outputState": "recording"})
+	fake.sendEvent("RecordStateChanged", map[string]any{"outputState": OutputStarted})
 	waitUntil(t, func() bool { return c.has(eventtype.ObsRecordingStarted) >= 0 })
-	fake.sendEvent("RecordStateChanged", map[string]any{"outputState": "stopped", "outputPath": "/rec.mp4"})
+	fake.sendEvent("RecordStateChanged", map[string]any{"outputState": OutputStopped, "outputPath": "/rec.mp4"})
 	waitUntil(t, func() bool { return c.has(eventtype.ObsRecordingStopped) >= 0 })
 	assert.Equal(t, "/rec.mp4", c.payload(c.has(eventtype.ObsRecordingStopped)).Details.ObsFile.Path)
 
@@ -585,8 +588,8 @@ func TestRunPublishesEachChangeOnce(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- s.Run(ctx) }()
 	waitUntil(t, func() bool { return s.Connected() })
-	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": "streaming"})
-	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": "streaming"})
+	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": OutputStarted})
+	fake.sendEvent("StreamStateChanged", map[string]any{"outputState": OutputStarted})
 	waitUntil(t, func() bool { return c.count(eventtype.ObsStreamStarted) == 1 })
 	time.Sleep(200 * time.Millisecond)
 	assert.Equal(t, 1, c.count(eventtype.ObsStreamStarted))

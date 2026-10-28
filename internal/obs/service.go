@@ -205,7 +205,7 @@ func (s *Service) handleEvent(ctx context.Context, c *client, ev *eventMsg) {
 	case "StreamStateChanged":
 		var d streamStateEvent
 		_ = json.Unmarshal(ev.Data, &d)
-		s.stateChanged(ctx, d.OutputState, "streaming", &s.streamActive, func(active bool) {
+		s.stateChanged(ctx, d.OutputState, &s.streamActive, func(active bool) {
 			typ := eventtype.ObsStreamStopped
 			if active {
 				typ = eventtype.ObsStreamStarted
@@ -215,7 +215,7 @@ func (s *Service) handleEvent(ctx context.Context, c *client, ev *eventMsg) {
 	case "RecordStateChanged":
 		var d recordStateEvent
 		_ = json.Unmarshal(ev.Data, &d)
-		s.stateChanged(ctx, d.OutputState, "recording", &s.recordActive, func(active bool) {
+		s.stateChanged(ctx, d.OutputState, &s.recordActive, func(active bool) {
 			typ := eventtype.ObsRecordingStopped
 			if active {
 				typ = eventtype.ObsRecordingStarted
@@ -272,14 +272,15 @@ func (s *Service) handleEvent(ctx context.Context, c *client, ev *eventMsg) {
 }
 
 // stateChanged runs the state change of stream and record (B44): the
-// OBS states starting, stopping and paused are ignored, and each
+// output states other than started and stopped are ignored (starting,
+// stopping, paused, resumed, reconnecting, reconnected), and each
 // change publishes once, so a repeated state publishes nothing.
-func (s *Service) stateChanged(_ context.Context, state, activeState string, active *bool, publish func(active bool)) {
+func (s *Service) stateChanged(_ context.Context, state string, active *bool, publish func(active bool)) {
 	var on bool
 	switch state {
-	case activeState:
+	case OutputStarted:
 		on = true
-	case "stopped":
+	case OutputStopped:
 	default:
 		return
 	}
