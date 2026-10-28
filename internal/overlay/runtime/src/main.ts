@@ -203,10 +203,18 @@ function serverNow(): number {
   return Date.now() + serverTimeOffset;
 }
 
-// The per-second re-renders of the clocks (A5, B17, B26).
+// The per-second re-renders of the clocks (A5, B17, B26). Each render
+// runs in its own try/catch: one render that throws (e.g. an unknown
+// time zone) must not stop the others.
 const perSecond = new Set<() => void>();
 setInterval(() => {
-  for (const render of perSecond) render();
+  for (const render of perSecond) {
+    try {
+      render();
+    } catch {
+      // keep the other renders running
+    }
+  }
 }, 1000);
 
 // ---------- durations and formats (B17) ----------

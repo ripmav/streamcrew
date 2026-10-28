@@ -52,6 +52,7 @@ type fixture struct {
 
 	mu       sync.Mutex
 	sec      settings.Overlay
+	loc      *time.Location // nil for the profile default (UTC)
 	msgs     []overlay.Message
 	effects  []effect
 	state    map[string][]byte
@@ -132,7 +133,13 @@ func (f *fixture) setSection(sec settings.Overlay) {
 
 // scope returns the profile scope for the label render and the goal reset.
 func (f *fixture) scope(context.Context) (*template.Scope, error) {
-	return &template.Scope{Platform: platform.Twitch, Location: time.UTC, ArgDelimiter: " "}, nil
+	f.mu.Lock()
+	loc := f.loc
+	f.mu.Unlock()
+	if loc == nil {
+		loc = time.UTC
+	}
+	return &template.Scope{Platform: platform.Twitch, Location: loc, ArgDelimiter: " "}, nil
 }
 
 // locale returns the locale of the profile.
@@ -660,6 +667,34 @@ func TestWidgetLabels(t *testing.T) {
 		ups = f.updates(t, "lb2")
 		require.Len(t, ups, 2)
 		assert.Equal(t, `{"text":"43"}`, ups[1])
+	})
+}
+
+// TestLabelOmitsTheLocalTimeZoneCoversB24: the profile time zone
+// time.Local (the system zone) must not go to the runtime as
+// timeZone "Local": the browser rejects the name and every throwing
+// render would stop the shared per-second loop.
+func TestLabelOmitsTheLocalTimeZoneCoversB24(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("lb1", overlaywidgets.KindLabel, map[string]any{"type": "time"}),
+		}})
+		defer f.stop()
+		f.mu.Lock()
+		f.loc = time.Local
+		f.mu.Unlock()
+		f.attach(t)
+
+		synctest.Sleep(time.Second) // the tick re-renders the labels
+		synctest.Wait()
+		ups := f.updates(t, "lb1")
+		require.Len(t, ups, 1)
+		var st map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ups[0]), &st))
+		assert.Equal(t, "time", st["kind"])
+		_, hasZone := st["timeZone"]
+		assert.False(t, hasZone, "without a zone the browser takes its own time zone")
 	})
 }
 

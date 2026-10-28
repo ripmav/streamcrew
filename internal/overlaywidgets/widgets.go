@@ -435,7 +435,13 @@ func (s *Service) dateTimeState(ctx context.Context, kind string) map[string]any
 	if sc, err := s.ports.Scope(ctx); err == nil && sc.Location != nil {
 		zone = sc.Location.String()
 	}
-	return map[string]any{"kind": kind, "locale": string(loc), "timeZone": zone}
+	st := map[string]any{"kind": kind, "locale": string(loc)}
+	// time.Local's name "Local" is not a zone the browser knows; without
+	// the key the browser takes its own time zone.
+	if zone != time.Local.String() {
+		st["timeZone"] = zone
+	}
+	return st
 }
 
 // pushLabelState pushes the state of the label; the date and time states
