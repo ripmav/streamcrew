@@ -35,3 +35,13 @@ func TestBundleCarriesTheRuntimeMarkers(t *testing.T) {
 		assert.True(t, strings.Contains(web.Bundle, marker), "the bundle misses %q", marker)
 	}
 }
+
+// TestBundleHasNoBottomYOffset is the regression test of the bottom
+// positions (Review 342-4, B9): bottom:0 already places the element at
+// the bottom edge; the old code lifted it by its own height on top of
+// that with translateY(-100%).
+func TestBundleHasNoBottomYOffset(t *testing.T) {
+	t.Parallel()
+	assert.False(t, strings.Contains(web.Bundle, "-100%"),
+		"the bottom positions must not lift the element by its own height")
+}

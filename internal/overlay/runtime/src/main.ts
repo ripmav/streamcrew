@@ -117,9 +117,9 @@ const SIMPLE: Record<string, string> = {
   "center-left": "left:0; top:50%; transform:translateY(-50%);",
   "center": "left:50%; top:50%; transform:translate(-50%,-50%);",
   "center-right": "right:0; top:50%; transform:translateY(-50%);",
-  "bottom-left": "left:0; bottom:0; transform:translateY(-100%);",
-  "bottom": "left:50%; bottom:0; transform:translate(-50%,-100%);",
-  "bottom-right": "right:0; bottom:0; transform:translateY(-100%);",
+  "bottom-left": "left:0; bottom:0;",
+  "bottom": "left:50%; bottom:0; transform:translateX(-50%);",
+  "bottom-right": "right:0; bottom:0;",
 };
 
 function place(el: HTMLElement, pos: Position, layer: number): void {
