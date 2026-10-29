@@ -88,6 +88,9 @@ func NewServer(cfg Config) (*Server, error) {
 	return s, nil
 }
 
+// Service returns the overlay service of the server.
+func (s *Server) Service() *Service { return s.cfg.Service }
+
 // Listening returns a channel that is closed once the server listens.
 func (s *Server) Listening() <-chan struct{} { return s.listening }
 

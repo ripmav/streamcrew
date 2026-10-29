@@ -13,6 +13,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/host"
 	"github.com/ripmav/streamcrew/internal/action/moderation"
 	"github.com/ripmav/streamcrew/internal/action/network"
+	overlayaction "github.com/ripmav/streamcrew/internal/action/overlay"
 	streamaction "github.com/ripmav/streamcrew/internal/action/stream"
 	twitchaction "github.com/ripmav/streamcrew/internal/action/twitch"
 	"github.com/ripmav/streamcrew/internal/action/usercommand"
@@ -36,6 +37,7 @@ func ActionCatalog(granted capability.Source) (*action.Registry, error) {
 		host.Catalog(),
 		moderation.Catalog(),
 		network.Catalog(),
+		overlayaction.Catalog(),
 		twitchaction.Catalog(),
 		users.Catalog(),
 		values.Catalog(),

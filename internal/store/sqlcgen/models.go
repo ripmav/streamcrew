@@ -110,6 +110,11 @@ type Meta struct {
 	Value string
 }
 
+type OverlayWidgetState struct {
+	WidgetID string
+	State    string
+}
+
 type Quote struct {
 	Number    int64
 	ID        string

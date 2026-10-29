@@ -174,6 +174,8 @@
               "enum": [
                 "app.started",
                 "app.stopping",
+                "overlay.goal.progress",
+                "overlay.goal.segment_completed",
                 "channel.stream.start",
                 "channel.stream.stop",
                 "channel.follow",
@@ -615,6 +617,9 @@
         },
         {
           "$ref": "#/$defs/action.moderation"
+        },
+        {
+          "$ref": "#/$defs/action.overlay"
         },
         {
           "$ref": "#/$defs/action.platform_message"
@@ -3042,6 +3047,939 @@
           "required": [
             "type",
             "kind"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "action.overlay": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "overlay"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "item",
+            "widget"
+          ],
+          "default": "item",
+          "x-ui": "choice"
+        },
+        "endpoint": {
+          "type": "string",
+          "default": "",
+          "x-ui": "text"
+        },
+        "position": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "enum": [
+                "simple",
+                "percent",
+                "pixels",
+                "random"
+              ],
+              "x-ui": "choice"
+            },
+            "point": {
+              "type": "string",
+              "enum": [
+                "top-left",
+                "top",
+                "top-right",
+                "center-left",
+                "center",
+                "center-right",
+                "bottom-left",
+                "bottom",
+                "bottom-right"
+              ],
+              "x-ui": "choice"
+            },
+            "x": {
+              "type": "number",
+              "minimum": 0
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "model"
+          ],
+          "additionalProperties": false,
+          "default": {
+            "model": "simple",
+            "point": "top-left",
+            "x": 0,
+            "y": 0
+          }
+        },
+        "layer": {
+          "type": "integer",
+          "default": 0
+        },
+        "animation": {
+          "type": "string",
+          "enum": [
+            "none",
+            "fade",
+            "slide-left",
+            "slide-right",
+            "slide-up",
+            "slide-down",
+            "pop"
+          ],
+          "default": "",
+          "x-ui": "choice"
+        },
+        "animationDuration": {
+          "type": "string",
+          "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
+          "default": "0s",
+          "x-ui": "duration"
+        },
+        "duration": {
+          "type": "string",
+          "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
+          "default": "0s",
+          "x-ui": "duration"
+        },
+        "content": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "text",
+                "image",
+                "video",
+                "audio",
+                "html",
+                "youtube",
+                "clip",
+                "timer"
+              ],
+              "x-ui": "choice"
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "maxWidth": {
+              "type": "number",
+              "minimum": 1
+            },
+            "src": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "width": {
+              "type": "number",
+              "minimum": 1
+            },
+            "height": {
+              "type": "number",
+              "minimum": 1
+            },
+            "start": {
+              "type": "number",
+              "minimum": 0
+            },
+            "volume": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "loop": {
+              "type": "boolean",
+              "x-ui": "switch"
+            },
+            "html": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "multiline"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "user": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "template"
+            },
+            "duration": {
+              "type": "string",
+              "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
+              "x-ui": "duration"
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "down",
+                "up"
+              ],
+              "x-ui": "choice"
+            },
+            "format": {
+              "type": "string",
+              "x-ui": "text"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "template"
+                },
+                "maxWidth": {
+                  "type": "number",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "kind",
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "image"
+                },
+                "src": {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "template"
+                },
+                "width": {
+                  "type": "number",
+                  "minimum": 1
+                },
+                "height": {
+                  "type": "number",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "kind",
+                "src"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "video"
+                },
+                "src": {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "template"
+                },
+                "start": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "volume": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "loop": {
+                  "type": "boolean",
+                  "x-ui": "switch"
+                }
+              },
+              "required": [
+                "kind",
+                "src"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "audio"
+                },
+                "src": {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "template"
+                },
+                "volume": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                }
+              },
+              "required": [
+                "kind",
+                "src"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "html"
+                },
+                "html": {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "multiline"
+                }
+              },
+              "required": [
+                "kind",
+                "html"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "youtube"
+                },
+                "url": {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "template"
+                },
+                "width": {
+                  "type": "number",
+                  "minimum": 1
+                },
+                "height": {
+                  "type": "number",
+                  "minimum": 1
+                },
+                "start": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "volume": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                }
+              },
+              "required": [
+                "kind",
+                "url",
+                "width",
+                "height"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "clip"
+                },
+                "url": {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "template"
+                },
+                "user": {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "template"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "timer"
+                },
+                "duration": {
+                  "type": "string",
+                  "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
+                  "x-ui": "duration"
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "down",
+                    "up"
+                  ],
+                  "x-ui": "choice"
+                },
+                "format": {
+                  "type": "string",
+                  "x-ui": "text"
+                }
+              },
+              "required": [
+                "kind",
+                "duration"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "default": {
+            "kind": "text"
+          }
+        },
+        "widget": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "text"
+        },
+        "op": {
+          "type": "string",
+          "enum": [
+            "show",
+            "hide",
+            "update",
+            "add_to_goal",
+            "add_to_timer",
+            "pause_timer",
+            "add_to_event_list"
+          ],
+          "x-ui": "choice"
+        },
+        "data": {
+          "type": "object"
+        },
+        "amount": {
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": -1000000,
+              "maximum": 1000000
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "expression"
+            }
+          ],
+          "x-ui": "amount"
+        },
+        "text": {
+          "type": "string",
+          "x-ui": "template"
+        }
+      },
+      "required": [
+        "type",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "overlay"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "item",
+              "default": "item"
+            },
+            "endpoint": {
+              "type": "string",
+              "default": "",
+              "x-ui": "text"
+            },
+            "position": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string",
+                  "enum": [
+                    "simple",
+                    "percent",
+                    "pixels",
+                    "random"
+                  ],
+                  "x-ui": "choice"
+                },
+                "point": {
+                  "type": "string",
+                  "enum": [
+                    "top-left",
+                    "top",
+                    "top-right",
+                    "center-left",
+                    "center",
+                    "center-right",
+                    "bottom-left",
+                    "bottom",
+                    "bottom-right"
+                  ],
+                  "x-ui": "choice"
+                },
+                "x": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "model"
+              ],
+              "additionalProperties": false,
+              "default": {
+                "model": "simple",
+                "point": "top-left",
+                "x": 0,
+                "y": 0
+              }
+            },
+            "layer": {
+              "type": "integer",
+              "default": 0
+            },
+            "animation": {
+              "type": "string",
+              "enum": [
+                "none",
+                "fade",
+                "slide-left",
+                "slide-right",
+                "slide-up",
+                "slide-down",
+                "pop"
+              ],
+              "default": "",
+              "x-ui": "choice"
+            },
+            "animationDuration": {
+              "type": "string",
+              "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
+              "default": "0s",
+              "x-ui": "duration"
+            },
+            "duration": {
+              "type": "string",
+              "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
+              "default": "0s",
+              "x-ui": "duration"
+            },
+            "content": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "image",
+                    "video",
+                    "audio",
+                    "html",
+                    "youtube",
+                    "clip",
+                    "timer"
+                  ],
+                  "x-ui": "choice"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "template"
+                },
+                "maxWidth": {
+                  "type": "number",
+                  "minimum": 1
+                },
+                "src": {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "template"
+                },
+                "width": {
+                  "type": "number",
+                  "minimum": 1
+                },
+                "height": {
+                  "type": "number",
+                  "minimum": 1
+                },
+                "start": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "volume": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "loop": {
+                  "type": "boolean",
+                  "x-ui": "switch"
+                },
+                "html": {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "multiline"
+                },
+                "url": {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "template"
+                },
+                "user": {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "template"
+                },
+                "duration": {
+                  "type": "string",
+                  "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
+                  "x-ui": "duration"
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "down",
+                    "up"
+                  ],
+                  "x-ui": "choice"
+                },
+                "format": {
+                  "type": "string",
+                  "x-ui": "text"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "text"
+                    },
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "x-ui": "template"
+                    },
+                    "maxWidth": {
+                      "type": "number",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "image"
+                    },
+                    "src": {
+                      "type": "string",
+                      "minLength": 1,
+                      "x-ui": "template"
+                    },
+                    "width": {
+                      "type": "number",
+                      "minimum": 1
+                    },
+                    "height": {
+                      "type": "number",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "src"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "video"
+                    },
+                    "src": {
+                      "type": "string",
+                      "minLength": 1,
+                      "x-ui": "template"
+                    },
+                    "start": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "volume": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "loop": {
+                      "type": "boolean",
+                      "x-ui": "switch"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "src"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "audio"
+                    },
+                    "src": {
+                      "type": "string",
+                      "minLength": 1,
+                      "x-ui": "template"
+                    },
+                    "volume": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "src"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "html"
+                    },
+                    "html": {
+                      "type": "string",
+                      "minLength": 1,
+                      "x-ui": "multiline"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "html"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "youtube"
+                    },
+                    "url": {
+                      "type": "string",
+                      "minLength": 1,
+                      "x-ui": "template"
+                    },
+                    "width": {
+                      "type": "number",
+                      "minimum": 1
+                    },
+                    "height": {
+                      "type": "number",
+                      "minimum": 1
+                    },
+                    "start": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "volume": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "url",
+                    "width",
+                    "height"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "clip"
+                    },
+                    "url": {
+                      "type": "string",
+                      "minLength": 1,
+                      "x-ui": "template"
+                    },
+                    "user": {
+                      "type": "string",
+                      "minLength": 1,
+                      "x-ui": "template"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "timer"
+                    },
+                    "duration": {
+                      "type": "string",
+                      "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+$",
+                      "x-ui": "duration"
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": [
+                        "down",
+                        "up"
+                      ],
+                      "x-ui": "choice"
+                    },
+                    "format": {
+                      "type": "string",
+                      "x-ui": "text"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "duration"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "default": {
+                "kind": "text"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "content"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "overlay"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "widget",
+              "default": "item"
+            },
+            "widget": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "text"
+            },
+            "op": {
+              "type": "string",
+              "enum": [
+                "show",
+                "hide",
+                "update",
+                "add_to_goal",
+                "add_to_timer",
+                "pause_timer",
+                "add_to_event_list"
+              ],
+              "x-ui": "choice"
+            },
+            "data": {
+              "type": "object"
+            },
+            "amount": {
+              "oneOf": [
+                {
+                  "type": "number",
+                  "minimum": -1000000,
+                  "maximum": 1000000
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "x-ui": "expression"
+                }
+              ],
+              "x-ui": "amount"
+            },
+            "text": {
+              "type": "string",
+              "x-ui": "template"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "widget",
+            "op"
           ],
           "additionalProperties": false
         }

@@ -17,6 +17,11 @@ Phase 6 (Agent-Plattform) ist fast vollständig umgesetzt, M2 (Headless-MVP) ist
 - **Log-Stream** (6.6): Log-Zeilen sind Ereignisse; Clients abonnieren sie gefiltert nach Level, Plattform, Channel und Ereignisklasse über den Event-Stream.
 - **Release MVP** (6.7): Auslieferung steht (Releases mit Binary, Doku und Docker-Tar, [ADR-0025](docs/adr/0025-release-und-distribution.md)); offen sind die ADR-0025-Akzeptanz und die Registry-Publishing-Nachführung.
 
+Phase 7 (Overlays und Medien) läuft:
+
+- **Overlay-Server** (7.1): Ein eigener HTTP-Server für OBS-Browserquellen ([ADR-0019](docs/adr/0019-overlay-architektur.md)) mit eingebetteter TypeScript-Runtime, mehreren Endpunkten, optionalem Token und Medienauslieferung aus freigegebenen Verzeichnissen.
+- **Items und Widgets** (7.2): Die Aktion `overlay` zeigt Items (Text, Bild, Video, Ton, HTML, YouTube, Clip, Timer) und steuert die fünf Widget-Kinds `label`, `goal`, `timer`, `event_list` und `chat` (Sichtbarkeit, Zustand, Fortschritt, Timer, Listen, Chat); der Ziel-Fortschritt bleibt im Profil, und die Zieleffekte laufen als Bus-Ereignisse.
+
 Die vollständige Planung mit Abnahmekriterien steht in der [Roadmap](docs/roadmap.md).
 
 ## Dokumentation

@@ -35,6 +35,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/host"
 	"github.com/ripmav/streamcrew/internal/action/moderation"
 	"github.com/ripmav/streamcrew/internal/action/network"
+	overlayaction "github.com/ripmav/streamcrew/internal/action/overlay"
 	streamaction "github.com/ripmav/streamcrew/internal/action/stream"
 	twitchaction "github.com/ripmav/streamcrew/internal/action/twitch"
 	"github.com/ripmav/streamcrew/internal/action/usercommand"
@@ -66,6 +67,7 @@ import (
 	modsvc "github.com/ripmav/streamcrew/internal/moderation"
 	"github.com/ripmav/streamcrew/internal/netguard"
 	"github.com/ripmav/streamcrew/internal/overlay"
+	"github.com/ripmav/streamcrew/internal/overlaywidgets"
 	"github.com/ripmav/streamcrew/internal/preset"
 	"github.com/ripmav/streamcrew/internal/profile"
 	"github.com/ripmav/streamcrew/internal/prompt"
@@ -156,8 +158,10 @@ type App struct {
 	http         *httpserver.Server
 	api          *api.Server
 	overlay      *overlay.Server
-	ready        *readiness
-	rights       *config.Live
+	// widgets runs the P1 widgets of the overlay (roadmap 7.2).
+	widgets *overlaywidgets.Service
+	ready   *readiness
+	rights  *config.Live
 	// file is the resolver of the configuration file; watcher applies
 	// its changes at runtime (roadmap 6.5), nil without a file.
 	file    *config.FileResolver
@@ -616,6 +620,13 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if err != nil {
 		return a, err
 	}
+	// The widget service (roadmap 7.2, spec overlays.md, B19 to B28):
+	// it runs the P1 widgets and fills the state of the runtimes in the
+	// state sync of the overlay server (B4, B20).
+	if a.widgets, err = a.newOverlayWidgets(component(logger, "widgets")); err != nil {
+		return a, err
+	}
+	a.overlay.Service().SetStateProvider(a.widgets.StateForSync)
 	if cfg.OverlayPublicInsecure() {
 		logger.WarnContext(ctx, "the overlay listens on a public address without a token",
 			"listen", cfg.OverlayListen,
@@ -627,6 +638,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		a.sup.Add("backup", scheduler),
 		a.sup.Add("http", a.http, supervisor.WithCritical()),
 		a.sup.Add("overlay", a.overlay),
+		a.sup.Add("widgets", a.widgets),
 		a.sup.Add("events", a.events),
 		a.sup.Add("timer", a.timer),
 		a.sup.Add("users", a.userSvc),
@@ -835,6 +847,13 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches,
 	add(twitchaction.Descriptors(twitchaction.Ports{
 		Templates: a.templates,
 		Ops:       a.twitchOps(),
+		Logger:    component(a.logger, "action"),
+	}))
+	add(overlayaction.Descriptors(overlayaction.Ports{
+		Templates: a.templates,
+		Overlay:   overlayActionOps{app: a},
+		Widgets:   overlayActionOps{app: a},
+		Clips:     overlayActionOps{app: a},
 		Logger:    component(a.logger, "action"),
 	}))
 	if err := errors.Join(errs...); err != nil {

@@ -225,7 +225,7 @@ func TestItemShowAndRemoveOverTheWire(t *testing.T) {
 	readMsg(t, c) // hello
 	readMsg(t, c) // state.widgets
 
-	id, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
+	id, _, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
 		Kind: "text", Content: map[string]any{"text": "hi"},
 		Position: settings.Position{Model: settings.PositionSimple, Point: "center"},
 		Layer:    3,
@@ -257,7 +257,7 @@ func TestItemEndedOverTheWire(t *testing.T) {
 	readMsg(t, c)
 	readMsg(t, c)
 
-	id, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
+	id, _, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
 		Kind: "audio", Position: settings.Position{Model: settings.PositionSimple, Point: "center"},
 	})
 	require.NoError(t, err)

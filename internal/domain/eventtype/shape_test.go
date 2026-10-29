@@ -69,6 +69,8 @@ func TestShapes(t *testing.T) {
 		eventtype.ChatUserUnmod:               "user",
 		eventtype.ChatUserVIP:                 "user",
 		eventtype.ChatUserUnVIP:               "user",
+		eventtype.OverlayGoalProgress:         "(user)",
+		eventtype.OverlayGoalSegmentCompleted: "(user)",
 	}
 	for _, d := range eventtype.All() {
 		sh, ok := eventtype.ShapeOf(d.Type)

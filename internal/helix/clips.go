@@ -30,6 +30,9 @@ type Clip struct {
 	ViewCount uint64 `json:"view_count"`
 	// CreatedAt is the time the clip was made.
 	CreatedAt time.Time `json:"created_at"`
+	// Duration is the length of the clip in seconds, with fractions;
+	// 0 if the API does not name one.
+	Duration float64 `json:"duration,omitzero"`
 }
 
 // ListClips lists the latest clips of the channel (Helix
@@ -49,6 +52,26 @@ func (c *Client) ListClips(ctx context.Context, broadcasterID string) ([]Clip, e
 		return nil, err
 	}
 	return clips, nil
+}
+
+// LatestClip returns the newest clip of the channel (Helix GET /clips,
+// first=1), or nil if the channel has no clip.
+func (c *Client) LatestClip(ctx context.Context, broadcasterID string) (*Clip, error) {
+	q := url.Values{"broadcaster_id": {broadcasterID}, "first": {"1"}}
+	req, err := c.request(ctx, "GET", "/clips", q, nil)
+	if err != nil {
+		return nil, err
+	}
+	var envelope struct {
+		Data []Clip `json:"data"`
+	}
+	if err := c.http.DoJSON(ctx, req, &envelope); err != nil {
+		return nil, err
+	}
+	if len(envelope.Data) == 0 {
+		return nil, nil
+	}
+	return &envelope.Data[0], nil
 }
 
 // CreateClip makes a clip of the current stream (Helix POST /clips,

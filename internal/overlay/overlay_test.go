@@ -83,7 +83,7 @@ func TestItemLifecycleCoversShowRemoveAndStateSync(t *testing.T) {
 		svc := testService(t, settings.Overlay{})
 
 		// An unknown endpoint is an error with the ID (B45, B18).
-		_, err := svc.ShowItem(context.Background(), "nope", overlay.Item{
+		_, _, err := svc.ShowItem(context.Background(), "nope", overlay.Item{
 			Kind: "text", Position: settings.Position{Model: settings.PositionSimple, Point: "center"},
 		})
 		require.Error(t, err)
@@ -101,7 +101,7 @@ func TestItemLifecycleCoversShowRemoveAndStateSync(t *testing.T) {
 		assert.Equal(t, settings.DefaultEndpointID, hello.Endpoint)
 
 		// The item is shown, and removed after its duration (B11).
-		id, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
+		id, ended, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
 			Kind:     "text",
 			Position: settings.Position{Model: settings.PositionSimple, Point: "top"},
 			Duration: 20 * time.Millisecond,
@@ -111,10 +111,16 @@ func TestItemLifecycleCoversShowRemoveAndStateSync(t *testing.T) {
 		time.Sleep(30 * time.Millisecond) // the duration timer fires
 		synctest.Wait()                   // the removal broadcast has run
 		assert.Equal(t, overlay.TypeItemRemove, rec.all()[3].Type)
+		// The end channel closes when the item leaves the active set (B14).
+		select {
+		case <-ended:
+		default:
+			t.Fatal("the end channel is not closed")
+		}
 		assert.False(t, svc.RemoveItem(context.Background(), settings.DefaultEndpointID, id)) // twice is a no-op
 
 		// A new client sees the active item again in its handshake (B4).
-		id2, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
+		id2, _, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
 			Kind: "text", Position: settings.Position{Model: settings.PositionSimple, Point: "center"},
 		})
 		require.NoError(t, err)
@@ -134,7 +140,7 @@ func TestItemEndedRemovesTheItemCoversB14(t *testing.T) {
 	rec := &recorder{}
 	rec.attach(t, svc)
 	rec.wait(t, 2) // handshake
-	id, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
+	id, ended, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
 		Kind:     "video",
 		Position: settings.Position{Model: settings.PositionSimple, Point: "center"},
 	})
@@ -143,6 +149,12 @@ func TestItemEndedRemovesTheItemCoversB14(t *testing.T) {
 	require.True(t, svc.ItemEnded(context.Background(), settings.DefaultEndpointID, id))
 	rec.wait(t, 4)
 	assert.Equal(t, overlay.TypeItemRemove, rec.all()[3].Type)
+	// The end channel closes on the item.ended (B14).
+	select {
+	case <-ended:
+	default:
+		t.Fatal("the end channel is not closed")
+	}
 	assert.Empty(t, svc.ActiveItems(settings.DefaultEndpointID))
 }
 
@@ -153,20 +165,20 @@ func TestItemValidationCoversB9AndB10(t *testing.T) {
 	svc := testService(t, settings.Overlay{})
 	pos := settings.Position{Model: settings.PositionSimple, Point: "center"}
 
-	_, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{Kind: "hologram", Position: pos})
+	_, _, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{Kind: "hologram", Position: pos})
 	require.Error(t, err)
-	_, err = svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{Kind: "text", Position: pos, Animation: "spiral"})
+	_, _, err = svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{Kind: "text", Position: pos, Animation: "spiral"})
 	require.Error(t, err)
-	_, err = svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
+	_, _, err = svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
 		Kind: "text", Position: settings.Position{Model: "warp", Point: "center"},
 	})
 	require.Error(t, err)
-	_, err = svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{Kind: "text", Position: pos, Duration: -time.Second})
+	_, _, err = svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{Kind: "text", Position: pos, Duration: -time.Second})
 	require.Error(t, err)
 	assert.Empty(t, svc.ActiveItems(settings.DefaultEndpointID))
 
 	// The random position is rolled into percent coordinates (B9).
-	id, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
+	id, _, err := svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
 		Kind: "text", Position: settings.Position{Model: settings.PositionRandom},
 	})
 	require.NoError(t, err)
@@ -240,7 +252,7 @@ func TestReloadAppliesTheSectionCoversB2(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	id, err := svc.ShowItem(context.Background(), "alerts", overlay.Item{
+	id, ended, err := svc.ShowItem(context.Background(), "alerts", overlay.Item{
 		Kind: "text", Position: settings.Position{Model: settings.PositionSimple, Point: "center"},
 	})
 	require.NoError(t, err)
@@ -258,6 +270,58 @@ func TestReloadAppliesTheSectionCoversB2(t *testing.T) {
 	assert.True(t, ok)
 	assert.Empty(t, svc.ActiveItems("alerts"))
 	require.False(t, svc.RemoveItem(context.Background(), "alerts", id))
+	// The dropped item closes its end channel (B11, B14).
+	select {
+	case <-ended:
+	default:
+		t.Fatal("the end channel is not closed")
+	}
+}
+
+// TestWidgetUpdateAndVisibilityCoversB21AndB22: widget.update goes to
+// the runtimes of the endpoint of the widget, and WidgetVisible reports
+// the section flag and the runtime overrides.
+func TestWidgetUpdateAndVisibilityCoversB21AndB22(t *testing.T) {
+	sec := settings.Overlay{
+		Widgets: []settings.OverlayWidget{
+			{ID: "goal1", Kind: "goal", Name: "Goal", Visible: true, Position: settings.Position{Model: settings.PositionSimple, Point: "top"}},
+			{ID: "label1", Kind: "label", Visible: false, Position: settings.Position{Model: settings.PositionSimple, Point: "bottom"}},
+		},
+	}
+	svc := testService(t, sec)
+	rec := &recorder{}
+	rec.attach(t, svc)
+	rec.wait(t, 2) // handshake
+
+	// The section flags (B21).
+	v, ok := svc.WidgetVisible("goal1")
+	assert.True(t, ok)
+	assert.True(t, v)
+	v, ok = svc.WidgetVisible("label1")
+	assert.True(t, ok)
+	assert.False(t, v)
+	_, ok = svc.WidgetVisible("nope")
+	assert.False(t, ok)
+
+	// A runtime override counts too (B21).
+	require.NoError(t, svc.SetVisible(context.Background(), "label1", true))
+	rec.wait(t, 3)
+	v, _ = svc.WidgetVisible("label1")
+	assert.True(t, v)
+
+	// widget.update goes to the runtimes of the endpoint (B22).
+	require.NoError(t, svc.UpdateWidget(context.Background(), "goal1", map[string]any{"total": 100}))
+	rec.wait(t, 4)
+	msg := rec.all()[3]
+	assert.Equal(t, overlay.TypeWidgetUpdate, msg.Type)
+	data := msg.Data.(overlay.WidgetUpdateData)
+	assert.Equal(t, "goal1", data.ID)
+	assert.Equal(t, map[string]any{"total": 100}, data.State)
+
+	// An unknown widget is an error with the ID in the message.
+	err := svc.UpdateWidget(context.Background(), "nope", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nope")
 }
 
 // wait checks that n messages are recorded; the sends of the service
