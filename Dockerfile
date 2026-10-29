@@ -37,7 +37,9 @@ ENV STREAMCREW_MODE=server \
 
 USER 65532:65532
 VOLUME /data
-EXPOSE 8740
+# The API and the overlay server (roadmap 7.1); in server mode both
+# listen on all interfaces.
+EXPOSE 8740 8742
 
 ENTRYPOINT ["/usr/local/bin/streamcrew"]
 CMD ["serve"]

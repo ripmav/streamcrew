@@ -96,7 +96,7 @@ Weitere Plattformen (YouTube, Kick, Multiplattform) stehen seit dem 2026-09-30 i
 | Phase 4: Twitch | 4.1 (Authentifizierung), 4.2 (Helix-Client), 4.3 (EventSub), 4.4 (Funktionen) und 4.5 (Tests) abgeschlossen; das Exit-Kriterium des manuellen 4-h-Test-Streams (4.5) ist noch offen |
 | Phase 5: Core-Services | abgeschlossen: 5.1, 5.2.1–5.2.6, 5.3, 5.4, 5.5 und 5.6 (P0 und P1) |
 | Phase 6: API, CLI, TUI | in Arbeit (Nachprüfung 2026-10-23): 6.1, 6.2–6.3 (bis auf CLI-Reste), 6.4 (Grundgerüst; Ansichten bis auf Login-Flow; TUI-Tests mit Test-Harness), 6.6 abgeschlossen, 6.5 bis auf die Nacharbeit aus dem Code-Review 2026-10-24; offen: 6.2 Agent-Handler, 6.5 Config-API nur einschränkend und `serve`-Verdrahtung, 6.4 Login-Flow, 6.7 ADR-0025-Akzeptanz und erster Release-Tag |
-| Phase 7: Overlays und Medien | in Arbeit (2026-10-27): Spezifikation und ADRs (0019, 0020) fertig; 7.1–7.5 in Arbeit |
+| Phase 7: Overlays und Medien | in Arbeit (2026-10-27): Spezifikation und ADRs (0019, 0020) fertig, 7.1 fertig, 7.2–7.5 in Arbeit |
 | Phase 8: Economy, Community, Spiele | offen |
 | Phase 9: Integrationen, Scripting, Agent | offen |
 | Phase 10: Developer-API, MCP, Webhooks, Import | offen |
@@ -820,13 +820,13 @@ Konfiguration (6.5) bzw. der Konfigurationsdatei.
 ### 7.1 Overlay-Server und Runtime
 
 - [x] Spezifikation `docs/spec/overlays.md` und ADR-0019: Architektur und Protokoll (S), erledigt 2026-10-27
-- [ ] HTTP- und WebSocket-Server, mehrere Endpunkte (eine URL je Browserquelle), optionales Token, Wiederverbinden der Clients (M)
-- [ ] Neu geschriebene Overlay-Runtime in TypeScript, gebündelt mit der Go-API von esbuild per `go generate` und per `go:embed` ausgeliefert (L):
+- [x] HTTP- und WebSocket-Server, mehrere Endpunkte (eine URL je Browserquelle), optionales Token, Wiederverbinden der Clients (M), erledigt 2026-10-27
+- [x] Neu geschriebene Overlay-Runtime in TypeScript, gebündelt mit der Go-API von esbuild per `go generate` und per `go:embed` ausgeliefert (L), erledigt 2026-10-27:
   - Pakete, Positionen, Ebenen
   - Ein- und Ausblend-Animationen, Batching
   - Sandbox-iframes für eigenes HTML
-- [ ] Dateien aus freigegebenen Verzeichnissen (`os.Root`), Range-Requests (`http.ServeContent`), korrekte MIME-Typen (S)
-- [ ] Settings-Sektion „overlay“ mit ihren Funktionen, aus 3.2 übertragen (S)
+- [x] Dateien aus freigegebenen Verzeichnissen (`os.Root`), Range-Requests (`http.ServeContent`), korrekte MIME-Typen (S), erledigt 2026-10-27
+- [x] Settings-Sektion „overlay“ mit ihren Funktionen, aus 3.2 übertragen (S), erledigt 2026-10-27
 
 ### 7.2 Items und Widgets (P1)
 
@@ -1276,6 +1276,7 @@ Eigene Datei seit 2026-10-09: [backlog.md](backlog.md).
 
 | Datum | Änderung |
 |---|---|
+| 2026-10-27 | Phase 7.1 (Overlay-Server und Runtime) code-seitig abgeschlossen: neuer, nicht-kritischer HTTP-Server `internal/overlay` neben dem API-Server (ADR-0019) — Endpunkte mit eigener URL (`/overlay/{id}`, `default` immer), JSON-Protokoll über `coder/websocket` (Handshake `hello` → `state.widgets` → aktive Items, `ready`-Resync, Backoff-Client), optionales Token als Query-Parameter (sonst 401), Items (Kinds, Positionen, Ebenen, Animationen, Dauer mit Auto-Remove, `item.ended`), Widget-Sichtbarkeit (B21). Embedded TypeScript-Runtime (`internal/overlay/runtime`, esbuild per `go:generate` gepinnt, Bundle eingecheckt + `go:embed`, CI-Regen-Check), ein Request pro Browserquelle. Medien aus `<data-dir>/profiles/<id>/media/` und freigegebenen `file-root`-Wurzeln über `os.Root` + `http.ServeContent` (Range, MIME), Gate `host:fs`. Settings-Sektion `overlay` (v1), Config `overlay-listen` (Default `127.0.0.1:8742`, Server-Modus `:8742`, nur TCP) und `overlay-token` (Credential, aus `config show` draußen, Restart-only). Die Readiness des Cores blockiert nicht mehr an fehlgeschlagenen nicht-kritischen Runnables — der Overlay-Server ist der erste, und sein Ausfall (z. B. belegter Port) darf den Core nicht un-ready machen (B1); `supervisor.Status` trägt dafür die Kritikalität. ADR-0019: Verweis auf den Web-Client berichtigt (separates Web-Repo, kein `internal/web`); `Dockerfile` EXPOSE 8742; usage-Overlay-Abschnitt; Test-Matrix `docs/tests/I-7.1-overlay-server.md`. |
 | 2026-10-24 | Nachprüfung Doku gegen Code (Code-Review 2026-10-24, D1–D6): ADR-0025 und Code-ADRs 0015–0017 als akzeptiert gesetzt (Index und ADR-Dateien), Code-ADR-0001 `go 1.27.3`; die Release-Pipeline hat einen geglückten Lauf (`v0.1.0-alpha2`, Pre-Release 2026-10-24) — der erste echte Release-Tag der M2-Exit-Kriterien steht mit dem stabilen Tag; die Spezifikationen moderation, twitch-events und twitch-multi-channel stehen auf „Umgesetzt“ mit abgehakten Akzeptanzboxen; die stale Verweise in README/usage (Modus-Standard, Token-Regel, Registry-Image, `profile channels chat`) sind berichtigt. |
 | 2026-10-23 | Zwei Produkt-Bugs aus der TUI-Test-Migration (6.4.3, PR #326) gefixt (Folge-PR im selben Stack): (1) `convertEvent` (`internal/app/api_stream.go`) setzte `Event.Type` nie — die TUI routet Live-Stream-Events per `GetType()` und sah sie deshalb nie, und der Kind-Filter des Streams (`EventFilter.Kinds`) matchte auf die leeren Typen nichts. Jetzt trägt jedes konvertierte Event seinen Protokolltypen (stream.proto: `chat.message`, `feed`, `command.instance`, `prompt`, `log`); Test `TestConvertEventCarriesTheProtocolType`. (2) Die `editing`-Flags der TUI (Commands und Settings, gleicher Fehler) wurden in `editCommand`/`editConfig` auf einem Value-Receiver-Copy gesetzt und nie zurückgesetzt — der „editing in $EDITOR …“-Status erschien nie. Jetzt Pointer-Receiver (wie `applyCommandFilter`), Reset im `actionDoneMsg`/`configUpdatedMsg`, und die Commands-View rendert die Status-Zeile (die Settings-View renderte sie schon); Tests: Edit-Subtests mit no-op- und blockierendem Editor. Test-Matrix `docs/tests/fix-event-type-and-editing-flag.md`. |
 | 2026-10-24 | Code-Review 2026-10-24, V3/C14: Der Projektinhaber hat den Widerspruch zwischen ADR-0013, Punkt 3, und Code-ADR-0021 entschieden ([Nachtrag 2026-10-24](adr/code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-24-die-api-erweitert-keine-rechte)). `ConfigService/Update` darf Rechte und sicherheitsrelevante Einstellungen nur einschränken, gemessen am aktuell wirksamen Stand; lokal in der Datei bleibt Erweitern möglich. `log-file` gilt nur noch beim Start (restart statt hot), weil ein Admin-Token sonst Log-Zeilen in beliebige Dateien schreiben ließe. 6.5 bekommt drei offene Punkte: die Prüfung in `Watcher.Update`, `log-file` als restart und danach die Verdrahtung des File-Resolvers in `serve`. |

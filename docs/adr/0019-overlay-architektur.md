@@ -13,7 +13,7 @@ Phase 7 führt Overlay-Items (Text, Bild, Video, Ton, HTML, YouTube, Clips, Emot
 
 Drei Varianten standen zur Diskussion:
 
-1. **Browser-Pane im Haupt-Webclient** — Overlays wären Tabs des Streamer-UI.
+1. **Browser-Pane im Web-Client (separates Web-Repo `streamcrew-web`)** — Overlays wären Tabs des Streamer-UI.
 2. **Eigener HTTP-Server + eingebetteter Web-Client** — die Streamcrew-App hostet die Overlay-Seiten selbst; OBS zeigt die URLs in Browser-Panes (Q1).
 3. **Externe Overlay-App** (z. B. Streamlabs-Overlay-artig).
 
@@ -141,7 +141,7 @@ Client → Server:
 
 | Variante | Pro | Contra |
 | --- | --- | --- |
-| Browser-Pane im Haupt-Webclient | Kein zweiter Server | Zwei Zielgeräte in einer SPA; die TUI ist nicht für OBS gebaut; der Browser-Pane würde das Verwaltungs-UI laden |
+| Browser-Pane im Web-Client (Web-Repo) | Kein zweiter Server | Zwei Zielgeräte in einer SPA; der Browser-Pane würde die komplette Verwaltungs-SPA laden, und das Web-Repo ist kein Teil dieses Builds |
 | **Eigener HTTP-Server (gewählt)** | Isoliert, einfach, OBS-nativ (Q1), wiederverwendete Bundle-Pipeline | Zweiter Port, zweiter Rebind-Pfad |
 | Externe Overlay-App | Getrennter Prozess | Zusätzliche Installation, Duplizität des Protokolls, keine gemeinsame Medienlieferung, gegen das 1-App-Ziel der Roadmap |
 

@@ -80,6 +80,32 @@ func TestDefaultsWhenNeverSaved(t *testing.T) {
 	u, err := settings.Load(t.Context(), svc, settings.DefaultUsers())
 	require.NoError(t, err)
 	assert.Equal(t, settings.Users{}, u, "no regular role by default (users-and-roles.md, B26)")
+
+	o, err := settings.Load(t.Context(), svc, settings.DefaultOverlay())
+	require.NoError(t, err)
+	assert.Equal(t, settings.Overlay{}, o, "B2: the default endpoint exists without an entry")
+}
+
+// TestOverlayDefaultRoundTripCoversB2: the overlay defaults pass their own
+// validation, and a widget added to the defaults saves and loads back.
+func TestOverlayDefaultRoundTripCoversB2(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc, _ := newService(t)
+	o := settings.DefaultOverlay()
+	require.NoError(t, o.Validate())
+	o.Widgets = append(o.Widgets, settings.OverlayWidget{
+		ID:       "w1",
+		Kind:     "label",
+		Name:     "Label",
+		Position: settings.Position{Model: settings.PositionSimple, Point: "top"},
+	})
+	require.NoError(t, settings.Save(ctx, svc, o))
+	got, err := settings.Load(ctx, svc, settings.DefaultOverlay())
+	require.NoError(t, err)
+	require.NoError(t, got.Validate())
+	assert.Empty(t, got.Endpoints)
+	assert.Equal(t, o.Widgets, got.Widgets)
 }
 
 func TestSaveAndLoad(t *testing.T) {
@@ -242,6 +268,17 @@ func TestValidation(t *testing.T) {
 		settings.Moderation{Filters: []settings.Filter{{Kind: settings.FilterWord, Word: "x", Exempt: []role.Role{"vip"}}}},
 		settings.Moderation{StrikeLevels: []settings.StrikeLevel{{Level: 0}}},
 		settings.Moderation{StrikeLevels: []settings.StrikeLevel{{Level: 1}, {Level: 1}}},
+		settings.Overlay{Endpoints: []settings.OverlayEndpoint{{ID: ""}}},
+		settings.Overlay{Endpoints: []settings.OverlayEndpoint{{ID: "alerts"}, {ID: "alerts"}}},
+		settings.Overlay{Endpoints: []settings.OverlayEndpoint{{ID: "default"}}}, // the default endpoint always exists (B2)
+		settings.Overlay{Widgets: []settings.OverlayWidget{{ID: ""}}},
+		settings.Overlay{Widgets: []settings.OverlayWidget{{ID: "w1"}, {ID: "w1"}}},
+		settings.Overlay{Widgets: []settings.OverlayWidget{{ID: "w1", Kind: "hologram"}}},
+		settings.Overlay{Widgets: []settings.OverlayWidget{{ID: "w1", Kind: "label", Endpoint: "nope"}}},
+		settings.Overlay{Widgets: []settings.OverlayWidget{{ID: "w1", Kind: "label", Position: settings.Position{Model: "warp"}}}},
+		settings.Overlay{Widgets: []settings.OverlayWidget{{ID: "w1", Kind: "label", Position: settings.Position{Model: settings.PositionSimple, Point: "nope"}}}},
+		settings.Overlay{Widgets: []settings.OverlayWidget{{ID: "w1", Kind: "label", Position: settings.Position{Model: settings.PositionPercent, X: 101}}}},
+		settings.Overlay{Widgets: []settings.OverlayWidget{{ID: "w1", Kind: "label", Position: settings.Position{Model: settings.PositionPixels, Y: -1}}}},
 	} {
 		assert.Error(t, settings.Save(ctx, svc, s), "%+v", s)
 	}

@@ -7,9 +7,9 @@
 //
 // There are the sections "backups" and "time" (roadmap 2.2), "commands"
 // (roadmap 3.2), "locale" (roadmap 3.4, ADR-0022), "events" (roadmap 3.6),
-// "channelPoints" (roadmap 4.4), "channels" (roadmap 4.6), and "general"
-// and "chat" (roadmap 5.1); "moderation" and "overlay" follow with their
-// features.
+// "channelPoints" (roadmap 4.4), "channels" (roadmap 4.6), and "general",
+// "chat" (roadmap 5.1) and "moderation" (roadmap 5.2) and "overlay"
+// (roadmap 7.1).
 package settings
 
 import (
@@ -18,6 +18,7 @@ import (
 	json "encoding/json/v2"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -64,6 +65,7 @@ func New(repo Repository) (*Service, error) {
 		{Type: sectionUsers, Version: 1, Decode: decode[Users]},
 		{Type: sectionTimers, Version: 1, Decode: decode[Timers]},
 		{Type: sectionModeration, Version: 1, Decode: decode[Moderation]},
+		{Type: sectionOverlay, Version: 1, Decode: decode[Overlay]},
 	} {
 		if err := r.Register(e); err != nil {
 			return nil, err
@@ -178,6 +180,8 @@ func defaultSection(section string) (Section, bool) {
 		return DefaultTimers(), true
 	case sectionModeration:
 		return DefaultModeration(), true
+	case sectionOverlay:
+		return DefaultOverlay(), true
 	}
 	return nil, false
 }
@@ -202,6 +206,7 @@ const (
 	sectionUsers         = "users"
 	sectionTimers        = "timers"
 	sectionModeration    = "moderation"
+	sectionOverlay       = "overlay"
 )
 
 // Limits of the section "events" (spec events.md, B5, B8, B10).
@@ -683,6 +688,171 @@ func (c Channels) Contains(login string) bool {
 		}
 	}
 	return false
+}
+
+// DefaultEndpointID is the overlay endpoint that always exists (spec
+// overlays.md, B2); the URLs of the items and the audio sink use it when
+// they name no endpoint.
+const DefaultEndpointID = "default"
+
+// Overlay configures the overlay server of the profile (spec
+// overlays.md, B2, B19, roadmap 7.1): the named endpoints with their own
+// URL each and the widgets defined in the profile. The mutable state of a
+// widget (goal progress, timer values, boss health) is not part of the
+// section; it is stored per widget in the profile (B20, roadmap 7.2).
+type Overlay struct {
+	// Endpoints are the named endpoints; the ID default always exists,
+	// with or without an entry here (B2).
+	Endpoints []OverlayEndpoint `json:"endpoints"`
+	// Widgets are the widgets defined in the profile, in the order they
+	// were added; empty for none (B19).
+	Widgets []OverlayWidget `json:"widgets"`
+}
+
+// OverlayEndpoint is one named endpoint with its own URL (B2).
+type OverlayEndpoint struct {
+	// ID is the address part of the URL /overlay/<id>; not empty and
+	// unique in the profile.
+	ID string `json:"id"`
+	// Name is the display name of the endpoint; empty for the ID.
+	Name string `json:"name,omitempty"`
+}
+
+// OverlayWidget is one widget defined in the profile (B19).
+type OverlayWidget struct {
+	// ID is unique in the profile; not empty.
+	ID string `json:"id"`
+	// Kind is the widget kind, one of KnownWidgetKinds.
+	Kind string `json:"kind"`
+	// Name is the display name of the widget; empty for the ID.
+	Name string `json:"name,omitempty"`
+	// Endpoint is the endpoint the widget shows on; empty for default
+	// (B19).
+	Endpoint string `json:"endpoint,omitempty"`
+	// Position is where the widget shows (B9); the default is the
+	// simple point top-left.
+	Position Position `json:"position"`
+	// Visible switches the widget on and off (B21); a hidden widget does
+	// not run and is not sent to the runtime.
+	Visible bool `json:"visible"`
+	// Config is the kind-specific configuration as a JSON document;
+	// empty for none. It is not validated here; the widget service of
+	// the kind validates it (roadmap 7.2).
+	Config any `json:"config,omitempty"`
+}
+
+// Position is a position of an item or widget on the endpoint (B9): one
+// of the models with its coordinates.
+type Position struct {
+	// Model is the position model: simple, percent, pixels or random.
+	Model string `json:"model"`
+	// Point is the named screen point for the model simple; one of the
+	// SimplePoints.
+	Point string `json:"point,omitempty"`
+	// X and Y are the coordinates for the models percent (0 to 100) and
+	// pixels (0 or more), in that order.
+	X float64 `json:"x,omitempty"`
+	Y float64 `json:"y,omitempty"`
+}
+
+// The position models (B9).
+const (
+	PositionSimple  = "simple"
+	PositionPercent = "percent"
+	PositionPixels  = "pixels"
+	PositionRandom  = "random"
+)
+
+// SimplePoints are the nine named screen points of the model simple
+// (B9), in the order the runtime lays them out.
+//
+//nolint:gochecknoglobals // static table of screen points
+var SimplePoints = []string{
+	"top-left", "top", "top-right",
+	"center-left", "center", "center-right",
+	"bottom-left", "bottom", "bottom-right",
+}
+
+// KnownWidgetKinds are the widget kinds of phase 7 (spec overlays.md,
+// B24–B37), in the order of the roadmap: the P1 kinds of 7.2 first.
+//
+//nolint:gochecknoglobals // static table of kinds
+var KnownWidgetKinds = []string{
+	"label", "goal", "timer", "event_list", "chat",
+	"persistent_timer", "stream_boss", "end_credits", "leaderboard",
+	"wheel", "poll", "persistent_emote_effect", "game_queue", "discord_voice",
+}
+
+// DefaultOverlay returns the defaults of B2 and B19: no endpoints
+// entries (the default endpoint exists without an entry) and no
+// widgets.
+func DefaultOverlay() Overlay {
+	return Overlay{}
+}
+
+// DocType implements polydoc.Document.
+func (Overlay) DocType() string { return sectionOverlay }
+
+// Validate checks the section (B2, B9, B19).
+func (o Overlay) Validate() error { return o.validate() }
+
+func (o Overlay) validate() error {
+	endpoints := map[string]bool{DefaultEndpointID: true}
+	for i, e := range o.Endpoints {
+		if e.ID == "" {
+			return fmt.Errorf("endpoint %d: the ID is empty", i)
+		}
+		if endpoints[e.ID] {
+			return fmt.Errorf("endpoint %d: the ID %q is set more than once", i, e.ID)
+		}
+		endpoints[e.ID] = true
+	}
+	seen := make(map[string]bool, len(o.Widgets))
+	for i, w := range o.Widgets {
+		if w.ID == "" {
+			return fmt.Errorf("widget %d: the ID is empty", i)
+		}
+		if seen[w.ID] {
+			return fmt.Errorf("widget %d: the ID %q is set more than once", i, w.ID)
+		}
+		seen[w.ID] = true
+		if !slices.Contains(KnownWidgetKinds, w.Kind) {
+			return fmt.Errorf("widget %q: the kind %q is unknown", w.ID, w.Kind)
+		}
+		if w.Endpoint != "" && w.Endpoint != DefaultEndpointID && !endpoints[w.Endpoint] {
+			return fmt.Errorf("widget %q: the endpoint %q is unknown", w.ID, w.Endpoint)
+		}
+		if err := w.Position.validate(); err != nil {
+			return fmt.Errorf("widget %q: %w", w.ID, err)
+		}
+	}
+	return nil
+}
+
+// Validate checks the position for its model (B9).
+func (p Position) Validate() error { return p.validate() }
+
+func (p Position) validate() error {
+	switch p.Model {
+	case PositionSimple:
+		if !slices.Contains(SimplePoints, p.Point) {
+			return fmt.Errorf("the simple point %q is unknown", p.Point)
+		}
+	case PositionPercent:
+		if p.X < 0 || p.X > 100 || p.Y < 0 || p.Y > 100 {
+			return fmt.Errorf("the percent coordinates (%g, %g) are not between 0 and 100", p.X, p.Y)
+		}
+	case PositionPixels:
+		if p.X < 0 || p.Y < 0 {
+			return fmt.Errorf("the pixel coordinates (%g, %g) must be 0 or more", p.X, p.Y)
+		}
+	case PositionRandom:
+		// The server rolls a random point when it shows (B9); the
+		// document carries no coordinates.
+	default:
+		return fmt.Errorf("the position model %q is unknown", p.Model)
+	}
+	return nil
 }
 
 // migrateChannelsV1 drops the chat adapter of version 1: the adapters

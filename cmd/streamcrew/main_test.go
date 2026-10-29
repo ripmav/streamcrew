@@ -106,6 +106,7 @@ func TestConfigShow(t *testing.T) {
 		DataDir:         filepath.Join(userDir, config.AppDirName),
 		Mode:            config.ModeServer,
 		Listen:          ":8740",
+		OverlayListen:   ":8742",
 		ShutdownTimeout: "15s",
 		LogLevel:        "debug",
 		LogFormat:       "json",

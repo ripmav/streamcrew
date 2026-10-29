@@ -326,6 +326,81 @@ func TestResolve(t *testing.T) {
 	}
 }
 
+func TestResolveOverlayListen(t *testing.T) {
+	t.Parallel()
+	valid := func(mode config.Mode) config.Config {
+		return config.Config{
+			DataDir:         "/data",
+			Mode:            mode,
+			ShutdownTimeout: time.Second,
+			Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},
+			Log:             config.LogConfig{Level: "info", Format: "text", MaxSize: 1},
+		}
+	}
+
+	t.Run("default per mode", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			mode config.Mode
+			want string
+		}{
+			{config.ModeDaemon, "127.0.0.1:8742"},
+			{config.ModeDesktop, "127.0.0.1:8742"},
+			{config.ModeServer, ":8742"},
+		}
+		for _, tc := range tests {
+			t.Run(string(tc.mode), func(t *testing.T) {
+				t.Parallel()
+				cfg := valid(tc.mode)
+				require.NoError(t, cfg.Resolve())
+				assert.Equal(t, tc.want, cfg.OverlayListen, "B1")
+			})
+		}
+	})
+
+	tests := []struct {
+		name       string
+		modify     func(*config.Config)
+		wantListen string
+		wantErr    []string
+	}{
+		{name: "explicit listen", modify: func(c *config.Config) { c.OverlayListen = "0.0.0.0:9999" }, wantListen: "0.0.0.0:9999"},
+		{
+			name:    "unix is rejected",
+			modify:  func(c *config.Config) { c.OverlayListen = "unix:/data/x.sock" },
+			wantErr: []string{"--overlay-listen", "TCP only"},
+		},
+		{name: "bad port", modify: func(c *config.Config) { c.OverlayListen = "localhost:http" }, wantErr: []string{"--overlay-listen"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := valid(config.ModeDaemon)
+			tc.modify(&cfg)
+			err := cfg.Resolve()
+			if len(tc.wantErr) == 0 {
+				require.NoError(t, err)
+				assert.Equal(t, tc.wantListen, cfg.OverlayListen)
+				return
+			}
+			require.Error(t, err)
+			for _, want := range tc.wantErr {
+				assert.ErrorContains(t, err, want)
+			}
+		})
+	}
+}
+
+func TestViewOmitsTheOverlayToken(t *testing.T) {
+	t.Parallel()
+	cfg := config.Config{OverlayListen: "127.0.0.1:8742", OverlayToken: "secret"}
+	out, err := yaml.Marshal(cfg.View())
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "secret", "the token is a credential")
+	assert.NotContains(t, string(out), "overlay_token")
+	assert.Contains(t, string(out), "overlay_listen")
+}
+
 func TestParseLevel(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"debug", "info", "warn", "error"} {

@@ -100,6 +100,10 @@ type Status struct {
 	Err      error         // the error that led to StateBackoff or StateFailed
 	Restarts int           // number of restarts so far
 	Delay    time.Duration // the wait before the next start, in StateBackoff
+	// Critical is true if the failure of the runnable stops the core;
+	// the readiness of the core only counts the critical ones against
+	// failed states.
+	Critical bool
 }
 
 // Option configures a Supervisor.
@@ -208,7 +212,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	s.mu.Unlock()
 
 	for _, e := range entries {
-		s.report(Status{Name: e.name, State: StateStarting})
+		s.report(Status{Name: e.name, State: StateStarting, Critical: e.critical})
 	}
 
 	// Each runnable gets its own context, independent of ctx, so that they
@@ -286,7 +290,7 @@ func (c *child) loop(ctx context.Context) {
 	delay := MinBackoff
 
 	for restarts := 0; ; restarts++ {
-		c.sup.report(Status{Name: name, State: StateRunning, Restarts: restarts})
+		c.sup.report(Status{Name: name, State: StateRunning, Restarts: restarts, Critical: c.entry.critical})
 		logger.DebugContext(ctx, "runnable started", "restarts", restarts)
 		started := time.Now()
 		err := runRecovering(ctx, c.entry.runnable)
@@ -298,12 +302,12 @@ func (c *child) loop(ctx context.Context) {
 		switch {
 		case err == nil && c.entry.policy != RestartAlways:
 			logger.InfoContext(ctx, "runnable finished")
-			c.sup.report(Status{Name: name, State: StateStopped, Restarts: restarts})
+			c.sup.report(Status{Name: name, State: StateStopped, Restarts: restarts, Critical: c.entry.critical})
 			c.stopForGood(ErrCriticalStopped)
 			return
 		case err != nil && (IsPermanent(err) || c.entry.policy == RestartNever):
 			logger.ErrorContext(ctx, "runnable failed", errorArgs(err)...)
-			c.sup.report(Status{Name: name, State: StateFailed, Err: err, Restarts: restarts})
+			c.sup.report(Status{Name: name, State: StateFailed, Err: err, Restarts: restarts, Critical: c.entry.critical})
 			c.stopForGood(err)
 			return
 		}
@@ -312,7 +316,7 @@ func (c *child) loop(ctx context.Context) {
 			delay = MinBackoff
 		}
 		wait := jitter(delay)
-		c.sup.report(Status{Name: name, State: StateBackoff, Err: err, Restarts: restarts, Delay: wait})
+		c.sup.report(Status{Name: name, State: StateBackoff, Err: err, Restarts: restarts, Delay: wait, Critical: c.entry.critical})
 		if err != nil {
 			logger.ErrorContext(ctx, "runnable failed, restarting", append(errorArgs(err), "delay", wait)...)
 		} else {
@@ -337,7 +341,7 @@ func (c *child) stopped(ctx context.Context, logger *slog.Logger, restarts int, 
 		logger.ErrorContext(ctx, "runnable returned an error while stopping", errorArgs(err)...)
 	}
 	logger.DebugContext(ctx, "runnable stopped")
-	c.sup.report(Status{Name: c.entry.name, State: StateStopped, Err: err, Restarts: restarts})
+	c.sup.report(Status{Name: c.entry.name, State: StateStopped, Err: err, Restarts: restarts, Critical: c.entry.critical})
 }
 
 // stopForGood tells Run to shut down if the runnable is critical.
