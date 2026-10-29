@@ -23,6 +23,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/id"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
+	"github.com/ripmav/streamcrew/internal/emote"
 	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/overlay"
 	"github.com/ripmav/streamcrew/internal/polydoc"
@@ -117,14 +118,24 @@ func (f *fakeOverlay) ShowAt(t *testing.T, i int) time.Time {
 	return f.showAt[i]
 }
 
+// count is the number of the shown items.
+func (f *fakeOverlay) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.items)
+}
+
 // fakeWidgets is a fake of the widget operations the action runs.
 type fakeWidgets struct {
-	mu     sync.Mutex
-	goals  []string
-	timers []string
-	adds   []string
-	pauses int
-	lists  []string
+	mu      sync.Mutex
+	goals   []string
+	timers  []string
+	adds    []string
+	pauses  int
+	lists   []string
+	credits []string
+	wheels  []string
+	bosses  []string
 }
 
 func (f *fakeWidgets) AddToGoal(_ context.Context, widgetID string, amount int64, p platform.Name, _ *user.User) error {
@@ -162,6 +173,34 @@ func (f *fakeWidgets) AddToEventList(_ context.Context, widgetID, userName, text
 	return nil
 }
 
+func (f *fakeWidgets) AddToCredits(_ context.Context, widgetID, section, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.credits = append(f.credits, fmt.Sprintf("%s:%s:%s", widgetID, section, text))
+	return nil
+}
+
+func (f *fakeWidgets) PlayCredits(_ context.Context, widgetID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.credits = append(f.credits, "play:"+widgetID)
+	return nil
+}
+
+func (f *fakeWidgets) SpinWheel(_ context.Context, widgetID string, _ *user.User) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.wheels = append(f.wheels, widgetID)
+	return nil
+}
+
+func (f *fakeWidgets) DamageStreamBoss(_ context.Context, widgetID string, amount int64, force bool, _ *user.User) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.bosses = append(f.bosses, fmt.Sprintf("%s:%d:%t", widgetID, amount, force))
+	return nil
+}
+
 // fixture wires the overlay type with the fakes and the note journal into
 // a running engine.
 type fixture struct {
@@ -185,6 +224,7 @@ func newFixture(t *testing.T) *fixture {
 		Overlay:   fakeOverlay,
 		Widgets:   fakeWidgets,
 		Clips:     fakeClips{clip: overlayaction.Clip{URL: "https://clips.twitch.tv/Clip", Duration: 30 * time.Second}},
+		Emotes:    testEmotes,
 		Logger:    slog.New(slog.DiscardHandler),
 	}
 	descs, err := overlayaction.Descriptors(ports)
@@ -233,6 +273,15 @@ type fakeClips struct {
 
 func (f fakeClips) LatestClip(_ context.Context, _ string) (overlayaction.Clip, error) {
 	return f.clip, f.err
+}
+
+// testEmotes is the Emotes port of the fixture: the catalog the emote
+// effect resolves over.
+func testEmotes(context.Context) []emote.Emote {
+	return []emote.Emote{
+		{ID: "e1", Code: "Kappa", Image: "https://emotes/Kappa.png"},
+		{ID: "e2", Code: "Pog", Image: "https://emotes/Pog.png"},
+	}
 }
 
 // overlayAction makes an overlay action of kind without ports, for the
@@ -306,7 +355,39 @@ func TestOverlayValidate(t *testing.T) {
 			a.Widget.Widget = ""
 		}, ok: false},
 		{name: "widget with unknown operation", kind: overlayaction.KindWidget, mutate: func(a *overlayaction.Overlay) {
-			a.Widget.Op = "spin_wheel"
+			a.Widget.Op = "not_an_operation"
+		}, ok: false},
+		{name: "widget spin_wheel valid", kind: overlayaction.KindWidget, ok: true, mutate: func(a *overlayaction.Overlay) {
+			a.Widget.Op = overlayaction.OpSpinWheel
+		}},
+		{name: "widget spin_wheel with amount", kind: overlayaction.KindWidget, mutate: func(a *overlayaction.Overlay) {
+			a.Widget.Op = overlayaction.OpSpinWheel
+			a.Widget.Amount = action.Fixed(decimal.New(1))
+		}, ok: false},
+		{name: "widget play_credits valid", kind: overlayaction.KindWidget, ok: true, mutate: func(a *overlayaction.Overlay) {
+			a.Widget.Op = overlayaction.OpPlayCredits
+		}},
+		{name: "widget add_to_credits valid", kind: overlayaction.KindWidget, ok: true, mutate: func(a *overlayaction.Overlay) {
+			a.Widget.Op = overlayaction.OpAddToCredits
+			a.Widget.Data = map[string]any{"section": "chatters"}
+			a.Widget.Text = "thanks"
+		}},
+		{name: "widget damage_stream_boss valid", kind: overlayaction.KindWidget, ok: true, mutate: func(a *overlayaction.Overlay) {
+			a.Widget.Op = overlayaction.OpDamageStreamBoss
+			a.Widget.Amount = action.Fixed(decimal.New(50))
+			a.Widget.Data = map[string]any{"force": true}
+		}},
+		{name: "widget damage_stream_boss without amount", kind: overlayaction.KindWidget, mutate: func(a *overlayaction.Overlay) {
+			a.Widget.Op = overlayaction.OpDamageStreamBoss
+		}, ok: false},
+		{name: "item emote_effect valid", kind: overlayaction.KindItem, ok: true, mutate: func(a *overlayaction.Overlay) {
+			a.Item.Content = map[string]any{"kind": "emote_effect", "emotes": []string{"Kappa"}}
+		}},
+		{name: "item emote_effect without emotes", kind: overlayaction.KindItem, mutate: func(a *overlayaction.Overlay) {
+			a.Item.Content = map[string]any{"kind": "emote_effect"}
+		}, ok: false},
+		{name: "item emote_effect with unknown effect", kind: overlayaction.KindItem, mutate: func(a *overlayaction.Overlay) {
+			a.Item.Content = map[string]any{"kind": "emote_effect", "emotes": []string{"Kappa"}, "effect": "warp"}
 		}, ok: false},
 		{name: "widget add_to_goal without amount", kind: overlayaction.KindWidget, mutate: func(a *overlayaction.Overlay) {
 			a.Widget.Op = overlayaction.OpAddToGoal
@@ -474,6 +555,26 @@ func TestOverlayWidgetOps(t *testing.T) {
 				a.Widget.Text = "hello"
 			}),
 			f.ov(t, overlayaction.KindWidget, func(a *overlayaction.Overlay) {
+				a.Widget.Widget = "e1"
+				a.Widget.Op = overlayaction.OpAddToCredits
+				a.Widget.Data = map[string]any{"section": "thanks"}
+				a.Widget.Text = "the crew"
+			}),
+			f.ov(t, overlayaction.KindWidget, func(a *overlayaction.Overlay) {
+				a.Widget.Widget = "e1"
+				a.Widget.Op = overlayaction.OpPlayCredits
+			}),
+			f.ov(t, overlayaction.KindWidget, func(a *overlayaction.Overlay) {
+				a.Widget.Widget = "w1"
+				a.Widget.Op = overlayaction.OpSpinWheel
+			}),
+			f.ov(t, overlayaction.KindWidget, func(a *overlayaction.Overlay) {
+				a.Widget.Widget = "b1"
+				a.Widget.Op = overlayaction.OpDamageStreamBoss
+				a.Widget.Amount = action.Fixed(decimal.New(50))
+				a.Widget.Data = map[string]any{"force": true}
+			}),
+			f.ov(t, overlayaction.KindWidget, func(a *overlayaction.Overlay) {
 				a.Widget.Op = overlayaction.OpHide
 			}),
 		)
@@ -485,7 +586,114 @@ func TestOverlayWidgetOps(t *testing.T) {
 		assert.Equal(t, 1, f.widgets.pauses)
 		assert.Equal(t, []string{"t1:-3:"}, f.widgets.goals)
 		assert.Equal(t, []string{"l1::hello"}, f.widgets.lists)
+		assert.Equal(t, []string{"e1:thanks:the crew", "play:e1"}, f.widgets.credits)
+		assert.Equal(t, []string{"w1"}, f.widgets.wheels)
+		assert.Equal(t, []string{"b1:50:true"}, f.widgets.bosses)
 		assert.Equal(t, map[string]any{"text": "new"}, f.overlay.updated["l1"])
 		assert.Equal(t, map[string]bool{"w1": false}, f.overlay.visible)
+
+		// add_to_credits without the section in the data is a clear error,
+		// the command continues without the widget call (B31, B38).
+		missing := f.h.Command("nocredits",
+			f.ov(t, overlayaction.KindWidget, func(a *overlayaction.Overlay) {
+				a.Widget.Widget = "e1"
+				a.Widget.Op = overlayaction.OpAddToCredits
+				a.Widget.Text = "x"
+			}),
+		)
+		in = f.h.Start(missing, engine.Params{})
+		synctest.Wait()
+		assert.Equal(t, engine.StateCompleted, f.h.Instance(in.ID).State)
+		assert.Len(t, f.widgets.credits, 2)
+	})
+}
+
+// TestOverlayEmoteEffectItem covers B35: the item kind emote_effect
+// resolves the names over the emote catalog, caps the shown emotes, keeps
+// the unknown as text while allowEmoji, and shows nothing without a
+// resolvable emote.
+func TestOverlayEmoteEffectItem(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t)
+
+		// The names resolve to the images of the catalog; maxShown caps
+		// the shown emotes over the list (B35).
+		cmd := f.h.Command("rain",
+			f.ov(t, overlayaction.KindItem, func(a *overlayaction.Overlay) {
+				a.Item.Content = map[string]any{
+					"kind": "emote_effect", "emotes": []string{"Kappa", "Pog"},
+					"effect": "rain", "perEmoteShown": 2, "maxShown": 3,
+				}
+			}),
+		)
+		in := f.h.Start(cmd, engine.Params{})
+		f.overlay.end(t, 0)
+		synctest.Wait()
+		assert.Equal(t, engine.StateCompleted, f.h.Instance(in.ID).State)
+		item := f.overlay.Item(t, 0)
+		assert.Equal(t, "emote_effect", item.Kind)
+		assert.Equal(t, map[string]any{
+			"effect": "rain",
+			"emotes": []map[string]any{
+				{"code": "Kappa", "image": "https://emotes/Kappa.png", "shown": 2},
+				{"code": "Pog", "image": "https://emotes/Pog.png", "shown": 1},
+			},
+		}, item.Content)
+
+		// allowEmoji keeps the unknown name without an image, as text
+		// for the runtime (B35).
+		cmd = f.h.Command("emoji",
+			f.ov(t, overlayaction.KindItem, func(a *overlayaction.Overlay) {
+				a.Item.Content = map[string]any{
+					"kind": "emote_effect", "emotes": []string{"Kappa", "Nope"},
+					"effect": "burst", "allowEmoji": true,
+				}
+			}),
+		)
+		in = f.h.Start(cmd, engine.Params{})
+		f.overlay.end(t, 1)
+		synctest.Wait()
+		item = f.overlay.Item(t, 1)
+		assert.Equal(t, map[string]any{
+			"effect": "burst",
+			"emotes": []map[string]any{
+				{"code": "Kappa", "image": "https://emotes/Kappa.png", "shown": 1},
+				{"code": "Nope", "image": "", "shown": 1},
+			},
+		}, item.Content)
+
+		// Without allowEmoji the unknown name is dropped, and without a
+		// resolvable emote no item is shown, the command continues
+		// (B35).
+		cmd = f.h.Command("dropped",
+			f.ov(t, overlayaction.KindItem, func(a *overlayaction.Overlay) {
+				a.Item.Content = map[string]any{
+					"kind": "emote_effect", "emotes": []string{"Kappa", "Nope"},
+				}
+			}),
+		)
+		in = f.h.Start(cmd, engine.Params{})
+		f.overlay.end(t, 2)
+		synctest.Wait()
+		item = f.overlay.Item(t, 2)
+		assert.Equal(t, map[string]any{
+			"effect": "random",
+			"emotes": []map[string]any{
+				{"code": "Kappa", "image": "https://emotes/Kappa.png", "shown": 1},
+			},
+		}, item.Content)
+
+		none := f.h.Command("none",
+			f.ov(t, overlayaction.KindItem, func(a *overlayaction.Overlay) {
+				a.Item.Content = map[string]any{
+					"kind": "emote_effect", "emotes": []string{"Nope", "Meh"},
+				}
+			}),
+		)
+		in = f.h.Start(none, engine.Params{})
+		synctest.Wait()
+		assert.Equal(t, engine.StateCompleted, f.h.Instance(in.ID).State)
+		assert.Equal(t, 3, f.overlay.count())
 	})
 }

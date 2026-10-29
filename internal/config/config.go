@@ -93,6 +93,11 @@ type Config struct {
 	// spec overlays.md, B43); empty for a connection without a password.
 	// Changes need a restart.
 	ObsPassword string `name:"obs-password" placeholder:"PASSWORD" help:"The password of the OBS obs-websocket (roadmap 7.4); empty for a connection without a password. Changes need a restart."`
+	// DiscordVoiceChannel is the ID of the voice channel the
+	// discord_voice widget tracks (roadmap 7.5, spec overlays.md, B37);
+	// the token comes from the environment STREAMCREW_DISCORD_TOKEN.
+	// Changes need a restart.
+	DiscordVoiceChannel string `name:"discord-voice-channel" placeholder:"CHANNEL-ID" help:"The ID of the Discord voice channel the discord_voice widget tracks (roadmap 7.5); the token comes from the environment STREAMCREW_DISCORD_TOKEN. Empty for an inactive service. Changes need a restart."`
 
 	// Grant, Revoke, FileRoot and OutboundAllow are the rights of
 	// Code-ADR-0019. Changes of them in the configuration file apply

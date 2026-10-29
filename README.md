@@ -17,12 +17,13 @@ Phase 6 (Agent-Plattform) ist fast vollständig umgesetzt, M2 (Headless-MVP) ist
 - **Log-Stream** (6.6): Log-Zeilen sind Ereignisse; Clients abonnieren sie gefiltert nach Level, Plattform, Channel und Ereignisklasse über den Event-Stream.
 - **Release MVP** (6.7): Auslieferung steht (Releases mit Binary, Doku und Docker-Tar, [ADR-0025](docs/adr/0025-release-und-distribution.md)); offen sind die ADR-0025-Akzeptanz und die Registry-Publishing-Nachführung.
 
-Phase 7 (Overlays und Medien) läuft:
+Phase 7 (Overlays und Medien) ist abgeschlossen (2026-10-28, M3 erfüllt):
 
 - **Overlay-Server** (7.1): Ein eigener HTTP-Server für OBS-Browserquellen ([ADR-0019](docs/adr/0019-overlay-architektur.md)) mit eingebetteter TypeScript-Runtime, mehreren Endpunkten, optionalem Token und Medienauslieferung aus freigegebenen Verzeichnissen.
 - **Items und Widgets** (7.2): Die Aktion `overlay` zeigt Items (Text, Bild, Video, Ton, HTML, YouTube, Clip, Timer) und steuert die fünf Widget-Kinds `label`, `goal`, `timer`, `event_list` und `chat` (Sichtbarkeit, Zustand, Fortschritt, Timer, Listen, Chat); der Ziel-Fortschritt bleibt im Profil, und die Zieleffekte laufen als Bus-Ereignisse.
 - **Medien** (7.3): Die Aktionen `sound` (Datei aus dem Medienverzeichnis) und `text_to_speech` (Browser-Speech, Google, Azure, Piper) spielen auf den Sinks `overlay` (Default, im Browser-Pane) und `local` (Audiogerät des Hosts, Build-Tag `localaudio` — die Release-Binaries `streamcrew-desktop`); [ADR-0020](docs/adr/0020-audio-ausgabe.md).
 - **OBS Studio** (7.4): Der Core verbindet sich per eigenem obs-websocket-v5-Client (`coder/websocket`) mit OBS — Szenen, Quellen, Filter, Stream, Aufnahme und Replay-Buffer als Bus-Ereignisse (`obs.*`) und als `streaming_software`-Aktion; ohne OBS startet der Core ohne Retry, eine abgerissene Verbindung reconnectet alle 5 s.
+- **Weitere Widgets** (7.5): Neun weitere Widget-Kinds — `persistent_timer` (persistiert, Stream-a-thons), `stream_boss` (Health, Overkill, Self-Heal), `end_credits` (Abspann-Sektionen), `leaderboard`, `wheel` (Glücksrad mit Modifiern), `poll` (aktive Twitch-Umfragen und -Vorhersagen), `persistent_emote_effect` (Emote-Combos aus dem Chat), `game_queue` (persistierte Queue) und `discord_voice` (Besetzung eines Voice-Kanals über das Discord-Gateway, Token nur aus der Umgebung) — dazu das Item-Kind `emote_effect` und die Widget-Operationen `add_to_credits`, `play_credits`, `spin_wheel`, `damage_stream_boss` und elf neue Bus-Ereignisse.
 
 Die vollständige Planung mit Abnahmekriterien steht in der [Roadmap](docs/roadmap.md).
 

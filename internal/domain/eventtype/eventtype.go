@@ -49,6 +49,40 @@ type Descriptor struct {
 const (
 	OverlayGoalProgress         event.Type = "overlay.goal.progress"
 	OverlayGoalSegmentCompleted event.Type = "overlay.goal.segment_completed"
+	// OverlayTimerAdjusted is the change of the persistent timer by an
+	// event amount or the operation add_to_timer (spec overlays.md, B29).
+	OverlayTimerAdjusted event.Type = "overlay.timer.adjusted"
+	// OverlayTimerCompleted is the persistent timer reaching zero
+	// (spec overlays.md, B29).
+	OverlayTimerCompleted event.Type = "overlay.timer.completed"
+	// OverlayBossDamage is the damage of the stream boss (spec
+	// overlays.md, B30).
+	OverlayBossDamage event.Type = "overlay.boss.damage"
+	// OverlayBossHeal is the healing of the stream boss (spec
+	// overlays.md, B30).
+	OverlayBossHeal event.Type = "overlay.boss.heal"
+	// OverlayBossNew is the new boss after the old one is dead (spec
+	// overlays.md, B30).
+	OverlayBossNew event.Type = "overlay.boss.new"
+	// OverlayWheelSpun is the finished spin of the wheel (spec
+	// overlays.md, B33).
+	OverlayWheelSpun event.Type = "overlay.wheel.spun"
+)
+
+// GameQueue, the queue of the profile (spec overlays.md, B36): the
+// entries run as bus events that event commands react to.
+const (
+	GameQueueJoined   event.Type = "gamequeue.joined"
+	GameQueueLeft     event.Type = "gamequeue.left"
+	GameQueuePosition event.Type = "gamequeue.position"
+)
+
+// DiscordVoice, the occupants of the configured Discord voice channel
+// (spec overlays.md, B37): the changes run as bus events that event
+// commands react to.
+const (
+	DiscordVoiceJoined event.Type = "discord.voice.joined"
+	DiscordVoiceLeft   event.Type = "discord.voice.left"
 )
 
 // OBS, the events of the OBS Studio connection (spec overlays.md, B44):
@@ -175,6 +209,19 @@ func All() []Descriptor {
 
 		neutral(OverlayGoalProgress, Always),
 		neutral(OverlayGoalSegmentCompleted, Always),
+		neutral(OverlayTimerAdjusted, Always),
+		neutral(OverlayTimerCompleted, Always),
+		neutral(OverlayBossDamage, Always),
+		neutral(OverlayBossHeal, Always),
+		neutral(OverlayBossNew, Always),
+		neutral(OverlayWheelSpun, Always),
+
+		neutral(GameQueueJoined, Always),
+		neutral(GameQueueLeft, Always),
+		neutral(GameQueuePosition, Always),
+
+		neutral(DiscordVoiceJoined, Always),
+		neutral(DiscordVoiceLeft, Always),
 
 		neutral(ObsStreamStarted, Always),
 		neutral(ObsStreamStopped, Always),

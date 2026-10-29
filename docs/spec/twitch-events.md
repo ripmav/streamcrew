@@ -94,7 +94,7 @@ Twitch-Actions (Roadmap 4.4, A4 für Umfragen und Vorhersagen).
 |---|---|---|
 | B20 | Die Antwort-Felder der Chatnachricht (`reply_parent_message_*` in EventSub) werden verworfen: die kanonische Chatnachricht des Cores hat kein Antwort-Feld. Ein Abbilden wäre ein Spec-Nachtrag mit `reply`-Aktion (Backlog, Roadmap 4.4/5.x). | Q1, Q3 |
 | B21 | Bei einem Massengeschenk nennt die Plattform nur die Gesamtzahl; die Beschenkten stehen nicht in der Nutzlast, der Core bildet sie nicht ab. | Q1, Q7 |
-| B22 | Umfragen und Vorhersagen als Ereignisse sind verworfen (B17); die Katalog-Typen `twitch.poll.*` und `twitch.prediction.*` bleiben im Katalog, werden aber nicht abonniert und lösen nichts aus. | Q5 |
+| B22 | Umfragen und Vorhersagen als Ereignisse sind verworfen (B17); die Katalog-Typen `twitch.poll.*` und `twitch.prediction.*` bleiben im Katalog, werden aber nicht abonniert und lösen nichts aus. Das `poll`-Widget (Roadmap 7.5) speist sich aus dem Helix-Status der Umfragen und Vorhersagen, die der Twitch-Action (Roadmap 7.5, `internal/poll`) erzeugt, und nicht aus diesen Typen. | Q5 |
 
 ## Quellen
 

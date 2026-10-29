@@ -17,17 +17,22 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"math/rand"
 	"slices"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/ripmav/streamcrew/internal/discord"
 	"github.com/ripmav/streamcrew/internal/domain/eventtype"
 	"github.com/ripmav/streamcrew/internal/domain/feed"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
+	"github.com/ripmav/streamcrew/internal/emote"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/overlay"
+	"github.com/ripmav/streamcrew/internal/poll"
 	"github.com/ripmav/streamcrew/internal/settings"
 	"github.com/ripmav/streamcrew/internal/template"
 )
@@ -46,6 +51,19 @@ const (
 	KindTimer     = "timer"
 	KindEventList = "event_list"
 	KindChat      = "chat"
+)
+
+// The kinds of the widgets of 7.5 (B29-B37).
+const (
+	KindPersistentTimer = "persistent_timer"
+	KindStreamBoss      = "stream_boss"
+	KindEndCredits      = "end_credits"
+	KindLeaderboard     = "leaderboard"
+	KindWheel           = "wheel"
+	KindPoll            = "poll"
+	KindEmoteEffect     = "persistent_emote_effect"
+	KindGameQueue       = "game_queue"
+	KindDiscordVoice    = "discord_voice"
 )
 
 // FeedTypes are the event types that land in the feed (events.md, B30);
@@ -114,6 +132,15 @@ type Ports struct {
 	// Locale returns the locale of the profile, as the runtime formats
 	// the dates and times of the label kinds date and time (B24, A5).
 	Locale func(ctx context.Context) (template.Locale, error)
+	// TopUsers ranks the users of the profile by a statistic for the
+	// leaderboard widget (B32).
+	TopUsers func(ctx context.Context, stat user.Stat, n int) ([]user.Ranked, error)
+	// Emotes lists the emotes of the home channel for the emote effect
+	// (B35).
+	Emotes func(ctx context.Context) []emote.Emote
+	// DiscordOccupants lists the current occupants of the configured
+	// Discord voice channel for the discord_voice widget (B37).
+	DiscordOccupants func(ctx context.Context) []discord.Occupant
 	// Logger logs the service; nil discards the output.
 	Logger *slog.Logger
 }
@@ -214,6 +241,29 @@ type Service struct {
 	// labelTexts is the last pushed label text by widget ID; an unchanged
 	// render pushes nothing (B24).
 	labelTexts map[string]string
+	// pollState is the state of the active vote; all poll widgets show
+	// it (B34).
+	pollState poll.State
+	hasPoll   bool
+	// persistentTimers are the running persistent timers by widget ID
+	// (B29); they are persisted in the profile (B20).
+	persistentTimers map[string]*persistentTimerState
+	// bosses are the running stream bosses by widget ID (B30); in memory.
+	bosses map[string]*streamBossState
+	// wheels are the running probabilities of the wheel widgets by widget
+	// ID (B33).
+	wheels map[string]*wheelState
+	// gameQueue is the queue of the profile; all game_queue widgets show
+	// it (B36).
+	gameQueue []gameEntry
+	// gameQueueLoaded reports whether the queue was read from the state.
+	gameQueueLoaded bool
+	// credits are the collected sections of the end_credits widgets by
+	// widget ID (B31).
+	credits map[string]*endCreditsState
+	// emoteCombos are the running combo counts of the persistent emote
+	// effect widgets by widget ID (B35).
+	emoteCombos map[string]*emoteEffectState
 }
 
 // New returns a service with the ports p.
@@ -225,15 +275,22 @@ func New(p Ports, opts ...Option) (*Service, error) {
 		return nil, errors.New("new widget service: missing port")
 	case p.StreamStates == nil || p.SessionStats == nil || p.Locale == nil:
 		return nil, errors.New("new widget service: missing port")
+	case p.TopUsers == nil || p.Emotes == nil || p.DiscordOccupants == nil:
+		return nil, errors.New("new widget service: missing port")
 	}
 	s := &Service{
-		ports:      p,
-		logger:     slog.New(slog.DiscardHandler),
-		goals:      map[string]*goalState{},
-		timers:     map[string]*timerState{},
-		lists:      map[string][]listEntry{},
-		chats:      map[string][]chatMsg{},
-		labelTexts: map[string]string{},
+		ports:            p,
+		logger:           slog.New(slog.DiscardHandler),
+		goals:            map[string]*goalState{},
+		timers:           map[string]*timerState{},
+		lists:            map[string][]listEntry{},
+		chats:            map[string][]chatMsg{},
+		labelTexts:       map[string]string{},
+		persistentTimers: map[string]*persistentTimerState{},
+		bosses:           map[string]*streamBossState{},
+		wheels:           map[string]*wheelState{},
+		credits:          map[string]*endCreditsState{},
+		emoteCombos:      map[string]*emoteEffectState{},
 	}
 	for _, opt := range opts {
 		if err := opt(s); err != nil {
@@ -272,6 +329,9 @@ func (s *Service) Run(ctx context.Context) error {
 			eventtype.ChatMessageDelete,
 			eventtype.ChatUserTimeout,
 			eventtype.ChatUserBan,
+			eventtype.ChannelStreamStart,
+			eventtype.DiscordVoiceJoined,
+			eventtype.DiscordVoiceLeft,
 		),
 	)
 	interval := s.tickDur
@@ -307,12 +367,23 @@ func (s *Service) handle(ctx context.Context, env event.Envelope) {
 		s.goalProgress(ctx, env)
 		s.refreshList(ctx)
 		s.refreshLabels(ctx)
+		s.persistentTimerProgress(ctx, env)
+		s.streamBossStep(ctx, env)
+		s.endCreditsCollect(ctx, env)
+		s.refreshLeaderboard(ctx)
 	case eventtype.ChatMessage:
 		s.chatMessage(ctx, env)
+		s.endCreditsCollect(ctx, env)
+		s.emoteEffectMessage(ctx, env)
 	case eventtype.ChatMessageDelete:
 		s.chatDeleted(ctx, env)
 	case eventtype.ChatUserTimeout, eventtype.ChatUserBan:
 		s.chatModerated(ctx, env)
+		s.endCreditsCollect(ctx, env)
+	case eventtype.ChannelStreamStart:
+		s.endCreditsClear(ctx)
+	case eventtype.DiscordVoiceJoined, eventtype.DiscordVoiceLeft:
+		s.refreshDiscordVoice(ctx)
 	default:
 		// The subscription filters; the default keeps a new type from
 		// being silently counted wrong.
@@ -331,6 +402,8 @@ func (s *Service) tick(ctx context.Context) {
 	s.refreshList(ctx)
 	s.startTimers(ctx)
 	s.goalReset(ctx)
+	s.persistentTimerTick(ctx)
+	s.refreshLeaderboard(ctx)
 }
 
 // section reads the overlay section on demand (A1); nil on an error, which
@@ -1470,6 +1543,1513 @@ func (s *Service) chatConfig(ctx context.Context, w settings.OverlayWidget) *cha
 // ---------- shared ----------
 
 // widget finds the widget in the section; it must be of the kind want.
+// ---------- poll (B34) ----------
+
+// SetPollState sets the state of the active vote (B34) and pushes it to
+// the visible poll widgets; the twitch action feeds it from the Helix
+// status checks. Without a section (start) it is kept for the sync.
+func (s *Service) SetPollState(ctx context.Context, st poll.State) error {
+	s.mu.Lock()
+	s.pollState = st
+	s.hasPoll = true
+	s.mu.Unlock()
+	sec := s.section(ctx)
+	if sec == nil {
+		return nil
+	}
+	for _, w := range sec.Widgets {
+		if w.Kind != KindPoll || !s.visible(w) {
+			continue
+		}
+		s.push(ctx, w, st)
+	}
+	return nil
+}
+
+// StateForPoll returns the active vote for the state sync (B4); nil
+// without one.
+func (s *Service) StateForPoll(_ context.Context, _ settings.OverlayWidget) any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.hasPoll {
+		return nil
+	}
+	return s.pollState
+}
+
+// ---------- discord_voice (B37) ----------
+
+// refreshDiscordVoice pushes the current occupants of the configured
+// voice channel to the visible discord_voice widgets (B37).
+func (s *Service) refreshDiscordVoice(ctx context.Context) {
+	sec := s.section(ctx)
+	if sec == nil {
+		return
+	}
+	occupants := s.ports.DiscordOccupants(ctx)
+	state := map[string]any{"occupants": occupants}
+	for _, w := range sec.Widgets {
+		if w.Kind != KindDiscordVoice || !s.visible(w) {
+			continue
+		}
+		s.push(ctx, w, state)
+	}
+}
+
+// StateForDiscordVoice returns the current occupants for the state sync
+// (B4, B37).
+func (s *Service) StateForDiscordVoice(ctx context.Context, _ settings.OverlayWidget) any {
+	return map[string]any{"occupants": s.ports.DiscordOccupants(ctx)}
+}
+
+// ---------- leaderboard (B32) ----------
+
+// leaderboardConfig is the configuration of the leaderboard widget.
+type leaderboardConfig struct {
+	// Stat is the statistic: watch_time, messages or commands.
+	Stat string `json:"stat"`
+	// Count is the number of entries; zero for the default of ten.
+	Count int `json:"count"`
+}
+
+// leaderboardStat maps the statistic name of the configuration to the
+// statistic of the user rankings (B32).
+func leaderboardStat(name string) (user.Stat, bool) {
+	switch name {
+	case "watch_time":
+		return user.StatWatchMinutes, true
+	case "messages":
+		return user.StatMessages, true
+	case "commands":
+		return user.StatCommandsRun, true
+	default:
+		return "", false
+	}
+}
+
+// refreshLeaderboard re-reads the visible leaderboard widgets on the tick
+// and on the events that change the statistics (B32).
+func (s *Service) refreshLeaderboard(ctx context.Context) {
+	sec := s.section(ctx)
+	if sec == nil {
+		return
+	}
+	for _, w := range sec.Widgets {
+		if w.Kind != KindLeaderboard || !s.visible(w) {
+			continue
+		}
+		cfg := s.leaderboardConfig(ctx, w)
+		if cfg == nil {
+			continue
+		}
+		if st, ok := s.leaderboardState(ctx, cfg); ok {
+			s.push(ctx, w, st)
+		}
+	}
+}
+
+func (s *Service) leaderboardConfig(ctx context.Context, w settings.OverlayWidget) *leaderboardConfig {
+	var c leaderboardConfig
+	if err := decodeConfig(w.Config, &c); err != nil {
+		s.logger.ErrorContext(ctx, "the leaderboard configuration is unreadable", "widget", w.ID, "error", err)
+		return nil
+	}
+	if _, ok := leaderboardStat(c.Stat); !ok {
+		s.logger.ErrorContext(ctx, "the leaderboard statistic is unknown", "widget", w.ID, "stat", c.Stat)
+		return nil
+	}
+	if c.Count < 0 {
+		s.logger.ErrorContext(ctx, "the leaderboard count is negative", "widget", w.ID, "count", c.Count)
+		return nil
+	}
+	return &c
+}
+
+// leaderboardState is the runtime state of the leaderboard (B32): the
+// ranked entries with the user and the value.
+func (s *Service) leaderboardState(ctx context.Context, cfg *leaderboardConfig) (map[string]any, bool) {
+	stat, ok := leaderboardStat(cfg.Stat)
+	if !ok {
+		return nil, false
+	}
+	n := cfg.Count
+	if n <= 0 {
+		n = 10
+	}
+	ranked, err := s.ports.TopUsers(ctx, stat, n)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "reading the leaderboard failed", "error", err)
+		return nil, false
+	}
+	entries := make([]map[string]any, 0, len(ranked))
+	for _, r := range ranked {
+		entries = append(entries, map[string]any{"name": userName(r.User), "value": r.Value})
+	}
+	return map[string]any{"stat": cfg.Stat, "entries": entries}, true
+}
+
+// StateForLeaderboard returns the leaderboard for the state sync (B4); it
+// re-reads the ranking.
+func (s *Service) StateForLeaderboard(ctx context.Context, w settings.OverlayWidget) any {
+	cfg := s.leaderboardConfig(ctx, w)
+	if cfg == nil {
+		return nil
+	}
+	st, _ := s.leaderboardState(ctx, cfg)
+	return st
+}
+
+// userName is the display name of the user; the login if there is none.
+func userName(u user.User) string {
+	for _, i := range u.Identities {
+		if i.DisplayName != "" {
+			return i.DisplayName
+		}
+		if i.Login != "" {
+			return i.Login
+		}
+	}
+	return ""
+}
+
+// ---------- wheel (B33) ----------
+
+// wheelConfig is the configuration of the wheel widget.
+type wheelConfig struct {
+	// EqualProbability is true for equal chances for every outcome
+	// (default); otherwise the probabilities of the outcomes are used.
+	EqualProbability bool `json:"equal_probability"`
+	// Outcomes are the outcomes of the wheel, in order; at least one.
+	Outcomes []wheelOutcome `json:"outcomes"`
+}
+
+// wheelOutcome is one outcome of the wheel.
+type wheelOutcome struct {
+	// Name is the name of the outcome.
+	Name string `json:"name"`
+	// Probability is the decimal percent of the outcome, when the chances
+	// are not equal; the probabilities must sum to 100.
+	Probability float64 `json:"probability"`
+	// Modifier is the whole percent points of the outcome; the sum of the
+	// modifiers is zero.
+	Modifier int `json:"modifier"`
+}
+
+// wheelState is the running state of the wheel widget (B33): the current
+// probabilities, which the modifiers shift from spin to spin.
+type wheelState struct {
+	probs []float64
+}
+
+func (s *Service) wheelConfig(ctx context.Context, w settings.OverlayWidget) *wheelConfig {
+	var c wheelConfig
+	if err := decodeConfig(w.Config, &c); err != nil {
+		s.logger.ErrorContext(ctx, "the wheel configuration is unreadable", "widget", w.ID, "error", err)
+		return nil
+	}
+	if len(c.Outcomes) < 1 {
+		s.logger.ErrorContext(ctx, "the wheel has no outcomes", "widget", w.ID)
+		return nil
+	}
+	for i, o := range c.Outcomes {
+		if o.Name == "" {
+			s.logger.ErrorContext(ctx, "a wheel outcome needs a name", "widget", w.ID, "outcome", i)
+			return nil
+		}
+	}
+	if !c.EqualProbability {
+		sum := 0.0
+		mod := 0
+		for _, o := range c.Outcomes {
+			if o.Probability < 0 {
+				s.logger.ErrorContext(ctx, "a wheel probability is negative", "widget", w.ID)
+				return nil
+			}
+			sum += o.Probability
+			mod += o.Modifier
+		}
+		if math.Abs(sum-100) > 0.0001 {
+			s.logger.ErrorContext(ctx, "the wheel probabilities must sum to 100", "widget", w.ID, "sum", sum)
+			return nil
+		}
+		if mod != 0 {
+			s.logger.ErrorContext(ctx, "the wheel modifiers must sum to zero", "widget", w.ID, "sum", mod)
+			return nil
+		}
+	}
+	return &c
+}
+
+// wheelProbs returns the current probabilities of the wheel, loaded from
+// the running state or the configuration.
+func (s *Service) wheelProbs(w settings.OverlayWidget, cfg *wheelConfig) []float64 {
+	s.mu.Lock()
+	st := s.wheels[w.ID]
+	s.mu.Unlock()
+	if st != nil && len(st.probs) == len(cfg.Outcomes) {
+		return st.probs
+	}
+	return s.wheelInitialProbs(cfg)
+}
+
+// wheelInitialProbs are the probabilities before the first spin (B33).
+func (s *Service) wheelInitialProbs(cfg *wheelConfig) []float64 {
+	n := len(cfg.Outcomes)
+	if cfg.EqualProbability {
+		p := make([]float64, n)
+		for i := range p {
+			p[i] = 100.0 / float64(n)
+		}
+		return p
+	}
+	p := make([]float64, n)
+	for i, o := range cfg.Outcomes {
+		p[i] = o.Probability
+	}
+	return p
+}
+
+// SpinWheel runs the spin of the wheel widget (B33): it draws the outcome
+// server-side, sends the spin to the runtime, applies the modifier rule,
+// and publishes overlay.wheel.spun.
+func (s *Service) SpinWheel(ctx context.Context, widgetID string, u *user.User) error {
+	w, err := s.widget(ctx, widgetID, KindWheel)
+	if err != nil {
+		return err
+	}
+	cfg := s.wheelConfig(ctx, w)
+	if cfg == nil {
+		return fmt.Errorf("%w: the wheel widget has no valid configuration", ErrUnknownWidget)
+	}
+	probs := s.wheelProbs(w, cfg)
+	idx := weightedPick(probs)
+	outcome := cfg.Outcomes[idx]
+	// The modifier rule of the spin (B33): a negative modifier of the
+	// landed outcome shifts the probabilities by the modifiers, a positive
+	// one resets them, zero changes nothing.
+	next := probs
+	if outcome.Modifier < 0 {
+		next = append([]float64(nil), probs...)
+		for i := range next {
+			next[i] += float64(cfg.Outcomes[i].Modifier)
+		}
+	} else if outcome.Modifier > 0 {
+		next = s.wheelInitialProbs(cfg)
+	}
+	s.mu.Lock()
+	s.wheels[w.ID] = &wheelState{probs: next}
+	s.mu.Unlock()
+	s.push(ctx, w, map[string]any{
+		"spin": map[string]any{
+			"index":    idx,
+			"name":     outcome.Name,
+			"duration": 4.0,
+		},
+	})
+	s.publish(ctx, eventtype.OverlayWheelSpun, eventtype.Payload{
+		Platform: platform.Twitch,
+		User:     u,
+		Details:  eventtype.Details{OverlayWheel: &eventtype.OverlayWheel{Outcome: outcome.Name}},
+	})
+	return nil
+}
+
+// StateForWheel returns the wheel for the state sync (B4): the outcomes
+// and the current probabilities.
+func (s *Service) StateForWheel(ctx context.Context, w settings.OverlayWidget) any {
+	cfg := s.wheelConfig(ctx, w)
+	if cfg == nil {
+		return nil
+	}
+	probs := s.wheelProbs(w, cfg)
+	outcomes := make([]map[string]any, len(cfg.Outcomes))
+	for i, o := range cfg.Outcomes {
+		outcomes[i] = map[string]any{"name": o.Name, "probability": probs[i]}
+	}
+	return map[string]any{"outcomes": outcomes}
+}
+
+// ---------- persistent_timer (B29) ----------
+
+// persistentTimerConfig is the configuration of the persistent timer.
+type persistentTimerConfig struct {
+	// Initial is the starting duration as text, e.g. "1h30m".
+	Initial string `json:"initial"`
+	// Format is the display format (B17); empty for MM:SS.
+	Format string `json:"format"`
+	// DisableOnCompletion hides the widget when it reaches zero.
+	DisableOnCompletion bool `json:"disable_on_completion"`
+	// ResetOnEnable resets to the initial duration when the widget is
+	// shown again after being hidden.
+	ResetOnEnable bool `json:"reset_on_enable"`
+	// AllowWhilePaused allows the event amounts while the widget is
+	// hidden (paused).
+	AllowWhilePaused bool `json:"allow_adjustment_while_paused"`
+	// EventAmounts are the seconds an event of the type adds, keyed by the
+	// event type, e.g. "channel.follow": 60.
+	EventAmounts map[string]int64 `json:"event_amounts"`
+	// initial is the parsed initial duration.
+	initial time.Duration
+	// eventAmounts are the parsed event durations.
+	eventAmounts map[string]time.Duration
+}
+
+// persistentTimerState is the running state of the persistent timer (B29);
+// it is persisted in the profile (B20).
+type persistentTimerState struct {
+	// deadline is when the timer reaches zero while it runs.
+	deadline time.Time
+	// remaining is the frozen time while it is paused (hidden).
+	remaining time.Duration
+	// paused reports whether the timer is frozen.
+	paused bool
+	// completed reports whether the timer reached zero.
+	completed bool
+	// wasVisible is the visibility of the last tick, for the change.
+	wasVisible bool
+}
+
+// persistentTimerDoc is the stored form of persistentTimerState.
+type persistentTimerDoc struct {
+	DeadlineMs  int64 `json:"deadline_ms"`
+	RemainingMs int64 `json:"remaining_ms"`
+	Paused      bool  `json:"paused"`
+	Completed   bool  `json:"completed"`
+	WasVisible  bool  `json:"was_visible"`
+}
+
+// persistentTimerLoad returns the running state of the persistent timer,
+// loaded from the profile on first use (B20).
+func (s *Service) persistentTimerLoad(ctx context.Context, widgetID string) (*persistentTimerState, error) {
+	s.mu.Lock()
+	if st, ok := s.persistentTimers[widgetID]; ok {
+		s.mu.Unlock()
+		return st, nil
+	}
+	s.mu.Unlock()
+	doc, found, err := s.ports.State.OverlayWidgetState(ctx, widgetID)
+	if err != nil {
+		return nil, err
+	}
+	st := &persistentTimerState{}
+	if found {
+		var d persistentTimerDoc
+		if err := json.Unmarshal(doc, &d); err != nil {
+			s.logger.ErrorContext(ctx, "the persistent timer state is unreadable, starting fresh", "widget", widgetID, "error", err)
+		} else {
+			st.deadline = time.UnixMilli(d.DeadlineMs)
+			st.remaining = time.Duration(d.RemainingMs) * time.Millisecond
+			st.paused = d.Paused
+			st.completed = d.Completed
+			st.wasVisible = d.WasVisible
+		}
+	}
+	s.mu.Lock()
+	s.persistentTimers[widgetID] = st
+	s.mu.Unlock()
+	return st, nil
+}
+
+// persistentTimerSave stores the state of the persistent timer (B20).
+func (s *Service) persistentTimerSave(ctx context.Context, widgetID string, st *persistentTimerState) {
+	d := persistentTimerDoc{
+		DeadlineMs:  st.deadline.UnixMilli(),
+		RemainingMs: st.remaining.Milliseconds(),
+		Paused:      st.paused,
+		Completed:   st.completed,
+		WasVisible:  st.wasVisible,
+	}
+	doc, err := json.Marshal(d)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "storing the persistent timer state failed", "widget", widgetID, "error", err)
+		return
+	}
+	if err := s.ports.State.SetOverlayWidgetState(ctx, widgetID, doc); err != nil {
+		s.logger.ErrorContext(ctx, "storing the persistent timer state failed", "widget", widgetID, "error", err)
+	}
+}
+
+// persistentTimerConfig decodes and checks the configuration of the
+// persistent timer (B29).
+func (s *Service) persistentTimerConfig(ctx context.Context, w settings.OverlayWidget) *persistentTimerConfig {
+	var c persistentTimerConfig
+	c.eventAmounts = map[string]time.Duration{}
+	if err := decodeConfig(w.Config, &c); err != nil {
+		s.logger.ErrorContext(ctx, "the persistent timer configuration is unreadable", "widget", w.ID, "error", err)
+		return nil
+	}
+	if c.Initial != "" {
+		d, err := time.ParseDuration(c.Initial)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "the persistent timer initial duration is unknown", "widget", w.ID, "initial", c.Initial)
+			return nil
+		}
+		c.initial = d
+	}
+	if c.Format == "" {
+		c.Format = "MM:SS"
+	}
+	for typ, sec := range c.EventAmounts {
+		c.eventAmounts[typ] = time.Duration(sec) * time.Second
+	}
+	return &c
+}
+
+// persistentTimerProgress applies the event amount of the type to the
+// visible persistent timers, or to the hidden ones while
+// allow_adjustment_while_paused (B29).
+func (s *Service) persistentTimerProgress(ctx context.Context, env event.Envelope) {
+	sec := s.section(ctx)
+	if sec == nil {
+		return
+	}
+	key := string(env.Type)
+	for _, w := range sec.Widgets {
+		if w.Kind != KindPersistentTimer {
+			continue
+		}
+		cfg := s.persistentTimerConfig(ctx, w)
+		if cfg == nil {
+			continue
+		}
+		// A hidden timer is frozen; the event amounts reach it while
+		// allow_adjustment_while_paused (B29).
+		if !s.visible(w) && !cfg.AllowWhilePaused {
+			continue
+		}
+		amount, ok := cfg.eventAmounts[key]
+		if !ok || amount == 0 {
+			continue
+		}
+		s.persistentTimerAdjust(ctx, w, cfg, amount, env)
+	}
+}
+
+// AddToPersistentTimer adds d, which may be negative (B29, B38), to the
+// persistent timer and publishes overlay.timer.adjusted.
+func (s *Service) AddToPersistentTimer(ctx context.Context, widgetID string, d time.Duration) error {
+	w, err := s.widget(ctx, widgetID, KindPersistentTimer)
+	if err != nil {
+		return err
+	}
+	cfg := s.persistentTimerConfig(ctx, w)
+	if cfg == nil {
+		return fmt.Errorf("%w: the persistent timer has no valid configuration", ErrUnknownWidget)
+	}
+	s.persistentTimerAdjust(ctx, w, cfg, d, event.Envelope{})
+	return nil
+}
+
+// persistentTimerAdjust changes the remaining time of the persistent timer
+// by d and publishes overlay.timer.adjusted (B29).
+func (s *Service) persistentTimerAdjust(ctx context.Context, w settings.OverlayWidget, cfg *persistentTimerConfig, d time.Duration, env event.Envelope) {
+	st, err := s.persistentTimerLoad(ctx, w.ID)
+	if err != nil {
+		return
+	}
+	s.mu.Lock()
+	if st.completed {
+		s.mu.Unlock()
+		return
+	}
+	if st.paused {
+		st.remaining += d
+		if st.remaining < 0 {
+			st.remaining = 0
+		}
+	} else {
+		st.deadline = st.deadline.Add(d)
+	}
+	s.mu.Unlock()
+	s.persistentTimerSave(ctx, w.ID, st)
+	s.pushPersistentTimer(ctx, w, cfg, st)
+	user := (*user.User)(nil)
+	if p, ok := event.Payload[eventtype.Payload](env); ok {
+		user = p.User
+	}
+	s.publish(ctx, eventtype.OverlayTimerAdjusted, eventtype.Payload{
+		Platform: platform.Twitch,
+		User:     user,
+		Details:  eventtype.Details{OverlayTimer: &eventtype.OverlayTimer{AmountChanged: int64(d.Seconds())}},
+	})
+}
+
+// persistentTimerTick runs the tick work of the visible persistent timers
+// (B29): it freezes the hidden ones, resumes the shown ones, and completes
+// the ones that reached zero.
+func (s *Service) persistentTimerTick(ctx context.Context) {
+	sec := s.section(ctx)
+	if sec == nil {
+		return
+	}
+	for _, w := range sec.Widgets {
+		if w.Kind != KindPersistentTimer {
+			continue
+		}
+		cfg := s.persistentTimerConfig(ctx, w)
+		if cfg == nil {
+			continue
+		}
+		st, err := s.persistentTimerLoad(ctx, w.ID)
+		if err != nil {
+			continue
+		}
+		visible := s.visible(w)
+		now := time.Now()
+		changed := false
+		s.mu.Lock()
+		switch {
+		case !visible && st.wasVisible:
+			// The widget was hidden: freeze the remaining time, or reset
+			// it to the initial while reset_on_enable (B29).
+			if cfg.ResetOnEnable {
+				st.remaining = cfg.initial
+			} else if !st.paused {
+				st.remaining = max(time.Until(st.deadline), 0)
+			}
+			st.paused = true
+			changed = true
+		case visible && !st.wasVisible:
+			// The widget was shown: resume from the frozen time, or start
+			// from the initial while it is new or reset_on_enable (B29).
+			if cfg.ResetOnEnable || st.deadline.IsZero() {
+				st.deadline = now.Add(cfg.initial)
+			} else {
+				st.deadline = now.Add(st.remaining)
+			}
+			st.paused = false
+			changed = true
+		case visible && !st.paused && !st.completed && st.deadline.Before(now):
+			// The running timer reached zero (B29).
+			st.completed = true
+			st.remaining = 0
+			changed = true
+		}
+		st.wasVisible = visible
+		s.mu.Unlock()
+		if changed {
+			s.persistentTimerSave(ctx, w.ID, st)
+		}
+		if visible || changed {
+			s.pushPersistentTimer(ctx, w, cfg, st)
+		}
+		if st.completed && changed && st.wasVisible {
+			s.publish(ctx, eventtype.OverlayTimerCompleted, eventtype.Payload{Platform: platform.Twitch})
+		}
+	}
+}
+
+// pushPersistentTimer pushes the state of the persistent timer (B22, B29).
+func (s *Service) pushPersistentTimer(ctx context.Context, w settings.OverlayWidget, cfg *persistentTimerConfig, st *persistentTimerState) {
+	state := map[string]any{
+		"deadline":  st.deadline.UnixMilli(),
+		"paused":    st.paused,
+		"pausedMs":  st.remaining.Milliseconds(),
+		"completed": st.completed,
+		"format":    cfg.Format,
+		"disabled":  st.completed && cfg.DisableOnCompletion,
+	}
+	s.push(ctx, w, state)
+}
+
+// StateForPersistentTimer returns the state of the persistent timer for
+// the state sync (B4, B20).
+func (s *Service) StateForPersistentTimer(ctx context.Context, w settings.OverlayWidget) any {
+	cfg := s.persistentTimerConfig(ctx, w)
+	if cfg == nil {
+		return nil
+	}
+	st, err := s.persistentTimerLoad(ctx, w.ID)
+	if err != nil {
+		return nil
+	}
+	return map[string]any{
+		"deadline":  st.deadline.UnixMilli(),
+		"paused":    st.paused,
+		"pausedMs":  st.remaining.Milliseconds(),
+		"completed": st.completed,
+		"format":    cfg.Format,
+		"disabled":  st.completed && cfg.DisableOnCompletion,
+	}
+}
+
+// ---------- stream_boss (B30) ----------
+
+// streamBossConfig is the configuration of the stream boss.
+type streamBossConfig struct {
+	// BaseHealth is the health of a new boss.
+	BaseHealth int64 `json:"base_health"`
+	// KillBonusHealth is the health added to the next boss after a kill.
+	KillBonusHealth int64 `json:"kill_bonus_health"`
+	// OverkillBonusMultiplier multiplies the overkill into the next boss's
+	// health.
+	OverkillBonusMultiplier float64 `json:"overkill_bonus_multiplier"`
+	// SelfHealMultiplier multiplies the healing when the boss damages
+	// itself.
+	SelfHealMultiplier float64 `json:"self_heal_multiplier"`
+	// CompoundPreviousHealth compounds the previous max health into the
+	// next boss; nil for the default of true.
+	CompoundPreviousHealth *bool `json:"compound_previous_health"`
+	// EventAmounts are the health an event of the type adds, keyed by the
+	// event type, e.g. "channel.follow": 5.
+	EventAmounts map[string]int64 `json:"event_amounts"`
+}
+
+// streamBossState is the running state of the stream boss (B30); it is in
+// memory.
+type streamBossState struct {
+	// boss is the display name of the current boss.
+	boss string
+	// health is the current health.
+	health int64
+	// maxHealth is the max health of the current boss, for the compound.
+	maxHealth int64
+}
+
+func (s *Service) streamBossConfig(ctx context.Context, w settings.OverlayWidget) *streamBossConfig {
+	var c streamBossConfig
+	if err := decodeConfig(w.Config, &c); err != nil {
+		s.logger.ErrorContext(ctx, "the stream boss configuration is unreadable", "widget", w.ID, "error", err)
+		return nil
+	}
+	if c.BaseHealth < 1 {
+		s.logger.ErrorContext(ctx, "the stream boss base health must be positive", "widget", w.ID)
+		return nil
+	}
+	return &c
+}
+
+// streamBossState returns the running state of the boss, started with the
+// configured base health if there is none yet.
+func (s *Service) streamBossState(_ context.Context, w settings.OverlayWidget, cfg *streamBossConfig) *streamBossState {
+	s.mu.Lock()
+	st := s.bosses[w.ID]
+	s.mu.Unlock()
+	if st != nil {
+		return st
+	}
+	st = &streamBossState{boss: "", health: cfg.BaseHealth, maxHealth: cfg.BaseHealth}
+	s.mu.Lock()
+	s.bosses[w.ID] = st
+	s.mu.Unlock()
+	return st
+}
+
+// streamBossStep applies the event amount to the visible bosses (B30).
+func (s *Service) streamBossStep(ctx context.Context, env event.Envelope) {
+	sec := s.section(ctx)
+	if sec == nil {
+		return
+	}
+	key := string(env.Type)
+	for _, w := range sec.Widgets {
+		if w.Kind != KindStreamBoss || !s.visible(w) {
+			continue
+		}
+		cfg := s.streamBossConfig(ctx, w)
+		if cfg == nil {
+			continue
+		}
+		amount, ok := cfg.EventAmounts[key]
+		if !ok || amount == 0 {
+			continue
+		}
+		u := (*user.User)(nil)
+		if p, ok := event.Payload[eventtype.Payload](env); ok {
+			u = p.User
+		}
+		s.streamBossApply(ctx, w, cfg, amount, u, false)
+	}
+}
+
+// DamageStreamBoss applies the damage of the operation to the boss (B30,
+// B38): a negative amount heals, the caller who is the boss heals with the
+// self-heal multiplier, and force forces the damage.
+func (s *Service) DamageStreamBoss(ctx context.Context, widgetID string, amount int64, force bool, u *user.User) error {
+	w, err := s.widget(ctx, widgetID, KindStreamBoss)
+	if err != nil {
+		return err
+	}
+	cfg := s.streamBossConfig(ctx, w)
+	if cfg == nil {
+		return fmt.Errorf("%w: the stream boss has no valid configuration", ErrUnknownWidget)
+	}
+	s.streamBossApply(ctx, w, cfg, amount, u, force)
+	return nil
+}
+
+// streamBossApply changes the health of the boss by damage, publishes the
+// effect, and rolls a new boss at zero or below (B30).
+func (s *Service) streamBossApply(ctx context.Context, w settings.OverlayWidget, cfg *streamBossConfig, amount int64, u *user.User, force bool) {
+	st := s.streamBossState(ctx, w, cfg)
+	s.mu.Lock()
+	heal := amount < 0
+	// The caller who is the boss heals, not damages, while self-heal is
+	// configured and the damage is not forced (B30).
+	if !force && !heal && u != nil && !u.ID.IsZero() && st.boss == userName(*u) {
+		amount = -int64(float64(amount) * cfg.SelfHealMultiplier)
+		heal = true
+	}
+	overkill := int64(0)
+	st.health -= amount // amount is negative for a heal: adds the health
+	if st.health <= 0 {
+		overkill = -st.health
+		st.health = 0
+	}
+	health := st.health
+	changed := -amount
+	boss := st.boss
+	maxHealth := st.maxHealth
+	compounded := cfg.CompoundPreviousHealth == nil || *cfg.CompoundPreviousHealth
+	s.mu.Unlock()
+
+	if health <= 0 {
+		s.streamBossNew(ctx, w, cfg, boss, maxHealth, overkill, compounded)
+		s.pushBoss(ctx, w)
+		return
+	}
+	typ := eventtype.OverlayBossHeal
+	if !heal {
+		typ = eventtype.OverlayBossDamage
+	}
+	s.pushBoss(ctx, w)
+	s.publish(ctx, typ, eventtype.Payload{
+		Platform: platform.Twitch,
+		User:     u,
+		Details: eventtype.Details{OverlayBoss: &eventtype.OverlayBoss{
+			Health: health,
+			Amount: changed,
+		}},
+	})
+}
+
+// streamBossNew rolls the new boss after the old one is dead (B30): a
+// random active user other than the dead one, with the compounded health.
+func (s *Service) streamBossNew(ctx context.Context, w settings.OverlayWidget, cfg *streamBossConfig, dead string, prevMax, overkill int64, compounded bool) {
+	candidates := s.streamBossCandidates(ctx, dead)
+	next := ""
+	if len(candidates) > 0 {
+		//nolint:gosec // not a cryptographic source, but the random name of the next boss
+		next = candidates[rand.Intn(len(candidates))]
+	}
+	base := cfg.BaseHealth
+	if compounded && prevMax > base {
+		base = prevMax
+	}
+	health := base + cfg.KillBonusHealth + int64(float64(overkill)*cfg.OverkillBonusMultiplier)
+	s.mu.Lock()
+	st := s.bosses[w.ID]
+	if st != nil {
+		st.boss = next
+		st.health = health
+		st.maxHealth = health
+	}
+	s.mu.Unlock()
+	s.publish(ctx, eventtype.OverlayBossNew, eventtype.Payload{
+		Platform: platform.Twitch,
+		Details:  eventtype.Details{OverlayBoss: &eventtype.OverlayBoss{Health: health}},
+	})
+}
+
+// streamBossCandidates are the active users for the next boss (B30): the
+// recent feed events with a user, other than the dead one.
+func (s *Service) streamBossCandidates(ctx context.Context, dead string) []string {
+	events, err := s.ports.Feed.LatestFeed(ctx, 50)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "reading the boss candidates failed", "error", err)
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, e := range events {
+		if e.DisplayName == "" || e.DisplayName == dead || seen[e.DisplayName] {
+			continue
+		}
+		seen[e.DisplayName] = true
+		out = append(out, e.DisplayName)
+	}
+	return out
+}
+
+// pushBoss pushes the state of the stream boss (B22).
+func (s *Service) pushBoss(ctx context.Context, w settings.OverlayWidget) {
+	s.mu.Lock()
+	st := s.bosses[w.ID]
+	var boss string
+	var health, maxHealth int64
+	if st != nil {
+		boss, health, maxHealth = st.boss, st.health, st.maxHealth
+	}
+	s.mu.Unlock()
+	s.push(ctx, w, map[string]any{"boss": boss, "health": health, "max_health": maxHealth})
+}
+
+// StateForStreamBoss returns the state of the stream boss for the state
+// sync (B4); nil without a running boss.
+func (s *Service) StateForStreamBoss(_ context.Context, w settings.OverlayWidget) any {
+	s.mu.Lock()
+	st := s.bosses[w.ID]
+	s.mu.Unlock()
+	if st == nil {
+		return nil
+	}
+	return map[string]any{"boss": st.boss, "health": st.health, "max_health": st.maxHealth}
+}
+
+// ---------- game_queue (B36) ----------
+
+// gameQueueStateKey is the state key of the profile-level game queue (B36).
+const gameQueueStateKey = "game_queue"
+
+// gameQueueConfig is the configuration of the game queue.
+type gameQueueConfig struct {
+	// MaxSize is the max size of the queue; 0 for the default of 10.
+	MaxSize int `json:"max_size"`
+}
+
+// gameEntry is one entry of the game queue.
+type gameEntry struct {
+	// User is the display name of the user.
+	User string `json:"user"`
+	// Position is the 1-based position for the runtime; the server fills
+	// it, it is not persisted.
+	Position int `json:"position"`
+}
+
+// gameQueueDoc is the stored form of the game queue; the position is
+// derived by the server and not persisted.
+type gameQueueDoc struct {
+	Entries []gameEntryDoc `json:"entries"`
+}
+
+// gameEntryDoc is the stored form of gameEntry.
+type gameEntryDoc struct {
+	// User is the display name of the user.
+	User string `json:"user"`
+}
+
+// gameQueueMaxSize is the max size from the first game queue widget, or the
+// default of ten (B36).
+func (s *Service) gameQueueMaxSize(ctx context.Context) int {
+	sec := s.section(ctx)
+	if sec != nil {
+		for _, w := range sec.Widgets {
+			if w.Kind != KindGameQueue {
+				continue
+			}
+			var c gameQueueConfig
+			if err := decodeConfig(w.Config, &c); err == nil && c.MaxSize > 0 {
+				return c.MaxSize
+			}
+		}
+	}
+	return 10
+}
+
+// gameQueue returns the queue of the profile, loaded from the state on
+// first use (B20, B36).
+func (s *Service) gameQueueEntries(ctx context.Context) []gameEntry {
+	s.mu.Lock()
+	if s.gameQueueLoaded {
+		out := append([]gameEntry(nil), s.gameQueue...)
+		s.mu.Unlock()
+		return out
+	}
+	s.mu.Unlock()
+	doc, found, err := s.ports.State.OverlayWidgetState(ctx, gameQueueStateKey)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "reading the game queue failed", "error", err)
+	} else if found {
+		var d gameQueueDoc
+		if err := json.Unmarshal(doc, &d); err == nil {
+			entries := make([]gameEntry, 0, len(d.Entries))
+			for _, e := range d.Entries {
+				entries = append(entries, gameEntry{User: e.User})
+			}
+			s.mu.Lock()
+			s.gameQueue = entries
+			s.gameQueueLoaded = true
+			out := append([]gameEntry(nil), entries...)
+			s.mu.Unlock()
+			return out
+		}
+	}
+	s.mu.Lock()
+	s.gameQueueLoaded = true
+	s.mu.Unlock()
+	return nil
+}
+
+// gameQueueSave stores the queue of the profile (B20, B36).
+func (s *Service) gameQueueSave(ctx context.Context, entries []gameEntry) {
+	s.mu.Lock()
+	s.gameQueue = append([]gameEntry(nil), entries...)
+	s.gameQueueLoaded = true
+	s.mu.Unlock()
+	docs := make([]gameEntryDoc, 0, len(entries))
+	for _, e := range entries {
+		docs = append(docs, gameEntryDoc{User: e.User})
+	}
+	doc, err := json.Marshal(gameQueueDoc{Entries: docs})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "storing the game queue failed", "error", err)
+		return
+	}
+	if err := s.ports.State.SetOverlayWidgetState(ctx, gameQueueStateKey, doc); err != nil {
+		s.logger.ErrorContext(ctx, "storing the game queue failed", "error", err)
+	}
+}
+
+// JoinGameQueue adds the user to the queue and publishes
+// gamequeue.joined (B36); it is a clear error if the user is already in or
+// the queue is full.
+func (s *Service) JoinGameQueue(ctx context.Context, u *user.User) error {
+	name := userName(*u)
+	entries := s.gameQueueEntries(ctx)
+	for _, e := range entries {
+		if e.User == name {
+			return fmt.Errorf("the user %q is already in the queue", name)
+		}
+	}
+	if len(entries) >= s.gameQueueMaxSize(ctx) {
+		return errors.New("the game queue is full")
+	}
+	entries = append(entries, gameEntry{User: name})
+	s.gameQueueSave(ctx, entries)
+	s.pushGameQueue(ctx)
+	s.publish(ctx, eventtype.GameQueueJoined, eventtype.Payload{
+		Platform: platform.Twitch,
+		User:     u,
+		Details:  eventtype.Details{GameQueue: &eventtype.GameQueue{Position: len(entries)}},
+	})
+	return nil
+}
+
+// LeaveGameQueue removes the user from the queue and publishes
+// gamequeue.left (B36); it is a clear error without the user.
+func (s *Service) LeaveGameQueue(ctx context.Context, u *user.User) error {
+	name := userName(*u)
+	entries := s.gameQueueEntries(ctx)
+	position := 0
+	next := entries[:0]
+	for _, e := range entries {
+		if e.User == name {
+			position = len(next) + 1
+			continue
+		}
+		next = append(next, e)
+	}
+	if position == 0 {
+		return fmt.Errorf("the user %q is not in the queue", name)
+	}
+	s.gameQueueSave(ctx, next)
+	s.pushGameQueue(ctx)
+	s.publish(ctx, eventtype.GameQueueLeft, eventtype.Payload{
+		Platform: platform.Twitch,
+		User:     u,
+		Details:  eventtype.Details{GameQueue: &eventtype.GameQueue{Position: position}},
+	})
+	return nil
+}
+
+// pushGameQueue pushes the queue to the visible game queue widgets (B22).
+func (s *Service) pushGameQueue(ctx context.Context) {
+	sec := s.section(ctx)
+	if sec == nil {
+		return
+	}
+	entries := s.gameQueueEntries(ctx)
+	for i := range entries {
+		entries[i].Position = i + 1 // 1-based for the runtime
+	}
+	for _, w := range sec.Widgets {
+		if w.Kind != KindGameQueue || !s.visible(w) {
+			continue
+		}
+		s.push(ctx, w, map[string]any{"entries": entries})
+	}
+}
+
+// StateForGameQueue returns the queue for the state sync (B4, B36).
+func (s *Service) StateForGameQueue(ctx context.Context, _ settings.OverlayWidget) any {
+	entries := s.gameQueueEntries(ctx)
+	for i := range entries {
+		entries[i].Position = i + 1
+	}
+	return map[string]any{"entries": entries}
+}
+
+// ---------- end_credits (B31) ----------
+
+// endCreditsConfig is the configuration of the end credits.
+type endCreditsConfig struct {
+	// CustomSections are the names of the custom sections.
+	CustomSections []string `json:"custom_sections"`
+}
+
+// endCreditsEntry is one entry of a section.
+type endCreditsEntry struct {
+	// User is the display name of the user; empty for a custom entry.
+	User string `json:"user,omitempty"`
+	// Text is the text of a custom entry; empty for a user entry.
+	Text string `json:"text,omitempty"`
+}
+
+// endCreditsState is the data of the end credits, collected per stream
+// session while the widget is visible (B31).
+type endCreditsState struct {
+	sections map[string][]endCreditsEntry
+}
+
+// endCreditsSections are the built-in sections, in order (B31).
+//
+//nolint:gochecknoglobals // static table of sections
+var endCreditsSections = []string{
+	"chatters", "new_followers", "new_subscribers", "resubscribers",
+	"gifted_subscriptions", "all_subscriptions", "raids", "twitch_bits",
+}
+
+// endCreditsNew returns a new state with the built-in and the custom
+// sections.
+func endCreditsNew(cfg *endCreditsConfig) *endCreditsState {
+	st := &endCreditsState{sections: map[string][]endCreditsEntry{}}
+	for _, name := range endCreditsSections {
+		st.sections[name] = nil
+	}
+	for _, name := range cfg.CustomSections {
+		if _, ok := st.sections[name]; !ok {
+			st.sections[name] = nil
+		}
+	}
+	return st
+}
+
+// endCreditsLoad returns the collected state of the widget, started fresh
+// if there is none (B31).
+func (s *Service) endCreditsLoad(_ context.Context, widgetID string, cfg *endCreditsConfig) *endCreditsState {
+	s.mu.Lock()
+	st := s.credits[widgetID]
+	s.mu.Unlock()
+	if st != nil {
+		return st
+	}
+	st = endCreditsNew(cfg)
+	s.mu.Lock()
+	s.credits[widgetID] = st
+	s.mu.Unlock()
+	return st
+}
+
+// endCreditsCollect collects the event into the visible end credits (B31).
+func (s *Service) endCreditsCollect(ctx context.Context, env event.Envelope) {
+	sec := s.section(ctx)
+	if sec == nil {
+		return
+	}
+	payload, ok := event.Payload[eventtype.Payload](env)
+	if !ok {
+		return
+	}
+	for _, w := range sec.Widgets {
+		if w.Kind != KindEndCredits || !s.visible(w) {
+			continue
+		}
+		cfg := s.endCreditsConfig(ctx, w)
+		if cfg == nil {
+			continue
+		}
+		st := s.endCreditsLoad(ctx, w.ID, cfg)
+		s.endCreditsAdd(ctx, env.Type, st, payload)
+		s.pushCredits(ctx, w, st)
+	}
+}
+
+// endCreditsAdd adds the user of the event to the section it belongs to
+// (B31); a ban removes the user from every section.
+func (s *Service) endCreditsAdd(_ context.Context, typ event.Type, st *endCreditsState, p eventtype.Payload) {
+	switch typ {
+	case eventtype.ChatMessage:
+		s.endCreditsUser(st, "chatters", p.User)
+	case eventtype.ChannelFollow:
+		s.endCreditsUser(st, "new_followers", p.User)
+	case eventtype.ChannelSubscribe:
+		s.endCreditsUser(st, "new_subscribers", p.User)
+		s.endCreditsUser(st, "all_subscriptions", p.User)
+	case eventtype.ChannelResubscribe:
+		s.endCreditsUser(st, "resubscribers", p.User)
+		s.endCreditsUser(st, "all_subscriptions", p.User)
+	case eventtype.ChannelSubscriptionGift:
+		s.endCreditsUser(st, "gifted_subscriptions", p.User)
+		s.endCreditsUser(st, "all_subscriptions", p.Target)
+	case eventtype.ChannelSubscriptionMassGift:
+		s.endCreditsUser(st, "all_subscriptions", p.User)
+	case eventtype.ChannelRaid:
+		s.endCreditsUser(st, "raids", p.User)
+	case eventtype.TwitchBitsCheer:
+		s.endCreditsUser(st, "twitch_bits", p.User)
+	case eventtype.ChatUserBan, eventtype.ChatUserTimeout:
+		s.endCreditsRemove(st, p.User)
+	default:
+	}
+}
+
+// endCreditsUser adds the user to the section, once (B31).
+func (s *Service) endCreditsUser(st *endCreditsState, section string, u *user.User) {
+	if u == nil || u.ID.IsZero() {
+		return
+	}
+	name := userName(*u)
+	s.mu.Lock()
+	entries := st.sections[section]
+	for _, e := range entries {
+		if e.User == name {
+			s.mu.Unlock()
+			return
+		}
+	}
+	st.sections[section] = append(entries, endCreditsEntry{User: name})
+	s.mu.Unlock()
+}
+
+// endCreditsRemove removes the user from every section (B31).
+func (s *Service) endCreditsRemove(st *endCreditsState, u *user.User) {
+	if u == nil || u.ID.IsZero() {
+		return
+	}
+	name := userName(*u)
+	s.mu.Lock()
+	for section, entries := range st.sections {
+		next := entries[:0]
+		for _, e := range entries {
+			if e.User != name {
+				next = append(next, e)
+			}
+		}
+		st.sections[section] = next
+	}
+	s.mu.Unlock()
+}
+
+// endCreditsClear clears the collected data of the visible end credits on
+// a new stream session (B31).
+func (s *Service) endCreditsClear(ctx context.Context) {
+	sec := s.section(ctx)
+	if sec == nil {
+		return
+	}
+	for _, w := range sec.Widgets {
+		if w.Kind != KindEndCredits {
+			continue
+		}
+		cfg := s.endCreditsConfig(ctx, w)
+		if cfg == nil {
+			continue
+		}
+		st := s.endCreditsLoad(ctx, w.ID, cfg)
+		s.mu.Lock()
+		st.sections = map[string][]endCreditsEntry{}
+		for _, name := range append(endCreditsSections, cfg.CustomSections...) {
+			st.sections[name] = nil
+		}
+		s.mu.Unlock()
+		if s.visible(w) {
+			s.pushCredits(ctx, w, st)
+		}
+	}
+}
+
+// endCreditsConfig decodes the configuration of the end credits.
+func (s *Service) endCreditsConfig(ctx context.Context, w settings.OverlayWidget) *endCreditsConfig {
+	var c endCreditsConfig
+	if err := decodeConfig(w.Config, &c); err != nil {
+		s.logger.ErrorContext(ctx, "the end credits configuration is unreadable", "widget", w.ID, "error", err)
+		return nil
+	}
+	return &c
+}
+
+// AddToCredits adds a custom entry of the section to the end credits
+// (B31, B38).
+func (s *Service) AddToCredits(ctx context.Context, widgetID, section, text string) error {
+	w, err := s.widget(ctx, widgetID, KindEndCredits)
+	if err != nil {
+		return err
+	}
+	cfg := s.endCreditsConfig(ctx, w)
+	if cfg == nil {
+		return fmt.Errorf("%w: the end credits have no valid configuration", ErrUnknownWidget)
+	}
+	if !slices.Contains(append(endCreditsSections, cfg.CustomSections...), section) {
+		return fmt.Errorf("%w: the section %q is unknown", ErrUnknownWidget, section)
+	}
+	st := s.endCreditsLoad(ctx, w.ID, cfg)
+	s.mu.Lock()
+	st.sections[section] = append(st.sections[section], endCreditsEntry{Text: text})
+	s.mu.Unlock()
+	s.pushCredits(ctx, w, st)
+	return nil
+}
+
+// PlayCredits starts the sequence of the end credits (B31, B38): the
+// sections go to the runtime, which rolls them.
+func (s *Service) PlayCredits(ctx context.Context, widgetID string) error {
+	w, err := s.widget(ctx, widgetID, KindEndCredits)
+	if err != nil {
+		return err
+	}
+	cfg := s.endCreditsConfig(ctx, w)
+	if cfg == nil {
+		return fmt.Errorf("%w: the end credits have no valid configuration", ErrUnknownWidget)
+	}
+	st := s.endCreditsLoad(ctx, w.ID, cfg)
+	s.push(ctx, w, s.creditsState(cfg, s.creditsSnapshot(st), true))
+	return nil
+}
+
+// pushCredits pushes the collected data of the end credits (B22).
+func (s *Service) pushCredits(ctx context.Context, w settings.OverlayWidget, st *endCreditsState) {
+	cfg := s.endCreditsConfig(ctx, w)
+	if cfg == nil {
+		return
+	}
+	s.push(ctx, w, s.creditsState(cfg, s.creditsSnapshot(st), false))
+}
+
+// creditsSnapshot copies the collected sections under the lock (Review
+// 347-1): the bus goroutine and the actions write the sections in
+// parallel, and a concurrent map write would end the process.
+func (s *Service) creditsSnapshot(st *endCreditsState) map[string][]endCreditsEntry {
+	s.mu.Lock()
+	sections := make(map[string][]endCreditsEntry, len(st.sections))
+	for name, entries := range st.sections {
+		sections[name] = append([]endCreditsEntry(nil), entries...)
+	}
+	s.mu.Unlock()
+	return sections
+}
+
+// creditsState is the runtime state of the end credits: the sections in
+// order; playing is the roll flag (B31).
+func (s *Service) creditsState(cfg *endCreditsConfig, sections map[string][]endCreditsEntry, playing bool) map[string]any {
+	names := append(append([]string{}, endCreditsSections...), cfg.CustomSections...)
+	out := map[string]any{}
+	for _, name := range names {
+		out[name] = sections[name]
+	}
+	return map[string]any{"sections": out, "playing": playing}
+}
+
+// StateForEndCredits returns the collected data for the state sync (B4).
+func (s *Service) StateForEndCredits(ctx context.Context, w settings.OverlayWidget) any {
+	cfg := s.endCreditsConfig(ctx, w)
+	if cfg == nil {
+		return nil
+	}
+	s.mu.Lock()
+	st := s.credits[w.ID]
+	s.mu.Unlock()
+	if st == nil {
+		st = endCreditsNew(cfg)
+	}
+	return s.creditsState(cfg, s.creditsSnapshot(st), false)
+}
+
+// ---------- persistent_emote_effect (B35) ----------
+
+// emoteEffectConfig is the configuration of the persistent emote effect.
+type emoteEffectConfig struct {
+	// Effect is the effect: rain, burst or random.
+	Effect string `json:"effect"`
+	// Duration is the duration of the effect as text, e.g. "5s".
+	Duration string `json:"duration"`
+	// PerEmoteShown is the count shown per occurring emote.
+	PerEmoteShown int `json:"per_emote_shown"`
+	// MaxShown is the overall cap of shown emotes.
+	MaxShown int `json:"max_shown"`
+	// ComboCount is the count of the same emote that triggers the effect.
+	ComboCount int `json:"combo_count"`
+	// ComboTimeframe is the window, in seconds, of the combo.
+	ComboTimeframe int `json:"combo_timeframe"`
+	// IgnoreDuplicates counts each emote once per message.
+	IgnoreDuplicates bool `json:"ignore_duplicates"`
+	duration         time.Duration
+	timeframe        time.Duration
+}
+
+// emoteEffectState is the combo state of one emote effect widget (B35).
+type emoteEffectState struct {
+	// occurrences are the recent times per emote code.
+	occurrences map[string][]time.Time
+}
+
+func (s *Service) emoteEffectConfig(ctx context.Context, w settings.OverlayWidget) *emoteEffectConfig {
+	var c emoteEffectConfig
+	if err := decodeConfig(w.Config, &c); err != nil {
+		s.logger.ErrorContext(ctx, "the emote effect configuration is unreadable", "widget", w.ID, "error", err)
+		return nil
+	}
+	if c.Effect != "rain" && c.Effect != "burst" && c.Effect != "random" {
+		s.logger.ErrorContext(ctx, "the emote effect is unknown", "widget", w.ID, "effect", c.Effect)
+		return nil
+	}
+	if c.Duration != "" {
+		d, err := time.ParseDuration(c.Duration)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "the emote effect duration is unknown", "widget", w.ID, "duration", c.Duration)
+			return nil
+		}
+		c.duration = d
+	}
+	if c.ComboCount < 1 {
+		c.ComboCount = 3
+	}
+	if c.ComboTimeframe < 1 {
+		c.ComboTimeframe = 10
+	}
+	c.timeframe = time.Duration(c.ComboTimeframe) * time.Second
+	return &c
+}
+
+// emoteEffectMessage runs the persistent emote effect on a chat message
+// (B35): it counts the combos of the emotes and triggers the effect once a
+// combo is reached.
+func (s *Service) emoteEffectMessage(ctx context.Context, env event.Envelope) {
+	sec := s.section(ctx)
+	if sec == nil {
+		return
+	}
+	payload, ok := event.Payload[eventtype.Payload](env)
+	if !ok || payload.Details.Message == nil {
+		return
+	}
+	codes := payload.Details.Message.Emotes
+	if len(codes) == 0 {
+		return
+	}
+	for _, w := range sec.Widgets {
+		if w.Kind != KindEmoteEffect || !s.visible(w) {
+			continue
+		}
+		cfg := s.emoteEffectConfig(ctx, w)
+		if cfg == nil {
+			continue
+		}
+		s.emoteEffectCombo(ctx, w, cfg, codes)
+	}
+}
+
+// emoteEffectCombo counts the emotes of the message and triggers the
+// effect for the reached combos (B35).
+func (s *Service) emoteEffectCombo(ctx context.Context, w settings.OverlayWidget, cfg *emoteEffectConfig, codes []string) {
+	if cfg.IgnoreDuplicates {
+		seen := map[string]bool{}
+		next := codes[:0]
+		for _, c := range codes {
+			if !seen[c] {
+				seen[c] = true
+				next = append(next, c)
+			}
+		}
+		codes = next
+	}
+	st := s.emoteEffectState(w.ID)
+	now := time.Now()
+	cutoff := now.Add(-cfg.timeframe)
+	for _, code := range codes {
+		var keep []time.Time
+		for _, t := range st.occurrences[code] {
+			if t.After(cutoff) {
+				keep = append(keep, t)
+			}
+		}
+		keep = append(keep, now)
+		st.occurrences[code] = keep
+		if len(keep) >= cfg.ComboCount {
+			s.emoteEffectTrigger(ctx, w, cfg, code)
+			st.occurrences[code] = nil
+		}
+	}
+}
+
+// emoteEffectState returns the combo state of the widget, started fresh if
+// there is none.
+func (s *Service) emoteEffectState(widgetID string) *emoteEffectState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st := s.emoteCombos[widgetID]
+	if st == nil {
+		st = &emoteEffectState{occurrences: map[string][]time.Time{}}
+		s.emoteCombos[widgetID] = st
+	}
+	return st
+}
+
+// emoteEffectTrigger resolves the emote to its image and pushes the effect
+// to the runtime (B35); a name without a known emote is dropped.
+func (s *Service) emoteEffectTrigger(ctx context.Context, w settings.OverlayWidget, cfg *emoteEffectConfig, code string) {
+	images := s.emoteImages(ctx)
+	image, ok := images[code]
+	if !ok {
+		s.logger.DebugContext(ctx, "the emote of the effect is unknown", "widget", w.ID, "code", code)
+		return
+	}
+	count := max(cfg.PerEmoteShown, 1)
+	if cfg.MaxShown > 0 && count > cfg.MaxShown {
+		count = cfg.MaxShown
+	}
+	s.push(ctx, w, map[string]any{
+		"effect":          cfg.Effect,
+		"duration_ms":     cfg.duration.Milliseconds(),
+		"code":            code,
+		"image":           image,
+		"per_emote_shown": count,
+	})
+}
+
+// emoteImages resolves the emote codes of the channel to their image URLs
+// (B35).
+func (s *Service) emoteImages(ctx context.Context) map[string]string {
+	images := map[string]string{}
+	for _, e := range s.ports.Emotes(ctx) {
+		images[e.Code] = e.Image
+	}
+	return images
+}
+
+// StateForEmoteEffect returns nil: the emote effect has no persistent
+// state to sync, the effect is a one-shot push (B4, B35).
+func (s *Service) StateForEmoteEffect(_ context.Context, _ settings.OverlayWidget) any { return nil }
+
+// weightedPick draws an index with the weights of probs; a non-positive
+// weight never wins, and a zero total falls back to a uniform draw.
+func weightedPick(probs []float64) int {
+	total := 0.0
+	for _, p := range probs {
+		if p > 0 {
+			total += p
+		}
+	}
+	if total <= 0 {
+		//nolint:gosec // not a cryptographic source, but the spin draw of the wheel
+		return rand.Intn(len(probs))
+	}
+	//nolint:gosec // not a cryptographic source, but the spin draw of the wheel
+	r := rand.Float64() * total
+	acc := 0.0
+	for i, p := range probs {
+		if p <= 0 {
+			continue
+		}
+		acc += p
+		if r <= acc {
+			return i
+		}
+	}
+	return len(probs) - 1
+}
+
+// widget returns the widget with the ID and the kind; an unknown ID or a
+// kind mismatch is a clear error for the action (B38).
 func (s *Service) widget(ctx context.Context, widgetID, want string) (settings.OverlayWidget, error) {
 	sec := s.section(ctx)
 	if sec == nil {
@@ -1522,6 +3102,24 @@ func (s *Service) StateForSync(ctx context.Context, w settings.OverlayWidget) an
 		return s.StateForList(ctx, w)
 	case KindChat:
 		return s.StateForChat(ctx, w)
+	case KindPoll:
+		return s.StateForPoll(ctx, w)
+	case KindLeaderboard:
+		return s.StateForLeaderboard(ctx, w)
+	case KindWheel:
+		return s.StateForWheel(ctx, w)
+	case KindPersistentTimer:
+		return s.StateForPersistentTimer(ctx, w)
+	case KindStreamBoss:
+		return s.StateForStreamBoss(ctx, w)
+	case KindGameQueue:
+		return s.StateForGameQueue(ctx, w)
+	case KindEndCredits:
+		return s.StateForEndCredits(ctx, w)
+	case KindEmoteEffect:
+		return s.StateForEmoteEffect(ctx, w)
+	case KindDiscordVoice:
+		return s.StateForDiscordVoice(ctx, w)
 	default:
 		return nil
 	}

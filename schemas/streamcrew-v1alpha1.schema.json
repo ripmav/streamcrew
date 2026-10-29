@@ -176,6 +176,17 @@
                 "app.stopping",
                 "overlay.goal.progress",
                 "overlay.goal.segment_completed",
+                "overlay.timer.adjusted",
+                "overlay.timer.completed",
+                "overlay.boss.damage",
+                "overlay.boss.heal",
+                "overlay.boss.new",
+                "overlay.wheel.spun",
+                "gamequeue.joined",
+                "gamequeue.left",
+                "gamequeue.position",
+                "discord.voice.joined",
+                "discord.voice.left",
                 "obs.stream.started",
                 "obs.stream.stopped",
                 "obs.recording.started",
@@ -3188,7 +3199,8 @@
                 "html",
                 "youtube",
                 "clip",
-                "timer"
+                "timer",
+                "emote_effect"
               ],
               "x-ui": "choice"
             },
@@ -3258,6 +3270,37 @@
             "format": {
               "type": "string",
               "x-ui": "text"
+            },
+            "emotes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "x-ui": "template"
+              },
+              "minItems": 1,
+              "x-ui": "list"
+            },
+            "effect": {
+              "type": "string",
+              "enum": [
+                "rain",
+                "burst",
+                "random"
+              ],
+              "x-ui": "choice"
+            },
+            "perEmoteShown": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maxShown": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "allowEmoji": {
+              "type": "boolean",
+              "x-ui": "switch"
             }
           },
           "required": [
@@ -3473,6 +3516,58 @@
                 "duration"
               ],
               "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "emote_effect"
+                },
+                "emotes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "x-ui": "template"
+                  },
+                  "minItems": 1,
+                  "x-ui": "list"
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": [
+                    "rain",
+                    "burst",
+                    "random"
+                  ],
+                  "x-ui": "choice"
+                },
+                "width": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "height": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "perEmoteShown": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "maxShown": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "allowEmoji": {
+                  "type": "boolean",
+                  "x-ui": "switch"
+                }
+              },
+              "required": [
+                "kind",
+                "emotes"
+              ],
+              "additionalProperties": false
             }
           ],
           "default": {
@@ -3493,7 +3588,11 @@
             "add_to_goal",
             "add_to_timer",
             "pause_timer",
-            "add_to_event_list"
+            "add_to_event_list",
+            "add_to_credits",
+            "play_credits",
+            "spin_wheel",
+            "damage_stream_boss"
           ],
           "x-ui": "choice"
         },
@@ -3638,7 +3737,8 @@
                     "html",
                     "youtube",
                     "clip",
-                    "timer"
+                    "timer",
+                    "emote_effect"
                   ],
                   "x-ui": "choice"
                 },
@@ -3708,6 +3808,37 @@
                 "format": {
                   "type": "string",
                   "x-ui": "text"
+                },
+                "emotes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "x-ui": "template"
+                  },
+                  "minItems": 1,
+                  "x-ui": "list"
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": [
+                    "rain",
+                    "burst",
+                    "random"
+                  ],
+                  "x-ui": "choice"
+                },
+                "perEmoteShown": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "maxShown": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "allowEmoji": {
+                  "type": "boolean",
+                  "x-ui": "switch"
                 }
               },
               "required": [
@@ -3923,6 +4054,58 @@
                     "duration"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "emote_effect"
+                    },
+                    "emotes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "x-ui": "template"
+                      },
+                      "minItems": 1,
+                      "x-ui": "list"
+                    },
+                    "effect": {
+                      "type": "string",
+                      "enum": [
+                        "rain",
+                        "burst",
+                        "random"
+                      ],
+                      "x-ui": "choice"
+                    },
+                    "width": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "height": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "perEmoteShown": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "maxShown": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "allowEmoji": {
+                      "type": "boolean",
+                      "x-ui": "switch"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "emotes"
+                  ],
+                  "additionalProperties": false
                 }
               ],
               "default": {
@@ -3967,7 +4150,11 @@
                 "add_to_goal",
                 "add_to_timer",
                 "pause_timer",
-                "add_to_event_list"
+                "add_to_event_list",
+                "add_to_credits",
+                "play_credits",
+                "spin_wheel",
+                "damage_stream_boss"
               ],
               "x-ui": "choice"
             },
