@@ -1,0 +1,9 @@
+{
+  "type": "text_to_speech",
+  "schemaVersion": 1,
+  "enabled": true,
+  "text": "hello",
+  "volume": 100,
+  "rate": 1,
+  "pitch": 1
+}

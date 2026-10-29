@@ -111,9 +111,24 @@ type Service struct {
 	// service before the server runs, and it must not call back into the
 	// service.
 	stateProvider func(ctx context.Context, w settings.OverlayWidget) any
+	// tts is the in-flight speech per endpoint ID (B41, provider
+	// browser); nil if none speaks.
+	tts map[string]*ttsState
 
 	nextItem atomic.Uint64
 	nextSlot atomic.Uint64
+	nextTTS  atomic.Int64
+}
+
+// ttsState is a speech that the runtimes of an endpoint speak (B41).
+type ttsState struct {
+	// seq is the sequence of the speech, echoed by the tts.ended that
+	// ends it, so that the tts.ended of a canceled speech cannot end the
+	// next one (the runtime cancels the current speech before it speaks
+	// a new one).
+	seq int64
+	// end is closed when the speech is done.
+	end chan struct{}
 }
 
 // activeItem is an item in the active set of an endpoint.
@@ -150,6 +165,7 @@ func New(ctx context.Context, p Ports) (*Service, error) {
 		visible:   map[string]bool{},
 		items:     map[string]map[string]*activeItem{},
 		clients:   map[string]map[string]ClientSlot{},
+		tts:       map[string]*ttsState{},
 	}
 	if err := s.reload(ctx); err != nil {
 		return nil, err
@@ -192,6 +208,13 @@ func (s *Service) reload(ctx context.Context) error {
 				close(item.end)
 			}
 			delete(s.items, id)
+		}
+	}
+	// The in-flight speech of a removed endpoint cannot end (B41).
+	for id := range s.tts {
+		if _, ok := endpoints[id]; !ok {
+			close(s.tts[id].end)
+			delete(s.tts, id)
 		}
 	}
 	return nil
@@ -348,6 +371,52 @@ func (s *Service) takeItem(endpoint, id string) (*activeItem, bool) {
 // false if the item is not active.
 func (s *Service) ItemEnded(ctx context.Context, endpoint, id string) (ok bool) {
 	return s.RemoveItem(ctx, endpoint, id)
+}
+
+// TTSSpeak makes the runtimes of the endpoint speak the text (B41, the
+// provider browser) and returns the channel that the tts.ended closes.
+// The runtime cancels the current speech before it speaks the new one,
+// so the speech is replaced and the old channel is closed; the seq
+// keeps the tts.ended of the canceled speech from ending the new one
+// (B49). An unknown endpoint is an error with the ID in the message
+// (B45).
+func (s *Service) TTSSpeak(ctx context.Context, endpoint string, d TTSSpeakData) (<-chan struct{}, error) {
+	if d.Text == "" {
+		return nil, errors.New("overlay: tts.speak needs a text")
+	}
+	s.mu.Lock()
+	if _, ok := s.endpoints[endpoint]; !ok {
+		s.mu.Unlock()
+		return nil, fmt.Errorf("overlay: the endpoint %q is unknown", endpoint)
+	}
+	if cur := s.tts[endpoint]; cur != nil {
+		close(cur.end)
+	}
+	d.Seq = s.nextTTS.Add(1)
+	st := &ttsState{seq: d.Seq, end: make(chan struct{})}
+	s.tts[endpoint] = st
+	s.mu.Unlock()
+	s.logger.InfoContext(ctx, "overlay tts speak", "endpoint", endpoint, "seq", d.Seq)
+	s.broadcast(endpoint, Message{Type: TypeTTSSpeak, Data: d})
+	return st.end, nil
+}
+
+// TTSEnded is the tts.ended message of a runtime (B41): the speech with
+// the seq has ended, and the first report closes the channel (B49). ok
+// is false if the endpoint has no speech with the seq, e.g. the tts.ended
+// of a canceled speech after the next one started.
+func (s *Service) TTSEnded(ctx context.Context, endpoint string, seq int64) (ok bool) {
+	s.mu.Lock()
+	st := s.tts[endpoint]
+	if st == nil || st.seq != seq {
+		s.mu.Unlock()
+		return false
+	}
+	delete(s.tts, endpoint)
+	s.mu.Unlock()
+	close(st.end)
+	s.logger.DebugContext(ctx, "overlay tts ended", "endpoint", endpoint, "seq", seq)
+	return true
 }
 
 // ActiveItems returns the active items of the endpoint in a stable

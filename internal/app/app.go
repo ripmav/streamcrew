@@ -36,7 +36,9 @@ import (
 	"github.com/ripmav/streamcrew/internal/action/moderation"
 	"github.com/ripmav/streamcrew/internal/action/network"
 	overlayaction "github.com/ripmav/streamcrew/internal/action/overlay"
+	soundaction "github.com/ripmav/streamcrew/internal/action/sound"
 	streamaction "github.com/ripmav/streamcrew/internal/action/stream"
+	ttsaction "github.com/ripmav/streamcrew/internal/action/tts"
 	twitchaction "github.com/ripmav/streamcrew/internal/action/twitch"
 	"github.com/ripmav/streamcrew/internal/action/usercommand"
 	"github.com/ripmav/streamcrew/internal/action/users"
@@ -64,6 +66,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/lockfile"
 	"github.com/ripmav/streamcrew/internal/logging"
+	"github.com/ripmav/streamcrew/internal/media"
 	modsvc "github.com/ripmav/streamcrew/internal/moderation"
 	"github.com/ripmav/streamcrew/internal/netguard"
 	"github.com/ripmav/streamcrew/internal/overlay"
@@ -77,6 +80,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/supervisor"
 	"github.com/ripmav/streamcrew/internal/template"
 	timersvc "github.com/ripmav/streamcrew/internal/timer"
+	ttspkg "github.com/ripmav/streamcrew/internal/tts"
 	"github.com/ripmav/streamcrew/internal/twitch"
 	"github.com/ripmav/streamcrew/internal/userservice"
 	"github.com/ripmav/streamcrew/internal/vault"
@@ -160,8 +164,18 @@ type App struct {
 	overlay      *overlay.Server
 	// widgets runs the P1 widgets of the overlay (roadmap 7.2).
 	widgets *overlaywidgets.Service
-	ready   *readiness
-	rights  *config.Live
+	// mediaDir is the media directory of the profile (roadmap 7.1, B6);
+	// the overlay server serves it and the media and tts services of
+	// 7.3 play and generate under it (ADR-0020).
+	mediaDir string
+	// media plays the files of the sound and text_to_speech actions on
+	// the sinks (roadmap 7.3, ADR-0020 §1).
+	media *media.Service
+	// tts renders the speech of the file providers of the
+	// text_to_speech action (roadmap 7.3, ADR-0020 §3).
+	tts    *ttspkg.Service
+	ready  *readiness
+	rights *config.Live
 	// file is the resolver of the configuration file; watcher applies
 	// its changes at runtime (roadmap 6.5), nil without a file.
 	file    *config.FileResolver
@@ -612,11 +626,11 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	// non-critical HTTP server beside the API server. It serves the
 	// embedded runtime and the released media; without host:fs (the
 	// server mode) it serves no media.
-	mediaDir := filepath.Join(a.profiles.Dir(), a.profile.ID, "media")
-	if err := os.MkdirAll(mediaDir, 0o700); err != nil {
+	a.mediaDir = filepath.Join(a.profiles.Dir(), a.profile.ID, "media")
+	if err := os.MkdirAll(a.mediaDir, 0o700); err != nil {
 		return a, fmt.Errorf("create the media directory: %w", err)
 	}
-	a.overlay, err = newOverlayServer(ctx, cfg, a, mediaDir, component(logger, "overlay"))
+	a.overlay, err = newOverlayServer(ctx, cfg, a, a.mediaDir, component(logger, "overlay"))
 	if err != nil {
 		return a, err
 	}
@@ -627,6 +641,13 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		return a, err
 	}
 	a.overlay.Service().SetStateProvider(a.widgets.StateForSync)
+	// The media and the tts services (roadmap 7.3, ADR-0020): the sinks
+	// the sound and text_to_speech actions play on, and the providers
+	// that render the speech to a file under the media directory.
+	a.media = a.newMedia(component(logger, "media"))
+	if a.tts, err = a.newTTS(cfg, component(logger, "tts")); err != nil {
+		return a, err
+	}
 	if cfg.OverlayPublicInsecure() {
 		logger.WarnContext(ctx, "the overlay listens on a public address without a token",
 			"listen", cfg.OverlayListen,
@@ -855,6 +876,23 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches,
 		Widgets:   overlayActionOps{app: a},
 		Clips:     overlayActionOps{app: a},
 		Logger:    component(a.logger, "action"),
+	}))
+	add(soundaction.Descriptors(soundaction.Ports{
+		Media:       mediaFiles{a: a},
+		Sinks:       mediaSinks{a: a},
+		Rights:      a.rights,
+		DefaultSink: a.cfg.AudioSink,
+		Logger:      component(a.logger, "action"),
+	}))
+	add(ttsaction.Descriptors(ttsaction.Ports{
+		Templates:       a.templates,
+		TTS:             ttsService{a: a},
+		Browser:         ttsBrowser{a: a},
+		Sinks:           mediaSinks{a: a},
+		Rights:          a.rights,
+		DefaultSink:     a.cfg.AudioSink,
+		DefaultProvider: a.cfg.TTSProvider,
+		Logger:          component(a.logger, "action"),
 	}))
 	if err := errors.Join(errs...); err != nil {
 		return nil, err

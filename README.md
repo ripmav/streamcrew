@@ -21,6 +21,7 @@ Phase 7 (Overlays und Medien) läuft:
 
 - **Overlay-Server** (7.1): Ein eigener HTTP-Server für OBS-Browserquellen ([ADR-0019](docs/adr/0019-overlay-architektur.md)) mit eingebetteter TypeScript-Runtime, mehreren Endpunkten, optionalem Token und Medienauslieferung aus freigegebenen Verzeichnissen.
 - **Items und Widgets** (7.2): Die Aktion `overlay` zeigt Items (Text, Bild, Video, Ton, HTML, YouTube, Clip, Timer) und steuert die fünf Widget-Kinds `label`, `goal`, `timer`, `event_list` und `chat` (Sichtbarkeit, Zustand, Fortschritt, Timer, Listen, Chat); der Ziel-Fortschritt bleibt im Profil, und die Zieleffekte laufen als Bus-Ereignisse.
+- **Medien** (7.3): Die Aktionen `sound` (Datei aus dem Medienverzeichnis) und `text_to_speech` (Browser-Speech, Google, Azure, Piper) spielen auf den Sinks `overlay` (Default, im Browser-Pane) und `local` (Audiogerät des Hosts, Build-Tag `localaudio` — die Release-Binaries `streamcrew-desktop`); [ADR-0020](docs/adr/0020-audio-ausgabe.md).
 
 Die vollständige Planung mit Abnahmekriterien steht in der [Roadmap](docs/roadmap.md).
 

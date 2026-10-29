@@ -133,6 +133,10 @@ type WidgetUpdateData struct {
 type TTSSpeakData struct {
 	// Text is the text to speak.
 	Text string `json:"text"`
+	// Seq is the sequence of the speech; the runtime echoes it in the
+	// tts.ended that ends the speech, so that the tts.ended of a
+	// canceled speech cannot end the next one (B49).
+	Seq int64 `json:"seq,omitempty"`
 	// Voice is the voice name; empty for the default voice.
 	Voice string `json:"voice,omitempty"`
 	// Volume is the volume from 0 to 1; 1 for full.

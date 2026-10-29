@@ -152,3 +152,117 @@ func TestChatCommandRunsOnMockPlatform(t *testing.T) {
 	cancel()
 	require.NoError(t, <-errc)
 }
+
+// soundCommands is a chat command that plays a file of the media
+// directory (roadmap 7.3, B40).
+const soundCommands = `apiVersion: streamcrew/v1alpha1
+kind: ChatCommand
+metadata: {name: PlaySound}
+spec:
+  triggers: [playsound]
+  actions:
+    - {type: sound, file: "intro.wav", sink: "overlay"}
+`
+
+// TestSoundActionRunsAgainstTheBuiltServices covers the wiring of
+// roadmap 7.3 (Review 345-1): the sound action is wired before the media
+// and tts services are built, so the ports resolve them at the call; the
+// action completes instead of panicking on a nil service.
+func TestSoundActionRunsAgainstTheBuiltServices(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	cfg := testConfig(t)
+
+	// Create the profile, find its path, and put the file in the media
+	// directory the core creates next to the profile database.
+	first, err := app.New(ctx, cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil))
+	require.NoError(t, err)
+	p := first.Profile()
+	path := p.Path
+	require.NoError(t, first.Close())
+	mediaDir := filepath.Join(filepath.Dir(path), p.ID, "media")
+	require.NoError(t, os.MkdirAll(mediaDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(mediaDir, "intro.wav"), []byte("RIFF"), 0o600))
+
+	// Import the command as code.
+	rights, err := cfg.Rights()
+	require.NoError(t, err)
+	file := filepath.Join(t.TempDir(), "sound.v1alpha1.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(soundCommands), 0o600))
+	report, err := app.ImportCommandFiles(ctx, path, nil, rights, []string{file})
+	require.NoError(t, err)
+	require.True(t, report.Imported, "%+v", report)
+
+	// The core on the profile with the mock platform.
+	var mp *mock.Platform
+	a, err := app.New(ctx, cfg, app.WithConsole(&bytes.Buffer{}), app.WithKeyring(nil),
+		app.WithPlatform(func(_ context.Context, b app.PlatformBuilder) (connector.Platform, error) {
+			mp, err = mock.New(b.Receiver, mock.WithLogger(b.Logger), mock.WithPublisher(b.Publisher))
+			return mp, err
+		}))
+	require.NoError(t, err)
+
+	var (
+		mu   sync.Mutex
+		seen []event.Envelope
+	)
+	sub := a.Bus().Subscribe(ctx, event.WithPrefixes("command.instance.", "mock."), event.WithBuffer(256))
+	go func() {
+		for e := range sub.C() {
+			mu.Lock()
+			seen = append(seen, e)
+			mu.Unlock()
+		}
+	}()
+	waitFor := func(what string, fn func(event.Envelope) bool) {
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			mu.Lock()
+			found := slices.ContainsFunc(seen, fn)
+			mu.Unlock()
+			if found {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("no event: %s", what)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	errc := make(chan error, 1)
+	go func() { errc <- a.Run(runCtx) }()
+	require.Eventually(t, a.Ready, 10*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return mp.Status().Connected() },
+		5*time.Second, 10*time.Millisecond, "the mock platform to connect")
+
+	// The simulated user triggers the sound command; the action plays
+	// through the built media service and the instance completes.
+	sent, err := mp.Say(ctx, "alice", "!playsound")
+	require.NoError(t, err)
+	assert.Equal(t, mock.Delivered, sent.Delivery)
+	waitFor("the sound command to complete",
+		func(e event.Envelope) bool { return instanceNamed(e, "PlaySound") })
+
+	// Before the fix the nil service panicked inside the engine; the
+	// command's default error policy continues on a failed action, so
+	// the instance completes either way — the error lands in its action
+	// errors.
+	var completed engine.Instance
+	found := false
+	mu.Lock()
+	for _, e := range seen {
+		if instanceNamed(e, "PlaySound") {
+			completed, found = event.Payload[engine.Instance](e)
+			break
+		}
+	}
+	mu.Unlock()
+	require.True(t, found, "the completed instance of the sound command")
+	assert.Empty(t, completed.Errors, "the sound action must not fail")
+
+	cancel()
+	require.NoError(t, <-errc)
+}
