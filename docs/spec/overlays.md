@@ -49,7 +49,7 @@ anknüpfen (Phase 8).
 | ID | Regel | Quellen |
 |---|---|---|
 | B13 | Item-Kinds: `text` (Text, optionaler Max-Width für Zeilenumbruch), `image` (Pfad oder URL, optionale Breite/Höhe, nur eine Angabe → proportionale Skalierung), `video` (Pfad oder URL, optionale Dauer, Startzeit in Sekunden, Lautstärke 0–100, Schleife), `audio` (Pfad oder URL, Dauer, Lautstärke), `html` (eigenes HTML), `youtube` (URL, Breite und Höhe zwingend, Startzeit, Lautstärke), `clip` (Twitch-Clip: URL oder letzter Clip eines Users), `timer` (Dauer, aufwärts oder abwärts zählen, Anzeigeformat), `emote_effect` (7.5). | Q2 |
-| B14 | Ton- und Video-Items melden ihr Wiedergabe-Ende: die Runtime sendet `item.ended`, wenn der Browser die Wiedergabe beendet hat. Die Core-Aktion meldet das Ende an die Engine mit `engine.Run.PlaybackEnds` (B43); ohne Meldung zählt die Engine vom Ende der Aktion. | Q2, Q7 |
+| B14 | Ton- und Video-Items melden ihr Wiedergabe-Ende: die Runtime sendet `item.ended`, wenn der Browser die Wiedergabe beendet hat. Die Core-Aktion meldet das Ende an die Engine mit `engine.Run.PlaybackEnds` ([`command-engine.md`](command-engine.md) B43); ohne Meldung zählt die Engine vom Ende der Aktion. | Q2, Q7 |
 | B15 | `youtube` und `clip` laden als Embeds in der Browserquelle (YouTube: Embed-Frame; Clip: Clip-Seite in einem Frame). Brechen sie ohne Netz, bleibt das Overlay ansonsten funktionsfähig. | Q2 |
 | B16 | Der Clip-Item zeigt die Dauer des Clips als Detail im Bus-Ereignis, falls ein Event-Command sie braucht (Analogon zu `$twitchclipduration`, [Interop]). | Q2 |
 | B17 | `timer` zählt als Item eine Dauer abwärts (Standard) oder aufwärts und zeigt das Format `DD`, `HH`, `hh`, `MM`, `mm`, `SS`, `ss` (kumuliert bzw. Rest, B28). | Q2, Q8 |
@@ -139,7 +139,7 @@ anknüpfen (Phase 8).
 - [ ] B13–B18: jedes Item-Kind rendert; Ton-/Video-Items melden `item.ended`; YouTube/Clip als Embed
 - [ ] B19–B23: Widgets aus der Sektion erscheinen auf ihrem Endpunkt; `show`/`hide`/`update` wirken; der Zustand überlebt einen Neustart (persistent_timer, goal, boss, queue)
 - [ ] B24–B37: jedes Widget-Kind zeigt live aktuelle Daten (Feed, Chat, Sitzungsstatistik, Twitch-Polls); die Ereignis-Wirkungen publizieren die `overlay.*`/`gamequeue.*`/`discord.voice.*`-Ereignisse mit Details
-- [ ] B38–B42: die Actions `overlay`, `sound`, `text_to_speech`, `streaming_software` sind im Typkatalog mit Schema; `PlaybackEnds` erreicht die Engine (B43-Mindestabstand der Begrüßungen)
+- [ ] B38–B42: die Actions `overlay`, `sound`, `text_to_speech`, `streaming_software` sind im Typkatalog mit Schema; `PlaybackEnds` erreicht die Engine (Mindestabstand der Begrüßungen, [`command-engine.md`](command-engine.md) B43)
 - [ ] B43–B44: OBS-Verbindung mit Reconnect; alle `obs.*`-Ereignisse laufen als Bus-Ereignisse
 - [ ] M3-Exit: eine Browserquelle zeigt Alerts (Follow, Abo, Cheer) mit Bild, Ton und TTS; ein Ziel-Widget aktualisiert live; ein Command wechselt die OBS-Szene
 
