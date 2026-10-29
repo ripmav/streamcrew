@@ -96,7 +96,7 @@ Client → Server:
 
 ### 7. OBS-Steuerung (B42–B44)
 
-- `internal/obs` auf `github.com/andreykaipov/goobs` v1.11.1 (obs-websocket v5-Protokoll, Q27). **Nicht** `Omniscimus/goobs` (existiert nicht).
+- `internal/obs` mit eigenem obs-websocket-v5-Client auf `github.com/coder/websocket` (Code-ADR-0015, Q27): die Kandidatin `github.com/andreykaipov/goobs` fällt weg, weil ihre Abhängigkeit `github.com/hashicorp/logutils` (MPL-2.0) nicht in der Lizenz-Allowlist steht (Code-ADR-0001; 2026-10-28 nach dem Lizenzergebnis der CI entschieden).
 - Konfiguration: `obs-host` (Default `127.0.0.1`), `obs-port` (Default `4455`), `obs-password` (leer = kein Passwort) (B43).
 - Verbindungs-Verhalten (B43, Q25): verbinden beim Start, **kein Retry vor der ersten erfolgreichen Verbindung** (Info-Log, vermeidet Log-Spam wenn OBS nicht läuft), nach einem erfolgreichen Connect 5-s-Reconnect-Loop bei Abriss.
 - Action `streaming_software` mit Kinds `set_scene|start_stream|stop_stream|start_recording|stop_recording|save_replay|set_source|set_filter` (B42, Q26); ohne aktive Verbindung ist jede Ausführung eine klare Fehlermeldung (B55).

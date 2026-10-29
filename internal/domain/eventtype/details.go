@@ -46,6 +46,67 @@ type Details struct {
 	// GoalSegment is the completed segment of
 	// overlay.goal.segment_completed.
 	GoalSegment *GoalSegment `json:"goal_segment,omitempty"`
+	// ObsFile is the file of obs.recording.stopped and obs.replay.saved
+	// (spec overlays.md, B44).
+	ObsFile *ObsFile `json:"obs_file,omitempty"`
+	// ObsScene is the scene of obs.scene.changed (spec overlays.md, B44).
+	ObsScene *ObsScene `json:"obs_scene,omitempty"`
+	// ObsTransition is the transition of obs.transition.started and
+	// obs.transition.ended (spec overlays.md, B44).
+	ObsTransition *ObsTransition `json:"obs_transition,omitempty"`
+	// ObsSource is the source of obs.source.visibility_changed (spec
+	// overlays.md, B44).
+	ObsSource *ObsSource `json:"obs_source,omitempty"`
+	// ObsFilter is the filter of obs.filter.visibility_changed (spec
+	// overlays.md, B44).
+	ObsFilter *ObsFilter `json:"obs_filter,omitempty"`
+}
+
+// ObsFile is the file of obs.recording.stopped and obs.replay.saved
+// (spec overlays.md, B44).
+type ObsFile struct {
+	// Path is the path of the file as OBS names it.
+	Path string `json:"path"`
+}
+
+// ObsScene is the scene of obs.scene.changed (spec overlays.md, B44).
+type ObsScene struct {
+	// Scene is the current program scene.
+	Scene string `json:"scene"`
+	// Previous is the program scene before the change; empty if the
+	// connection has not seen a scene before (B44: the event carries the
+	// current and the previous scene, and the service knows the previous
+	// from the last change or the start of the connection).
+	Previous string `json:"previous,omitempty"`
+}
+
+// ObsTransition is the transition of obs.transition.started and
+// obs.transition.ended (spec overlays.md, B44).
+type ObsTransition struct {
+	// Name is the name of the transition.
+	Name string `json:"name"`
+}
+
+// ObsSource is the source of obs.source.visibility_changed (spec
+// overlays.md, B44).
+type ObsSource struct {
+	// Scene is the scene the item is in.
+	Scene string `json:"scene"`
+	// Source is the source of the scene item.
+	Source string `json:"source"`
+	// Visible is whether the scene item is enabled now.
+	Visible bool `json:"visible"`
+}
+
+// ObsFilter is the filter of obs.filter.visibility_changed (spec
+// overlays.md, B44).
+type ObsFilter struct {
+	// Source is the source the filter is on.
+	Source string `json:"source"`
+	// Filter is the filter.
+	Filter string `json:"filter"`
+	// Visible is whether the filter is enabled now.
+	Visible bool `json:"visible"`
 }
 
 // GoalProgress is the progress of the overlay goal widget (spec

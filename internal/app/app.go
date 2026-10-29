@@ -38,6 +38,7 @@ import (
 	overlayaction "github.com/ripmav/streamcrew/internal/action/overlay"
 	soundaction "github.com/ripmav/streamcrew/internal/action/sound"
 	streamaction "github.com/ripmav/streamcrew/internal/action/stream"
+	streamingaction "github.com/ripmav/streamcrew/internal/action/streaming"
 	ttsaction "github.com/ripmav/streamcrew/internal/action/tts"
 	twitchaction "github.com/ripmav/streamcrew/internal/action/twitch"
 	"github.com/ripmav/streamcrew/internal/action/usercommand"
@@ -69,6 +70,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/media"
 	modsvc "github.com/ripmav/streamcrew/internal/moderation"
 	"github.com/ripmav/streamcrew/internal/netguard"
+	"github.com/ripmav/streamcrew/internal/obs"
 	"github.com/ripmav/streamcrew/internal/overlay"
 	"github.com/ripmav/streamcrew/internal/overlaywidgets"
 	"github.com/ripmav/streamcrew/internal/preset"
@@ -173,7 +175,11 @@ type App struct {
 	media *media.Service
 	// tts renders the speech of the file providers of the
 	// text_to_speech action (roadmap 7.3, ADR-0020 §3).
-	tts    *ttspkg.Service
+	tts *ttspkg.Service
+	// obs is the OBS Studio connection (roadmap 7.4, spec overlays.md,
+	// B43, B44); the streaming_software action runs the operations on
+	// it.
+	obs    *obs.Service
 	ready  *readiness
 	rights *config.Live
 	// file is the resolver of the configuration file; watcher applies
@@ -476,6 +482,22 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		template.WithSources(globals, template.CounterSource(a.store), template.CommandSource(a.store)),
 	)
 
+	// The obs service is built before the action wiring, so the OBS port
+	// of the streaming_software action carries the service, not a nil
+	// pointer (Review 346-N1); it runs with the supervisor like the other
+	// services.
+	a.obs = obs.New(obs.Ports{
+		Host:     cfg.ObsHost,
+		Port:     cfg.ObsPort,
+		Password: cfg.ObsPassword,
+		Bus:      a.bus,
+		Dialer: netguard.Dialer{
+			Protect:   cfg.Mode == config.ModeServer,
+			Allowlist: a.rights.Outbound,
+		},
+		Logger: component(logger, "obs"),
+	})
+
 	// The command service decodes commands with the types that have ports,
 	// so that the engine runs the actions it loads (Code-ADR-0013, point 3).
 	// The command action switches through the service, which the late port
@@ -660,6 +682,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		a.sup.Add("http", a.http, supervisor.WithCritical()),
 		a.sup.Add("overlay", a.overlay),
 		a.sup.Add("widgets", a.widgets),
+		a.sup.Add("obs", a.obs),
 		a.sup.Add("events", a.events),
 		a.sup.Add("timer", a.timer),
 		a.sup.Add("users", a.userSvc),
@@ -893,6 +916,10 @@ func (a *App) actionTypes(globals *template.Globals, switches commands.Switches,
 		DefaultSink:     a.cfg.AudioSink,
 		DefaultProvider: a.cfg.TTSProvider,
 		Logger:          component(a.logger, "action"),
+	}))
+	add(streamingaction.Descriptors(streamingaction.Ports{
+		OBS:    obsActionOps{Service: a.obs},
+		Logger: component(a.logger, "action"),
 	}))
 	if err := errors.Join(errs...); err != nil {
 		return nil, err

@@ -59,6 +59,12 @@ type Options struct {
 	// reach in server mode.
 	FileRoot      map[string]string
 	OutboundAllow []string
+	// ObsHost, ObsPort and ObsPassword are the OBS obs-websocket of the
+	// OBS connection (roadmap 7.4); empty selects the defaults of the
+	// configuration.
+	ObsHost     string
+	ObsPort     int
+	ObsPassword string
 	// LogLevel and LogFormat configure the console log (empty is "info" and
 	// "text"); LogFile is the JSON log file: "true" (the streamcrew binary
 	// default) writes the file in the data directory, "false" disables it,
@@ -128,6 +134,12 @@ func Run(ctx context.Context, opts Options) error {
 	if opts.StreamCatchUp <= 0 {
 		opts.StreamCatchUp = 256
 	}
+	if opts.ObsHost == "" {
+		opts.ObsHost = "127.0.0.1"
+	}
+	if opts.ObsPort <= 0 {
+		opts.ObsPort = 4455
+	}
 	cfg := config.Config{
 		DataDir:         opts.DataDir,
 		Profile:         opts.Profile,
@@ -145,6 +157,9 @@ func Run(ctx context.Context, opts Options) error {
 		FileRoot:        opts.FileRoot,
 		OutboundAllow:   opts.OutboundAllow,
 		BootstrapToken:  opts.BootstrapToken,
+		ObsHost:         opts.ObsHost,
+		ObsPort:         opts.ObsPort,
+		ObsPassword:     opts.ObsPassword,
 		ShutdownTimeout: opts.ShutdownTimeout,
 		Stream: config.StreamConfig{
 			Buffer:  opts.StreamBuffer,

@@ -176,6 +176,16 @@
                 "app.stopping",
                 "overlay.goal.progress",
                 "overlay.goal.segment_completed",
+                "obs.stream.started",
+                "obs.stream.stopped",
+                "obs.recording.started",
+                "obs.recording.stopped",
+                "obs.replay.saved",
+                "obs.scene.changed",
+                "obs.transition.started",
+                "obs.transition.ended",
+                "obs.source.visibility_changed",
+                "obs.filter.visibility_changed",
                 "channel.stream.start",
                 "channel.stream.stop",
                 "channel.follow",
@@ -638,6 +648,9 @@
         },
         {
           "$ref": "#/$defs/action.stream"
+        },
+        {
+          "$ref": "#/$defs/action.streaming_software"
         },
         {
           "$ref": "#/$defs/action.text_to_speech"
@@ -4323,6 +4336,318 @@
         "text"
       ],
       "additionalProperties": false
+    },
+    "action.streaming_software": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "streaming_software"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "x-ui": "switch"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "set_scene",
+            "start_stream",
+            "stop_stream",
+            "start_recording",
+            "stop_recording",
+            "save_replay",
+            "set_source",
+            "set_filter"
+          ],
+          "default": "set_scene",
+          "x-ui": "choice"
+        },
+        "scene": {
+          "type": "string",
+          "minLength": 1,
+          "default": "",
+          "x-ui": "text"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "text"
+        },
+        "visible": {
+          "type": "boolean",
+          "x-ui": "switch"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "input": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "text"
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "x-ui": "text"
+        },
+        "show": {
+          "type": "boolean",
+          "x-ui": "switch"
+        }
+      },
+      "required": [
+        "type",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "streaming_software"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "set_scene",
+              "default": "set_scene"
+            },
+            "scene": {
+              "type": "string",
+              "minLength": 1,
+              "default": "",
+              "x-ui": "text"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "scene"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "streaming_software"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "start_stream",
+              "default": "set_scene"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "streaming_software"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "stop_stream",
+              "default": "set_scene"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "streaming_software"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "start_recording",
+              "default": "set_scene"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "streaming_software"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "stop_recording",
+              "default": "set_scene"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "streaming_software"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "save_replay",
+              "default": "set_scene"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "streaming_software"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "set_source",
+              "default": "set_scene"
+            },
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "text"
+            },
+            "visible": {
+              "type": "boolean",
+              "x-ui": "switch"
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "source"
+          ],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "required": [
+                "visible"
+              ]
+            },
+            {
+              "required": [
+                "x"
+              ]
+            },
+            {
+              "required": [
+                "y"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "streaming_software"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "x-ui": "switch"
+            },
+            "kind": {
+              "const": "set_filter",
+              "default": "set_scene"
+            },
+            "input": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "text"
+            },
+            "filter": {
+              "type": "string",
+              "minLength": 1,
+              "x-ui": "text"
+            },
+            "show": {
+              "type": "boolean",
+              "x-ui": "switch"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "input",
+            "filter",
+            "show"
+          ],
+          "additionalProperties": false
+        }
+      ]
     },
     "action.text_to_speech": {
       "type": "object",

@@ -228,7 +228,8 @@ lassen.
 **Restart:** `data-dir`, `profile`, `config` (offene Dateien und
 Datenbanken des laufenden Prozesses), `overlay-listen`, `overlay-token`
 (Overlay-Server, s. u.), `audio-sink`, `tts-provider`, `tts-piper-model`
-(Sound und TTS, s. u.).
+(Sound und TTS, s. u.), `obs-host`, `obs-port`, `obs-password`
+(OBS-Verbindung, s. u.).
 
 **Beispiele:**
 
@@ -414,6 +415,52 @@ Desktop-Variante `streamcrew-desktop` mit dem Tag `localaudio`
 (linux, windows, darwin; amd64, arm64) — die Variante für den
 Streaming-PC mit lokaler Tonwiedergabe. Die Wiedergabe selbst prüft die
 CI nicht (kein Audiogerät auf den Runnern).
+
+## OBS Studio (Roadmap 7.4)
+
+Der Core verbindet sich mit OBS Studio über dessen obs-websocket-v5-
+Schnittstelle (eigener Client auf `coder/websocket`, Code-ADR-0015;
+[overlays.md](spec/overlays.md) B42–B45):
+Er liest den Zustand und die Ereignisse der Verbindung und führt die
+Operationen der `streaming_software`-Aktion darauf aus.
+
+**Verbindung (B43):** Die Verbindung läuft ab Core-Start mit
+`obs-host` (Default `127.0.0.1`), `obs-port` (Default `4455`) und
+`obs-password` (leer = ohne Passwort) — alle drei gelten **nur zum
+Start** (⟳, Neustart bei Änderung). Ist beim Start kein OBS
+erreichbar oder das Passwort falsch, läuft der Core ohne OBS-Verbindung
+weiter: eine info-Logzeile, kein Retry (B43). Eine danach abgerissene
+Verbindung verbindet sich alle 5 s neu; ein Zustand, der sich seit der
+letzten Verbindung nicht geändert hat, publiziert beim Reconnect
+nichts. Im Server-Modus hütet der Netguard die Verbindung wie alle
+ausgehenden Verbindungen — `--outbound-allow` öffnet das `host:port`
+gezielt.
+
+**Ereignisse (B44):** Diese OBS-Ereignisse laufen als Bus-Ereignisse,
+unabhängig davon, wer die Änderung herbeiführt; startende und stoppende
+Zwischenzustände werden ignoriert, jede Änderung publiziert einmal:
+
+- `obs.stream.started` / `obs.stream.stopped`
+- `obs.recording.started` / `obs.recording.stopped` (Dateipfad)
+- `obs.replay.saved` (Dateipfad)
+- `obs.scene.changed` (aktuelle und vorherige Szene)
+- `obs.transition.started` / `obs.transition.ended` (Übergangsname)
+- `obs.source.visibility_changed` (Szene, Quelle, sichtbar)
+- `obs.filter.visibility_changed` (Quelle, Filter, sichtbar)
+
+**StreamingSoftware-Action (B42):** Der Typ `streaming_software`
+steuert die OBS-Verbindung; ohne aktive Verbindung ist jede Ausführung
+ein klarer Fehler des Aktions-Schritts (die Fehlerpolitik des Commands
+greift), kein Stillstand (B55):
+
+| Kind | Mitglieder | Wirkung |
+|---|---|---|
+| `set_scene` | `scene` | Setzt die aktuelle Programm-Szene. |
+| `start_stream` / `stop_stream` | — | Startet bzw. stoppt den Stream-Output. |
+| `start_recording` / `stop_recording` | — | Startet bzw. stoppt den Aufnahme-Output. |
+| `save_replay` | — | Speichert den Replay-Buffer; der Pfad kommt mit `obs.replay.saved`. |
+| `set_source` | `source` plus mindestens eines von `visible`, `x`, `y` | Sichtbarkeit und/oder Position einer Quelle der aktuellen Szene (Rest des Transform bleibt, wie er ist). |
+| `set_filter` | `input`, `filter`, `show` | Sichtbarkeit eines Filters einer Quelle. |
 
 ## Logs im Stream (read-only)
 

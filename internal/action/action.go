@@ -51,6 +51,7 @@ const (
 	CategoryTwitch      Category = "twitch"       // twitch (clip, marker, ad, raid, shoutout, poll, prediction, reward)
 	CategoryStream      Category = "stream"       // stream (set_title, set_game)
 	CategoryOverlay     Category = "overlay"      // overlay (item, widget)
+	CategoryObs         Category = "obs"          // streaming_software
 	CategoryUserCommand Category = "user_command" // user_command (remember)
 )
 
@@ -60,6 +61,7 @@ func Categories() []Category {
 		CategoryFlow, CategoryCommands, CategoryValues, CategoryChat,
 		CategoryNetwork, CategoryModeration, CategoryUsers, CategoryHost,
 		CategoryTwitch, CategoryStream, CategoryOverlay, CategoryUserCommand,
+		CategoryObs,
 	}
 }
 
