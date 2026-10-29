@@ -231,10 +231,15 @@ class FakeWS {
 
 function boot({ search = "" } = {}) {
   const clock = makeClock();
+  const created = [];
   const document = {
     head: new El("head"),
     body: new El("body"),
-    createElement: (t) => new El(t.toLowerCase()),
+    createElement: (t) => {
+      const el = new El(t.toLowerCase());
+      created.push(el);
+      return el;
+    },
     querySelector: () => null,
   };
   const ctx = vm.createContext({
@@ -271,6 +276,9 @@ function boot({ search = "" } = {}) {
   return {
     clock,
     document,
+    // every element the runtime created, also the ones still pending
+    // their batched start:
+    created,
     ws: () => FakeWS.current,
     // flush drains the batched item starts (B8): the first item shows
     // 300 ms after the virtual clock starts, the next 300 ms after
@@ -422,6 +430,43 @@ scenario("342-3: the resync removes items and widgets lost in the disconnect", (
   ok(!env.byText("gone-item"), "i1: removed after the resync");
   ok(env.byText("stays-widget"), "w2: re-announced, still shown");
   ok(env.byText("stays-item"), "i2: re-announced, still shown");
+});
+
+// 344-2: the timer item counts the rest of the duration down (B17).
+scenario("344-2: the timer item counts down", (env) => {
+  const ws = env.ws();
+  ws._open();
+  env.hello();
+  env.show({
+    id: "t",
+    kind: "timer",
+    position: { model: "simple", point: "center" },
+    layer: 1,
+    content: { duration: "90s", format: "MM:SS" },
+  });
+  const span = env.created.find((c) => c.className.includes("sc-kind-timer")).children[0];
+  env.clock.tick(1000);
+  eq(span.textContent, "01:29", "t=1 s: shows the rest, not the total");
+  env.clock.tick(29000);
+  eq(span.textContent, "01:00", "t=30 s: the 90 s countdown after 30 s");
+});
+
+// 344-2: the cumulative (uppercase) tokens carry the value without
+// modulo: 5400 s as MM:SS is 90:00, not 30:00.
+scenario("344-2: the cumulative tokens are not modulo", (env) => {
+  const ws = env.ws();
+  ws._open();
+  env.hello();
+  env.show({
+    id: "t",
+    kind: "timer",
+    position: { model: "simple", point: "center" },
+    layer: 1,
+    content: { duration: "5400s", format: "MM:SS" },
+  });
+  env.clock.renderOnce(); // the per-second render at the current time
+  const span = env.created.find((c) => c.className.includes("sc-kind-timer")).children[0];
+  eq(span.textContent, "90:00", "5400 s in MM:SS without modulo");
 });
 
 // ---------- run ----------

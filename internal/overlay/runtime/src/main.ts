@@ -252,25 +252,22 @@ function parseGoDuration(text: string): number {
 }
 
 // formatTimer renders a timer into the format (B17): the tokens DD, HH,
-// MM and SS carry the cumulative value, hh, mm and ss the rest, each
-// padded to two digits. A count-down counts the rest of the duration, a
-// count-up the elapsed time; for a count-up both are the same.
+// MM and SS carry the cumulative value without modulo (90 min as MM:SS
+// is 90:00), hh, mm and ss the rest, each padded to two digits. A
+// count-down passes the rest for both, a count-up the elapsed time.
 function formatTimer(format: string, totalMs: number, restMs: number): string {
-  const parts = (ms: number): { d: number; h: number; m: number; s: number } => {
-    const t = Math.max(0, Math.floor(ms / 1000));
-    return { d: Math.floor(t / 86400), h: Math.floor((t % 86400) / 3600), m: Math.floor((t % 3600) / 60), s: t % 60 };
-  };
-  const cum = parts(totalMs);
-  const rest = parts(restMs);
+  const sec = (ms: number): number => Math.max(0, Math.floor(ms / 1000));
+  const t = sec(totalMs);
+  const r = sec(restMs);
   const pad = (n: number): string => String(n).padStart(2, "0");
   return format
-    .replace("DD", pad(cum.d))
-    .replace("HH", pad(cum.h))
-    .replace("MM", pad(cum.m))
-    .replace("SS", pad(cum.s))
-    .replace("hh", pad(rest.h))
-    .replace("mm", pad(rest.m))
-    .replace("ss", pad(rest.s));
+    .replace("DD", pad(Math.floor(t / 86400)))
+    .replace("HH", pad(Math.floor(t / 3600)))
+    .replace("MM", pad(Math.floor(t / 60)))
+    .replace("SS", pad(t % 60))
+    .replace("hh", pad(Math.floor(r / 3600)))
+    .replace("mm", pad(Math.floor((r % 3600) / 60)))
+    .replace("ss", pad(r % 60));
 }
 
 // ---------- item rendering (B11-B17) ----------
@@ -389,7 +386,9 @@ function renderContent(el: HTMLElement, entry: Entry): void {
           span.textContent = formatTimer(c.format ?? "MM:SS", elapsed, elapsed);
         } else {
           const rest = startAt + totalMs - now;
-          span.textContent = formatTimer(c.format ?? "MM:SS", totalMs, rest);
+          // The count-down shows the rest; the cumulative tokens of a
+          // count-down are the rest as well (B17).
+          span.textContent = formatTimer(c.format ?? "MM:SS", rest, rest);
           if (rest <= 0 && !ended) {
             ended = true;
             perSecond.delete(entry.render!);
