@@ -32,7 +32,7 @@ Zusätzliche Eingangsgrößen:
 | Sink | Build/Modus | Implementation |
 | --- | --- | --- |
 | `overlay` | **Default**, immer verfügbar (außer ohne `host:fs`) | Schickt ein `audio`-Item an den **Default-Overlay-Endpunkt** (ADR-0019 §4); das Audio wird im Browser-Pane über den Streamer-PC wiedergegeben (Q21). Kein extra Audio-Device, keine `host:audio`-Capability nötig. |
-| `local` | Build-Tag `localaudio`, `host:audio` erforderlich | `ebitengine/oto/v3` v3.5.1 (MIT-lizenziert, aktives Go-Audio-Backend für Desktop). `audio-device`-Konfiguration (Device-Index oder Name, Default: System-Standard). WAV ist garantiert dekodierbar; **MP3 wird in 7.3 entschieden** (Kandidat `github.com/dmarc/ito/mp3`, MIT); falls nicht: WAV-only mit `shortcut:`-Kommentar und klarem Fehler bei MP3. |
+| `local` | Build-Tag `localaudio`, `host:audio` erforderlich | `ebitengine/oto/v3` v3.5.1 (MIT-lizenziert, aktives Go-Audio-Backend für Desktop). `audio-device`-Konfiguration (Device-Index oder Name, Default: System-Standard). Nur 16-Bit-PCM-WAV; MP3 und andere Formate sind ein klarer Fehler (Nachtrag 2026-10-27, Punkt 1). |
 | `agent` | Stub in 7.3, Implementation in 9.6 | Schickt das Audio-Event ins Agent-Protokoll; der Agent spielt es lokal ab. In 7.3 werden nur die Action-Zielwahl und der Capability-Check real; die eigentliche Durchleitung kommt mit 9.6. |
 
 ### 2. Konfiguration
@@ -57,11 +57,11 @@ Medien-Items (`kind: audio|video|clip`) mit Audio-Track werden im Browser-Pane d
 
 - **Pro:**
   - Default-Verhalten (`overlay`) deckt den MIU-Fall exakt ab (Q21) und braucht **keine** `host:audio`-Capability — der Server-Modus bleibt funktionsfähig für Overlays und Overlay-Audio.
-  - `local` ist opt-in über Build-Tag: die Desktop-App (Goreleaser `streamcrew-desktop`) wird mit `localaudio` gebaut, das Server-Image nicht; `oto/v3` und ein MP3-Decoder landen nicht in jedem Build.
+  - `local` ist opt-in über Build-Tag: die Desktop-App (Goreleaser `streamcrew-desktop`) wird mit `localaudio` gebaut, das Server-Image nicht; `oto/v3` landet nicht in jedem Build.
   - `oto/v3` ist stabil, MIT-lizenziert und der De-facto-Standard für Go-Desktop-Audio; keine Abhängigkeits-Eskalation.
   - Agent-Sink-Stub in 7.3 hält die Action-Signatur stabil, 9.6 ergänzt nur die Durchleitung — keine Breaking-Change.
 - **Contra:**
-  - MP3-Unterstützung für `local` hängt von einer zusätzlichen Dependency ab; wenn die nicht passt, bleibt WAV-only (Shortcut, dokumentiert).
+  - `local` spielt nur WAV (16-Bit-PCM); MP3 bräuchte eine zusätzliche Dependency und bleibt offen (Nachtrag 2026-10-27, Punkt 1).
   - Ein zweiter Build mit Tag (`streamcrew-desktop`) erweitert die Goreleaser-Config; die CI muss den Tag-Check fahren (Mindest: `go build -tags localaudio ./...`).
   - `local`-Audio im Server-Modus ist per Capability untersagt — muss in der Doku klar stehen (B40, A10).
 
@@ -75,7 +75,7 @@ Medien-Items (`kind: audio|video|clip`) mit Audio-Track werden im Browser-Pane d
 
 ## Open Items
 
-- ~~**MP3-Decoder** für `local`-Sink: in 7.3 entscheiden (`github.com/dmarc/ito/mp3` vs. WAV-only).~~ Erledigt 2026-10-27 (Nachtrag): WAV-only, der Kandidat ist tot.
+- ~~**MP3-Decoder** für `local`-Sink: in 7.3 entscheiden.~~ Erledigt 2026-10-27 (Nachtrag): WAV-only, der Kandidat existiert nicht.
 - **Agent-Audio-Durchleitung** (9.6): Protokoll-Meldung `audio.play` (Datei oder URL) ist der voraussichtliche Vorschlag; wird in 9.6 spezialisiert.
 - **Geräteauswahl** für `local`: weggefallen mit dem Nachtrag 2026-10-27 (oto/v3 hat keine Geräte-API). Falls sie gebraucht wird, ist ein anderer Backend-Weg nötig (z. B. ein Gerätewechsel auf Systemseite, ein zweites Backend oder eine neue Dependency).
 
@@ -83,7 +83,7 @@ Medien-Items (`kind: audio|video|clip`) mit Audio-Track werden im Browser-Pane d
 
 Vier Punkte der Entscheidung haben sich bei der Umsetzung geändert:
 
-1. **MP3 entfällt, WAV-only.** Der Kandidat `github.com/dmarc/ito/mp3` ist tot (Repository 404). Die `local`-Ausgabe dekodiert 16-Bit-PCM-WAV; andere Formate (MP3, 24-Bit, float32, andere Kanalzahlen) sind ein klarer Fehler (`internal/media/wav.go`, `shortcut:`-Kommentar). Die Wiedergabe normalisiert alles auf 44100 Hz Stereo float32 — oto/v3 kennt pro Prozess genau ein Format (`FormatFloat32LE`) und einen einzigen Audio-Kontext.
+1. **MP3 entfällt, WAV-only.** Der in der ursprünglichen Fassung genannte MP3-Kandidat existiert nicht (Repository 404). Die `local`-Ausgabe dekodiert 16-Bit-PCM-WAV; andere Formate (MP3, 24-Bit, float32, andere Kanalzahlen) sind ein klarer Fehler (`internal/media/wav.go`, `shortcut:`-Kommentar). Die Wiedergabe normalisiert alles auf 44100 Hz Stereo float32 — oto/v3 kennt pro Prozess genau ein Format (`FormatFloat32LE`) und einen einzigen Audio-Kontext.
 2. **`audio-device` entfällt.** oto/v3 v3.5.1 hat keine API zur Geräteauswahl (ALSA/PulseAudio-Systemdefault). Der Config-Key kommt nicht, die Doku (usage) sagt es. Offener Punkt bleibt, ob das genügt.
 3. **piper-Pitch wird ignoriert.** piper kennt kein Pitch-Flag (nur `--length-scale` für die Rate und `--volume`); die Pitch-Option der Aktion geht bei `piper` verloren (`internal/tts/piper.go`, `shortcut:`-Kommentar).
 4. **Kein cgo nötig.** oto/v3 v3.5.1 ist auf Linux reines Go (purego/ALSA) — der Goreleaser-Build `streamcrew-desktop` (Tag `localaudio`) cross-compiliert mit `CGO_ENABLED=0` für linux, windows und darwin, ohne Mingw/osxcross. Die Wiedergabe selbst prüft die CI nicht (kein Audiogerät auf den Runnern); die Abnahme läuft auf dem Streaming-PC.

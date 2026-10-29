@@ -120,7 +120,7 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
 - [x] `internal/media`: Sink-Interface, `overlay`-Sink (Audio-Item auf dem Default-Endpunkt),
   `local`-Sink (Build-Tag `localaudio`, oto/v3; **Abweichung:** keine Geräteauswahl —
   oto/v3 kennt keine Geräte-API, System-Defaultgerät, ADR-0020 offener Punkt; **Abweichung:**
-  nur 16-Bit-PCM-WAV — der MP3-Kandidat `dmarc/ito/mp3` ist tot (404), ADR-0020 §1),
+  nur 16-Bit-PCM-WAV — der MP3-Kandidat existiert nicht (404), ADR-0020 §1),
   `agent`-Port vorbereitet (Stub bis 9.6)
 - [x] Sound-Action: Typ `sound` (file, volume, sink, waitForFinish), `VisualAudio`,
   `PlaybackEnds` (nur mit `waitForFinish` — ohne wartet die Aktion nicht, und die Engine

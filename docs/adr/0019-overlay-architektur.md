@@ -147,6 +147,6 @@ Client → Server:
 
 ## Open Items
 
-- MP3-Decoding für den `local`-Audio-Sink (ADR-0020): Kandidat `github.com/dmarc/ito/mp3` — wird in 7.3 entschieden.
+- ~~MP3-Decoding für den `local`-Audio-Sink (ADR-0020): in 7.3 entscheiden.~~ Erledigt 2026-10-27: WAV-only, der damals genannte Kandidat existiert nicht ([ADR-0020, Nachtrag 2026-10-27](0020-audio-ausgabe.md#nachtrag-2026-10-27-umsetzung-73), Punkt 1).
 - Das OBS-Reconnect-Intervall (5 s) ist aus der MIU-Doku übernommen (Q25); Anpassbar über Config in späteren Phasen, falls nötig.
 - Browser-Pane-URL-Dokumentation (OBS-Einrichtung) gehört in `docs/usage.md`, mit der Umsetzung von 7.1.

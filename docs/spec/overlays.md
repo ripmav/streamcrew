@@ -145,7 +145,7 @@ anknüpfen (Phase 8).
 
 ## Offene Fragen
 
-- Lokale Audio-Dekodierung: MP3-Dekoder in reinem Go (Pfad in 7.3 entscheiden; WAV ist sicher); CGO-Freundlichkeit von oto unter Linux zu verifizieren.
+- ~~Lokale Audio-Dekodierung: MP3-Dekoder in reinem Go; CGO-Freundlichkeit von oto unter Linux.~~ Erledigt 2026-10-27: WAV-only, oto/v3 braucht kein cgo ([ADR-0020, Nachtrag](../adr/0020-audio-ausgabe.md#nachtrag-2026-10-27-umsetzung-73), Punkte 1 und 4).
 - Der Endpunkt-Token soll später (D5/W4) über die API erzeugen werden; bis dahin ist er Startkonfiguration.
 
 ## Quellen
