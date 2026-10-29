@@ -1157,8 +1157,8 @@ Es existieren ADR-0001 bis ADR-0013. Alle höheren Nummern in Plan und Roadmap s
 | 0016 | `0016-youtube-chat-streaming.md` | `streamList` vs. Polling | Backlog | `streamList` mit Polling-Fallback |
 | 0017 | `0017-scripting.md` | Ersatz für C#-Skripte | 9 | goja (JavaScript) |
 | 0018 | `0018-web-frontend-technologie.md` | Web-Stack | W0 | TS-SPA + connect-web |
-| 0019 | `0019-overlay-architektur.md` | Server, Runtime, Protokoll | 7 | eigene Runtime, JSON über WebSocket |
-| 0020 | `0020-audio-ausgabe.md` | Audio-Sinks | 7 | Overlay als Standard, lokale Ausgabe P1 |
+| 0019 | `0019-overlay-architektur.md` | Server, Runtime, Protokoll | 7 | **akzeptiert**: eigener Overlay-HTTP-Server (nicht-kritisch), TypeScript-Runtime per esbuild/`go:embed`, JSON-Protokoll über WebSocket, Medien über `os.Root` |
+| 0020 | `0020-audio-ausgabe.md` | Audio-Sinks | 7 | **akzeptiert**: Sinks `overlay` (Standard), `local` (Build-Tag `localaudio`, oto/v3), `agent` (Stub, 9.6) |
 | 0021 | `0021-import-von-mixitup-daten.md` | Interop-Import, `$`-Namen | 0 (Recht), 10 (Umsetzung) | nach rechtlicher Prüfung |
 | 0022 | `0022-internationalisierung.md` | i18n-Bibliothek, Sprachen | 3 | **akzeptiert**: EN + DE, ICU MessageFormat v1 im Teilumfang, eigener Parser und Renderer auf `golang.org/x/text` |
 | 0023 | `0023-release-und-distribution.md` | goreleaser, Docker, Updates | 6 | GitHub-Releases, kein eigener Update-Server; Artefakte nach ADR-0007; Desktop-Pakete nach ADR-0005/0006 |

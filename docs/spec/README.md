@@ -47,7 +47,7 @@ Die Regeln setzen [ADR-0001](../adr/0001-neuimplementierung-und-nutzung-des-orig
 | [`twitch-events.md`](twitch-events.md) | Zuordnung der Twitch-Events und ihrer Identifier | Phase 4.4 | Umgesetzt |
 | [`twitch-multi-channel.md`](twitch-multi-channel.md) | Die Channels, in denen der Bot arbeitet: Voraussetzung, Channel-Dimension, Ownership-Gate | Phase 4.6 | Umgesetzt |
 | [`moderation.md`](moderation.md) | Filter, Strikes, Teilnahmeregeln | Phase 5 | Umgesetzt |
-| `overlays.md` | Overlay-Items, Widgets, Protokoll | Phase 7 | geplant |
+| [`overlays.md`](overlays.md) | Overlay-Items, Widgets, Protokoll, Medien, OBS, TTS, Discord-Voice, Spielewarteschlange | Phase 7 | Geprüft |
 | `economy.md` | Währungen, Ränge, Inventar, Shop | Phase 8 | geplant |
 | `games.md` | Spiel-Framework und Chatspiele | Phase 8 | geplant |
 

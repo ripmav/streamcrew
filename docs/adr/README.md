@@ -47,6 +47,8 @@ Ergänzend:
 | [0012](0012-persistenz.md) | Persistenz: SQLite je Profil, Backups und Secrets | Akzeptiert | 2026-09-29 |
 | [0013](0013-sicherheitsmodell.md) | Sicherheitsmodell (Entwurf) | Akzeptiert | 2026-09-29 |
 | [0014](0014-oauth-und-app-credentials.md) | OAuth und App-Credentials | Abgelöst durch ADR-0023 | 2026-10-07 |
+| [0019](0019-overlay-architektur.md) | Overlay-Architektur: eigener HTTP-Server + Web-Client, Medien über den Streamer-PC | Akzeptiert | 2026-10-27 |
+| [0020](0020-audio-ausgabe.md) | Audioausgabe: Sinks overlay, local (Build-Tag), agent (Stub) | Akzeptiert | 2026-10-27 |
 | [0022](0022-internationalisierung.md) | Internationalisierung | Akzeptiert | 2026-10-02 |
 | [0023](0023-twitch-login-authorization-code-flow.md) | Twitch-Login per Authorization Code Flow | Akzeptiert | 2026-10-08 |
 | [0024](0024-eingebaute-twitch-app.md) | Eingebaute Twitch-App für den Login | Akzeptiert | 2026-10-11 |
