@@ -134,7 +134,7 @@ Client → Server:
 - **Contra:**
   - Zweiter `http.Server` = zweite Port-Konfiguration und ein zweiter Rebind-Pfad (akzeptabel, `internal/httpserver` liefert das Muster).
   - Die Overlay-Runtime ist ein neues TypeScript-Paket ohne UI-Framework; Widget-Rendering muss handgerollt werden (bewusster Trade-off gegen Framework-Overhead).
-  - Server-Modus hat keine Overlay-Medien ohne Reverse-Proxy (keine `host:fs`); `overlay-listen` = `:8742` + Doku-Notiz deckt den Fall.
+  - Im Server-Modus liefert der Overlay-Server keine Medien, solange `host:fs` nicht per `--grant` freigegeben ist ([Code-ADR-0019](code/0019-host-rechte-in-der-startkonfiguration.md)). Ein Reverse-Proxy ändert daran nichts; er betrifft nur den Zugriff von einem anderen Rechner, den `overlay-listen` = `:8742` plus Doku-Notiz abdeckt.
   - YouTube/Clip-Embeds brauchen im Browser-Pane Internet (B15); das ist inhärent und kein Bug.
 
 ## Abwägungen
