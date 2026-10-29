@@ -469,6 +469,43 @@ scenario("344-2: the cumulative tokens are not modulo", (env) => {
   eq(span.textContent, "90:00", "5400 s in MM:SS without modulo");
 });
 
+// 344-6: the clip embed carries the parent parameter Twitch requires,
+// and the slug keeps dashes and underscores (B15).
+scenario("344-6: the clip embed carries parent and the full slug", (env) => {
+  const ws = env.ws();
+  ws._open();
+  env.hello();
+  env.show({
+    id: "cl",
+    kind: "clip",
+    position: { model: "simple", point: "center" },
+    layer: 1,
+    content: { url: "https://clips.twitch.tv/Foo-Bar_9" },
+  });
+  env.flush();
+  const el = env.byClass("sc-kind-clip");
+  const f = el.children.find((c) => c.tagName === "IFRAME");
+  eq(f.src, "https://clips.twitch.tv/embed?clip=Foo-Bar_9&parent=127.0.0.1", "clip: embed with parent");
+});
+
+// 344-7: an URL that is no clip page (it can come from the chat as a
+// template, e.g. as javascript:) renders no iframe.
+scenario("344-7: a non-clip URL renders no iframe", (env) => {
+  const ws = env.ws();
+  ws._open();
+  env.hello();
+  env.show({
+    id: "x",
+    kind: "clip",
+    position: { model: "simple", point: "center" },
+    layer: 1,
+    content: { url: "javascript:alert(1)" },
+  });
+  env.flush();
+  const el = env.byClass("sc-kind-clip");
+  eq(el.children.length, 0, "no iframe for a non-clip URL");
+});
+
 // ---------- run ----------
 
 let passed = 0;

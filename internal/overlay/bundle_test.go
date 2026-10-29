@@ -46,6 +46,18 @@ func TestBundleHasNoBottomYOffset(t *testing.T) {
 		"the bottom positions must not lift the element by its own height")
 }
 
+// TestBundleClipEmbedIsSafe is the regression test of the clip embed
+// (Review 344-6/344-7, B15): the embed URL carries the parent
+// parameter Twitch requires, the slug regex keeps dashes and
+// underscores, and an unmatched URL no longer reaches the iframe raw.
+func TestBundleClipEmbedIsSafe(t *testing.T) {
+	t.Parallel()
+	assert.True(t, strings.Contains(web.Bundle, "([A-Za-z0-9_-]+)"),
+		"the slug regex keeps dashes and underscores")
+	assert.True(t, strings.Contains(web.Bundle, "&parent="),
+		"the embed URL carries the parent parameter")
+}
+
 // TestBundlePositionsUseTheTranslateProperty is the regression test of
 // the centering (Review 342-5, B9/B10): the named positions center via
 // the CSS property translate, so the show animations, which animate

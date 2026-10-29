@@ -278,10 +278,14 @@ function youtubeId(url: string): string {
   return m ? m[1] : "";
 }
 
-// clipEmbed is the embed URL of a Twitch clip page (B15).
+// clipEmbed is the embed URL of a Twitch clip page (B15). Twitch
+// renders the embed only with the parent parameter, and the slug may
+// carry dashes and underscores. An URL that is no clip page has no
+// embed: the raw URL must not reach the iframe (it is a template that
+// can come from the chat, e.g. as javascript:).
 function clipEmbed(url: string): string {
-  const m = url.match(/clips\.twitch\.tv\/([A-Za-z0-9]+)/);
-  return m ? `https://clips.twitch.tv/embed?clip=${m[1]}` : url;
+  const m = url.match(/clips\.twitch\.tv\/([A-Za-z0-9_-]+)/);
+  return m ? `https://clips.twitch.tv/embed?clip=${m[1]}&parent=${location.hostname}` : "";
 }
 
 function renderContent(el: HTMLElement, entry: Entry): void {
@@ -359,10 +363,13 @@ function renderContent(el: HTMLElement, entry: Entry): void {
       break;
     }
     case "clip": {
-      // The clip page in a frame (B15).
+      // The clip page in a frame (B15); no valid clip URL renders
+      // nothing.
       el.classList.add("sc-clip");
+      const src = clipEmbed(c.url ?? "");
+      if (!src) break;
       const f = document.createElement("iframe");
-      f.src = clipEmbed(c.url ?? "");
+      f.src = src;
       f.allow = "autoplay";
       if (c.width) f.style.width = `${c.width}px`;
       if (c.height) f.style.height = `${c.height}px`;
