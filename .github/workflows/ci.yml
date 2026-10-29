@@ -104,8 +104,8 @@ jobs:
         run: go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 diff -f sqlc.yaml
 
       # The overlay runtime bundle must match the TypeScript source
-      # (Code-ADR-0016). The esbuild version is pinned in
-      # internal/overlay/generate.go.
+      # (Code-ADR-0016). The esbuild version is pinned in go.mod and
+      # updated by Renovate.
       - name: overlay bundle diff
         run: |
           go generate ./internal/overlay/...
