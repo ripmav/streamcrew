@@ -19,7 +19,7 @@ Entscheidungsgrundlage: Arbeitsauftrag des Projektinhabers vom 2026-10-27 (auton
 | `engine.Run.PlaybackEnds` | Existiert (B43): die Aktion meldet das Ende der Wiedergabe, die Engine nutzt es für den Mindestabstand der Begrüßungen |
 | `internal/emote` | Emote-Kataloge (Twitch/BTTV/FFZ) mit Cache und Bild-URLs |
 | `internal/domain/feed` | Event-Feed je Profil (`LatestFeed`, 200 Einträge) mit den Typen Follow, Sub, Resub, Geschenk, Massengeschenk, Raid, Cheer |
-| `internal/store` | goose-Migrationen; letzte Tabelle `user_answer` (0020) |
+| `internal/store` | goose-Migrationen; zum Planungsstand die letzte `0022_api_tokens`, Phase 7 ergänzt `0023_overlay_widget_state` (korrigiert 2026-10-29, Review 341-10) |
 | `internal/capability` | `host:fs`, `host:process`, `host:audio`, `net:outbound`, `script` je Betriebsmodus |
 | `coder/websocket` | Bereits Abhängigkeit (EventSub) — wird für die Overlay-WS-Endpunkte wiederverwendet |
 | Build-Werkzeuge | esbuild-Konvention steht in Code-ADR-0016 (gepinnte Version per `go generate`, eingechecktes Bündel, CI-Check) |

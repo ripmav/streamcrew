@@ -92,7 +92,7 @@ Client → Server:
 ### 5. Widgets (B19–B23; Arten in 7.2/7.5)
 
 - **Definition** in den Einstellungen, neue Sektion `overlay`: `endpoints` (Liste, reservierte ID `default`, je Endpunkt `id` und `name`) und `widgets` (Liste: `id` eindeutig im Profil, `kind`, `name`, `endpoint` (Default `default`), `visible`, Position (B9), `config` JSON) (B2, B19).
-- **Laufzeit-Zustand** (mutable Daten wie Ziel-Fortschritt, Timer-Werte, Boss-HP, Rad-Status) in der Store-Tabelle `overlay_widget_state` (ein JSON-Dokument je Widget, Migration ab 0021); ein Neustart ändert nichts am Zustand (B20).
+- **Laufzeit-Zustand** (mutable Daten wie Ziel-Fortschritt, Timer-Werte, Boss-HP, Rad-Status) in der Store-Tabelle `overlay_widget_state` (ein JSON-Dokument je Widget, Migration `0023_overlay_widget_state`); ein Neustart ändert nichts am Zustand (B20).
 - **Widget-„Commands"** des Originals werden zu **Bus-Ereignissen** mit Details, auf die Event-Commands reagieren (Abweichung A2): `overlay.goal.progress/segment_completed`, `overlay.timer.adjusted/completed`, `overlay.boss.damage/heal/new`, `overlay.wheel.spun`, `gamequeue.joined/left/position`, `discord.voice.joined/left` — alle in `eventtype.All()` und damit von Event-Commands aus auslösbar (B23).
 - Widget-Rendering ist client-seitig (TS-Module pro `kind`); der Server hält nur den Zustand und sendet `widget.*`-Meldungen (B21, B22).
 
