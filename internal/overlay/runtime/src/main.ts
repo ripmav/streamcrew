@@ -109,16 +109,18 @@ document.head.appendChild(style);
 // ---------- positioning (B9) ----------
 
 // The nine named screen points of the model "simple": CSS for the
-// element that places it at the point.
+// element that places it at the point. The centering uses the CSS
+// property translate (not transform), so the show animations, which
+// animate transform with the fill mode both, cannot override it.
 const SIMPLE: Record<string, string> = {
   "top-left": "left:0; top:0;",
-  "top": "left:50%; top:0; transform:translateX(-50%);",
+  "top": "left:50%; top:0; translate:-50% 0;",
   "top-right": "right:0; top:0;",
-  "center-left": "left:0; top:50%; transform:translateY(-50%);",
-  "center": "left:50%; top:50%; transform:translate(-50%,-50%);",
-  "center-right": "right:0; top:50%; transform:translateY(-50%);",
+  "center-left": "left:0; top:50%; translate:0 -50%;",
+  "center": "left:50%; top:50%; translate:-50% -50%;",
+  "center-right": "right:0; top:50%; translate:0 -50%;",
   "bottom-left": "left:0; bottom:0;",
-  "bottom": "left:50%; bottom:0; transform:translateX(-50%);",
+  "bottom": "left:50%; bottom:0; translate:-50% 0;",
   "bottom-right": "right:0; bottom:0;",
 };
 
@@ -129,7 +131,8 @@ function place(el: HTMLElement, pos: Position, layer: number): void {
   s.right = "auto";
   s.top = "auto";
   s.bottom = "auto";
-  s.transform = "";
+  // transform stays the animations' property; positioning is translate.
+  s.translate = "";
   if (pos.model === "simple") {
     for (const decl of (SIMPLE[pos.point ?? "center"] ?? SIMPLE.center).split(";")) {
       const i = decl.indexOf(":");

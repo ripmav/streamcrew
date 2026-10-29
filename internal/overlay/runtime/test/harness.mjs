@@ -334,12 +334,36 @@ scenario("342-4: bottom positions have no Y offset", (env) => {
   const b = env.byText("bottom");
   eq(b.style.left, "50%", "bottom: left");
   eq(b.style.bottom, "0", "bottom: bottom");
-  eq(b.style.transform, "translateX(-50%)", "bottom: only the X centering");
+  eq(b.style.translate, "-50% 0", "bottom: X centering via the translate property");
+  eq(b.style.transform ?? "", "", "bottom: no transform");
   const bl = env.byText("bottom-left");
   eq(bl.style.left, "0", "bottom-left: left");
   eq(bl.style.bottom, "0", "bottom-left: bottom");
-  ok(!("translate" in bl.style), "bottom-left: no translate");
-  eq(bl.style.transform, "", "bottom-left: no transform");
+  eq(bl.style.translate, "", "bottom-left: no centering");
+  eq(bl.style.transform ?? "", "", "bottom-left: no transform");
+});
+
+// 342-5: the show animations animate transform with the fill mode
+// both; the positioning must therefore not sit in transform. A
+// centered item with slide-left keeps its translate centering.
+scenario("342-5: animations do not override the centering", (env) => {
+  const ws = env.ws();
+  ws._open();
+  env.hello();
+  env.show({
+    id: "c",
+    kind: "text",
+    position: { model: "simple", point: "center" },
+    layer: 1,
+    animation: "slide-left",
+    content: { text: "center" },
+  });
+  env.flush();
+  const c = env.byText("center");
+  eq(c.style.translate, "-50% -50%", "center: centering via the translate property");
+  ok(c.style.animation.includes("sc-slide-left"), "center: the show animation runs");
+  ok(c.style.animation.includes("both"), "center: fill mode both");
+  eq(c.style.transform ?? "", "", "center: transform is the animations' property");
 });
 
 // ---------- run ----------

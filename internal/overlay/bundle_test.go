@@ -45,3 +45,15 @@ func TestBundleHasNoBottomYOffset(t *testing.T) {
 	assert.False(t, strings.Contains(web.Bundle, "-100%"),
 		"the bottom positions must not lift the element by its own height")
 }
+
+// TestBundlePositionsUseTheTranslateProperty is the regression test of
+// the centering (Review 342-5, B9/B10): the named positions center via
+// the CSS property translate, so the show animations, which animate
+// transform with the fill mode both, cannot override the centering.
+func TestBundlePositionsUseTheTranslateProperty(t *testing.T) {
+	t.Parallel()
+	assert.True(t, strings.Contains(web.Bundle, "translate:-50% -50%"),
+		"the center point centers via the CSS translate property")
+	assert.False(t, strings.Contains(web.Bundle, "translate(-50%"),
+		"no transform-based centering is left in the positions")
+}
