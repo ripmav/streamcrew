@@ -432,8 +432,14 @@ function renderContent(el: HTMLElement, entry: Entry): void {
   }
 }
 
+// The batched item start is delayed (B8). The ID is registered
+// synchronously in pending, so that a remove before the start cancels
+// the start, and a second show before the start cannot render the item
+// twice (B11).
+const pending = new Map<string, { entry: Entry; timer: ReturnType<typeof setTimeout> }>();
+
 function showItem(data: ItemData): void {
-  if (items.has(data.id)) return;
+  if (items.has(data.id) || pending.has(data.id)) return;
   const el = document.createElement("div");
   el.className = "sc-item sc-kind-" + data.kind;
   const entry: Entry = { el, data };
@@ -443,15 +449,22 @@ function showItem(data: ItemData): void {
   const startAt = itemStartAt(now);
   lastItemStart = startAt;
   const start = (): void => {
+    pending.delete(data.id);
     document.body.appendChild(el);
     showAnimation(el, data.animation, data.animationDuration);
     items.set(data.id, entry);
   };
-  if (startAt > now) setTimeout(start, startAt - now);
+  if (startAt > now) pending.set(data.id, { entry, timer: setTimeout(start, startAt - now) });
   else start();
 }
 
 function removeItem(id: string): void {
+  const p = pending.get(id);
+  if (p) {
+    pending.delete(id);
+    clearTimeout(p.timer);
+    return;
+  }
   const entry = items.get(id);
   if (!entry) return;
   items.delete(id);

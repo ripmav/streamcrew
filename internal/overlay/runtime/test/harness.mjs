@@ -366,6 +366,29 @@ scenario("342-5: animations do not override the centering", (env) => {
   eq(c.style.transform ?? "", "", "center: transform is the animations' property");
 });
 
+// 342-2: the batched start is registered synchronously (pending): a
+// remove before the start cancels it, and a duplicate show before the
+// start cannot render the item twice.
+scenario("342-2: a remove before the batched start cancels it", (env) => {
+  const ws = env.ws();
+  ws._open();
+  env.hello();
+  env.show({ id: "a", kind: "text", position: { model: "simple", point: "top-left" }, layer: 1, content: { text: "first" } });
+  env.clock.tick(200);
+  env.show({ id: "b", kind: "text", position: { model: "simple", point: "top-right" }, layer: 1, content: { text: "second" } });
+  env.show({ id: "b2", kind: "text", position: { model: "simple", point: "center-left" }, layer: 1, content: { text: "third" } });
+  env.show({ id: "b2", kind: "text", position: { model: "simple", point: "center-left" }, layer: 1, content: { text: "third" } });
+  ok(!env.byText("second"), "b: not shown before its start");
+  env.remove("b");
+  env.clock.tick(1000);
+  ok(env.byText("first"), "a: shown");
+  ok(!env.byText("second"), "b: the removed item never shows");
+  const third = env.document.body.children.filter((c) =>
+    c.children.some((ch) => ch.textContent === "third")
+  );
+  eq(third.length, 1, "b2: the duplicate show renders exactly once");
+});
+
 // ---------- run ----------
 
 let passed = 0;
