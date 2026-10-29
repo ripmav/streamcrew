@@ -64,7 +64,7 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
 - **Widget-Commands des Originals** werden zu Ereignissen auf dem Bus (`overlay.goal.progress`,
   `overlay.wheel.spun`, …), auf die Event-Commands reagieren (Abweichung A2 in der Spezifikation).
 - **Medien** (ADR-0020): Audio-Sinks `overlay` (Default, spielt in der Browserquelle) und
-  `local` (Build-Tag `localaudio`, `ebitengine/oto/v3`, Geräteauswahl); `agent` ist vorbereitet
+  `local` (Build-Tag `localaudio`, `ebitengine/oto/v3`, System-Standardgerät ohne Geräteauswahl); `agent` ist vorbereitet
   (Port), die Umsetzung mit Phase 9.6. TTS-Provider: `browser` (Web Speech API im Overlay,
   Default), `google`, `azure`, `piper` (externer Prozess).
 - **OBS** (7.4): `internal/obs` mit eigenem obs-websocket-v5-Client auf `github.com/coder/websocket` (Code-ADR-0015; die `goobs`-Kandidatin fällt an der Lizenz-Allowlist für `hashicorp/logutils` (MPL-2.0, Code-ADR-0001) weg);

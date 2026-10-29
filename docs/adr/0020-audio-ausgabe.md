@@ -32,13 +32,13 @@ Zusätzliche Eingangsgrößen:
 | Sink | Build/Modus | Implementation |
 | --- | --- | --- |
 | `overlay` | **Default**, immer verfügbar (außer ohne `host:fs`) | Schickt ein `audio`-Item an den **Default-Overlay-Endpunkt** (ADR-0019 §4); das Audio wird im Browser-Pane über den Streamer-PC wiedergegeben (Q21). Kein extra Audio-Device, keine `host:audio`-Capability nötig. |
-| `local` | Build-Tag `localaudio`, `host:audio` erforderlich | `ebitengine/oto/v3` v3.5.1 (MIT-lizenziert, aktives Go-Audio-Backend für Desktop). `audio-device`-Konfiguration (Device-Index oder Name, Default: System-Standard). Nur 16-Bit-PCM-WAV; MP3 und andere Formate sind ein klarer Fehler (Nachtrag 2026-10-27, Punkt 1). |
+| `local` | Build-Tag `localaudio`, `host:audio` erforderlich | `ebitengine/oto/v3` v3.5.1 (MIT-lizenziert, aktives Go-Audio-Backend für Desktop). Ausgabe auf dem System-Standardgerät, ohne Geräteauswahl (Nachtrag 2026-10-27, Punkt 2). Nur 16-Bit-PCM-WAV; MP3 und andere Formate sind ein klarer Fehler (Nachtrag 2026-10-27, Punkt 1). |
 | `agent` | Stub in 7.3, Implementation in 9.6 | Schickt das Audio-Event ins Agent-Protokoll; der Agent spielt es lokal ab. In 7.3 werden nur die Action-Zielwahl und der Capability-Check real; die eigentliche Durchleitung kommt mit 9.6. |
 
 ### 2. Konfiguration
 
 - `audio-sink`: `overlay` (Default) | `local` | `agent` (Server-Modus: `local` ist per Capability `host:audio` unzulässig — Check bei der Aktion, nicht bei der Config-Prüfung).
-- `audio-device`: nur für `local`; Device-Index (Default `-1` = System-Default) oder Name; Neustart erforderlich.
+- ~~`audio-device`: Geräteauswahl für `local`.~~ Entfällt (Nachtrag 2026-10-27, Punkt 2): oto/v3 hat keine Geräte-API, `local` spielt auf dem System-Standardgerät.
 - API-Keys für TTS-Provider über Env (ADR-0019 §6), nicht in der Config-Datei.
 
 ### 3. TTS-Provider (Details)
