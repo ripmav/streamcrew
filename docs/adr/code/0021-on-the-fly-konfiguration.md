@@ -6,7 +6,8 @@
   `internal/dryrun`, `internal/supervisor`, `internal/engine`, `internal/app`
 - **Bezug:** Code-ADR-0005 (Konfiguration), Code-ADR-0019 (Host-Rechte,
   Punkt 5: Watcher), Code-ADR-0003 (Betriebsmodi), ADR-0013 (Punkt 3:
-  über die API nur einschränken; siehe [Nachtrag 2026-10-24](#nachtrag-2026-10-24-die-api-erweitert-keine-rechte))
+  über die API nur einschränken; siehe [Nachtrag 2026-10-24](#nachtrag-2026-10-24-die-api-erweitert-keine-rechte));
+  [Nachtrag 2026-10-29](#nachtrag-2026-10-29-integrations-schlüssel-sind-hot): TTS- und Discord-Schlüssel sind hot
 
 ## Kontext
 
@@ -144,6 +145,13 @@ unverändert; diese Entscheidung passt sich an:
    - **`listen`:** ein Host, der bisher nicht gebunden war, außer Loopback
      oder einem Unix-Socket. Ein anderer Port auf demselben Host ist keine
      Erweiterung.
+   - **`overlay-listen`** (ergänzt 2026-10-29, [ADR-0019](../0019-overlay-architektur.md) §1):
+     dieselbe Regel wie bei `listen`. Der Overlay-Server ist ohne Token nur
+     bei reinem Loopback-Bind offen; ein Bind über Loopback hinaus verlangt
+     zwar einen Token, gibt aber Fremden eine neue Angriffsfläche. Der Wert
+     gilt erst nach einem Neustart; abgelehnt wird schon das Schreiben.
+     Overlay-Tokens selbst sind keine Startkonfiguration, sondern API-Tokens
+     mit dem Scope `overlay`.
    - **`tls-cert`, `tls-key`:** TLS entfernen, während der Bind über
      Loopback hinausreicht. Zertifikate tauschen bleibt erlaubt, weil das der
      Hauptfall ist.
@@ -170,3 +178,45 @@ unverändert; diese Entscheidung passt sich an:
 Für die übrigen Einstellungen ändert dieser Nachtrag nichts.
 
 Umgesetzt am 2026-10-25; siehe [Roadmap 6.5](../../roadmap.md#65-on-the-fly-konfiguration-server-modus).
+
+## Nachtrag 2026-10-29: Integrations-Schlüssel sind hot
+
+Phase 7 bringt Schlüssel für externe Dienste in die Startkonfiguration
+([ADR-0019](../0019-overlay-architektur.md) §6 und §9, Review 345-X2): `tts-google-key`,
+`tts-azure-key`, `tts-azure-region`, `discord-token` und
+`discord-voice-channel`. Der Projektinhaber hat am 2026-10-29 entschieden,
+dass sie ohne Neustart gesetzt werden können, wie die übrigen
+betriebsrelevanten Einstellungen.
+
+1. **hot.** Die fünf Schlüssel gehören zur Gruppe hot. Gesetzt per Flag oder
+   Umgebungsvariable sind sie wie jede Einstellung **fix** (Präzedenz von
+   Code-ADR-0005); on-the-fly ändern lassen sie sich über die
+   Konfigurationsdatei und die `ConfigService`.
+2. **Anwenden.** `config.ApplyFuncs` bekommt je Dienst ein Apply:
+   - **TTS:** Der TTS-Service liest die Keys je Anfrage aus einem
+     austauschbaren Snapshot (`atomic.Pointer`). Eine laufende Anfrage
+     behält ihren Key; ein entfernter Key ist ab der nächsten Aktion die
+     klare Fehlermeldung aus B54.
+   - **Discord:** Ein neuer Token oder Kanal schließt die Gateway-Sitzung
+     und verbindet neu; ein leerer Token macht den Dienst inaktiv (Info-Log),
+     ein gesetzter startet ihn. Die Besetzung des Widgets wird dabei geleert
+     und neu aufgebaut.
+   - Schlägt ein Apply fehl, bleibt der vorherige Zustand aktiv und der
+     Fehler wird geloggt (wie bei den übrigen Applies).
+3. **Secrets sind write-only.** `tts-google-key`, `tts-azure-key` und
+   `discord-token` erscheinen nie im Klartext:
+   - `ConfigService/Get` liefert statt des Werts nur, ob er gesetzt ist
+     (Platzhalter `<set>` im Dokument).
+   - `ConfigService/Update` übernimmt einen neuen Wert. Steht der
+     Platzhalter oder fehlt der Schlüssel, bleibt der bisherige Wert;
+     ein ausdrücklich leerer Wert löscht ihn. So überschreibt ein
+     zurückgeschriebenes Dokument die Secrets nicht versehentlich.
+   - Die Werte stehen nie in Logs, auch nicht in den Apply-Meldungen des
+     Watchers (dort nur der Schlüssel).
+   - Die Konfigurationsdatei mit Secrets schreibt der Core mit den Rechten
+     `0600`.
+4. **Keine Erweiterung.** Einen Key zu setzen oder zu ändern erweitert keine
+   Rechte im Sinne des Nachtrags 2026-10-24: Ein Key gibt dem Core keine
+   neuen Host-Rechte, und die Aktionen prüfen ihre Capabilities (TTS:
+   `net:outbound`) unverändert. Die Config-API darf die Schlüssel deshalb
+   setzen.

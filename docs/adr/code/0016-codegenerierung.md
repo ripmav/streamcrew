@@ -60,4 +60,4 @@
 - [x] CI: `buf lint` und Regenerierungs-Check (`buf generate` + `git diff --exit-code`) (Roadmap 6.1.1), erledigt 2026-10-16
 - [ ] Restliche Services von `v1alpha1` (Auth, Stream, Chat, Command, User, Counter, Settings, Backup) schreiben (Roadmap 6.1.2)
 - [ ] `buf breaking` ab `v1` in der CI aktivieren (Roadmap, ab Core 1.0)
-- [ ] esbuild-Generierung für die Overlay-Runtime (Roadmap Phase 7)
+- [ ] esbuild-Generierung für die Overlay-Runtime (Roadmap Phase 7): seit 7.1 übergangsweise über die CLI (`go run …/cmd/esbuild@v0.28.2`); die Umstellung auf `pkg/api` nach §2 ist entschieden (ADR-0019 §2, 2026-10-29) und steht als 341-11c in [`review-stack-343-2026-10-28.md`](../../reviews/review-stack-343-2026-10-28.md)
