@@ -56,7 +56,7 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
   sendet `hello`, `state.widgets` und die aktiven Items neu. Batching läuft in der Runtime
   (aufeinanderfolgende Items versetzt einblenden).
 - **Runtime** (ADR-0019): neu geschriebenes TypeScript in `internal/overlay/runtime/src`,
-  gebündelt per `go generate` mit esbuild (CLI per `go run …@v0.28.2`, Code-ADR-0016), eingecheckt
+  gebündelt per `go generate` mit esbuild (Go-API `pkg/api` über einen Generator, Code-ADR-0016 §2; bis 2026-10-29 die CLI per `go run …@v0.28.2`, Review 341-11), eingecheckt
   nach `internal/overlay/web`, per `go:embed` ausgeliefert. Kein Node.js.
 - **Widgets**: definiert in der Settings-Sektion "overlay" (je Widget `id`, `kind`, `endpoint`,
   Position, Konfiguration); der veränderliche Zustand (Goal-Fortschritt, Timer, Boss, Rad,

@@ -49,7 +49,7 @@ Entscheidende Eingangsgrößen:
 
 ### 2. Web-Client (Runtime)
 
-- Neue TypeScript-Quellen in `internal/overlay/runtime/src/`, Bundle nach Code-ADR-0016: `go:generate` mit **gepinntem** `go run github.com/evanw/esbuild/cmd/esbuild@v0.28.2`, Checked-in-Artefakt in `internal/overlay/web/` (Singlefile, `--minify`, `--target=es2020` — der OBS-Browser ist modern genug), `go:embed` im Server, CI-Regen-Check per `git diff --exit-code`.
+- Neue TypeScript-Quellen in `internal/overlay/runtime/src/`, Bundle nach Code-ADR-0016 §2 über die Go-API `github.com/evanw/esbuild/pkg/api` (geändert 2026-10-29, Review 341-11; vorher die CLI per `go run …/cmd/esbuild@v0.28.2`): `go:generate` startet ein kleines Generator-Programm im Paket `internal/overlay`, das `api.Build` mit den Optionen Singlefile, Minify, `es2020` (der OBS-Browser ist modern genug) und `iife` aufruft. Die esbuild-Version ist über `go.mod` gepinnt und wird von Renovate aktualisiert; esbuild wird nur vom Generator importiert und landet nicht im Core-Binary. Checked-in-Artefakt in `internal/overlay/web/`, `go:embed` im Server, CI-Regen-Check per `git diff --exit-code`.
 - Eine Server-Route liefert den Bundle-Byte-String; pro `{id}` wird derselbe Bundle mit einer kleinen JSON-Injektion (`window.__OVERLAY__ = {id, endpointName}`) individualisiert.
 - **Kein Framework** (kein React/Vue): Vanilla TS + CSS; die Overlay-Runtime ist ein stateless Renderer für Server-Zustand, Komplexität bleibt minimal.
 
