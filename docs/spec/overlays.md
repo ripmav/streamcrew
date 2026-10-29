@@ -63,7 +63,7 @@ anknüpfen (Phase 8).
 | B20 | Der veränderliche Zustand eines Widgets (Fortschritt, Timer, Boss, Rad, Credits, Queue) speichert der Core im Profil (`overlay_widget_state`, ein JSON-Dokument je Widget). Ein Neustart ändert nichts am Zustand; ein Neuaufbau des Profils startet bei Default. | Q3, Q8, Q10 |
 | B21 | `widget.show`/`widget.hide` (Aktion oder Profil-Änderung) schalten ein Widget ein/aus. Ein ausgeblendetes Widget läuft nicht mit (kein Tracking, keine Ereignisse) und wird nicht gesendet. | Q3 |
 | B22 | `widget.update` ändert die Anzeige- und Zustandsdaten eines Widgets; die Runtime zeigt den neuen Zustand ohne Reload. | Q3 |
-| B23 | Statt der "Widget Commands" des Originals publiziert der Core für jede Widget-Wirkung ein Bus-Ereignis mit Details; Event-Commands reagieren darauf (Abweichung A2). | Q3, Q8, Q10–Q13 |
+| B23 | Für jede Widget-Wirkung publiziert der Core ein Bus-Ereignis mit Details; Event-Commands reagieren darauf. Zusätzlich kennen `goal` (B25) und `wheel` (B33) wie das Original eigene Widget-Commands: Die Widget-`config` nennt sie per Command-Name (wie die Kanalpunkte-Belohnungen), und der Core startet sie über die Engine mit dem auslösenden Nutzer und den Details des Ereignisses. Das Ereignis wird immer publiziert, auch wenn ein Widget-Command läuft (Abweichung A2). | Q3, Q8, Q10–Q13 |
 
 ### Widgets: Arten (7.2 P1, 7.5 P2)
 
@@ -122,7 +122,7 @@ anknüpfen (Phase 8).
 | ID | Original | streamcrew | Begründung |
 |---|---|---|---|
 | A1 | Widget- und Endpunkt-Editor in der Desktop-App | Kopflos definiert über die Settings-Sektion und (später) die API; Editoren kommen mit D5/W4 | Kein GUI-Pfad in der Phase 7; die Sektion ist der gleiche Datenpfad |
-| A2 | "Widget Commands" (Commands, die ein Widget direkt ausführt) | Bus-Ereignisse (`overlay.*`), auf die Event-Commands reagieren | Gleiches Verhalten über die bestehende Event-Command-Mechanik, ohne zweiten Trigger-Pfad |
+| A2 | "Widget Commands" (Commands, die ein Widget direkt ausführt) | Widget-Commands bleiben für `goal` und `wheel` (B25, B33); zusätzlich publiziert jede Widget-Wirkung ein Bus-Ereignis (`overlay.*`), auf das Event-Commands reagieren (B23). Für die übrigen Widgets gibt es nur die Ereignisse. | Entschieden 2026-10-29 (Review 341-12): Die Widget-Commands bleiben, weil sie zur Widget-Konfiguration gehören (je Segment bzw. Outcome ein Command) und sich als Event-Command nur mit Bedingungen auf die Details nachbauen ließen; die Ereignisse erlauben weitere Reaktionen ohne Änderung am Widget. |
 | A3 | Discord Reactive Voice reagiert auf Sprechaktivität im Voice-Kanal | Gateway-Bot ohne Voice-Verbindung: nur Kanal-Mitgliedschaft (join/leave) | Opus-Voice-Decoding ist außerhalb des P3-Umfangs; die Ereignisse und das Widget decken die sichtbare Basis ab |
 | A4 | `Run Widget Function` (JS-Funktion des Widgets aufrufen) | entfällt | Widgets tragen kein eigenes ausführbares JS (Sandbox, B12); die Operation gibt eine klare Fehlermeldung |
 | A5 | Label-Datum/Zeit wird pro Sekunde im Browser rendert, Label-Texte minutengleich neu ausgewertet | Label-Text wird serverseitig (30 s + Ereignis), Datum/Zeit clientseitig pro Sekunde | Weniger Draht-Verkehr; gleiche Anzeige |
@@ -146,6 +146,7 @@ anknüpfen (Phase 8).
 ## Offene Fragen
 
 - ~~Lokale Audio-Dekodierung: MP3-Dekoder in reinem Go; CGO-Freundlichkeit von oto unter Linux.~~ Erledigt 2026-10-27: WAV-only, oto/v3 braucht kein cgo ([ADR-0020, Nachtrag](../adr/0020-audio-ausgabe.md#nachtrag-2026-10-27-umsetzung-73), Punkte 1 und 4).
+- Widget-Commands für `persistent_timer` und `stream_boss`: Das Original kennt sie (Q8, Q10); diese Spezifikation definiert sie noch nicht, bis dahin reagieren Event-Commands auf `overlay.timer.*` und `overlay.boss.*` (B23, A2).
 - ~~Der Endpunkt-Token soll später über die API erzeugt werden.~~ Entschieden 2026-10-29: Die Endpunkte nutzen API-Tokens mit dem Scope `overlay` (B5); sie entstehen über `streamcrew token create` und die Token-API.
 
 ## Quellen

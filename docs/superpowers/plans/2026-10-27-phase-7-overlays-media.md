@@ -61,8 +61,9 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
 - **Widgets**: definiert in der Settings-Sektion "overlay" (je Widget `id`, `kind`, `endpoint`,
   Position, Konfiguration); der veränderliche Zustand (Goal-Fortschritt, Timer, Boss, Rad,
   Credits) liegt in der Store-Tabelle `overlay_widget_state` (JSON je Widget-ID).
-- **Widget-Commands des Originals** werden zu Ereignissen auf dem Bus (`overlay.goal.progress`,
-  `overlay.wheel.spun`, …), auf die Event-Commands reagieren (Abweichung A2 in der Spezifikation).
+- **Widget-Wirkungen** publizieren Ereignisse auf dem Bus (`overlay.goal.progress`,
+  `overlay.wheel.spun`, …), auf die Event-Commands reagieren. `goal` und `wheel` behalten
+  zusätzlich die Widget-Commands des Originals (Abweichung A2, geändert 2026-10-29, Review 341-12).
 - **Medien** (ADR-0020): Audio-Sinks `overlay` (Default, spielt in der Browserquelle) und
   `local` (Build-Tag `localaudio`, `ebitengine/oto/v3`, System-Standardgerät ohne Geräteauswahl); `agent` ist vorbereitet
   (Port), die Umsetzung mit Phase 9.6. TTS-Provider: `browser` (Web Speech API im Overlay,
