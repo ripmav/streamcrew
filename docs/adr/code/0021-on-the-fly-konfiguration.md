@@ -144,6 +144,13 @@ unverändert; diese Entscheidung passt sich an:
    - **`listen`:** ein Host, der bisher nicht gebunden war, außer Loopback
      oder einem Unix-Socket. Ein anderer Port auf demselben Host ist keine
      Erweiterung.
+   - **`overlay-listen`** (ergänzt 2026-10-29, [ADR-0019](../0019-overlay-architektur.md) §1):
+     dieselbe Regel wie bei `listen`. Der Overlay-Server ist ohne Token nur
+     bei reinem Loopback-Bind offen; ein Bind über Loopback hinaus verlangt
+     zwar einen Token, gibt aber Fremden eine neue Angriffsfläche. Der Wert
+     gilt erst nach einem Neustart; abgelehnt wird schon das Schreiben.
+     Overlay-Tokens selbst sind keine Startkonfiguration, sondern API-Tokens
+     mit dem Scope `overlay`.
    - **`tls-cert`, `tls-key`:** TLS entfernen, während der Bind über
      Loopback hinausreicht. Zertifikate tauschen bleibt erlaubt, weil das der
      Hauptfall ist.
