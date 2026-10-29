@@ -54,8 +54,9 @@ interface WidgetData {
 
 // render is the re-render of an element that runs every second: the
 // label kinds date and time (A5), the timer widget (B26) and the timer
-// item (B17). It is removed with the element.
-type Entry = { el: HTMLElement; data: any; render?: () => void };
+// item (B17). It is removed with the element. stale is set on hello
+// (resync, B4) until the server re-announces the entry.
+type Entry = { el: HTMLElement; data: any; render?: () => void; stale?: boolean };
 
 const cfg: OverlayConfig = window.__OVERLAY__;
 const send = (type: string, data?: any): void => {
@@ -197,6 +198,9 @@ function hideAnimation(el: HTMLElement, name: string | undefined, ms: number | u
 
 const items = new Map<string, Entry>();
 const widgets = new Map<string, Entry>();
+// During a resync (B4) the locally held items and widgets are stale
+// until the server re-announces them.
+let resyncPending = false;
 let serverTimeOffset = 0; // serverTime - localTime (B4, B26)
 
 // The batching of consecutive items (B8): an item shown within 500 ms
@@ -439,7 +443,16 @@ function renderContent(el: HTMLElement, entry: Entry): void {
 const pending = new Map<string, { entry: Entry; timer: ReturnType<typeof setTimeout> }>();
 
 function showItem(data: ItemData): void {
-  if (items.has(data.id) || pending.has(data.id)) return;
+  const existing = items.get(data.id);
+  if (existing) {
+    existing.stale = false;
+    return;
+  }
+  const pnd = pending.get(data.id);
+  if (pnd) {
+    pnd.entry.stale = false;
+    return;
+  }
   const el = document.createElement("div");
   el.className = "sc-item sc-kind-" + data.kind;
   const entry: Entry = { el, data };
@@ -752,6 +765,7 @@ function renderWidget(el: HTMLElement, entry: Entry): void {
 
 function setWidget(data: WidgetData, visible: boolean): void {
   let entry = widgets.get(data.id);
+  if (entry) entry.stale = false;
   if (!entry) {
     const el = document.createElement("div");
     el.className = "sc-widget";
@@ -835,9 +849,11 @@ function handle(msg: Message): void {
   switch (msg.type) {
     case "hello":
       serverTimeOffset = new Date(d.time ?? 0).getTime() - Date.now();
+      beginResync();
       break;
     case "state.widgets":
       for (const w of d.widgets ?? []) setWidget(w, true);
+      finishResync();
       break;
     case "item.show":
       showItem(d);
@@ -860,6 +876,49 @@ function handle(msg: Message): void {
     default:
       break;
   }
+}
+
+// beginResync marks everything the runtime holds as stale (B4): after
+// a disconnect the server re-sends the full state — hello,
+// state.widgets, then the active items as item.show. What is not
+// re-announced did not survive the disconnect and is removed.
+function beginResync(): void {
+  resyncPending = true;
+  for (const entry of items.values()) entry.stale = true;
+  for (const p of pending.values()) p.entry.stale = true;
+  for (const entry of widgets.values()) entry.stale = true;
+}
+
+// finishResync schedules the removal of the stale entries. The sweep
+// runs in a later task, so every item.show of the sync batch has
+// already marked its entry fresh.
+function finishResync(): void {
+  setTimeout(() => {
+    if (!resyncPending) return;
+    resyncPending = false;
+    for (const [id, p] of pending)
+      if (p.entry.stale) {
+        pending.delete(id);
+        clearTimeout(p.timer);
+      }
+    for (const [id, entry] of items)
+      if (entry.stale) {
+        items.delete(id);
+        drop(entry);
+      }
+    for (const [id, entry] of widgets)
+      if (entry.stale) {
+        widgets.delete(id);
+        drop(entry);
+      }
+  }, 0);
+}
+
+// drop removes an entry without the out animation: it is gone from
+// the server state, so there is nothing to fade out.
+function drop(entry: Entry): void {
+  if (entry.render) perSecond.delete(entry.render);
+  entry.el.remove();
 }
 
 // syncWidget applies a widget message to the runtime state; visible

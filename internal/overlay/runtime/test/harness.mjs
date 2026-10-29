@@ -389,6 +389,41 @@ scenario("342-2: a remove before the batched start cancels it", (env) => {
   eq(third.length, 1, "b2: the duplicate show renders exactly once");
 });
 
+// 342-3: on a reconnect the server re-sends the full state (B4); what
+// was removed during the disconnect must not stay in the runtime.
+scenario("342-3: the resync removes items and widgets lost in the disconnect", (env) => {
+  const ws = env.ws();
+  ws._open();
+  env.hello();
+  env.widgets([
+    { id: "w1", kind: "label", name: "gone", position: { model: "simple", point: "top-left" }, state: { text: "gone-widget" } },
+    { id: "w2", kind: "label", name: "stays", position: { model: "simple", point: "top-right" }, state: { text: "stays-widget" } },
+  ]);
+  env.show({ id: "i1", kind: "text", position: { model: "simple", point: "bottom-left" }, layer: 1, content: { text: "gone-item" } });
+  env.show({ id: "i2", kind: "text", position: { model: "simple", point: "bottom-right" }, layer: 1, content: { text: "stays-item" } });
+  env.flush(1000);
+  ok(env.byText("gone-widget"), "w1: shown before the disconnect");
+  ok(env.byText("gone-item"), "i1: shown before the disconnect");
+
+  // The connection drops; the server removed w1 and i1 in the
+  // meantime. The reconnect re-sends the state without them.
+  ws._close();
+  env.clock.tick(1000); // the backoff reconnect
+  const ws2 = env.ws();
+  ws2._open(); // the runtime sends ready
+  env.hello();
+  env.widgets([
+    { id: "w2", kind: "label", name: "stays", position: { model: "simple", point: "top-right" }, state: { text: "stays-widget" } },
+  ]);
+  env.show({ id: "i2", kind: "text", position: { model: "simple", point: "bottom-right" }, layer: 1, content: { text: "stays-item" } });
+  env.clock.tick(20); // the resync sweep
+
+  ok(!env.byText("gone-widget"), "w1: removed after the resync");
+  ok(!env.byText("gone-item"), "i1: removed after the resync");
+  ok(env.byText("stays-widget"), "w2: re-announced, still shown");
+  ok(env.byText("stays-item"), "i2: re-announced, still shown");
+});
+
 // ---------- run ----------
 
 let passed = 0;
