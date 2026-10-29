@@ -39,7 +39,7 @@ Zusätzliche Eingangsgrößen:
 
 - `audio-sink`: `overlay` (Default) | `local` | `agent` (Server-Modus: `local` ist per Capability `host:audio` unzulässig — Check bei der Aktion, nicht bei der Config-Prüfung).
 - ~~`audio-device`: Geräteauswahl für `local`.~~ Entfällt (Nachtrag 2026-10-27, Punkt 2): oto/v3 hat keine Geräte-API, `local` spielt auf dem System-Standardgerät.
-- API-Keys für TTS-Provider über Env (ADR-0019 §6), nicht in der Config-Datei.
+- API-Keys für TTS-Provider als Schlüssel der Startkonfiguration (ADR-0019 §6): Flag, Konfigurationsdatei oder Umgebungsvariable über kong; kein eigenes `os.Getenv` (geändert 2026-10-29, Review 345-X2).
 
 ### 3. TTS-Provider (Details)
 
