@@ -33,7 +33,13 @@ Entscheidende Eingangsgrößen:
 ### 1. Server
 
 - Der Overlay-Server ist ein zweiter `http.Server` neben dem API-Server (`internal/httpserver`), als eigene Supervisor-Runnable **ohne `critical`-Flag**: Ein Ausfall tötet die Streamcrew-App nicht, die Haupt-API bleibt erreichbar (B1).
-- Konfiguration: `overlay-listen` (Default `127.0.0.1:8742`; im Server-Modus `:8742`, damit OBS auf einem anderen Rechner per URL/Reverse-Proxy zugreifen kann) und `overlay-token` (leer = kein Token; gesetzt = Page, WebSocket und Medien-URLs verlangen den abgleichenden Wert als Query-Parameter `token`, sonst 401; Neustart erforderlich, B1, B5). Port 8741 ist bereits durch die Auth-Loopback-URL belegt.
+- Konfiguration: `overlay-listen` (Default `127.0.0.1:8742`; im Server-Modus `:8742`, damit OBS auf einem anderen Rechner per URL/Reverse-Proxy zugreifen kann; Neustart erforderlich, B1). Port 8741 ist bereits durch die Auth-Loopback-URL belegt.
+- **Zugriffsschutz** (B5; geändert 2026-10-29, Review 341-6): Die Overlay-Endpunkte nutzen die API-Tokens des Profils aus [ADR-0013](0013-sicherheitsmodell.md) §5, keinen eigenen Token in der Startkonfiguration (`overlay-token` entfällt).
+  - Page, WebSocket und Medien-URLs nehmen den Token als Query-Parameter `token`. Gültig ist nur ein Token mit dem Scope `overlay`. Andere Scopes (auch `admin`) öffnen den Overlay-Server nicht, damit kein starker Token in einer OBS-URL landet.
+  - **Der Scope `overlay` öffnet nur Overlay-Seite, WebSocket und Medien, nie die API.** Er ist kein `read`-Scope: Ein Token aus einer OBS-URL steht in Szenen-Exporten, Screenshots und beim Bildschirm-Teilen und darf deshalb weder personenbezogene Daten noch Command-Definitionen lesen (behebt S8 aus [`open-findings-2026-10-26.md`](../reviews/open-findings-2026-10-26.md)). Ein Token, der nur `overlay` trägt, bekommt von der API 403.
+  - Ohne Token ist der Zugriff nur im Desktop- und Daemon-Modus erlaubt, wenn `overlay-listen` ausschließlich Loopback bindet. Sonst (Server-Modus oder Bind über Loopback hinaus) antwortet der Server ohne gültigen Token mit 401.
+  - Ein mitgeschickter, aber ungültiger oder widerrufener Token ergibt immer 401.
+  - Overlay-Tokens entstehen wie alle Tokens mit `streamcrew token create --scope overlay` bzw. über die Token-API; ein Widerruf wirkt sofort, auch für offene WebSockets.
 - Routen:
   - `GET /overlay/{id}` — eingebettete Overlay-Runtime (HTML+JS), `Cache-Control: no-store` (B3). `{id}` ist die Endpunkt-`id` aus den Overlay-Einstellungen; `default` existiert immer, unbekanntes `{id}` antwortet mit 404 (B2).
   - `GET /overlay/{id}/ws` — WebSocket-Upgrade, `coder/websocket` (B3), Token wie oben (B5).

@@ -35,7 +35,7 @@ anknüpfen (Phase 8).
 | B2 | Overlay-Endpunkte sind benannte Endpunkte im Profil (Settings-Sektion "overlay", Feld `endpoints`, je Endpunkt `id` und `name`). Die Id `default` existiert immer. Je Endpunkt gibt es genau eine URL der Form `http(s)://<host>:<port>/overlay/<id>`; unbekanntes `<id>` antwortet mit 404. | Q1 |
 | B3 | Die URL liefert die Overlay-Runtime (HTML+JS, eingebettet). Über `…/overlay/<id>/ws` verbindet sich die Runtime per WebSocket. Pakete sind JSON-Objekte `{type, data}` (ADR-0019). | Q1, Q5 |
 | B4 | Beim (Wieder-)Verbinden sendet der Server in dieser Reihenfolge: `hello` (Server-Version, Endpunkt, Serverzeit), `state.widgets` (alle sichtbaren Widgets des Endpunkts mit Zustand), dann die aktuell aktiven Items neu als `item.show`. Danach laufen nur noch Änderungen. | Q1, Q4 |
-| B5 | Ein optionaler Token schützt die Endpunkte: steht `overlay-token` in der Startkonfiguration, verlangen Page, WebSocket und Medien-URLs den abgleichen Wert als Query-Parameter `token`; abweichende oder fehlende Tokens antworten mit 401. Ohne gesetzten Token sind die Endpunkte offen. Die Endpunkte sind nur lesend. | Q1, Q5, Q6 |
+| B5 | Page, WebSocket und Medien-URLs nehmen einen API-Token des Profils mit dem Scope `overlay` als Query-Parameter `token` (ADR-0013 §5, ADR-0019 §1). Ohne Token sind die Endpunkte nur im Desktop- und Daemon-Modus bei reinem Loopback-Bind erreichbar; sonst, bei einem Token ohne Scope `overlay` und bei einem ungültigen oder widerrufenen Token antworten sie mit 401. Der Scope `overlay` öffnet nur diese Endpunkte, nicht die API. Die Endpunkte sind nur lesend. | Q1, Q5, Q6 |
 | B6 | Medien (Bilder, Videos, Ton) werden nur aus freigegebenen Verzeichnissen ausgeliefert: dem Medien-Verzeichnis des Profils (`media`) und den freigegebenen Wurzeln (`file-root`). Die URL-Form ist `/media/<wurzel>/<pfad>`; die Lieferung nutzt `http.ServeContent` (Range-Requests) und korrekte MIME-Typen. Ohne das Recht `host:fs` (Server-Modus) liefert der Server keine Medien (404). | Q1, Q6 |
 | B7 | Die Runtime verbindet sich automatisch und wieder mit Backoff (1 s bis 30 s), wenn die Verbindung abreißt; nach der (Wieder-)Verbindung stellt sie sich mit `ready` vor und rendert den empfangenen Zustand. | Q1, Q4 |
 | B8 | Aufeinanderfolgende Items desselben Endpunkts, die sich zeitlich überlappen würden, blendet die Runtime versetzt ein (Batching): ein Item, das innerhalb von 500 ms nach dem Vorherigen gezeigt wird, startet 300 ms später als dieses. | Q5 |
@@ -146,7 +146,7 @@ anknüpfen (Phase 8).
 ## Offene Fragen
 
 - ~~Lokale Audio-Dekodierung: MP3-Dekoder in reinem Go; CGO-Freundlichkeit von oto unter Linux.~~ Erledigt 2026-10-27: WAV-only, oto/v3 braucht kein cgo ([ADR-0020, Nachtrag](../adr/0020-audio-ausgabe.md#nachtrag-2026-10-27-umsetzung-73), Punkte 1 und 4).
-- Der Endpunkt-Token soll später (D5/W4) über die API erzeugen werden; bis dahin ist er Startkonfiguration.
+- ~~Der Endpunkt-Token soll später über die API erzeugt werden.~~ Entschieden 2026-10-29: Die Endpunkte nutzen API-Tokens mit dem Scope `overlay` (B5); sie entstehen über `streamcrew token create` und die Token-API.
 
 ## Quellen
 
