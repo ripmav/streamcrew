@@ -42,7 +42,7 @@ anknüpfen (Phase 8).
 | B9 | Items und Widgets haben Position und Ebene: Positionen sind `simple` (neun Bildschirmpunkte), `percent` (x/y in Prozent), `pixels` (x/y in Pixeln) oder `random` (Zufallspunkt im Pixel-Bereich, vom Server beim Zeigen gewürfelt). Ebenen sind ganze Zahlen; höhere Zahlen liegen darüber. | Q2 |
 | B10 | Items haben Ein- und Ausblend-Animationen aus dem Satz `none`, `fade`, `slide-left`, `slide-right`, `slide-up`, `slide-down`, `pop` mit eigener Dauer (Millisekunden, Default 300). Die Animation läuft als CSS-Übergang in der Runtime. | Q2, Q5 |
 | B11 | Ein Item verschwindet nach seiner Laufzeit: der Server sendet `item.remove` nach der Dauer (Default 10 s) und streicht es aus dem aktiven Satz. Video- und Ton-Items ohne gesetzte Dauer laufen, bis die Wiedergabe endet (B14), maximal bis zum Zeitlimit der Aktion. | Q2 |
-| B12 | HTML-Items rendert die Runtime in einem sandboxed iframe ohne Skript- und ohne same-origin-Zugriff; das HTML darf nur relative `/media/`- und absolute HTTPS-URLs referenzieren. | Q2, Q6 |
+| B12 | HTML-Items rendert die Runtime in einem sandboxed iframe ohne Skript- und ohne same-origin-Zugriff; das HTML darf nur relative `/media/`- und absolute HTTPS-URLs referenzieren. Eine Content-Security-Policy im iframe setzt das durch, und relative `/media/`-URLs bekommen den `token` der Seite (B5, ADR-0019 §4). | Q2, Q6 |
 
 ### Items (7.2)
 
