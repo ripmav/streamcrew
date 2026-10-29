@@ -336,13 +336,12 @@ function renderContent(el: HTMLElement, entry: Entry): void {
     }
     case "html": {
       el.classList.add("sc-html");
-      // Sandboxed without scripts and without same origin; the HTML may
-      // only reference relative /media/ paths and absolute https URLs
-      // (B12). The srcdoc base is the page URL, so relative paths
-      // resolve.
+      // Sandboxed without scripts and without same origin (B12); the
+      // HTML may only reference relative /media/ paths and absolute
+      // https URLs — htmlSrcdoc enforces both.
       const f = document.createElement("iframe");
       f.setAttribute("sandbox", "");
-      f.srcdoc = c.html ?? "";
+      f.srcdoc = htmlSrcdoc(c.html ?? "");
       if (c.width) f.style.width = `${c.width}px`;
       if (c.height) f.style.height = `${c.height}px`;
       el.appendChild(f);
@@ -804,6 +803,45 @@ function speak(d: any): void {
   u.onerror = () => send("tts.ended", { seq: d.seq });
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
+}
+
+// htmlSrcdoc prepares the HTML of an html item for the srcdoc (B12,
+// ADR-0019 section 4): every URL starting with /media/ (src, href,
+// poster, srcset) gets the token of the page, and the CSP meta is
+// prepended, enforcing the relative /media/ and absolute https rule.
+function htmlSrcdoc(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const origin = location.origin;
+  for (const el of doc.querySelectorAll("*")) {
+    for (const attr of ["src", "href", "poster"]) {
+      const v = el.getAttribute(attr);
+      if (v && v.startsWith("/media/")) el.setAttribute(attr, withToken(v));
+    }
+    const srcset = el.getAttribute("srcset");
+    if (srcset)
+      el.setAttribute(
+        "srcset",
+        srcset
+          .split(",")
+          .map((part) => {
+            // The srcset part is "url descriptor"; only the url part
+            // gets the token.
+            const i = part.indexOf(" ");
+            if (i < 0) return part.startsWith("/media/") ? withToken(part) : part;
+            const url = part.slice(0, i);
+            return url.startsWith("/media/") ? withToken(url) + part.slice(i) : part;
+          })
+          .join(",")
+      );
+  }
+  const meta = doc.createElement("meta");
+  meta.setAttribute("http-equiv", "Content-Security-Policy");
+  meta.setAttribute(
+    "content",
+    `default-src 'none'; img-src ${origin} https:; media-src ${origin} https:; style-src 'unsafe-inline' ${origin} https:; font-src ${origin} https:`
+  );
+  doc.head.insertBefore(meta, doc.head.firstChild);
+  return doc.documentElement.outerHTML;
 }
 
 // ---------- connection (B3, B4, B7) ----------

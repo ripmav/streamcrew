@@ -326,9 +326,19 @@ function ok(cond, what) {
 }
 
 const scenarios = [];
-function scenario(name, fn) {
-  scenarios.push({ name, fn });
+function scenario(name, fn, bootOpts) {
+  scenarios.push({ name, fn, bootOpts });
 }
+
+// The fixture of the html item: /media/ URLs in src, href, poster and
+// srcset, plus foreign URLs (absolute https, and http, which the CSP
+// blocks).
+const HTML_FIXTURE =
+  '<img src="/media/media/a.png">' +
+  '<a href="/media/media/b.png">link</a>' +
+  '<video poster="/media/media/c.png" src="https://cdn.example.com/v.mp4"></video>' +
+  '<div srcset="/media/media/a.png 1x, https://cdn.example.com/d.png 2x"></div>' +
+  '<img src="http://example.com/x.png">';
 
 // 342-4: bottom positions sit at the bottom edge; the old code lifted
 // them by their own height (translateY(-100%)).
@@ -506,11 +516,45 @@ scenario("344-7: a non-clip URL renders no iframe", (env) => {
   eq(el.children.length, 0, "no iframe for a non-clip URL");
 });
 
+// 341-9c: the html item loads /media/ URLs with the token of the page,
+// and the prepended CSP meta enforces the relative /media/ and
+// absolute https rule (B12, ADR-0019 section 4).
+scenario(
+  "341-9c: html items load media with the token under the CSP",
+  (env) => {
+    const ws = env.ws();
+    ws._open();
+    env.hello();
+    env.show({
+      id: "h",
+      kind: "html",
+      position: { model: "simple", point: "center" },
+      layer: 1,
+      content: { html: HTML_FIXTURE },
+    });
+    env.flush();
+    const el = env.byClass("sc-kind-html");
+    const f = el.children.find((c) => c.tagName === "IFRAME");
+    const srcdoc = f.srcdoc;
+    ok(srcdoc.includes('/media/media/a.png?token=tok123 1x') && srcdoc.includes('src="/media/media/a.png?token=tok123"'), "src and srcset get the token");
+    ok(srcdoc.includes('href="/media/media/b.png?token=tok123"'), "href gets the token");
+    ok(srcdoc.includes('poster="/media/media/c.png?token=tok123"'), "poster gets the token");
+    ok(srcdoc.includes("https://cdn.example.com/d.png 2x"), "the https srcset part stays");
+    ok(srcdoc.includes('src="https://cdn.example.com/v.mp4"'), "the absolute https URL stays");
+    ok(srcdoc.includes('http://example.com/x.png') && !srcdoc.includes("http://example.com/x.png?token"), "the http URL stays as is; the CSP blocks it");
+    ok(srcdoc.includes('http-equiv="Content-Security-Policy"'), "the CSP meta is prepended");
+    ok(srcdoc.includes("img-src http://127.0.0.1:8742 https:"), "the CSP allows the overlay origin and https");
+    ok(srcdoc.includes("default-src 'none'"), "the CSP denies everything else");
+    eq(f.getAttribute("sandbox"), "", "the iframe stays sandboxed");
+  },
+  { search: "?token=tok123" }
+);
+
 // ---------- run ----------
 
 let passed = 0;
 for (const s of scenarios) {
-  const env = boot();
+  const env = boot(s.bootOpts);
   const before = failures.length;
   try {
     s.fn(env);

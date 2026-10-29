@@ -46,6 +46,21 @@ func TestBundleHasNoBottomYOffset(t *testing.T) {
 		"the bottom positions must not lift the element by its own height")
 }
 
+// TestBundleHTMLItemEnforcesTheCSP is the regression test of the html
+// item (Review 341-9c, B12): before the srcdoc is set, the runtime
+// rewrites the /media/ URLs with the token of the page and prepends
+// the CSP meta that enforces the relative /media/ and absolute https
+// rule (ADR-0019 section 4).
+func TestBundleHTMLItemEnforcesTheCSP(t *testing.T) {
+	t.Parallel()
+	assert.True(t, strings.Contains(web.Bundle, "DOMParser"),
+		"the HTML is parsed before the srcdoc is set")
+	assert.True(t, strings.Contains(web.Bundle, "Content-Security-Policy"),
+		"the CSP meta is prepended")
+	assert.True(t, strings.Contains(web.Bundle, "default-src 'none'"),
+		"the CSP policy of ADR-0019 section 4")
+}
+
 // TestBundleClipEmbedIsSafe is the regression test of the clip embed
 // (Review 344-6/344-7, B15): the embed URL carries the parent
 // parameter Twitch requires, the slug regex keeps dashes and
