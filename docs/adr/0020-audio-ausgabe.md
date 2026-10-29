@@ -56,7 +56,7 @@ Medien-Items (`kind: audio|video|clip`) mit Audio-Track werden im Browser-Pane d
 ## Konsequenzen
 
 - **Pro:**
-  - Default-Verhalten (`overlay`) deckt den MIU-Fall exakt ab (Q21) und braucht **keine** `host:audio`-Capability — der Server-Modus bleibt funktionsfähig für Overlays und Overlay-Audio.
+  - Default-Verhalten (`overlay`) deckt den MIU-Fall exakt ab (Q21) und braucht **keine** `host:audio`-Capability. Im Server-Modus fehlt aber `host:fs` (ADR-0013 §2): Der Overlay-Server liefert dort keine Dateien aus (ADR-0019 §8), also weder Sound-Dateien noch die Audiodateien der TTS-Provider `google`, `azure` und `piper`. Ohne Freigabe bleibt im Server-Modus nur Browser-TTS; mit `--grant host:fs` ([Code-ADR-0019](code/0019-host-rechte-in-der-startkonfiguration.md)) funktioniert auch das Datei-Audio.
   - `local` ist opt-in über Build-Tag: die Desktop-App (Goreleaser `streamcrew-desktop`) wird mit `localaudio` gebaut, das Server-Image nicht; `oto/v3` landet nicht in jedem Build.
   - `oto/v3` ist stabil, MIT-lizenziert und der De-facto-Standard für Go-Desktop-Audio; keine Abhängigkeits-Eskalation.
   - Agent-Sink-Stub in 7.3 hält die Action-Signatur stabil, 9.6 ergänzt nur die Durchleitung — keine Breaking-Change.
