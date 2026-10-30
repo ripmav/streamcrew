@@ -766,7 +766,7 @@ func (s *Service) goalStep(ctx context.Context, w settings.OverlayWidget, amount
 func (s *Service) goalSegmentsCrossed(cfg *goalConfig, st *goalState) []goalSegmentCompleted {
 	var out []goalSegmentCompleted
 	for st.segment < len(cfg.Segments) {
-		boundary := goalBoundary(cfg, st)
+		boundary := goalBoundary(st, cfg.Segments)
 		if st.current < boundary {
 			break
 		}
@@ -799,17 +799,10 @@ type goalSegmentCompleted struct {
 }
 
 // goalBoundary is the amount at which the segment of st completes (B25):
-// the sum of the segments so far for the kind cumulative, the amount of
-// the segment for the kind individual.
-func goalBoundary(cfg *goalConfig, st *goalState) int64 {
-	if cfg.Mode == "individual" {
-		return cfg.Segments[st.segment].Amount
-	}
-	var sum int64
-	for _, sg := range cfg.Segments[:st.segment+1] {
-		sum += sg.Amount
-	}
-	return sum
+// the amount of the segment in both modes, as the progress is relative to
+// the current segment after every crossing (Review 344-4).
+func goalBoundary(st *goalState, segs []goalSegment) int64 {
+	return segs[st.segment].Amount
 }
 
 // goalTotal is the overall amount the goal displays (B25): the sum of the

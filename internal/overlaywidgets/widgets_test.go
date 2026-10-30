@@ -441,6 +441,44 @@ func TestWidgetGoal(t *testing.T) {
 	})
 }
 
+// TestGoalCumulativeSegmentsCoversB25 covers B25: in the mode cumulative,
+// a segment completes at its own amount on top of the segments before it,
+// not on top of their sum (Review 344-4).
+func TestGoalCumulativeSegmentsCoversB25(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := map[string]any{"mode": "cumulative", "segments": []any{
+			map[string]any{"name": "s1", "amount": 10},
+			map[string]any{"name": "s2", "amount": 10},
+		}}
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("g1", overlaywidgets.KindGoal, cfg),
+		}})
+		defer f.stop()
+		f.attach(t)
+		ada := twitchUser(t, "ada")
+
+		// The first segment completes at its own amount.
+		require.NoError(t, f.svc.AddToGoal(f.ctx, "g1", 10, platform.Twitch, ada))
+		synctest.Wait()
+		eff := f.effectsList()
+		require.Len(t, eff, 1)
+		assert.Equal(t, eventtype.OverlayGoalSegmentCompleted, eff[0].typ)
+		assert.Equal(t, &eventtype.GoalSegment{SegmentName: "s1", Current: 10, NextSegmentName: "s2", NextSegmentAmount: 10, Remaining: 10}, eff[0].payload.Details.GoalSegment)
+
+		// The second segment completes after a total of 20, not after 30
+		// (Review 344-4).
+		require.NoError(t, f.svc.AddToGoal(f.ctx, "g1", 10, platform.Twitch, ada))
+		synctest.Wait()
+		eff = f.effectsList()
+		require.Len(t, eff, 2)
+		assert.Equal(t, eventtype.OverlayGoalSegmentCompleted, eff[1].typ)
+		assert.Equal(t, &eventtype.GoalSegment{SegmentName: "s2", Current: 20, NextSegmentName: "", NextSegmentAmount: 0, Remaining: 0}, eff[1].payload.Details.GoalSegment)
+		// The progress has crossed both segments.
+		assert.JSONEq(t, `{"current":0,"segment":2,"reset_at":"0001-01-01T00:00:00Z"}`, string(f.stateDoc(t)))
+	})
+}
+
 // TestWidgetGoalReset covers B25: the automatic daily reset runs before
 // the step, in the time zone of the profile.
 func TestWidgetGoalReset(t *testing.T) {
