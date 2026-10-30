@@ -360,7 +360,8 @@ gibt die fünf Kinds `label`, `goal`, `timer`, `event_list` und `chat`:
 - `chat` zeigt die Chat-Nachrichten der gewählten Plattformen, mit
   optionaler Verzögerung und Ablaufzeit. Gelöschte Nachrichten
   verschwinden über die Plattform-Nachrichten-ID; bei Sperre oder Bann
-  eines Nutzers verschwinden seine Nachrichten.
+  eines Nutzers verschwinden seine Nachrichten — auch solche, die
+  noch auf die Verzögerung warten.
 
 Die Aktionen des Typs `overlay` mit dem Kind `widget` wirken auf diese
 Widgets: `show`/`hide` (Sichtbarkeit), `update` (Zustandsdaten; beim

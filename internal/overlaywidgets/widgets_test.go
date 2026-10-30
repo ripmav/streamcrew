@@ -850,6 +850,89 @@ func TestWidgetChat(t *testing.T) {
 	})
 }
 
+// TestChatDelayedDeleteCoversB28 covers B28 and Review 344-9: a delete
+// discards the message while it still waits for its delay; it never
+// shows.
+func TestChatDelayedDeleteCoversB28(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("c1", overlaywidgets.KindChat, map[string]any{"delayMs": 5000}),
+		}})
+		defer f.stop()
+		f.attach(t)
+
+		f.publish(t, eventtype.ChatMessage, twitchUser(t, "ada"), eventtype.Details{Message: &eventtype.Message{ID: "m1", Text: "hi"}})
+		synctest.Sleep(time.Second) // the delete arrives before the delay runs out
+		f.publish(t, eventtype.ChatMessageDelete, nil, eventtype.Details{Message: &eventtype.Message{ID: "m1"}})
+		synctest.Sleep(6 * time.Second) // the delay would have run out
+		assert.Empty(t, f.updates(t, "c1"))
+	})
+}
+
+// TestChatDelayedModeratedCoversB28 covers B28 and Review 344-9: a
+// timeout discards the delayed messages of the user while they wait; they
+// never show, the other users' messages still do.
+func TestChatDelayedModeratedCoversB28(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("c1", overlaywidgets.KindChat, map[string]any{"delayMs": 5000}),
+		}})
+		defer f.stop()
+		f.attach(t)
+		ada := twitchUser(t, "ada")
+		bob := twitchUser(t, "bob")
+
+		f.publish(t, eventtype.ChatMessage, ada, eventtype.Details{Message: &eventtype.Message{ID: "m1", Text: "hi"}})
+		f.publish(t, eventtype.ChatMessage, bob, eventtype.Details{Message: &eventtype.Message{ID: "m2", Text: "yo"}})
+		synctest.Sleep(time.Second)
+		f.publish(t, eventtype.ChatUserTimeout, ada, eventtype.Details{})
+		synctest.Sleep(6 * time.Second)
+
+		ups := f.updates(t, "c1")
+		require.Len(t, ups, 1)
+		assert.JSONEq(t, `{"messages":[{"user":"bob","text":"yo","platform":"twitch"}]}`, ups[0])
+	})
+}
+
+// TestChatIdenticalRemovalCoversB28 covers B28 and Review 344-9: two
+// identical messages leave the widget by their own remove timer; the
+// first timer removes only the first message.
+func TestChatIdenticalRemovalCoversB28(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("c1", overlaywidgets.KindChat, map[string]any{"removeAfterMs": 5000}),
+		}})
+		defer f.stop()
+		f.attach(t)
+		ada := twitchUser(t, "ada")
+
+		f.publish(t, eventtype.ChatMessage, ada, eventtype.Details{Message: &eventtype.Message{ID: "m1", Text: "hi"}})
+		synctest.Sleep(time.Second) // the timers fire at different times
+		f.publish(t, eventtype.ChatMessage, ada, eventtype.Details{Message: &eventtype.Message{ID: "m2", Text: "hi"}})
+		synctest.Wait()
+		ups := f.updates(t, "c1")
+		require.Len(t, ups, 2)
+		assert.JSONEq(t, `{"messages":[{"user":"ada","text":"hi","platform":"twitch"}]}`, ups[0])
+		assert.JSONEq(t, `{"messages":[{"user":"ada","text":"hi","platform":"twitch"},{"user":"ada","text":"hi","platform":"twitch"}]}`, ups[1])
+
+		synctest.Sleep(4500 * time.Millisecond) // the first remove timer fires
+		synctest.Wait()
+		ups = f.updates(t, "c1")
+		require.Len(t, ups, 3)
+		// only the first message left: the timer removed its own
+		assert.JSONEq(t, `{"messages":[{"user":"ada","text":"hi","platform":"twitch"}]}`, ups[2])
+
+		synctest.Sleep(750 * time.Millisecond) // the second remove timer fires
+		synctest.Wait()
+		ups = f.updates(t, "c1")
+		require.Len(t, ups, 4)
+		assert.JSONEq(t, `{"messages":[]}`, ups[3])
+	})
+}
+
 // TestWidgetLabels covers B24 and A5: the labels render on the tick, the
 // value kinds resolve the sources, the date and time go to the runtime
 // with the locale and the zone, and an unchanged render pushes nothing.

@@ -203,12 +203,24 @@ type listEntry struct {
 	Time int64 `json:"time"`
 }
 
+// chatPending is a message that shows after its delay (B28); the timer
+// is stopped when it is discarded or the service ends (Review 344-9,
+// 344-13).
+type chatPending struct {
+	msg   chatMsg
+	timer *time.Timer
+}
+
 // chatMsg is one shown message of a chat widget (B28).
 type chatMsg struct {
 	// ID is the platform's ID of the message, for the delete event;
 	// empty if the platform names none. It stays out of the runtime
 	// state.
 	ID string `json:"-"`
+	// Seq is the service's sequence number of the message; it
+	// identifies a message without a platform ID and stays out of the
+	// runtime state (Review 344-9).
+	Seq int64 `json:"-"`
 	// UserID is the core ID of the user; it stays out of the runtime
 	// state, which shows the name.
 	UserID string `json:"-"`
@@ -238,6 +250,16 @@ type Service struct {
 	lists map[string][]listEntry
 	// chats are the shown messages of the chat widgets by widget ID (B28).
 	chats map[string][]chatMsg
+	// chatSeq is the next sequence number of a chat message; it
+	// identifies a message without a platform ID (Review 344-9).
+	chatSeq int64
+	// chatPending are the delayed messages that have not shown yet, by
+	// widget ID (B28, Review 344-9).
+	chatPending map[string][]chatPending
+	// chatTimers are the running chat timers; the service stops them when
+	// it ends, so a callback never runs on the ended context (Review
+	// 344-13).
+	chatTimers []*time.Timer
 	// labelTexts is the last pushed label text by widget ID; an unchanged
 	// render pushes nothing (B24).
 	labelTexts map[string]string
@@ -285,6 +307,7 @@ func New(p Ports, opts ...Option) (*Service, error) {
 		timers:           map[string]*timerState{},
 		lists:            map[string][]listEntry{},
 		chats:            map[string][]chatMsg{},
+		chatPending:      map[string][]chatPending{},
 		labelTexts:       map[string]string{},
 		persistentTimers: map[string]*persistentTimerState{},
 		bosses:           map[string]*streamBossState{},
@@ -340,6 +363,7 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
+	defer s.stopChatTimers()
 	for {
 		select {
 		case env, ok := <-sub.C():
@@ -1487,7 +1511,8 @@ type chatConfig struct {
 }
 
 // chatMessage adds the message of a visible chat widget, after its delay
-// (B28).
+// (B28). A delete, ban or timeout discards the message while it waits
+// (Review 344-9).
 func (s *Service) chatMessage(ctx context.Context, env event.Envelope) {
 	payload, ok := event.Payload[eventtype.Payload](env)
 	if !ok || payload.Details.Message == nil || payload.User == nil {
@@ -1513,32 +1538,91 @@ func (s *Service) chatMessage(ctx context.Context, env event.Envelope) {
 			}
 		}
 		msg := chatMsg{ID: payload.Details.Message.ID, UserID: payload.User.ID.String(), User: userName, Text: payload.Details.Message.Text, Platform: string(payload.Platform)}
-		add := func() {
-			s.mu.Lock()
-			chats := append(slices.Clone(s.chats[w.ID]), msg)
-			if len(chats) > cfg.Max {
-				chats = chats[len(chats)-cfg.Max:]
-			}
-			s.chats[w.ID] = chats
-			s.mu.Unlock()
-			s.pushChat(ctx, w)
-			if cfg.RemoveAfterMs > 0 {
-				time.AfterFunc(time.Duration(cfg.RemoveAfterMs)*time.Millisecond, func() {
-					s.chatRemove(w.ID, msg)
-					s.pushChat(ctx, w)
-				})
-			}
-		}
+		s.mu.Lock()
+		s.chatSeq++
+		msg.Seq = s.chatSeq
+		s.mu.Unlock()
 		if cfg.DelayMs > 0 {
-			time.AfterFunc(time.Duration(cfg.DelayMs)*time.Millisecond, add)
+			timer := time.AfterFunc(time.Duration(cfg.DelayMs)*time.Millisecond, func() {
+				s.chatAddDue(ctx, w, msg, cfg)
+			})
+			s.mu.Lock()
+			s.chatPending[w.ID] = append(s.chatPending[w.ID], chatPending{msg: msg, timer: timer})
+			s.mu.Unlock()
+			s.trackChatTimer(timer)
 		} else {
-			add()
+			s.chatShow(ctx, w, msg, cfg)
 		}
 	}
 }
 
+// chatAddDue shows a delayed message, if it was not discarded while it
+// waited (B28, Review 344-9).
+func (s *Service) chatAddDue(ctx context.Context, w settings.OverlayWidget, msg chatMsg, cfg *chatConfig) {
+	s.mu.Lock()
+	pending := s.chatPending[w.ID]
+	kept := pending[:0]
+	found := false
+	for _, p := range pending {
+		if p.msg.Seq == msg.Seq {
+			found = true
+			continue
+		}
+		kept = append(kept, p)
+	}
+	s.chatPending[w.ID] = kept
+	s.mu.Unlock()
+	if !found {
+		return // discarded by a delete, ban or timeout
+	}
+	s.chatShow(ctx, w, msg, cfg)
+}
+
+// chatShow shows a message in the widget and schedules its removal (B28).
+func (s *Service) chatShow(ctx context.Context, w settings.OverlayWidget, msg chatMsg, cfg *chatConfig) {
+	s.mu.Lock()
+	chats := append(slices.Clone(s.chats[w.ID]), msg)
+	if len(chats) > cfg.Max {
+		chats = chats[len(chats)-cfg.Max:]
+	}
+	s.chats[w.ID] = chats
+	s.mu.Unlock()
+	s.pushChat(ctx, w)
+	if cfg.RemoveAfterMs > 0 {
+		timer := time.AfterFunc(time.Duration(cfg.RemoveAfterMs)*time.Millisecond, func() {
+			if s.chatRemove(w.ID, msg) {
+				s.pushChat(ctx, w)
+			}
+		})
+		s.trackChatTimer(timer)
+	}
+}
+
+// trackChatTimer remembers a chat timer; the service stops every
+// remembered timer when it ends (Review 344-13). The timers are never
+// removed from the list, one entry per delayed or timed message; the
+// list is freed with the service.
+func (s *Service) trackChatTimer(timer *time.Timer) {
+	s.mu.Lock()
+	s.chatTimers = append(s.chatTimers, timer)
+	s.mu.Unlock()
+}
+
+// stopChatTimers stops the running chat timers and drops the pending
+// messages when the service ends (Review 344-13).
+func (s *Service) stopChatTimers() {
+	s.mu.Lock()
+	for _, timer := range s.chatTimers {
+		timer.Stop()
+	}
+	s.chatTimers = nil
+	s.chatPending = map[string][]chatPending{}
+	s.mu.Unlock()
+}
+
 // chatDeleted removes the deleted message from the chat widgets (B28):
-// the delete event names the message by the platform's ID.
+// the delete event names the message by the platform's ID; it discards
+// the message while it still waits for its delay (Review 344-9).
 func (s *Service) chatDeleted(ctx context.Context, env event.Envelope) {
 	payload, ok := event.Payload[eventtype.Payload](env)
 	if !ok || payload.Details.Message == nil || payload.Details.Message.ID == "" {
@@ -1551,6 +1635,7 @@ func (s *Service) chatDeleted(ctx context.Context, env event.Envelope) {
 		return
 	}
 	changed := s.filterChats(func(m chatMsg) bool { return m.ID == msgID && m.Platform == plat })
+	s.discardChatPending(func(m chatMsg) bool { return m.ID == msgID && m.Platform == plat })
 	for _, w := range sec.Widgets {
 		if w.Kind == KindChat && changed[w.ID] {
 			s.pushChat(ctx, w)
@@ -1559,7 +1644,8 @@ func (s *Service) chatDeleted(ctx context.Context, env event.Envelope) {
 }
 
 // chatModerated removes the messages of the affected user from the chat
-// widgets (B28): a timed out or banned user leaves no trace.
+// widgets (B28): a timed out or banned user leaves no trace, the delayed
+// messages included (Review 344-9).
 func (s *Service) chatModerated(ctx context.Context, env event.Envelope) {
 	payload, ok := event.Payload[eventtype.Payload](env)
 	if !ok || payload.User == nil {
@@ -1571,6 +1657,7 @@ func (s *Service) chatModerated(ctx context.Context, env event.Envelope) {
 		return
 	}
 	changed := s.filterChats(func(m chatMsg) bool { return m.UserID == userID })
+	s.discardChatPending(func(m chatMsg) bool { return m.UserID == userID })
 	for _, w := range sec.Widgets {
 		if w.Kind == KindChat && changed[w.ID] {
 			s.pushChat(ctx, w)
@@ -1600,19 +1687,42 @@ func (s *Service) filterChats(keepOut func(chatMsg) bool) map[string]bool {
 	return changed
 }
 
-// chatRemove removes one message of the widget by its user and text.
-func (s *Service) chatRemove(widgetID string, msg chatMsg) {
+// discardChatPending drops the delayed messages matching keepOut before
+// they show (B28, Review 344-9).
+func (s *Service) discardChatPending(keepOut func(chatMsg) bool) {
+	s.mu.Lock()
+	for id, pending := range s.chatPending {
+		kept := pending[:0]
+		for _, p := range pending {
+			if keepOut(p.msg) {
+				p.timer.Stop()
+				continue
+			}
+			kept = append(kept, p)
+		}
+		s.chatPending[id] = kept
+	}
+	s.mu.Unlock()
+}
+
+// chatRemove removes the message of the widget by its sequence number and
+// reports whether it removed one (B28, Review 344-9): a remove timer must
+// not touch the identical message of another call.
+func (s *Service) chatRemove(widgetID string, msg chatMsg) bool {
 	s.mu.Lock()
 	chats := s.chats[widgetID]
 	kept := chats[:0]
+	removed := false
 	for _, m := range chats {
-		if m.UserID == msg.UserID && m.Text == msg.Text {
+		if m.Seq == msg.Seq {
+			removed = true
 			continue
 		}
 		kept = append(kept, m)
 	}
 	s.chats[widgetID] = kept
 	s.mu.Unlock()
+	return removed
 }
 
 // pushChat pushes the state of the chat widget (B28).
