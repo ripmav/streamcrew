@@ -68,7 +68,6 @@ func testServer(t *testing.T, sec settings.Overlay, check overlay.TokenCheck, me
 	t.Helper()
 	svc := testService(t, sec)
 	srv := startServer(t, overlay.Config{
-		Version:      "test",
 		Mode:         config.ModeDaemon,
 		TokenCheck:   check,
 		Service:      svc,
@@ -278,7 +277,6 @@ func TestOverlayWithoutATokenNeedsDaemonModeOnLoopback(t *testing.T) {
 			t.Parallel()
 			svc := testService(t, settings.Overlay{})
 			srv := startServer(t, overlay.Config{
-				Version:    "test",
 				Mode:       tc.mode,
 				TokenCheck: tokens.check,
 				Service:    svc,
@@ -291,7 +289,7 @@ func TestOverlayWithoutATokenNeedsDaemonModeOnLoopback(t *testing.T) {
 
 	// The server mode with the overlay scope opens.
 	svc := testService(t, settings.Overlay{})
-	srv := startServer(t, overlay.Config{Version: "test", Mode: config.ModeServer, TokenCheck: tokens.check, Service: svc})
+	srv := startServer(t, overlay.Config{Mode: config.ModeServer, TokenCheck: tokens.check, Service: svc})
 	resp := get(t, base(t, srv)+"/overlay/default?token=ov")
 	_ = resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -497,7 +495,6 @@ func TestMediaServesFilesWithRanges(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(released, "sub", "img.png"), []byte("PNGDATA"), 0o600))
 
 	srv := startServer(t, overlay.Config{
-		Version:      "test",
 		Mode:         config.ModeDaemon,
 		Service:      testService(t, settings.Overlay{}),
 		MediaDir:     media,
@@ -611,7 +608,7 @@ func TestMediaServesRegisteredMIMETypes(t *testing.T) {
 func TestOverlayServerServesUntilTheContextEnds(t *testing.T) {
 	svc := testService(t, settings.Overlay{})
 	ctx, cancel := context.WithCancel(context.Background())
-	srv, err := overlay.NewServer(overlay.Config{Listen: "127.0.0.1:0", Version: "test", Service: svc})
+	srv, err := overlay.NewServer(overlay.Config{Listen: "127.0.0.1:0", Service: svc})
 	require.NoError(t, err)
 	done := make(chan error, 1)
 	go func() { done <- srv.Run(ctx) }()
@@ -635,7 +632,7 @@ func TestOverlayServerFailsOnABrokenListenAddress(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, take.Close()) })
 
 	svc := testService(t, settings.Overlay{})
-	srv, err := overlay.NewServer(overlay.Config{Listen: take.Addr().String(), Version: "test", Service: svc})
+	srv, err := overlay.NewServer(overlay.Config{Listen: take.Addr().String(), Service: svc})
 	require.NoError(t, err)
 	err = srv.Run(context.Background())
 	require.Error(t, err)

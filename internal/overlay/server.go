@@ -50,8 +50,6 @@ type Config struct {
 	// TokenCheck validates the query parameter token, nil means no
 	// token can open the endpoints.
 	TokenCheck TokenCheck
-	// Version is the version of the core, reported by hello (B4).
-	Version string
 	// Service is the overlay state the server presents; required.
 	Service *Service
 	// MediaDir is the media directory of the profile, served under

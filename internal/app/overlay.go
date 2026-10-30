@@ -50,7 +50,6 @@ func newOverlayServer(ctx context.Context, cfg config.Config, a *App, mediaDir s
 		Listen:       cfg.OverlayListen,
 		Mode:         cfg.Mode,
 		TokenCheck:   overlayTokenCheck(apitoken.New(a.store)),
-		Version:      a.version,
 		Service:      svc,
 		MediaDir:     mediaDir,
 		Capabilities: a.rights,
