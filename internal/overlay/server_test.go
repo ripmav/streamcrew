@@ -506,6 +506,34 @@ func TestMediaServesFilesWithRanges(t *testing.T) {
 	}
 }
 
+// TestMediaClosesItsRootsPerRequest covers Review 342-6: the os.Root
+// opened per media request is closed again, so the file descriptors do
+// not grow with the request count.
+func TestMediaClosesItsRootsPerRequest(t *testing.T) {
+	if _, err := os.ReadDir("/proc/self/fd"); err != nil {
+		t.Skip("no /proc/self/fd")
+	}
+	media := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(media, "a.txt"), []byte("hello"), 0o600))
+	srv, _ := testServer(t, settings.Overlay{}, nil, media, hostFSCapability(t))
+
+	fds := func() int {
+		entries, err := os.ReadDir("/proc/self/fd")
+		require.NoError(t, err)
+		return len(entries)
+	}
+	before := fds()
+	for range 10 {
+		resp := get(t, base(t, srv)+"/media/media/a.txt")
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}
+	// One extra descriptor is the keep-alive connection of the test
+	// client; without the fix the ten unclosed roots would grow it by
+	// ten.
+	assert.LessOrEqual(t, fds(), before+2, "the roots of the requests are closed")
+}
+
 // TestMediaRequiresHostFSCoversB6: without the right the media route
 // serves nothing, even for an existing file.
 func TestMediaRequiresHostFSCoversB6(t *testing.T) {
