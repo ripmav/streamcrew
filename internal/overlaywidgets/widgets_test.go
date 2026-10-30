@@ -708,6 +708,30 @@ func TestWidgetTimer(t *testing.T) {
 	})
 }
 
+// TestPauseTimerWithoutStateCoversB26 covers B26 and Review 344-10:
+// pause_timer on a timer widget without a running state starts the timer
+// with its configured duration; the first toggle is not lost.
+func TestPauseTimerWithoutStateCoversB26(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("t1", overlaywidgets.KindTimer, map[string]any{"duration": "2m"}),
+		}})
+		defer f.stop()
+		f.attach(t)
+
+		now := time.Now()
+		require.NoError(t, f.svc.PauseTimer(f.ctx, "t1"))
+		synctest.Wait()
+		ups := f.updates(t, "t1")
+		require.Len(t, ups, 1)
+		var st map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ups[0]), &st))
+		assert.Equal(t, false, st["paused"])
+		assert.Equal(t, float64(now.Add(2*time.Minute).UnixMilli()), st["deadline"])
+	})
+}
+
 // TestWidgetEventList covers B27: the dynamic entries show before the
 // feed entries, capped at the maximum.
 func TestWidgetEventList(t *testing.T) {

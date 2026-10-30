@@ -351,7 +351,8 @@ gibt die fünf Kinds `label`, `goal`, `timer`, `event_list` und `chat`:
   addierte Beträge klemmen den Fortschritt bei null.
 - `timer` zählt eine Dauer (Format wie bei den Timer-Items) runter oder
   hoch; die Aktionen `add_to_timer` (negativ erlaubt) und
-  `pause_timer` (pausiert bzw. setzt fort) steuern ihn live.
+  `pause_timer` (pausiert bzw. setzt fort; ohne laufenden State startet
+  der Timer) steuern ihn live.
 - `event_list` zeigt die letzten Feed-Ereignisse (Follow, Abo, Resub,
   Geschenke, Raids, Cheers — filterbar) plus dynamische Einträge, die
   die Aktion `add_to_event_list` hinzufügt (Nutzer der Ausführung und

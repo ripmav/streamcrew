@@ -1253,7 +1253,9 @@ func (s *Service) PauseTimer(ctx context.Context, widgetID string) error {
 	st := s.timers[widgetID]
 	switch {
 	case st == nil:
-		st = &timerState{paused: true, pausedFor: cfg.duration}
+		// Without a running state the toggle starts the timer (Review
+		// 344-10); the first toggle must not be lost.
+		st = &timerState{deadline: time.Now().Add(cfg.duration)}
 		s.timers[widgetID] = st
 	case st.paused:
 		st.deadline = time.Now().Add(st.pausedFor)
