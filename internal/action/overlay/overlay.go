@@ -170,11 +170,14 @@ type Widgets interface {
 	DamageStreamBoss(ctx context.Context, widgetID string, amount int64, force bool, u *user.User) error
 }
 
-// Service is the overlay service the action runs on (B18, B21, B22).
+// Service is the overlay service the action runs on (B11, B18, B21, B22).
 type Service interface {
 	// ShowItem shows the item on the endpoint and returns its ID and a
 	// channel that is closed when the item leaves the active set (B11).
 	ShowItem(ctx context.Context, endpoint string, item overlay.Item) (string, <-chan struct{}, error)
+	// RemoveItem removes the item from the active set (B11); ok is false
+	// if the item is not active.
+	RemoveItem(ctx context.Context, endpoint, id string) (ok bool)
 	// SetVisible switches the widget on or off (B21).
 	SetVisible(ctx context.Context, widgetID string, visible bool) error
 	// Widget returns the definition of the widget from the profile; ok is
@@ -708,7 +711,7 @@ func (t Overlay) Perform(ctx context.Context, run *engine.Run) error {
 func (t Overlay) item(ctx context.Context, run *engine.Run) error {
 	o := t.Item
 	ports := t.ports
-	content, kind, err := t.renderedContent(ctx, run)
+	content, kind, clipDuration, err := t.renderedContent(ctx, run)
 	if err != nil {
 		return field("content", err)
 	}
@@ -716,13 +719,28 @@ func (t Overlay) item(ctx context.Context, run *engine.Run) error {
 	if endpoint == "" {
 		endpoint = settings.DefaultEndpointID
 	}
-	_, end, err := ports.Overlay.ShowItem(ctx, endpoint, overlay.Item{
+	// B11: an item without a duration shows for the default; the
+	// playback of audio and video runs until item.ended (B14); a clip
+	// by user shows for the duration of the clip (B16, Review 344-5).
+	duration := o.Duration.Std()
+	if duration == 0 {
+		duration = overlay.DefaultItemDuration
+		switch kind {
+		case "audio", "video":
+			duration = 0
+		case "clip":
+			if clipDuration > 0 {
+				duration = clipDuration
+			}
+		}
+	}
+	id, end, err := ports.Overlay.ShowItem(ctx, endpoint, overlay.Item{
 		Kind:              kind,
 		Position:          o.Position,
 		Layer:             o.Layer,
 		Animation:         o.Animation,
 		AnimationDuration: o.AnimationDuration.Std(),
-		Duration:          o.Duration.Std(),
+		Duration:          duration,
 		Content:           content,
 	})
 	if err != nil {
@@ -735,8 +753,10 @@ func (t Overlay) item(ctx context.Context, run *engine.Run) error {
 		// runtime reported the end of the playback or a reload dropped
 		// the endpoint (B11, B14).
 	case <-ctx.Done():
-		// B46: the time limit ends the action; without a client report
-		// the playback ends with it.
+		// B46: the time limit or a cancel ends the action; the item
+		// leaves the active set with it, so a reconnect does not resend
+		// it (Review 344-5).
+		ports.Overlay.RemoveItem(context.WithoutCancel(ctx), endpoint, id)
 		return ctx.Err()
 	}
 	if kind == "audio" || kind == "video" {
@@ -747,11 +767,12 @@ func (t Overlay) item(ctx context.Context, run *engine.Run) error {
 
 // renderedContent renders the templates of the content of the kind item
 // and returns it as a document for the runtime, with the kind of the
-// item. A clip by user resolves the latest clip of the user (B13, B16).
-func (t Overlay) renderedContent(ctx context.Context, run *engine.Run) (any, string, error) {
+// item and the duration of a clip by user (B13, B16). A clip by user
+// resolves the latest clip of the user.
+func (t Overlay) renderedContent(ctx context.Context, run *engine.Run) (any, string, time.Duration, error) {
 	c, err := t.decodeContent()
 	if err != nil {
-		return nil, "", err
+		return nil, "", 0, err
 	}
 	ports := t.ports
 	render := func(s action.Template) (string, error) {
@@ -761,13 +782,13 @@ func (t Overlay) renderedContent(ctx context.Context, run *engine.Run) (any, str
 	case "text":
 		text, err := render(action.Template(c.Text))
 		if err != nil {
-			return nil, "", err
+			return nil, "", 0, err
 		}
-		return map[string]any{"text": text, "maxWidth": c.MaxWidth}, "text", nil
+		return map[string]any{"text": text, "maxWidth": c.MaxWidth}, "text", 0, nil
 	case "image", "video", "audio":
 		src, err := render(action.Template(c.Src))
 		if err != nil {
-			return nil, "", err
+			return nil, "", 0, err
 		}
 		data := map[string]any{"src": src}
 		if c.Width > 0 {
@@ -785,17 +806,17 @@ func (t Overlay) renderedContent(ctx context.Context, run *engine.Run) (any, str
 		if c.Loop {
 			data["loop"] = true
 		}
-		return data, c.Kind, nil
+		return data, c.Kind, 0, nil
 	case "html":
 		html, err := render(action.Template(c.HTML))
 		if err != nil {
-			return nil, "", err
+			return nil, "", 0, err
 		}
-		return map[string]any{"html": html}, "html", nil
+		return map[string]any{"html": html}, "html", 0, nil
 	case "youtube":
 		url, err := render(action.Template(c.URL))
 		if err != nil {
-			return nil, "", err
+			return nil, "", 0, err
 		}
 		data := map[string]any{"url": url, "width": c.Width, "height": c.Height}
 		if c.Start > 0 {
@@ -804,7 +825,7 @@ func (t Overlay) renderedContent(ctx context.Context, run *engine.Run) (any, str
 		if c.Volume > 0 {
 			data["volume"] = c.Volume
 		}
-		return data, "youtube", nil
+		return data, "youtube", 0, nil
 	case "clip":
 		return t.clipContent(ctx, run, c)
 	case "timer":
@@ -816,18 +837,18 @@ func (t Overlay) renderedContent(ctx context.Context, run *engine.Run) (any, str
 		if format == "" {
 			format = "MM:SS"
 		}
-		return map[string]any{"duration": c.Duration, "direction": direction, "format": format}, "timer", nil
+		return map[string]any{"duration": c.Duration, "direction": direction, "format": format}, "timer", 0, nil
 	case "emote_effect":
 		return t.emoteEffectContent(ctx, run, c)
 	default:
-		return nil, "", fmt.Errorf("%w: unknown item kind %q", action.ErrInvalid, c.Kind)
+		return nil, "", 0, fmt.Errorf("%w: unknown item kind %q", action.ErrInvalid, c.Kind)
 	}
 }
 
 // emoteEffectContent is the content of the item kind emote_effect (B35):
 // the names resolved to image URLs over the emote catalog, the unknown
 // dropped, or kept as text while allow_emoji.
-func (t Overlay) emoteEffectContent(ctx context.Context, run *engine.Run, c *itemContent) (any, string, error) {
+func (t Overlay) emoteEffectContent(ctx context.Context, run *engine.Run, c *itemContent) (any, string, time.Duration, error) {
 	ports := t.ports
 	render := func(s action.Template) (string, error) {
 		return ports.Templates.Render(ctx, s.Parse(), run.Scope(), template.Text)
@@ -846,7 +867,7 @@ func (t Overlay) emoteEffectContent(ctx context.Context, run *engine.Run, c *ite
 	for _, name := range c.Emotes {
 		n, err := render(action.Template(name))
 		if err != nil {
-			return nil, "", err
+			return nil, "", 0, err
 		}
 		if n == "" {
 			continue
@@ -870,7 +891,7 @@ func (t Overlay) emoteEffectContent(ctx context.Context, run *engine.Run, c *ite
 		shown += count
 	}
 	if len(emotes) == 0 {
-		return nil, "", fmt.Errorf("%w: no emote of the effect was found", action.ErrInvalid)
+		return nil, "", 0, fmt.Errorf("%w: no emote of the effect was found", action.ErrInvalid)
 	}
 	data := map[string]any{"effect": effect, "emotes": emotes}
 	if c.Width > 0 {
@@ -879,34 +900,39 @@ func (t Overlay) emoteEffectContent(ctx context.Context, run *engine.Run, c *ite
 	if c.Height > 0 {
 		data["height"] = c.Height
 	}
-	return data, "emote_effect", nil
+	return data, "emote_effect", 0, nil
 }
 
 // clipContent is the content of the item kind clip (B13, B15, B16): the
-// URL as given, or the latest clip of the user.
-func (t Overlay) clipContent(ctx context.Context, run *engine.Run, c *itemContent) (any, string, error) {
+// URL as given, or the latest clip of the user, with the duration of the
+// clip of a user clip.
+func (t Overlay) clipContent(ctx context.Context, run *engine.Run, c *itemContent) (any, string, time.Duration, error) {
+	data := map[string]any{}
+	var duration time.Duration
 	if c.URL != "" {
 		url, err := t.ports.Templates.Render(ctx, action.Template(c.URL).Parse(), run.Scope(), template.Text)
 		if err != nil {
-			return nil, "", err
+			return nil, "", 0, err
 		}
-		return map[string]any{"url": url}, "clip", nil
+		data["url"] = url
+	} else {
+		login, err := t.ports.Templates.Render(ctx, action.Template(c.User).Parse(), run.Scope(), template.Text)
+		if err != nil {
+			return nil, "", 0, err
+		}
+		clip, err := t.ports.Clips.LatestClip(ctx, login)
+		if err != nil {
+			return nil, "", 0, err
+		}
+		data["url"] = clip.URL
+		// B16, minimal: the duration of the clip lands in the content; a
+		// bus event detail follows with the clip interop.
+		if clip.Duration > 0 {
+			duration = clip.Duration
+			data["duration"] = int(clip.Duration.Seconds())
+		}
 	}
-	login, err := t.ports.Templates.Render(ctx, action.Template(c.User).Parse(), run.Scope(), template.Text)
-	if err != nil {
-		return nil, "", err
-	}
-	clip, err := t.ports.Clips.LatestClip(ctx, login)
-	if err != nil {
-		return nil, "", err
-	}
-	data := map[string]any{"url": clip.URL}
-	// B16, minimal: the duration of the clip lands in the content; a
-	// bus event detail follows with the clip interop.
-	if clip.Duration > 0 {
-		data["duration"] = int(clip.Duration.Seconds())
-	}
-	return data, "clip", nil
+	return data, "clip", duration, nil
 }
 
 // widget runs the operation of the kind widget (B21 to B28, B38).
