@@ -491,3 +491,31 @@ func TestAttachDoesNotLoseBroadcastsDuringTheHandshake(t *testing.T) {
 		return false
 	}, 2*time.Second, 10*time.Millisecond, "the runtime must receive the item.show")
 }
+
+// TestSectionOrderIsKeptForEndpointsAndWidgets covers Review 342-12:
+// the endpoints and the widgets of the state sync follow the order of
+// the section (default first for the endpoints), not the alphabetical
+// order of the IDs.
+func TestSectionOrderIsKeptForEndpointsAndWidgets(t *testing.T) {
+	sec := settings.Overlay{
+		Endpoints: []settings.OverlayEndpoint{
+			{ID: "zulu", Name: "Zulu"},
+			{ID: "alpha", Name: "Alpha"},
+		},
+		Widgets: []settings.OverlayWidget{
+			{ID: "z", Kind: "label", Name: "Z", Visible: true},
+			{ID: "a", Kind: "label", Name: "A", Visible: true},
+		},
+	}
+	svc := testService(t, sec)
+	eps := svc.Endpoints()
+	require.Len(t, eps, 3)
+	assert.Equal(t, settings.DefaultEndpointID, eps[0].ID)
+	assert.Equal(t, "zulu", eps[1].ID)
+	assert.Equal(t, "alpha", eps[2].ID)
+
+	states := svc.WidgetStates(context.Background(), settings.DefaultEndpointID)
+	require.Len(t, states, 2)
+	assert.Equal(t, "z", states[0].ID)
+	assert.Equal(t, "a", states[1].ID)
+}

@@ -14,7 +14,6 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"slices"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -99,7 +98,13 @@ type Service struct {
 
 	mu        sync.Mutex
 	endpoints map[string]settings.OverlayEndpoint
-	widgets   map[string]settings.OverlayWidget
+	// endpointOrder is the order of the section's endpoints, for the
+	// stable listing; the default endpoint comes first (B2).
+	endpointOrder []string
+	widgets       map[string]settings.OverlayWidget
+	// widgetOrder is the order of the section's widgets, for the stable
+	// state sync (B4).
+	widgetOrder []string
 	// visible is the runtime visibility of a widget (B21); a widget
 	// not in the map shows its flag of the section.
 	visible map[string]bool
@@ -183,18 +188,24 @@ func (s *Service) reload(ctx context.Context) error {
 		return fmt.Errorf("overlay: load the section: %w", err)
 	}
 	endpoints := map[string]settings.OverlayEndpoint{settings.DefaultEndpointID: {ID: settings.DefaultEndpointID, Name: "Default"}}
+	endpointOrder := make([]string, 0, len(sec.Endpoints))
 	for _, e := range sec.Endpoints {
 		endpoints[e.ID] = e
+		endpointOrder = append(endpointOrder, e.ID)
 	}
 	widgets := make(map[string]settings.OverlayWidget, len(sec.Widgets))
+	widgetOrder := make([]string, 0, len(sec.Widgets))
 	for _, w := range sec.Widgets {
 		widgets[w.ID] = w
+		widgetOrder = append(widgetOrder, w.ID)
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.endpoints = endpoints
+	s.endpointOrder = endpointOrder
 	s.widgets = widgets
+	s.widgetOrder = widgetOrder
 	for id := range s.visible {
 		if _, ok := widgets[id]; !ok {
 			delete(s.visible, id)
@@ -245,7 +256,7 @@ func (s *Service) Endpoint(id string) (settings.OverlayEndpoint, bool) {
 }
 
 // Endpoints returns the endpoints in a stable order: default first, then
-// the endpoints of the section in their order.
+// the endpoints of the section in their order (Review 342-12).
 func (s *Service) Endpoints() []settings.OverlayEndpoint {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -253,15 +264,10 @@ func (s *Service) Endpoints() []settings.OverlayEndpoint {
 	if e, ok := s.endpoints[settings.DefaultEndpointID]; ok {
 		out = append(out, e)
 	}
-	ids := make([]string, 0, len(s.endpoints))
-	for id := range s.endpoints {
+	for _, id := range s.endpointOrder {
 		if id != settings.DefaultEndpointID {
-			ids = append(ids, id)
+			out = append(out, s.endpoints[id])
 		}
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		out = append(out, s.endpoints[id])
 	}
 	return out
 }
@@ -581,11 +587,12 @@ func (s *Service) handshake(hello HelloData, widgets []WidgetState, items []Item
 }
 
 // visibleWidgets are the definitions of the visible widgets of the
-// endpoint in the stable ID order, for the state sync (B4, B21); the
-// caller holds mu.
+// endpoint in the order of the section, for the state sync (B4, B21,
+// Review 342-12); the caller holds mu.
 func (s *Service) visibleWidgets(endpoint string) []settings.OverlayWidget {
 	var out []settings.OverlayWidget
-	for _, w := range s.widgets {
+	for _, id := range s.widgetOrder {
+		w := s.widgets[id]
 		ep := w.Endpoint
 		if ep == "" {
 			ep = settings.DefaultEndpointID
@@ -602,7 +609,6 @@ func (s *Service) visibleWidgets(endpoint string) []settings.OverlayWidget {
 		}
 		out = append(out, w)
 	}
-	slices.SortFunc(out, func(a, b settings.OverlayWidget) int { return cmp.Compare(a.ID, b.ID) })
 	return out
 }
 
@@ -622,13 +628,15 @@ func (s *Service) syncStates(ctx context.Context, provider func(ctx context.Cont
 	return out
 }
 
-// activeItems is ActiveItems without the lock; the caller holds mu.
+// activeItems is ActiveItems without the lock; the caller holds mu. The
+// ID order is the order of the show, because the IDs are zero-padded
+// counters (B4).
 func (s *Service) activeItems(endpoint string) []ItemData {
 	items := make([]ItemData, 0, len(s.items[endpoint]))
 	for _, item := range s.items[endpoint] {
 		items = append(items, item.data)
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
+	slices.SortFunc(items, func(a, b ItemData) int { return cmp.Compare(a.ID, b.ID) })
 	return items
 }
 
