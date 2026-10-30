@@ -7,9 +7,12 @@
 package overlaywidgets_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -42,6 +45,24 @@ type effect struct {
 	payload eventtype.Payload
 }
 
+// lockedWriter is the race-safe buffer of the captured log output.
+type lockedWriter struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (w *lockedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.Write(p)
+}
+
+func (w *lockedWriter) string() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
 // fixture wires the service with the real overlay service and the fakes of
 // the other ports, so the test reads what the runtime receives.
 type fixture struct {
@@ -61,12 +82,14 @@ type fixture struct {
 	msgs       []overlay.Message
 	effects    []effect
 	state      map[string][]byte
+	stateErr   error // when set, returned by the State port
 	feed       []feed.Event
 	streams    map[platform.Name]template.StreamState
 	sessions   map[platform.Name]feed.SessionStats
 	top        []user.Ranked
 	emoteList  []emote.Emote
 	discordOcc []discord.Occupant
+	logOut     *lockedWriter
 }
 
 // newFixture returns the fixture with the section and starts the service;
@@ -82,6 +105,7 @@ func newFixture(t *testing.T, sec settings.Overlay) *fixture {
 	}
 	f.ctx, f.cancel = context.WithCancel(t.Context())
 	f.setSection(sec)
+	f.logOut = &lockedWriter{}
 	ov, err := overlay.New(f.ctx, overlay.Ports{Section: f.section})
 	require.NoError(t, err)
 	f.overlay = ov
@@ -101,6 +125,7 @@ func newFixture(t *testing.T, sec settings.Overlay) *fixture {
 		TopUsers:         f.topUsers,
 		Emotes:           f.emotes,
 		DiscordOccupants: f.discordOccupants,
+		Logger:           slog.New(slog.NewTextHandler(f.logOut, nil)),
 	}, overlaywidgets.WithLabelTick(time.Second))
 	require.NoError(t, err)
 	ov.SetStateProvider(f.svc.StateForSync)
@@ -187,8 +212,23 @@ func (f *fixture) LatestFeed(_ context.Context, n int) ([]feed.Event, error) {
 func (f *fixture) OverlayWidgetState(_ context.Context, widgetID string) ([]byte, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.stateErr != nil {
+		return nil, false, f.stateErr
+	}
 	doc, ok := f.state[widgetID]
 	return doc, ok, nil
+}
+
+// failState makes the State port return err.
+func (f *fixture) failState(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.stateErr = err
+}
+
+// logText returns the captured log output.
+func (f *fixture) logText() string {
+	return f.logOut.string()
 }
 
 // SetOverlayWidgetState implements the State port.
@@ -511,6 +551,36 @@ func TestGoalConcurrentAccessCoversB25(t *testing.T) {
 
 		// 100 operations plus 100 events: exactly 200 (Review 344-8).
 		assert.JSONEq(t, `{"current":200,"segment":0,"reset_at":"0001-01-01T00:00:00Z"}`, string(f.stateDoc(t)))
+	})
+}
+
+// TestGoalLoadErrorsCoversB20 covers B20 and Review 344-11: a state error
+// is wrapped and returned from AddToGoal, logged on the event path, and
+// leaves the service running.
+func TestGoalLoadErrorsCoversB20(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		boom := errors.New("the store is broken")
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("g1", overlaywidgets.KindGoal, goalConfig()),
+		}})
+		defer f.stop()
+		// The state fails before the attach, so the handshake does not
+		// warm the goal cache.
+		f.failState(boom)
+		f.attach(t)
+
+		// AddToGoal returns the wrapped error (Review 344-11).
+		err := f.svc.AddToGoal(f.ctx, "g1", 1, platform.Twitch, twitchUser(t, "ada"))
+		assert.ErrorIs(t, err, boom)
+		assert.Contains(t, err.Error(), "the goal state of g1")
+
+		// The event path logs the error and shows nothing (Review 344-11).
+		f.publish(t, eventtype.ChannelFollow, twitchUser(t, "ada"), eventtype.Details{})
+		synctest.Wait()
+		assert.Empty(t, f.updates(t, "g1"))
+		assert.Empty(t, f.effectsList())
+		assert.Contains(t, f.logText(), "the goal step failed")
 	})
 }
 

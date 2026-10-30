@@ -775,7 +775,9 @@ func (s *Service) goalProgress(ctx context.Context, env event.Envelope) {
 		if w.Kind != KindGoal || !s.visible(w) {
 			continue
 		}
-		s.goalStep(ctx, w, amount, payload)
+		if err := s.goalStep(ctx, w, amount, payload); err != nil {
+			s.logger.ErrorContext(ctx, "the goal step failed", "widget", w.ID, "error", err)
+		}
 	}
 }
 
@@ -801,10 +803,10 @@ func goalAmount(t event.Type, p eventtype.Payload) (int64, bool) {
 // Review 344-8: the load, the change and the save run under the lock, and
 // the push takes its snapshot under the lock, as the bus goroutine and
 // the actions share the state.
-func (s *Service) goalStep(ctx context.Context, w settings.OverlayWidget, amount int64, p eventtype.Payload) {
+func (s *Service) goalStep(ctx context.Context, w settings.OverlayWidget, amount int64, p eventtype.Payload) error {
 	cfg := s.goalConfig(ctx, w)
 	if cfg == nil {
-		return
+		return nil
 	}
 	s.mu.Lock()
 	st, err := s.goalLoadLocked(ctx, w.ID)
@@ -831,7 +833,7 @@ func (s *Service) goalStep(ctx context.Context, w settings.OverlayWidget, amount
 	}
 	s.mu.Unlock()
 	if err != nil {
-		return
+		return err
 	}
 	if len(completed) > 0 {
 		for _, c := range completed {
@@ -849,6 +851,7 @@ func (s *Service) goalStep(ctx context.Context, w settings.OverlayWidget, amount
 		})
 	}
 	s.push(ctx, w, state)
+	return nil
 }
 
 // goalSegmentsCrossed advances st over the segments its amount reached, in
@@ -1012,7 +1015,11 @@ func (s *Service) goalReset(ctx context.Context) {
 			ran = true
 		}
 		s.mu.Unlock()
-		if err != nil || !ran {
+		if err != nil {
+			s.logger.ErrorContext(ctx, "the goal reset failed", "widget", w.ID, "error", err)
+			continue
+		}
+		if !ran {
 			continue
 		}
 		s.push(ctx, w, state)
@@ -1027,7 +1034,7 @@ func (s *Service) goalLoadLocked(ctx context.Context, widgetID string) (*goalSta
 	}
 	doc, found, err := s.ports.State.OverlayWidgetState(ctx, widgetID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("the goal state of %s: %w", widgetID, err)
 	}
 	st := &goalState{}
 	if found {
@@ -1105,14 +1112,14 @@ func (s *Service) goalConfig(ctx context.Context, w settings.OverlayWidget) *goa
 }
 
 // AddToGoal adds amount, which may be negative (B25, B50), to the goal
-// widget and pushes the progress.
+// widget and pushes the progress; a state error is returned (Review
+// 344-11).
 func (s *Service) AddToGoal(ctx context.Context, widgetID string, amount int64, p platform.Name, u *user.User) error {
 	w, err := s.widget(ctx, widgetID, KindGoal)
 	if err != nil {
 		return err
 	}
-	s.goalStep(ctx, w, amount, eventtype.Payload{Platform: p, User: u})
-	return nil
+	return s.goalStep(ctx, w, amount, eventtype.Payload{Platform: p, User: u})
 }
 
 // StateForGoal returns the goal state for the state sync (B4, B20); the
@@ -1130,6 +1137,7 @@ func (s *Service) StateForGoal(ctx context.Context, w settings.OverlayWidget) an
 	}
 	s.mu.Unlock()
 	if err != nil {
+		s.logger.ErrorContext(ctx, "reading the goal state failed", "widget", w.ID, "error", err)
 		return nil
 	}
 	return state
