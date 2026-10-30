@@ -433,21 +433,53 @@ func (s *Service) push(ctx context.Context, w settings.OverlayWidget, state any)
 
 // ---------- label (B24, A5) ----------
 
+// LabelKind is the kind of the label widget (B24).
+type LabelKind string
+
+// The kinds of the label widget (B24); date and time the runtime renders
+// locally, text the core as a template.
+const (
+	// LabelKindText is the default kind: a template text.
+	LabelKindText LabelKind = "text"
+	// LabelKindDate renders the date in the runtime (B24, A5).
+	LabelKindDate LabelKind = "date"
+	// LabelKindTime renders the time in the runtime (B24, A5).
+	LabelKindTime LabelKind = "time"
+	// LabelKindViewerCount shows the viewer count of the platform.
+	LabelKindViewerCount LabelKind = "viewer_count"
+	// LabelKindChatterCount shows the chatter count of the platform.
+	LabelKindChatterCount LabelKind = "chatter_count"
+	// LabelKindLatestFollower shows the name of the latest follower.
+	LabelKindLatestFollower LabelKind = "latest_follower"
+	// LabelKindTotalFollowers shows the count of the followers.
+	LabelKindTotalFollowers LabelKind = "total_followers"
+	// LabelKindLatestSubscriber shows the name of the latest subscriber.
+	LabelKindLatestSubscriber LabelKind = "latest_subscriber"
+	// LabelKindTotalSubscribers shows the count of the subscribers.
+	LabelKindTotalSubscribers LabelKind = "total_subscribers"
+	// LabelKindLatestRaid shows the name of the latest raid.
+	LabelKindLatestRaid LabelKind = "latest_raid"
+)
+
+// labelValueKinds are the kinds the core renders from its sources (B24).
+//
+//nolint:gochecknoglobals // static table of value kinds
+var labelValueKinds = []LabelKind{
+	LabelKindViewerCount, LabelKindChatterCount, LabelKindLatestFollower,
+	LabelKindTotalFollowers, LabelKindLatestSubscriber, LabelKindTotalSubscribers, LabelKindLatestRaid,
+}
+
+// Valid reports whether k is a known label kind.
+func (k LabelKind) Valid() bool {
+	return k == LabelKindText || k == LabelKindDate || k == LabelKindTime || slices.Contains(labelValueKinds, k)
+}
+
 // labelConfig is the configuration of the label widget.
 type labelConfig struct {
 	// Type is the kind of the label; empty for text.
-	Type string `json:"type"`
+	Type LabelKind `json:"type"`
 	// Text is the template of the kind text.
 	Text string `json:"text"`
-}
-
-// The label kinds that the core renders (B24); date and time the runtime
-// renders locally.
-//
-//nolint:gochecknoglobals // static table of label kinds
-var labelValueKinds = []string{
-	"viewer_count", "chatter_count", "latest_follower",
-	"total_followers", "latest_subscriber", "total_subscribers", "latest_raid",
 }
 
 // refreshLabels re-renders the visible label widgets (B24).
@@ -482,7 +514,7 @@ func (s *Service) pushLabel(ctx context.Context, w settings.OverlayWidget, scope
 		return
 	}
 	switch {
-	case cfg.Type == "date" || cfg.Type == "time":
+	case cfg.Type == LabelKindDate || cfg.Type == LabelKindTime:
 		s.pushLabelState(ctx, w, s.dateTimeState(ctx, cfg.Type))
 	case slices.Contains(labelValueKinds, cfg.Type):
 		s.pushLabelText(ctx, w, s.labelValue(ctx, cfg.Type, scope))
@@ -499,7 +531,7 @@ func (s *Service) pushLabel(ctx context.Context, w settings.OverlayWidget, scope
 // dateTimeState is the state of the label kinds date and time (B24, A5):
 // the runtime renders them per second in the locale and the time zone of
 // the profile.
-func (s *Service) dateTimeState(ctx context.Context, kind string) map[string]any {
+func (s *Service) dateTimeState(ctx context.Context, kind LabelKind) map[string]any {
 	loc := template.LocaleUSEnglish
 	if l, err := s.ports.Locale(ctx); err == nil {
 		loc = l
@@ -508,7 +540,7 @@ func (s *Service) dateTimeState(ctx context.Context, kind string) map[string]any
 	if sc, err := s.ports.Scope(ctx); err == nil && sc.Location != nil {
 		zone = sc.Location.String()
 	}
-	st := map[string]any{"kind": kind, "locale": string(loc)}
+	st := map[string]any{"kind": string(kind), "locale": string(loc)}
 	// time.Local's name "Local" is not a zone the browser knows; without
 	// the key the browser takes its own time zone.
 	if zone != time.Local.String() {
@@ -546,23 +578,23 @@ func (s *Service) pushIfChanged(ctx context.Context, w settings.OverlayWidget, k
 
 // labelValue resolves the data kinds of the label (B24). A value the
 // source does not report has no text (template.md, B4).
-func (s *Service) labelValue(ctx context.Context, kind string, scope *template.Scope) string {
+func (s *Service) labelValue(ctx context.Context, kind LabelKind, scope *template.Scope) string {
 	switch kind {
-	case "viewer_count", "chatter_count", "total_followers":
+	case LabelKindViewerCount, LabelKindChatterCount, LabelKindTotalFollowers:
 		st, err := s.ports.StreamStates.StreamState(ctx, scope.Platform)
 		if err != nil {
 			return ""
 		}
 		switch kind {
-		case "viewer_count":
+		case LabelKindViewerCount:
 			if st.Viewers != nil {
 				return strconv.FormatInt(*st.Viewers, 10)
 			}
-		case "chatter_count":
+		case LabelKindChatterCount:
 			if st.Chatters != nil {
 				return strconv.FormatInt(*st.Chatters, 10)
 			}
-		default: // total_followers
+		default: // LabelKindTotalFollowers
 			if st.Followers != nil {
 				return strconv.FormatInt(*st.Followers, 10)
 			}
@@ -571,15 +603,15 @@ func (s *Service) labelValue(ctx context.Context, kind string, scope *template.S
 			return s.sessionCount(ctx, scope.Platform, func(st feed.SessionStats) int64 { return st.Followers })
 		}
 		return "" // the value of the kind is unknown
-	case "total_subscribers":
+	case LabelKindTotalSubscribers:
 		// shortcut: the platforms report no total subscribers; the
 		// session count until a source exists (Phase 9).
 		return s.sessionCount(ctx, scope.Platform, func(st feed.SessionStats) int64 { return st.Subscribers })
-	case "latest_follower":
+	case LabelKindLatestFollower:
 		return s.latestUser(ctx, eventtype.ChannelFollow)
-	case "latest_subscriber":
+	case LabelKindLatestSubscriber:
 		return s.latestUser(ctx, eventtype.ChannelSubscribe)
-	case "latest_raid":
+	case LabelKindLatestRaid:
 		return s.latestUser(ctx, eventtype.ChannelRaid)
 	default:
 		return ""
@@ -599,7 +631,7 @@ func (s *Service) sessionCount(ctx context.Context, p platform.Name, part func(f
 // latestUser returns the name of the most recent feed event of type, or
 // empty if the feed has none.
 func (s *Service) latestUser(ctx context.Context, typ event.Type) string {
-	events, err := s.ports.Feed.LatestFeed(ctx, 50)
+	events, err := s.ports.Feed.LatestFeed(ctx, labelFeedScan)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "reading the feed for the label failed", "error", err)
 		return ""
@@ -620,6 +652,10 @@ func feedName(ev feed.Event) string {
 	return ev.Login
 }
 
+// labelFeedScan is how many recent feed events the latest_* labels scan
+// for the user (B24).
+const labelFeedScan = 50
+
 // labelConfig decodes and checks the configuration of the label widget;
 // the defaults are the kind text and an empty template.
 func (s *Service) labelConfig(ctx context.Context, w settings.OverlayWidget) *labelConfig {
@@ -629,9 +665,9 @@ func (s *Service) labelConfig(ctx context.Context, w settings.OverlayWidget) *la
 		return nil
 	}
 	if c.Type == "" {
-		c.Type = "text"
+		c.Type = LabelKindText
 	}
-	if c.Type != "text" && c.Type != "date" && c.Type != "time" && !slices.Contains(labelValueKinds, c.Type) {
+	if !c.Type.Valid() {
 		s.logger.ErrorContext(ctx, "the label kind is unknown", "widget", w.ID, "kind", c.Type)
 		return nil
 	}
@@ -645,7 +681,7 @@ func (s *Service) StateForLabel(ctx context.Context, w settings.OverlayWidget) a
 	if cfg == nil {
 		return nil
 	}
-	if cfg.Type == "date" || cfg.Type == "time" {
+	if cfg.Type == LabelKindDate || cfg.Type == LabelKindTime {
 		return s.dateTimeState(ctx, cfg.Type)
 	}
 	s.mu.Lock()
@@ -659,14 +695,57 @@ func (s *Service) StateForLabel(ctx context.Context, w settings.OverlayWidget) a
 
 // ---------- goal (B25, B23, A2, B50) ----------
 
+// GoalMode is the mode of the goal widget (B25).
+type GoalMode string
+
+// The modes of the goal widget (B25); cumulative is the default.
+const (
+	// GoalModeCumulative is the default mode: the segments build on each
+	// other, the display carries the overall amount.
+	GoalModeCumulative GoalMode = "cumulative"
+	// GoalModeIndividual works on each segment on its own.
+	GoalModeIndividual GoalMode = "individual"
+)
+
+//
+//nolint:gochecknoglobals // static table of goal modes
+var goalModes = []GoalMode{GoalModeCumulative, GoalModeIndividual}
+
+// Valid reports whether m is a known goal mode.
+func (m GoalMode) Valid() bool {
+	return slices.Contains(goalModes, m)
+}
+
+// GoalReset is the automatic reset of the goal widget (B25).
+type GoalReset string
+
+// The automatic resets of the goal widget (B25).
+const (
+	// GoalResetDaily runs the reset at the start of each day in the
+	// time zone of the profile.
+	GoalResetDaily GoalReset = "daily"
+	// GoalResetMonthly runs the reset at the start of each month in the
+	// time zone of the profile.
+	GoalResetMonthly GoalReset = "monthly"
+)
+
+//
+//nolint:gochecknoglobals // static table of goal resets
+var goalResets = []GoalReset{GoalResetDaily, GoalResetMonthly}
+
+// Valid reports whether r is a known goal reset.
+func (r GoalReset) Valid() bool {
+	return slices.Contains(goalResets, r)
+}
+
 // goalConfig is the configuration of the goal widget.
 type goalConfig struct {
 	// Segments are the segments of the goal, in order; at least one.
 	Segments []goalSegment `json:"segments"`
 	// Mode is cumulative (default) or individual.
-	Mode string `json:"mode"`
+	Mode GoalMode `json:"mode"`
 	// Reset is the automatic reset: daily or monthly; empty for none.
-	Reset string `json:"reset"`
+	Reset GoalReset `json:"reset"`
 }
 
 // goalSegment is one segment of the goal.
@@ -809,7 +888,7 @@ func goalBoundary(st *goalState, segs []goalSegment) int64 {
 // segments for the kind cumulative, the amount of the current segment for
 // the kind individual.
 func goalTotal(cfg *goalConfig, st *goalState) int64 {
-	if cfg.Mode == "individual" {
+	if cfg.Mode == GoalModeIndividual {
 		if st.segment < len(cfg.Segments) {
 			return cfg.Segments[st.segment].Amount
 		}
@@ -826,7 +905,7 @@ func goalTotal(cfg *goalConfig, st *goalState) int64 {
 // completed segments plus the amount of the current one for the kind
 // cumulative, the amount of the current segment for the kind individual.
 func goalReached(cfg *goalConfig, st *goalState) int64 {
-	if cfg.Mode == "individual" {
+	if cfg.Mode == GoalModeIndividual {
 		return st.current
 	}
 	var sum int64
@@ -840,7 +919,7 @@ func goalReached(cfg *goalConfig, st *goalState) int64 {
 // the goal is reached or overshot.
 func goalRemaining(cfg *goalConfig, st *goalState) int64 {
 	var rest int64
-	if cfg.Mode == "individual" {
+	if cfg.Mode == GoalModeIndividual {
 		var sum int64
 		for _, sg := range cfg.Segments[st.segment:] {
 			sum += sg.Amount
@@ -877,11 +956,7 @@ func goalSegmentAmount(cfg *goalConfig, st *goalState) int64 {
 // course (B25): the last reset must lie before the start of the current
 // day or month of the profile.
 func (s *Service) goalResetDue(ctx context.Context, w settings.OverlayWidget, cfg *goalConfig, st *goalState) bool {
-	switch cfg.Reset {
-	case "":
-		return false
-	case "daily", "monthly":
-	default:
+	if cfg.Reset == "" || !cfg.Reset.Valid() {
 		return false
 	}
 	scope, err := s.ports.Scope(ctx)
@@ -891,7 +966,7 @@ func (s *Service) goalResetDue(ctx context.Context, w settings.OverlayWidget, cf
 	}
 	now := time.Now().In(scope.Location)
 	var start time.Time
-	if cfg.Reset == "daily" {
+	if cfg.Reset == GoalResetDaily {
 		start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, scope.Location)
 	} else {
 		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, scope.Location)
@@ -972,7 +1047,7 @@ func (s *Service) goalSave(ctx context.Context, widgetID string, st *goalState) 
 func (s *Service) goalStateFor(cfg *goalConfig, st *goalState) map[string]any {
 	total := goalTotal(cfg, st)
 	current := goalReached(cfg, st)
-	if cfg.Mode != "individual" && current > total {
+	if cfg.Mode != GoalModeIndividual && current > total {
 		current = total
 	}
 	segments := make([]map[string]any, len(cfg.Segments))
@@ -1005,11 +1080,11 @@ func (s *Service) goalConfig(ctx context.Context, w settings.OverlayWidget) *goa
 			return nil
 		}
 	}
-	if c.Mode != "" && c.Mode != "cumulative" && c.Mode != "individual" {
+	if c.Mode != "" && !c.Mode.Valid() {
 		s.logger.ErrorContext(ctx, "the goal mode is unknown", "widget", w.ID, "mode", c.Mode)
 		return nil
 	}
-	if c.Reset != "" && c.Reset != "daily" && c.Reset != "monthly" {
+	if c.Reset != "" && !c.Reset.Valid() {
 		s.logger.ErrorContext(ctx, "the goal reset is unknown", "widget", w.ID, "reset", c.Reset)
 		return nil
 	}
@@ -1041,6 +1116,9 @@ func (s *Service) StateForGoal(ctx context.Context, w settings.OverlayWidget) an
 }
 
 // ---------- timer (B26) ----------
+
+// timerFormatDefault is the display format of the timer (B17, B26).
+const timerFormatDefault = "MM:SS"
 
 // timerConfig is the configuration of the timer widget.
 type timerConfig struct {
@@ -1195,23 +1273,26 @@ func (s *Service) timerConfig(ctx context.Context, w settings.OverlayWidget) *ti
 	var c timerConfig
 	if err := decodeConfig(w.Config, &c); err != nil {
 		s.logger.ErrorContext(ctx, "the timer configuration is unreadable", "widget", w.ID, "error", err)
-		return &timerConfig{Format: "MM:SS"}
+		return &timerConfig{Format: timerFormatDefault}
 	}
 	if c.Duration != "" {
 		d, err := time.ParseDuration(c.Duration)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "the timer duration is unknown", "widget", w.ID, "duration", c.Duration)
-			return &timerConfig{Format: "MM:SS"}
+			return &timerConfig{Format: timerFormatDefault}
 		}
 		c.duration = d
 	}
 	if c.Format == "" {
-		c.Format = "MM:SS"
+		c.Format = timerFormatDefault
 	}
 	return &c
 }
 
 // ---------- event_list (B27) ----------
+
+// listMaxDefault is the default maximum of the event list (B27).
+const listMaxDefault = 10
 
 // eventListConfig is the configuration of the event_list widget.
 type eventListConfig struct {
@@ -1324,16 +1405,16 @@ func (s *Service) listConfig(ctx context.Context, w settings.OverlayWidget) *eve
 	var c eventListConfig
 	if err := decodeConfig(w.Config, &c); err != nil {
 		s.logger.ErrorContext(ctx, "the event list configuration is unreadable", "widget", w.ID, "error", err)
-		return &eventListConfig{Max: 10}
+		return &eventListConfig{Max: listMaxDefault}
 	}
 	if c.Max < 1 {
-		c.Max = 10
+		c.Max = listMaxDefault
 	}
 	if len(c.Types) > 0 {
 		for _, typ := range c.Types {
 			if !slices.Contains(FeedTypes, event.Type(typ)) {
 				s.logger.ErrorContext(ctx, "the event list type is not a feed type", "widget", w.ID, "type", typ)
-				return &eventListConfig{Max: 10}
+				return &eventListConfig{Max: listMaxDefault}
 			}
 		}
 	}
@@ -1351,6 +1432,9 @@ func sortEntries(entries []listEntry) {
 }
 
 // ---------- chat (B28) ----------
+
+// chatMaxDefault is the default maximum of the chat widget (B28).
+const chatMaxDefault = 20
 
 // chatConfig is the configuration of the chat widget.
 type chatConfig struct {
@@ -1521,14 +1605,14 @@ func (s *Service) chatConfig(ctx context.Context, w settings.OverlayWidget) *cha
 	var c chatConfig
 	if err := decodeConfig(w.Config, &c); err != nil {
 		s.logger.ErrorContext(ctx, "the chat configuration is unreadable", "widget", w.ID, "error", err)
-		return &chatConfig{Max: 20}
+		return &chatConfig{Max: chatMaxDefault}
 	}
 	if c.Max < 1 {
-		c.Max = 20
+		c.Max = chatMaxDefault
 	}
 	if c.DelayMs < 0 || c.RemoveAfterMs < 0 {
 		s.logger.ErrorContext(ctx, "the chat delays must be 0 or more", "widget", w.ID)
-		return &chatConfig{Max: 20}
+		return &chatConfig{Max: chatMaxDefault}
 	}
 	return &c
 }
