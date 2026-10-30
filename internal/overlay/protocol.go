@@ -99,10 +99,10 @@ type ItemData struct {
 	Animation string `json:"animation,omitempty"`
 	// AnimationDuration is the time of the animation in milliseconds;
 	// 0 for the default of 300 (B10).
-	AnimationDuration int `json:"animationDuration,omitempty"`
+	AnimationDuration int `json:"animationDuration,omitzero"`
 	// Duration is the show time in milliseconds; 0 for until the
 	// playback ends (B11).
-	Duration int `json:"duration,omitempty"`
+	Duration int `json:"duration,omitzero"`
 	// Content is the kind-specific content as a JSON document; empty
 	// for none.
 	Content any `json:"content,omitempty"`
@@ -136,15 +136,15 @@ type TTSSpeakData struct {
 	// Seq is the sequence of the speech; the runtime echoes it in the
 	// tts.ended that ends the speech, so that the tts.ended of a
 	// canceled speech cannot end the next one (B49).
-	Seq int64 `json:"seq,omitempty"`
+	Seq int64 `json:"seq,omitzero"`
 	// Voice is the voice name; empty for the default voice.
 	Voice string `json:"voice,omitempty"`
 	// Volume is the volume from 0 to 1; 1 for full.
-	Volume float64 `json:"volume,omitempty"`
+	Volume float64 `json:"volume,omitzero"`
 	// Rate is the speaking rate; 1 for normal.
-	Rate float64 `json:"rate,omitempty"`
+	Rate float64 `json:"rate,omitzero"`
 	// Pitch is the pitch; 1 for normal.
-	Pitch float64 `json:"pitch,omitempty"`
+	Pitch float64 `json:"pitch,omitzero"`
 }
 
 // EndedData is the ID of the item whose playback the client reports

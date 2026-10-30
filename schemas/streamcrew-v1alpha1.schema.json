@@ -3151,9 +3151,7 @@
           "additionalProperties": false,
           "default": {
             "model": "simple",
-            "point": "top-left",
-            "x": 0,
-            "y": 0
+            "point": "top-left"
           }
         },
         "layer": {
@@ -3689,9 +3687,7 @@
               "additionalProperties": false,
               "default": {
                 "model": "simple",
-                "point": "top-left",
-                "x": 0,
-                "y": 0
+                "point": "top-left"
               }
             },
             "layer": {
