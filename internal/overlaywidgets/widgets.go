@@ -30,6 +30,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/emote"
+	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/overlay"
 	"github.com/ripmav/streamcrew/internal/poll"
@@ -141,6 +142,8 @@ type Ports struct {
 	// DiscordOccupants lists the current occupants of the configured
 	// Discord voice channel for the discord_voice widget (B37).
 	DiscordOccupants func(ctx context.Context) []discord.Occupant
+	// Commands starts a command by name for the goal widget (B23).
+	Commands func(ctx context.Context, name string, p engine.Params) error
 	// Logger logs the service; nil discards the output.
 	Logger *slog.Logger
 }
@@ -297,7 +300,7 @@ func New(p Ports, opts ...Option) (*Service, error) {
 		return nil, errors.New("new widget service: missing port")
 	case p.StreamStates == nil || p.SessionStats == nil || p.Locale == nil:
 		return nil, errors.New("new widget service: missing port")
-	case p.TopUsers == nil || p.Emotes == nil || p.DiscordOccupants == nil:
+	case p.TopUsers == nil || p.Emotes == nil || p.DiscordOccupants == nil || p.Commands == nil:
 		return nil, errors.New("new widget service: missing port")
 	}
 	s := &Service{
@@ -770,6 +773,9 @@ type goalConfig struct {
 	Mode GoalMode `json:"mode"`
 	// Reset is the automatic reset: daily or monthly; empty for none.
 	Reset GoalReset `json:"reset"`
+	// SegmentCompleted is the command to start when a segment completes
+	// without its own command (B23); empty for none.
+	SegmentCompleted string `json:"segment_completed"`
 }
 
 // goalSegment is one segment of the goal.
@@ -778,6 +784,9 @@ type goalSegment struct {
 	Name string `json:"name"`
 	// Amount is the amount of the segment; not negative.
 	Amount int64 `json:"amount"`
+	// Command is the command to start when the segment completes (B23);
+	// empty for the goal's segment_completed command.
+	Command string `json:"command"`
 }
 
 // goalProgress grows the visible goal widgets by the amount of the event
@@ -866,6 +875,7 @@ func (s *Service) goalStep(ctx context.Context, w settings.OverlayWidget, amount
 				User:     p.User,
 				Details:  eventtype.Details{GoalSegment: c.detail},
 			})
+			s.startGoalCommand(ctx, w, c.segment, cfg, p)
 		}
 	} else {
 		s.publish(ctx, eventtype.OverlayGoalProgress, eventtype.Payload{
@@ -914,6 +924,48 @@ func goalSegmentsCrossed(cfg *goalConfig, st *goalState) []goalSegmentCompleted 
 type goalSegmentCompleted struct {
 	segment goalSegment
 	detail  *eventtype.GoalSegment
+}
+
+// startGoalCommand starts the command of the completed segment, or the
+// goal's segment_completed command if the segment names none (B23,
+// Review 341-12g); never both. A start error is logged.
+func (s *Service) startGoalCommand(ctx context.Context, w settings.OverlayWidget, seg goalSegment, cfg *goalConfig, p eventtype.Payload) {
+	name := seg.Command
+	if name == "" {
+		name = cfg.SegmentCompleted
+	}
+	if name == "" {
+		return
+	}
+	if err := s.ports.Commands(ctx, name, engine.Params{Platform: p.Platform, Channel: p.Channel, User: p.User, Target: p.Target}); err != nil {
+		s.logger.ErrorContext(ctx, "starting the goal command failed", "widget", w.ID, "command", name, "error", err)
+	}
+}
+
+// ReferencedCommands returns the command names referenced by the widgets
+// of s (B23): the commands of the goal segments and the
+// segment_completed fallback; the settings check rejects an unknown name
+// on save (Review 341-12g).
+func ReferencedCommands(s settings.Overlay) []string {
+	var out []string
+	for _, w := range s.Widgets {
+		if w.Kind != KindGoal {
+			continue
+		}
+		var c goalConfig
+		if err := decodeConfig(w.Config, &c); err != nil {
+			continue
+		}
+		for _, seg := range c.Segments {
+			if seg.Command != "" {
+				out = append(out, seg.Command)
+			}
+		}
+		if c.SegmentCompleted != "" {
+			out = append(out, c.SegmentCompleted)
+		}
+	}
+	return out
 }
 
 // goalBoundary is the amount at which the segment of st completes (B25):

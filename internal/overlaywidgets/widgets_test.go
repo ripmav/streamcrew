@@ -31,6 +31,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/emote"
+	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/overlay"
 	"github.com/ripmav/streamcrew/internal/overlaywidgets"
@@ -89,6 +90,7 @@ type fixture struct {
 	top        []user.Ranked
 	emoteList  []emote.Emote
 	discordOcc []discord.Occupant
+	cmdNames   []string
 	logOut     *lockedWriter
 }
 
@@ -125,6 +127,7 @@ func newFixture(t *testing.T, sec settings.Overlay) *fixture {
 		TopUsers:         f.topUsers,
 		Emotes:           f.emotes,
 		DiscordOccupants: f.discordOccupants,
+		Commands:         f.commands,
 		Logger:           slog.New(slog.NewTextHandler(f.logOut, nil)),
 	}, overlaywidgets.WithLabelTick(time.Second))
 	require.NoError(t, err)
@@ -280,6 +283,22 @@ func (f *fixture) discordOccupants(context.Context) []discord.Occupant {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.discordOcc
+}
+
+// commands implements the Commands port: it records the started command
+// names (B23).
+func (f *fixture) commands(_ context.Context, name string, _ engine.Params) error {
+	f.mu.Lock()
+	f.cmdNames = append(f.cmdNames, name)
+	f.mu.Unlock()
+	return nil
+}
+
+// commandsList returns the started command names so far.
+func (f *fixture) commandsList() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.cmdNames)
 }
 
 // attach connects the fake runtime of the default endpoint and records
@@ -516,6 +535,48 @@ func TestGoalCumulativeSegmentsCoversB25(t *testing.T) {
 		assert.Equal(t, &eventtype.GoalSegment{SegmentName: "s2", Current: 20, NextSegmentName: "", NextSegmentAmount: 0, Remaining: 0}, eff[1].payload.Details.GoalSegment)
 		// The progress has crossed both segments.
 		assert.JSONEq(t, `{"current":0,"segment":2,"reset_at":"0001-01-01T00:00:00Z"}`, string(f.stateDoc(t)))
+	})
+}
+
+// TestGoalSegmentCommandsCoversB23 covers B23 and Review 341-12g: the
+// completed segment starts its own command, a segment without one starts
+// the goal's segment_completed command, never both; the
+// segment-completed event is published in both cases.
+func TestGoalSegmentCommandsCoversB23(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := map[string]any{
+			"segment_completed": "fallback",
+			"segments": []any{
+				map[string]any{"name": "s1", "amount": 100, "command": "segcmd"},
+				map[string]any{"name": "s2", "amount": 50},
+			},
+		}
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("g1", overlaywidgets.KindGoal, cfg),
+		}})
+		defer f.stop()
+		f.attach(t)
+		ada := twitchUser(t, "ada")
+
+		// s1 completes: its own command starts, not the fallback, and the
+		// segment event is published.
+		require.NoError(t, f.svc.AddToGoal(f.ctx, "g1", 100, platform.Twitch, ada))
+		synctest.Wait()
+		require.Equal(t, []string{"segcmd"}, f.commandsList())
+		eff := f.effectsList()
+		require.Len(t, eff, 1)
+		assert.Equal(t, eventtype.OverlayGoalSegmentCompleted, eff[0].typ)
+		assert.Equal(t, ada, eff[0].payload.User)
+
+		// s2 completes: without its own command, the fallback starts, and
+		// the segment event is published again.
+		require.NoError(t, f.svc.AddToGoal(f.ctx, "g1", 50, platform.Twitch, ada))
+		synctest.Wait()
+		require.Equal(t, []string{"segcmd", "fallback"}, f.commandsList())
+		eff = f.effectsList()
+		require.Len(t, eff, 2)
+		assert.Equal(t, eventtype.OverlayGoalSegmentCompleted, eff[1].typ)
 	})
 }
 

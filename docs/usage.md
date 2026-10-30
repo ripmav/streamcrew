@@ -347,8 +347,11 @@ gibt die fünf Kinds `label`, `goal`, `timer`, `event_list` und `chat`:
   Bits wachsen das Ziel; der Stand bleibt im Profil erhalten. Ohne
   erreichtes Segment veröffentlicht der Core `overlay.goal.progress`,
   bei einem erreichten Segment `overlay.goal.segment_completed` —
-  beides als Bus-Ereignis, auf das Ereignis-Commands reagieren. Negativ
-  addierte Beträge klemmen den Fortschritt bei null.
+  beides als Bus-Ereignis, auf das Ereignis-Commands reagieren. Ein
+  erreichtetes Segment startet seinen Command (`command` im Segment),
+  sonst den Command `segment_completed` des Ziels, nie beide; ein
+  unbekannter Command-Name ist ein Fehler beim Speichern der Sektion.
+  Negativ addierte Beträge klemmen den Fortschritt bei null.
 - `timer` zählt eine Dauer (Format wie bei den Timer-Items) runter oder
   hoch; die Aktionen `add_to_timer` (negativ erlaubt) und
   `pause_timer` (pausiert bzw. setzt fort; ohne laufenden State startet
