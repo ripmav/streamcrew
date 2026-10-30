@@ -23,7 +23,7 @@ const mediaRoot = "media"
 func (s *Server) serveMedia(w http.ResponseWriter, r *http.Request) {
 	// The token check comes before everything else: an unauthenticated
 	// request gets 401, whatever the core may serve (B5).
-	if !s.authorized(r) {
+	if _, ok := s.authorized(r); !ok {
 		s.refuse(r.Context(), w, r)
 		return
 	}

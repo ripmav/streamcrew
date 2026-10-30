@@ -226,10 +226,9 @@ Sonst könnte ein Admin-Token Log-Zeilen in beliebige Dateien schreiben
 lassen.
 
 **Restart:** `data-dir`, `profile`, `config` (offene Dateien und
-Datenbanken des laufenden Prozesses), `overlay-listen`, `overlay-token`
-(Overlay-Server, s. u.), `audio-sink`, `tts-provider`, `tts-piper-model`
-(Sound und TTS, s. u.), `obs-host`, `obs-port`, `obs-password`
-(OBS-Verbindung, s. u.).
+Datenbanken des laufenden Prozesses), `overlay-listen` (Overlay-Server,
+s. u.), `audio-sink`, `tts-provider`, `tts-piper-model` (Sound und TTS,
+s. u.), `obs-host`, `obs-port`, `obs-password` (OBS-Verbindung, s. u.).
 
 **Beispiele:**
 
@@ -273,20 +272,30 @@ die Änderung gilt erst nach einem **Neustart**, und die Browserquellen
 müssen nach einem Portwechsel neu geladen werden. Ein Unix-Socket ist
 keine Option (`--overlay-listen` lehnt es ab).
 
-**Token:** Leer gelassen sind die Endpunkte offen — nur korrekt für
-`127.0.0.1`. Wird der Server auf ein anderes Interface gebunden,
-sollte `--overlay-token` (bzw. `overlay_token`, oder die
-Umgebungsvariable `STREAMCREW_OVERLAY_TOKEN`) einen Wert tragen; dann
-verlangen Seite, WebSocket und Medien-URLs den gleichen Wert als
-Query-Parameter:
+**Token:** Die Endpunkte nutzen die API-Tokens des Profils (ADR-0013
+§5, ADR-0019 §1). Für OBS legst du einen Token mit dem Scope
+`overlay` an:
+
+```
+streamcrew token create overlay --scope overlay
+```
+
+Seite, WebSocket und Medien-URLs verlangen ihn als Query-Parameter:
 
 ```
 http://127.0.0.1:8742/overlay/default?token=<wert>
 ```
 
-Der Token ist ein Credential: er steht nicht in der Ausgabe von
-`streamcrew config show` und nicht in den Logs. Auch er gilt erst nach
-einem **Neustart**.
+Der Scope `overlay` öffnet nur den Overlay-Server — nie die API
+(sonst 403). Nur ein Token, das den Scope `overlay` trägt, öffnet die
+Endpunkte; ein Token mit nur `read` oder `admin` nicht, damit kein
+starker Token in einer OBS-URL landen muss. Ohne Token sind die
+Endpunkte nur im Desktop- und Daemon-Modus bei reinem Loopback-Bind
+erreichbar; im Server-Modus, bei einem ungültigen oder widerrufenen
+Token antworten sie mit 401. Ein Widerruf wirkt sofort: offene
+WebSocket-Verbindungen eines widerrufenen Tokens werden beim nächsten
+Senden geschlossen. Der Token-Wert wird nur einmal angezeigt, steht
+nicht in `config show` und nicht in den Logs.
 
 **Medien:** Dateien aus `<data-dir>/profiles/<profil-id>/media/`
 dient der Server unter `http://127.0.0.1:8742/media/media/<datei>` aus,

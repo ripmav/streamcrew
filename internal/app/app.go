@@ -698,12 +698,6 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if a.tts, err = a.newTTS(cfg, component(logger, "tts")); err != nil {
 		return a, err
 	}
-	if cfg.OverlayPublicInsecure() {
-		logger.WarnContext(ctx, "the overlay listens on a public address without a token",
-			"listen", cfg.OverlayListen,
-			"hint", "set --overlay-token, or put a reverse proxy in front")
-	}
-
 	err = errors.Join(
 		a.sup.Add("auth", a.auth),
 		a.sup.Add("backup", scheduler),
