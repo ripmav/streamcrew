@@ -274,6 +274,44 @@ func TestOverlayWithoutATokenNeedsDaemonModeOnLoopback(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
+// TestOverlayWithoutATokenChecksTheHostHeader covers the
+// DNS-rebinding protection (B5, Review 341-7): without a token the Host
+// header must name a loopback address, a foreign name answers 401; with
+// a valid overlay token the check does not apply.
+func TestOverlayWithoutATokenChecksTheHostHeader(t *testing.T) {
+	tokens := newFakeTokens(map[string][]apitoken.Scope{"ov": {apitoken.Overlay}})
+	srv, _ := testServer(t, settings.Overlay{}, tokens.check, "", capability.Set{})
+	addr, _ := srv.Addr()
+	port, _, err := net.SplitHostPort(addr.String())
+	require.NoError(t, err)
+
+	getHost := func(host, query string) int {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+			"http://"+addr.String()+"/overlay/default"+query, nil)
+		require.NoError(t, err)
+		req.Host = host
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	for _, tc := range []struct {
+		host  string
+		query string
+		want  int
+	}{
+		{addr.String(), "", http.StatusOK},
+		{"localhost:" + port, "", http.StatusOK},
+		{"[::1]:" + port, "", http.StatusOK},
+		{"evil.example:" + port, "", http.StatusUnauthorized},
+		{"obs-pc.lan:" + port, "?token=ov", http.StatusOK},
+		{"obs-pc.lan:" + port, "?token=nope", http.StatusUnauthorized},
+	} {
+		assert.Equal(t, tc.want, getHost(tc.host, tc.query), "Host "+tc.host+tc.query)
+	}
+}
+
 // TestOverlayRevokedTokenClosesTheWebSocket covers B5: a revocation
 // closes the open WebSocket on the next send.
 func TestOverlayRevokedTokenClosesTheWebSocket(t *testing.T) {

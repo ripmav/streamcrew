@@ -291,8 +291,11 @@ Der Scope `overlay` öffnet nur den Overlay-Server — nie die API
 Endpunkte; ein Token mit nur `read` oder `admin` nicht, damit kein
 starker Token in einer OBS-URL landen muss. Ohne Token sind die
 Endpunkte nur im Desktop- und Daemon-Modus bei reinem Loopback-Bind
-erreichbar; im Server-Modus, bei einem ungültigen oder widerrufenen
-Token antworten sie mit 401. Ein Widerruf wirkt sofort: offene
+und einem `Host`-Header, der einen Loopback-Namen nennt, erreichbar —
+eine fremde Website, deren Name auf `127.0.0.1` zeigt (DNS-Rebinding),
+behält ihren eigenen `Host` und bekommt 401. Im Server-Modus, bei
+einem ungültigen oder widerrufenen Token antworten die Endpunkte
+ebenfalls mit 401. Ein Widerruf wirkt sofort: offene
 WebSocket-Verbindungen eines widerrufenen Tokens werden beim nächsten
 Senden geschlossen. Der Token-Wert wird nur einmal angezeigt, steht
 nicht in `config show` und nicht in den Logs.

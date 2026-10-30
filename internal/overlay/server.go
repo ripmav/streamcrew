@@ -177,6 +177,23 @@ func (s *Server) buildMux() *http.ServeMux {
 	return mux
 }
 
+// loopbackHost reports whether the host names a loopback address:
+// localhost or a loopback IP such as 127.0.0.1 or [::1], with any port.
+// Against the Host header, not the destination, it stops DNS-rebinding:
+// a foreign site whose name resolves to 127.0.0.1 keeps its own Host
+// header in the browser (B5, Review 341-7).
+func loopbackHost(host string) bool {
+	h, _, err := net.SplitHostPort(host)
+	if err != nil {
+		h = host
+	}
+	if h == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
+
 // loopbackListen reports whether the listen address binds a loopback
 // host; an unparseable address fails closed (B5).
 func loopbackListen(addr string) bool {
@@ -184,26 +201,23 @@ func loopbackListen(addr string) bool {
 	if err != nil {
 		return false
 	}
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	return loopbackHost(host)
 }
 
 // authorized checks the access to the endpoints (B5): a token in the
 // query parameter must be a stored token with the overlay scope,
 // otherwise the endpoints answer 401, an invalid or revoked token as
 // well. Without a token the access is only allowed in desktop and
-// daemon mode with a loopback listen address. It returns the raw token
-// value, so the server can re-check it against a revocation on every
-// send of an open WebSocket.
+// daemon mode with a loopback listen address and a Host header that
+// names a loopback address. It returns the raw token value, so the
+// server can re-check it against a revocation on every send of an open
+// WebSocket.
 func (s *Server) authorized(r *http.Request) (token string, ok bool) {
 	token = r.URL.Query().Get("token")
 	if token != "" {
 		return token, s.cfg.TokenCheck != nil && s.cfg.TokenCheck(r.Context(), token)
 	}
-	return "", s.local
+	return "", s.local && loopbackHost(r.Host)
 }
 
 // refuse answers 401 and logs a warning with the address, without the
