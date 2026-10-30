@@ -333,8 +333,15 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close(websocket.StatusInternalError, err.Error())
 		return
 	}
-	go s.writeLoop(ctx, conn, out)
+	// The writer runs in its own goroutine; when the readLoop ends with
+	// the connection, the derived context ends with it, so the writer
+	// and its queue do not linger until the shutdown (Review 342-14).
+	writeCtx, cancelWrite := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Go(func() { s.writeLoop(writeCtx, conn, out) })
 	s.readLoop(ctx, conn, id, slot)
+	cancelWrite()
+	wg.Wait()
 }
 
 // writeLoop drains the send queue onto the connection until the context

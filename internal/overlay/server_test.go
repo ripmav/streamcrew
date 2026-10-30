@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sync"
 	"testing"
@@ -432,6 +433,30 @@ func TestItemShowAndRemoveOverTheWire(t *testing.T) {
 	var rm overlay.RemoveData
 	require.NoError(t, jsonV2Unmarshal(data, &rm))
 	assert.Equal(t, id, rm.ID)
+}
+
+// TestWriteLoopEndsWithTheConnection covers Review 342-14: the writer
+// goroutine of a connection ends when the connection ends — the
+// serveWS handler waits for it via wg, and the derived context is
+// canceled when the readLoop ends, so no writer lingers for the
+// lifetime of the server. The tight loop samples the goroutine count
+// until it returns to the baseline.
+func TestWriteLoopEndsWithTheConnection(t *testing.T) {
+	srv, _ := testServer(t, settings.Overlay{}, nil, "", capability.Set{})
+	time.Sleep(100 * time.Millisecond) // let the server's goroutines settle
+	baseline := runtime.NumGoroutine()
+	c := dial(t, srv)
+	readMsg(t, c) // the hello proves the connection is attached
+	require.NoError(t, c.Close(websocket.StatusNormalClosure, ""))
+	settled := false
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if runtime.NumGoroutine() <= baseline {
+			settled = true
+			break
+		}
+	}
+	require.True(t, settled, "the writer of the disconnected connection must end with it")
 }
 
 // TestItemEndedOverTheWire covers B14: the item.ended of the runtime
