@@ -17,7 +17,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/ripmav/streamcrew/internal/action"
@@ -905,16 +907,17 @@ func (t Overlay) emoteEffectContent(ctx context.Context, run *engine.Run, c *ite
 
 // clipContent is the content of the item kind clip (B13, B15, B16): the
 // URL as given, or the latest clip of the user, with the duration of the
-// clip of a user clip.
+// clip of a user clip. Only Twitch clip pages reach the runtime (Review
+// 344-6s).
 func (t Overlay) clipContent(ctx context.Context, run *engine.Run, c *itemContent) (any, string, time.Duration, error) {
-	data := map[string]any{}
+	var url string
 	var duration time.Duration
 	if c.URL != "" {
-		url, err := t.ports.Templates.Render(ctx, action.Template(c.URL).Parse(), run.Scope(), template.Text)
+		var err error
+		url, err = t.ports.Templates.Render(ctx, action.Template(c.URL).Parse(), run.Scope(), template.Text)
 		if err != nil {
 			return nil, "", 0, err
 		}
-		data["url"] = url
 	} else {
 		login, err := t.ports.Templates.Render(ctx, action.Template(c.User).Parse(), run.Scope(), template.Text)
 		if err != nil {
@@ -924,15 +927,40 @@ func (t Overlay) clipContent(ctx context.Context, run *engine.Run, c *itemConten
 		if err != nil {
 			return nil, "", 0, err
 		}
-		data["url"] = clip.URL
+		url = clip.URL
 		// B16, minimal: the duration of the clip lands in the content; a
 		// bus event detail follows with the clip interop.
 		if clip.Duration > 0 {
 			duration = clip.Duration
-			data["duration"] = int(clip.Duration.Seconds())
 		}
 	}
+	if !validClipURL(url) {
+		return nil, "", 0, fmt.Errorf("%w: the clip URL %q is not a Twitch clip page", action.ErrInvalid, url)
+	}
+	data := map[string]any{"url": url}
+	if duration > 0 {
+		data["duration"] = int(duration.Seconds())
+	}
 	return data, "clip", duration, nil
+}
+
+// validClipURL reports whether raw is a Twitch clip page (Review
+// 344-6s): https://clips.twitch.tv/<slug> or
+// https://www.twitch.tv/<kanal>/clip/<slug>. The URL can come from a
+// template and so from the chat; only clip pages may reach the runtime.
+func validClipURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return false
+	}
+	switch u.Host {
+	case "clips.twitch.tv":
+		return u.Path != "" && u.Path != "/"
+	case "www.twitch.tv":
+		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+		return len(parts) == 3 && parts[1] == "clip" && parts[0] != "" && parts[2] != ""
+	}
+	return false
 }
 
 // widget runs the operation of the kind widget (B21 to B28, B38).

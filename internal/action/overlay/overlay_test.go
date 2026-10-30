@@ -552,6 +552,53 @@ func TestOverlayClipItem(t *testing.T) {
 	})
 }
 
+// TestOverlayClipItemRejectsForeignURLs covers Review 344-6s: a clip
+// URL that is not a Twitch clip page is a clear error of the action, so
+// a template rendered from the chat cannot reach the runtime.
+func TestOverlayClipItemRejectsForeignURLs(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		url  string
+		ok   bool
+	}{
+		{name: "javascript scheme", url: "javascript:alert(1)"},
+		{name: "foreign host", url: "https://evil.example"},
+		{name: "http clip page", url: "http://clips.twitch.tv/Foo-Bar_9"},
+		{name: "lookalike host", url: "https://clips.twitch.tv.evil.example/Foo"},
+		{name: "clips page without slug", url: "https://clips.twitch.tv/"},
+		{name: "channel page without clip", url: "https://www.twitch.tv/kanal"},
+		{name: "clip page without slug", url: "https://www.twitch.tv/kanal/clip"},
+		{name: "clips page", url: "https://clips.twitch.tv/Foo-Bar_9", ok: true},
+		{name: "www clip page", url: "https://www.twitch.tv/kanal/clip/Foo-Bar_9", ok: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				f := newFixture(t)
+				cmd := f.h.Command("clip",
+					f.ov(t, overlayaction.KindItem, func(a *overlayaction.Overlay) {
+						a.Item.Content = map[string]any{"kind": "clip", "url": tc.url}
+					}),
+				)
+				// The error policy aborts, so the failure of the action
+				// ends the instance (B71).
+				cmd.ErrorPolicy = command.ErrorAbort
+				f.h.Put(cmd)
+				in := f.h.Start(cmd, engine.Params{})
+				if tc.ok {
+					assert.Equal(t, engine.StateRunning, in.State)
+					require.NoError(t, f.h.Engine().Cancel(t.Context(), in.ID))
+					synctest.Wait()
+				} else {
+					assert.Equal(t, engine.StateFailed, in.State)
+				}
+			})
+		})
+	}
+}
+
 // TestOverlayItemWithoutADurationFallsAfterTheDefault covers B11 and
 // Review 344-5: an item without a duration shows for the default of
 // 10 s, a clip by user for the duration of the clip, and audio and video
