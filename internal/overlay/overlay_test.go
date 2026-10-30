@@ -6,6 +6,7 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -441,4 +442,52 @@ func TestSyncStateDoesNotHoldTheLockDuringTheProvider(t *testing.T) {
 	}
 	close(release)
 	<-done
+}
+
+// TestAttachDoesNotLoseBroadcastsDuringTheHandshake covers Review
+// 342-13: the slot is registered before the handshake is sent, under
+// the same lock hold, so an item shown while the handshake is still in
+// flight reaches the runtime.
+func TestAttachDoesNotLoseBroadcastsDuringTheHandshake(t *testing.T) {
+	svc := testService(t, settings.Overlay{})
+	gate := make(chan struct{})
+	started := make(chan struct{})
+	var once sync.Once
+	var sends atomic.Int32
+	rec := &recorder{}
+	send := func(msg overlay.Message) {
+		sends.Add(1)
+		once.Do(func() { close(started) })
+		<-gate
+		rec.mu.Lock()
+		rec.list = append(rec.list, msg)
+		rec.mu.Unlock()
+	}
+	attachDone := make(chan struct{})
+	go func() {
+		defer close(attachDone)
+		_, _ = svc.Attach(context.Background(), settings.DefaultEndpointID, send)
+	}()
+	<-started // the handshake send has started
+	go func() {
+		_, _, _ = svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
+			Kind:     "text",
+			Position: settings.Position{Model: settings.PositionSimple, Point: "top"},
+		})
+	}()
+	// The first send is the handshake's hello, which holds the gate;
+	// the second send is the broadcast of the item, which only reaches
+	// this client if the slot was registered before the snapshot.
+	require.Eventually(t, func() bool { return sends.Load() >= 2 }, 2*time.Second, 10*time.Millisecond,
+		"the broadcast of the item shown during the handshake never reached the runtime")
+	close(gate)
+	<-attachDone
+	require.Eventually(t, func() bool {
+		for _, m := range rec.all() {
+			if m.Type == overlay.TypeItemShow {
+				return true
+			}
+		}
+		return false
+	}, 2*time.Second, 10*time.Millisecond, "the runtime must receive the item.show")
 }

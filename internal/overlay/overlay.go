@@ -510,22 +510,31 @@ func (s *Service) WidgetStates(ctx context.Context, endpoint string) []WidgetSta
 }
 
 // Attach registers a connected runtime of the endpoint and sends it the
-// handshake: hello, state.widgets and the active items (B4, B7). send
+// handshake: hello, state.widgets and the active items (B4, B7). The
+// slot is registered before the snapshot, under the same lock hold, so
+// a broadcast in between reaches the runtime (Review 342-13). send
 // delivers the messages to the runtime, called by the service for every
 // broadcast and the handshake. It returns the slot; the server detaches
 // it again with Detach when the connection ends.
 func (s *Service) Attach(ctx context.Context, endpoint string, send func(msg Message)) (ClientSlot, error) {
-	if err := s.SyncState(ctx, endpoint, send); err != nil {
-		return ClientSlot{}, err
-	}
-	slot := ClientSlot{ID: fmt.Sprintf("slot-%d", s.nextSlot.Add(1)), Send: send}
 	s.mu.Lock()
+	e, ok := s.endpoints[endpoint]
+	if !ok {
+		s.mu.Unlock()
+		return ClientSlot{}, fmt.Errorf("overlay: the endpoint %q is unknown", endpoint)
+	}
 	if s.clients[endpoint] == nil {
 		s.clients[endpoint] = map[string]ClientSlot{}
 	}
+	slot := ClientSlot{ID: fmt.Sprintf("slot-%d", s.nextSlot.Add(1)), Send: send}
 	s.clients[endpoint][slot.ID] = slot
+	hello, widgets, items, provider := s.snapshot(e)
 	s.mu.Unlock()
+	states := s.syncStates(ctx, provider, widgets)
 	s.logger.InfoContext(ctx, "overlay client attached", "endpoint", endpoint, "slot", slot.ID)
+	for _, msg := range s.handshake(hello, states, items) {
+		send(msg)
+	}
 	return slot, nil
 }
 
@@ -535,21 +544,28 @@ func (s *Service) Attach(ctx context.Context, endpoint string, send func(msg Mes
 // caught (B4, B7). The widget states are computed outside the service
 // lock, because the state provider does DB I/O (Review 344-12).
 func (s *Service) SyncState(ctx context.Context, endpoint string, send func(msg Message)) error {
-	e, ok := s.Endpoint(endpoint)
+	s.mu.Lock()
+	e, ok := s.endpoints[endpoint]
 	if !ok {
+		s.mu.Unlock()
 		return fmt.Errorf("overlay: the endpoint %q is unknown", endpoint)
 	}
-	s.mu.Lock()
-	hello := HelloData{Version: s.version, Endpoint: e.ID, Name: e.Name, Time: time.Now()}
-	widgets := s.visibleWidgets(endpoint)
-	items := s.activeItems(endpoint)
-	provider := s.stateProvider
+	hello, widgets, items, provider := s.snapshot(e)
 	s.mu.Unlock()
 	states := s.syncStates(ctx, provider, widgets)
 	for _, msg := range s.handshake(hello, states, items) {
 		send(msg)
 	}
 	return nil
+}
+
+// snapshot is the state of the endpoint for the state sync (B4),
+// collected under one lock hold; the caller holds mu. The widget states
+// are computed outside the lock with syncStates, because the provider
+// does DB I/O (Review 344-12).
+func (s *Service) snapshot(e settings.OverlayEndpoint) (HelloData, []settings.OverlayWidget, []ItemData, func(ctx context.Context, w settings.OverlayWidget) any) {
+	hello := HelloData{Version: s.version, Endpoint: e.ID, Name: e.Name, Time: time.Now()}
+	return hello, s.visibleWidgets(e.ID), s.activeItems(e.ID), s.stateProvider
 }
 
 // handshake builds the messages of a (re)connect in the order of B4.
