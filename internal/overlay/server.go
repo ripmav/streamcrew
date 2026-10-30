@@ -7,6 +7,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"html"
 	"log/slog"
 	"net"
 	"net/http"
@@ -248,8 +249,17 @@ OVERLAY_BUNDLE
 `
 
 // servePage serves the runtime of the named endpoint (B2, B3): the
-// embedded HTML with the endpoint ID and name injected. An unknown
-// endpoint answers 404 (B2).
+// embedded HTML with the endpoint ID and name injected, escaped for
+// the title and the inline script (Review 342-7). An unknown endpoint
+// answers 404 (B2).
+// scriptJSON returns the JSON of v with < escaped, so that it can be
+// inlined in a <script> block without breaking out of it (Review
+// 342-7); a string never fails to marshal.
+func scriptJSON(v any) string {
+	data, _ := json.Marshal(v)
+	return strings.ReplaceAll(string(data), "<", `\u003c`)
+}
+
 func (s *Server) servePage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	e, ok := s.cfg.Service.Endpoint(id)
@@ -261,9 +271,12 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request) {
 		s.refuse(r.Context(), w, r)
 		return
 	}
-	config := fmt.Sprintf(`{"id":%q,"name":%q}`, e.ID, e.Name)
+	// The ID and name come from the section and the URL; the title is
+	// HTML-escaped and the config JSON-escaped, so the name cannot
+	// break out of either (Review 342-7).
+	config := fmt.Sprintf(`{"id":%s,"name":%s}`, scriptJSON(e.ID), scriptJSON(e.Name))
 	page := strings.NewReplacer(
-		"OVERLAY_TITLE", e.Name,
+		"OVERLAY_TITLE", html.EscapeString(e.Name),
 		"OVERLAY_CONFIG", config,
 		"OVERLAY_BUNDLE", web.Bundle,
 	).Replace(indexHTML)

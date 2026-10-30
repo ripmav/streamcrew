@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -166,6 +167,27 @@ func (f *fakeTokens) revoke(value string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	delete(f.tokens, value)
+}
+
+// TestOverlayPageEscapesTheEndpointName covers Review 342-7: the
+// endpoint name goes into the title HTML-escaped and into the inline
+// script JSON-escaped, so it cannot break out of either.
+func TestOverlayPageEscapesTheEndpointName(t *testing.T) {
+	const name = `O'Brien <script>alert("x")</script> & "quotes"`
+	srv, _ := testServer(t, settings.Overlay{
+		Endpoints: []settings.OverlayEndpoint{{ID: "weird", Name: name}},
+	}, nil, "", capability.Set{})
+
+	resp := get(t, base(t, srv)+"/overlay/weird")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	s := string(body)
+	assert.NotContains(t, s, "<script>alert", "the name must not open a script")
+	assert.Contains(t, s, html.EscapeString(name), "the title is HTML-escaped")
+	assert.Contains(t, s, `\u003cscript>`, "the inline JSON escapes <")
+	assert.Contains(t, s, `\u003c/script>`, "the inline JSON closes the escaped tag")
 }
 
 // TestOverlayTokenScopeOpensTheEndpoints covers B5 and B48: the page,
