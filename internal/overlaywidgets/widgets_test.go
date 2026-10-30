@@ -479,6 +479,41 @@ func TestGoalCumulativeSegmentsCoversB25(t *testing.T) {
 	})
 }
 
+// TestGoalConcurrentAccessCoversB25 covers B20, B25 and Review 344-8: the
+// bus goroutine and the actions share the goal state; 100 parallel
+// AddToGoal calls plus events grow the goal by exactly their sum.
+func TestGoalConcurrentAccessCoversB25(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := map[string]any{"segments": []any{
+			map[string]any{"name": "s1", "amount": 1000},
+		}}
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("g1", overlaywidgets.KindGoal, cfg),
+		}})
+		defer f.stop()
+		f.attach(t)
+		ada := twitchUser(t, "ada")
+		w := widget("g1", overlaywidgets.KindGoal, cfg)
+
+		var wg sync.WaitGroup
+		for range 100 {
+			wg.Go(func() {
+				if err := f.svc.AddToGoal(f.ctx, "g1", 1, platform.Twitch, ada); err != nil {
+					t.Errorf("AddToGoal: %v", err)
+				}
+				f.publish(t, eventtype.ChannelFollow, ada, eventtype.Details{})
+				f.svc.StateForGoal(f.ctx, w)
+			})
+		}
+		wg.Wait()
+		synctest.Wait() // the bus goroutine processed every event
+
+		// 100 operations plus 100 events: exactly 200 (Review 344-8).
+		assert.JSONEq(t, `{"current":200,"segment":0,"reset_at":"0001-01-01T00:00:00Z"}`, string(f.stateDoc(t)))
+	})
+}
+
 // TestWidgetGoalReset covers B25: the automatic daily reset runs before
 // the step, in the time zone of the profile.
 func TestWidgetGoalReset(t *testing.T) {

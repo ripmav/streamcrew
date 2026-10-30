@@ -797,24 +797,42 @@ func goalAmount(t event.Type, p eventtype.Payload) (int64, bool) {
 
 // goalStep adds amount to the goal of w, publishes the effects and pushes
 // the new state. The step is one of the event effects (B25, B50).
+//
+// Review 344-8: the load, the change and the save run under the lock, and
+// the push takes its snapshot under the lock, as the bus goroutine and
+// the actions share the state.
 func (s *Service) goalStep(ctx context.Context, w settings.OverlayWidget, amount int64, p eventtype.Payload) {
 	cfg := s.goalConfig(ctx, w)
 	if cfg == nil {
 		return
 	}
-	st, err := s.goalLoad(ctx, w.ID)
+	s.mu.Lock()
+	st, err := s.goalLoadLocked(ctx, w.ID)
+	var completed []goalSegmentCompleted
+	var state map[string]any
+	prog := &eventtype.GoalProgress{Amount: amount}
+	if err == nil {
+		if s.goalResetDue(ctx, w, cfg, st) {
+			st.current, st.segment, st.resetAt = 0, 0, time.Now()
+		}
+		st.current += amount
+		if st.current < 0 {
+			st.current = 0 // B50: clamped to zero
+		}
+		completed = goalSegmentsCrossed(cfg, st)
+		s.goalSave(ctx, w.ID, st)
+		state = s.goalStateFor(cfg, st)
+		if len(completed) == 0 {
+			prog.Total = goalTotal(cfg, st)
+			prog.Current = goalReached(cfg, st)
+			prog.SegmentName = goalSegmentName(cfg, st)
+			prog.SegmentAmount = goalSegmentAmount(cfg, st)
+		}
+	}
+	s.mu.Unlock()
 	if err != nil {
 		return
 	}
-	if s.goalResetDue(ctx, w, cfg, st) {
-		st.current, st.segment, st.resetAt = 0, 0, time.Now()
-	}
-	st.current += amount
-	if st.current < 0 {
-		st.current = 0 // B50: clamped to zero
-	}
-	completed := s.goalSegmentsCrossed(cfg, st)
-	s.goalSave(ctx, w.ID, st)
 	if len(completed) > 0 {
 		for _, c := range completed {
 			s.publish(ctx, eventtype.OverlayGoalSegmentCompleted, eventtype.Payload{
@@ -827,22 +845,16 @@ func (s *Service) goalStep(ctx context.Context, w settings.OverlayWidget, amount
 		s.publish(ctx, eventtype.OverlayGoalProgress, eventtype.Payload{
 			Platform: p.Platform,
 			User:     p.User,
-			Details: eventtype.Details{GoalProgress: &eventtype.GoalProgress{
-				Total:         goalTotal(cfg, st),
-				Current:       goalReached(cfg, st),
-				Amount:        amount,
-				SegmentName:   goalSegmentName(cfg, st),
-				SegmentAmount: goalSegmentAmount(cfg, st),
-			}},
+			Details:  eventtype.Details{GoalProgress: prog},
 		})
 	}
-	s.push(ctx, w, s.goalStateFor(cfg, st))
+	s.push(ctx, w, state)
 }
 
 // goalSegmentsCrossed advances st over the segments its amount reached, in
 // the ascending direction only (B25, B50), and returns them with their
-// event details.
-func (s *Service) goalSegmentsCrossed(cfg *goalConfig, st *goalState) []goalSegmentCompleted {
+// event details; it is called under the lock.
+func goalSegmentsCrossed(cfg *goalConfig, st *goalState) []goalSegmentCompleted {
 	var out []goalSegmentCompleted
 	for st.segment < len(cfg.Segments) {
 		boundary := goalBoundary(st, cfg.Segments)
@@ -989,28 +1001,30 @@ func (s *Service) goalReset(ctx context.Context) {
 		if cfg == nil || cfg.Reset == "" {
 			continue
 		}
-		st, err := s.goalLoad(ctx, w.ID)
-		if err != nil {
+		s.mu.Lock()
+		st, err := s.goalLoadLocked(ctx, w.ID)
+		var state map[string]any
+		ran := false
+		if err == nil && s.goalResetDue(ctx, w, cfg, st) {
+			st.current, st.segment, st.resetAt = 0, 0, time.Now()
+			s.goalSave(ctx, w.ID, st)
+			state = s.goalStateFor(cfg, st)
+			ran = true
+		}
+		s.mu.Unlock()
+		if err != nil || !ran {
 			continue
 		}
-		if !s.goalResetDue(ctx, w, cfg, st) {
-			continue
-		}
-		st.current, st.segment, st.resetAt = 0, 0, time.Now()
-		s.goalSave(ctx, w.ID, st)
-		s.push(ctx, w, s.goalStateFor(cfg, st))
+		s.push(ctx, w, state)
 	}
 }
 
-// goalLoad returns the running state of the goal, loaded from the profile
-// on first use (B20).
-func (s *Service) goalLoad(ctx context.Context, widgetID string) (*goalState, error) {
-	s.mu.Lock()
+// goalLoadLocked returns the running state of the goal, loaded from the
+// profile on first use (B20); s.mu is held (Review 344-8).
+func (s *Service) goalLoadLocked(ctx context.Context, widgetID string) (*goalState, error) {
 	if st, ok := s.goals[widgetID]; ok {
-		s.mu.Unlock()
 		return st, nil
 	}
-	s.mu.Unlock()
 	doc, found, err := s.ports.State.OverlayWidgetState(ctx, widgetID)
 	if err != nil {
 		return nil, err
@@ -1024,13 +1038,12 @@ func (s *Service) goalLoad(ctx context.Context, widgetID string) (*goalState, er
 			st.current, st.segment, st.resetAt = docGoal.Current, docGoal.Segment, docGoal.ResetAt
 		}
 	}
-	s.mu.Lock()
 	s.goals[widgetID] = st
-	s.mu.Unlock()
 	return st, nil
 }
 
-// goalSave stores the state of the goal in the profile (B20).
+// goalSave stores the state of the goal in the profile (B20); it is called
+// under the lock (Review 344-8).
 func (s *Service) goalSave(ctx context.Context, widgetID string, st *goalState) {
 	doc, err := json.Marshal(goalDoc{Current: st.current, Segment: st.segment, ResetAt: st.resetAt})
 	if err != nil {
@@ -1102,17 +1115,24 @@ func (s *Service) AddToGoal(ctx context.Context, widgetID string, amount int64, 
 	return nil
 }
 
-// StateForGoal returns the goal state for the state sync (B4, B20).
+// StateForGoal returns the goal state for the state sync (B4, B20); the
+// snapshot is taken under the lock (Review 344-8).
 func (s *Service) StateForGoal(ctx context.Context, w settings.OverlayWidget) any {
 	cfg := s.goalConfig(ctx, w)
 	if cfg == nil {
 		return nil
 	}
-	st, err := s.goalLoad(ctx, w.ID)
+	s.mu.Lock()
+	st, err := s.goalLoadLocked(ctx, w.ID)
+	var state any
+	if err == nil {
+		state = s.goalStateFor(cfg, st)
+	}
+	s.mu.Unlock()
 	if err != nil {
 		return nil
 	}
-	return s.goalStateFor(cfg, st)
+	return state
 }
 
 // ---------- timer (B26) ----------
@@ -1157,7 +1177,7 @@ func (s *Service) startTimers(ctx context.Context) {
 			continue
 		}
 		s.mu.Unlock()
-		s.pushTimer(ctx, w, cfg, st)
+		s.pushTimer(ctx, w, cfg)
 	}
 }
 
@@ -1182,7 +1202,7 @@ func (s *Service) UpdateTimer(ctx context.Context, widgetID string, d time.Durat
 	s.mu.Lock()
 	s.timers[widgetID] = st
 	s.mu.Unlock()
-	s.pushTimer(ctx, w, cfg, st)
+	s.pushTimer(ctx, w, cfg)
 	return nil
 }
 
@@ -1209,7 +1229,7 @@ func (s *Service) AddToTimer(ctx context.Context, widgetID string, d time.Durati
 		st.deadline = st.deadline.Add(d)
 	}
 	s.mu.Unlock()
-	s.pushTimer(ctx, w, cfg, st)
+	s.pushTimer(ctx, w, cfg)
 	return nil
 }
 
@@ -1235,18 +1255,23 @@ func (s *Service) PauseTimer(ctx context.Context, widgetID string) error {
 		st.paused = true
 	}
 	s.mu.Unlock()
-	s.pushTimer(ctx, w, cfg, st)
+	s.pushTimer(ctx, w, cfg)
 	return nil
 }
 
 // pushTimer pushes the state of the timer widget (B26); the runtime
-// renders it per second from the server time of hello.
-func (s *Service) pushTimer(ctx context.Context, w settings.OverlayWidget, cfg *timerConfig, st *timerState) {
-	s.push(ctx, w, s.timerStateFor(cfg, st))
+// renders it per second from the server time of hello. The snapshot is
+// taken under the lock (Review 344-8); the state of w must exist.
+func (s *Service) pushTimer(ctx context.Context, w settings.OverlayWidget, cfg *timerConfig) {
+	s.mu.Lock()
+	state := timerStateFor(cfg, s.timers[w.ID])
+	s.mu.Unlock()
+	s.push(ctx, w, state)
 }
 
-// timerStateFor is the runtime state of the timer widget.
-func (s *Service) timerStateFor(cfg *timerConfig, st *timerState) map[string]any {
+// timerStateFor is the runtime state of the timer widget; st must not be
+// nil.
+func timerStateFor(cfg *timerConfig, st *timerState) map[string]any {
 	return map[string]any{
 		"deadline": st.deadline.UnixMilli(),
 		"paused":   st.paused,
@@ -1255,16 +1280,18 @@ func (s *Service) timerStateFor(cfg *timerConfig, st *timerState) map[string]any
 	}
 }
 
-// StateForTimer returns the timer state for the state sync (B4, B26).
+// StateForTimer returns the timer state for the state sync (B4, B26); the
+// snapshot is taken under the lock (Review 344-8).
 func (s *Service) StateForTimer(ctx context.Context, w settings.OverlayWidget) any {
 	cfg := s.timerConfig(ctx, w)
 	s.mu.Lock()
 	st := s.timers[w.ID]
-	s.mu.Unlock()
 	if st == nil {
 		st = &timerState{paused: true, pausedFor: cfg.duration}
 	}
-	return s.timerStateFor(cfg, st)
+	state := timerStateFor(cfg, st)
+	s.mu.Unlock()
+	return state
 }
 
 // timerConfig decodes the configuration of the timer widget; the format
