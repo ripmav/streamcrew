@@ -406,3 +406,39 @@ func TestTTSSpeakEndsWithReload(t *testing.T) {
 		t.Fatal("the speech of the removed endpoint must end")
 	}
 }
+
+// TestSyncStateDoesNotHoldTheLockDuringTheProvider covers Review 344-12:
+// the state provider does DB I/O, so the state sync must not hold the
+// service lock while it runs — a lock-taking call (Endpoint) has to
+// return while the provider is still blocked.
+func TestSyncStateDoesNotHoldTheLockDuringTheProvider(t *testing.T) {
+	svc := testService(t, settings.Overlay{
+		Widgets: []settings.OverlayWidget{{ID: "w1", Kind: "label", Name: "Label", Visible: true}},
+	})
+	called := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+	svc.SetStateProvider(func(context.Context, settings.OverlayWidget) any {
+		close(called)
+		<-release
+		return map[string]any{"text": "hi"}
+	})
+	go func() {
+		defer close(done)
+		_ = svc.SyncState(context.Background(), settings.DefaultEndpointID, func(overlay.Message) {})
+	}()
+	<-called // the provider is running
+	free := make(chan bool, 1)
+	go func() {
+		_, ok := svc.Endpoint(settings.DefaultEndpointID)
+		free <- ok
+	}()
+	select {
+	case ok := <-free:
+		assert.True(t, ok)
+	case <-time.After(2 * time.Second):
+		t.Fatal("the service lock is still held while the state provider runs")
+	}
+	close(release)
+	<-done
+}

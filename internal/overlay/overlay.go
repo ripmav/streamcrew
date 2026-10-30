@@ -7,6 +7,7 @@
 package overlay
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -502,8 +503,10 @@ func (s *Service) UpdateWidget(ctx context.Context, widgetID string, state any) 
 // services from 7.2.
 func (s *Service) WidgetStates(ctx context.Context, endpoint string) []WidgetState {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.widgetStates(ctx, endpoint)
+	widgets := s.visibleWidgets(endpoint)
+	provider := s.stateProvider
+	s.mu.Unlock()
+	return s.syncStates(ctx, provider, widgets)
 }
 
 // Attach registers a connected runtime of the endpoint and sends it the
@@ -529,7 +532,8 @@ func (s *Service) Attach(ctx context.Context, endpoint string, send func(msg Mes
 // SyncState sends the full state of the endpoint to send in the order
 // of B4: hello, state.widgets and the active items. The server calls it
 // on attach and on ready, so a message lost during the connection is
-// caught (B4, B7).
+// caught (B4, B7). The widget states are computed outside the service
+// lock, because the state provider does DB I/O (Review 344-12).
 func (s *Service) SyncState(ctx context.Context, endpoint string, send func(msg Message)) error {
 	e, ok := s.Endpoint(endpoint)
 	if !ok {
@@ -537,10 +541,12 @@ func (s *Service) SyncState(ctx context.Context, endpoint string, send func(msg 
 	}
 	s.mu.Lock()
 	hello := HelloData{Version: s.version, Endpoint: e.ID, Name: e.Name, Time: time.Now()}
-	widgets := s.widgetStates(ctx, endpoint)
+	widgets := s.visibleWidgets(endpoint)
 	items := s.activeItems(endpoint)
+	provider := s.stateProvider
 	s.mu.Unlock()
-	for _, msg := range s.handshake(hello, widgets, items) {
+	states := s.syncStates(ctx, provider, widgets)
+	for _, msg := range s.handshake(hello, states, items) {
 		send(msg)
 	}
 	return nil
@@ -558,9 +564,11 @@ func (s *Service) handshake(hello HelloData, widgets []WidgetState, items []Item
 	return msgs
 }
 
-// widgetStates is WidgetStates without the lock; the caller holds mu.
-func (s *Service) widgetStates(ctx context.Context, endpoint string) []WidgetState {
-	var out []WidgetState
+// visibleWidgets are the definitions of the visible widgets of the
+// endpoint in the stable ID order, for the state sync (B4, B21); the
+// caller holds mu.
+func (s *Service) visibleWidgets(endpoint string) []settings.OverlayWidget {
+	var out []settings.OverlayWidget
 	for _, w := range s.widgets {
 		ep := w.Endpoint
 		if ep == "" {
@@ -576,13 +584,25 @@ func (s *Service) widgetStates(ctx context.Context, endpoint string) []WidgetSta
 		if !visible {
 			continue
 		}
+		out = append(out, w)
+	}
+	slices.SortFunc(out, func(a, b settings.OverlayWidget) int { return cmp.Compare(a.ID, b.ID) })
+	return out
+}
+
+// syncStates fills the states of the widget definitions with the
+// provider (B20); a nil provider leaves the state empty. It runs
+// outside the service lock, because the provider does DB I/O
+// (Review 344-12).
+func (s *Service) syncStates(ctx context.Context, provider func(ctx context.Context, w settings.OverlayWidget) any, widgets []settings.OverlayWidget) []WidgetState {
+	out := make([]WidgetState, 0, len(widgets))
+	for _, w := range widgets {
 		var state any
-		if s.stateProvider != nil {
-			state = s.stateProvider(ctx, w)
+		if provider != nil {
+			state = provider(ctx, w)
 		}
 		out = append(out, WidgetState{ID: w.ID, Kind: w.Kind, Name: w.Name, Position: w.Position, State: state})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 
