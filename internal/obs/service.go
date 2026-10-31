@@ -178,27 +178,33 @@ func (s *Service) setClient(c *client) {
 
 // session runs the connection of client until it ends; it reports
 // whether the connection dropped, so that Run reconnects (B43). The
-// consumer of the events runs until the reader of the connection ends.
+// consumer of the events runs until the reader of the connection ends,
+// and the session waits for it.
 func (s *Service) session(ctx context.Context, c *client) bool {
-	go func() {
+	var wg sync.WaitGroup
+	wg.Go(func() {
 		for ev := range c.events {
 			s.handleEvent(ctx, c, ev)
 		}
-	}()
+	})
 	// The reader ends when the connection drops or the context ends
 	// (its read fails on both).
 	<-c.done
+	// The event channel closes with the reader; wait for the consumer,
+	// so that a handled event never outlives the session (Review
+	// 346-7).
+	wg.Wait()
 	// The connection is gone: clear it, so that an operation in the
 	// window until the (re)connection gets ErrNotConnected instead of
 	// the dead client (B55, Review 346-3).
 	s.setClient(nil)
+	// The connection is closed in both branches (Review 346-7).
+	c.close()
 	select {
 	case <-ctx.Done():
-		// The core is shutting down; the process exit ends the
-		// connection.
+		// The core is shutting down.
 		return false
 	default:
-		c.close()
 		return true
 	}
 }
