@@ -1889,6 +1889,21 @@ func TestWidgetEmoteEffect(t *testing.T) {
 		synctest.Wait()
 		ups = f.updates(t, "m4")
 		require.Len(t, ups, 1)
+
+		// A configuration without a duration gets the named default of
+		// 5 s (Review 347-10). The section switches to the fresh widget
+		// for this step; the tick reloads it in the overlay service.
+		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("m5", overlaywidgets.KindEmoteEffect, map[string]any{"effect": "rain", "combo_count": 2}),
+		}})
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		msg("Kappa")
+		msg("Kappa")
+		synctest.Wait()
+		ups = f.updates(t, "m5")
+		require.Len(t, ups, 1)
+		assert.JSONEq(t, `{"effect":"rain","duration_ms":5000,"code":"Kappa","image":"https://emotes/Kappa.png","per_emote_shown":1}`, ups[0])
 	})
 }
 

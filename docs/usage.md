@@ -551,8 +551,8 @@ Profil-Sektion `overlay`, Zustand zum Teil im Profil persistiert
   `combo_timeframe` Sekunden (Default 10) im Chat kommt
   (`ignore_duplicates` zählt pro Nachricht einmal). Die Codes löst
   der Core über den Emote-Katalog auf; unbekannte fallen weg. Effekte
-  `rain`, `burst`, `random`, Dauer `duration`, Anzahl pro Emote
-  `per_emote_shown`, Obergrenze `max_shown` (0 = keine).
+  `rain`, `burst`, `random`, Dauer `duration` (Default 5 s), Anzahl pro
+  Emote `per_emote_shown`, Obergrenze `max_shown` (0 = keine).
 - `game_queue` (B36): eine Queue je Profil, persistiert in
   `overlay_widget_state` (fester Schlüssel). `join`/`leave`
   (Phase 8.3, Chatspiele) ändern sie und der Core veröffentlicht

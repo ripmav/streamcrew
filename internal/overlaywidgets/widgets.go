@@ -45,6 +45,10 @@ var ErrUnknownWidget = errors.New("unknown widget")
 // labelTickDefault is the interval of the label re-render (B24, A5).
 const labelTickDefault = 30 * time.Second
 
+// emoteEffectDurationDefault is the effect duration when the
+// configuration names none (B35, Review 347-10).
+const emoteEffectDurationDefault = 5 * time.Second
+
 // The kinds of the widgets of 7.2 (B24-B28).
 const (
 	KindLabel     = "label"
@@ -3228,7 +3232,12 @@ func (s *Service) emoteEffectConfig(ctx context.Context, w settings.OverlayWidge
 		s.logger.ErrorContext(ctx, "the emote effect is unknown", "widget", w.ID, "effect", c.Effect)
 		return nil
 	}
-	if c.Duration != "" {
+	if c.Duration == "" {
+		// The named default, so the runtime gets a positive duration
+		// (Review 347-10).
+		c.Duration = emoteEffectDurationDefault.String()
+		c.duration = emoteEffectDurationDefault
+	} else {
 		d, err := time.ParseDuration(c.Duration)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "the emote effect duration is unknown", "widget", w.ID, "duration", c.Duration)
