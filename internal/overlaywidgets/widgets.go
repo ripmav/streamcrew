@@ -2080,6 +2080,16 @@ func (s *Service) wheelProbs(w settings.OverlayWidget, cfg *wheelConfig) []float
 	return s.wheelInitialProbs(cfg)
 }
 
+// wheelOutcomes is the outcomes of the runtime state with the
+// probabilities (B33).
+func wheelOutcomes(cfg *wheelConfig, probs []float64) []map[string]any {
+	outcomes := make([]map[string]any, len(cfg.Outcomes))
+	for i, o := range cfg.Outcomes {
+		outcomes[i] = map[string]any{"name": o.Name, "probability": probs[i]}
+	}
+	return outcomes
+}
+
 // wheelInitialProbs are the probabilities before the first spin (B33).
 func (s *Service) wheelInitialProbs(cfg *wheelConfig) []float64 {
 	n := len(cfg.Outcomes)
@@ -2128,6 +2138,10 @@ func (s *Service) SpinWheel(ctx context.Context, widgetID string, u *user.User) 
 	s.wheels[w.ID] = &wheelState{probs: next}
 	s.mu.Unlock()
 	s.push(ctx, w, map[string]any{
+		// The runtime replaces the state with the push, so the
+		// outcomes go with the spin, with the updated
+		// probabilities (Review 347-8).
+		"outcomes": wheelOutcomes(cfg, next),
 		"spin": map[string]any{
 			"index":    idx,
 			"name":     outcome.Name,
@@ -2150,11 +2164,7 @@ func (s *Service) StateForWheel(ctx context.Context, w settings.OverlayWidget) a
 		return nil
 	}
 	probs := s.wheelProbs(w, cfg)
-	outcomes := make([]map[string]any, len(cfg.Outcomes))
-	for i, o := range cfg.Outcomes {
-		outcomes[i] = map[string]any{"name": o.Name, "probability": probs[i]}
-	}
-	return map[string]any{"outcomes": outcomes}
+	return map[string]any{"outcomes": wheelOutcomes(cfg, probs)}
 }
 
 // ---------- persistent_timer (B29) ----------

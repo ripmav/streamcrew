@@ -1756,6 +1756,10 @@ func TestWidgetWheel(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(ups[0]), &spin))
 		rot, ok := spin["spin"].(map[string]any)
 		require.True(t, ok, "no spin in the state")
+		// The push carries the outcomes, because the runtime replaces
+		// the state with it (Review 347-8).
+		assert.JSONEq(t, `[{"name":"yes","probability":50},{"name":"no","probability":50}]`,
+			marshalState(t, spin["outcomes"]))
 		idx, name := rot["index"].(float64), rot["name"].(string)
 		assert.InDelta(t, 4.0, rot["duration"], 0.001)
 		want := map[float64]string{0: "yes", 1: "no"}
@@ -1771,6 +1775,13 @@ func TestWidgetWheel(t *testing.T) {
 		// deterministic.
 		require.NoError(t, f.svc.SpinWheel(f.ctx, "w2", ada))
 		synctest.Wait()
+		ups2 := f.updates(t, "w2")
+		require.Len(t, ups2, 1)
+		var spin2 map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ups2[0]), &spin2))
+		// The push shows the shifted probabilities (Review 347-8).
+		assert.JSONEq(t, `[{"name":"yes","probability":90},{"name":"no","probability":10}]`,
+			marshalState(t, spin2["outcomes"]))
 		assert.JSONEq(t, `{"outcomes":[{"name":"yes","probability":90},{"name":"no","probability":10}]}`,
 			marshalState(t, f.svc.StateForSync(f.ctx, w2)))
 
