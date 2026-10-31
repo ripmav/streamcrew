@@ -64,10 +64,6 @@ type Service struct {
 	// a name.
 	names map[string]string
 
-	// publishCtx is the context of the active connection for the
-	// publishes of the gateway handlers.
-	publishCtx context.Context
-
 	reconnect time.Duration
 }
 
@@ -138,8 +134,7 @@ func (s *Service) connect(ctx context.Context) error {
 	session.Identify.Intents = discordgo.IntentGuilds | discordgo.IntentGuildVoiceStates
 	session.AddHandler(s.onReady)
 	session.AddHandler(s.onGuildCreate)
-	session.AddHandler(s.onVoiceState)
-	s.publishCtx = ctx
+	session.AddHandler(s.onVoiceState(ctx))
 	if err := session.Open(); err != nil {
 		return err
 	}
@@ -164,36 +159,40 @@ func (s *Service) onGuildCreate(_ *discordgo.Session, g *discordgo.GuildCreate) 
 	}
 }
 
-// onVoiceState applies one voice state update of the gateway (B37): a
-// join, a leave, or a move into or out of the configured channel.
-func (s *Service) onVoiceState(_ *discordgo.Session, evt *discordgo.VoiceStateUpdate) {
-	if evt.UserID == "" {
-		return
-	}
-	// The membership before the update; the seed below may add the
-	// occupant, so the join is the difference.
-	s.mu.Lock()
-	_, was := s.occupants[evt.UserID]
-	s.mu.Unlock()
-	s.seed(evt.VoiceState)
-	now := evt.ChannelID == s.ports.Channel
-	s.mu.Lock()
-	var name string
-	switch {
-	case now && !was:
-		name = s.nameLocked(evt.UserID)
-		s.occupants[evt.UserID] = Occupant{Name: name, Channel: s.ports.Channel}
-	case !now && was:
-		name = s.nameLocked(evt.UserID)
-		delete(s.occupants, evt.UserID)
-	}
-	channel := s.ports.Channel
-	s.mu.Unlock()
-	switch {
-	case now && !was:
-		s.publish(eventtype.DiscordVoiceJoined, name, channel)
-	case !now && was:
-		s.publish(eventtype.DiscordVoiceLeft, name, channel)
+// onVoiceState returns the handler that applies one voice state update
+// of the gateway (B37): a join, a leave, or a move into or out of the
+// configured channel. The events are published on the context of the
+// connection the handler belongs to.
+func (s *Service) onVoiceState(ctx context.Context) func(_ *discordgo.Session, evt *discordgo.VoiceStateUpdate) {
+	return func(_ *discordgo.Session, evt *discordgo.VoiceStateUpdate) {
+		if evt.UserID == "" {
+			return
+		}
+		// The membership before the update; the seed below may add the
+		// occupant, so the join is the difference.
+		s.mu.Lock()
+		_, was := s.occupants[evt.UserID]
+		s.mu.Unlock()
+		s.seed(evt.VoiceState)
+		now := evt.ChannelID == s.ports.Channel
+		s.mu.Lock()
+		var name string
+		switch {
+		case now && !was:
+			name = s.nameLocked(evt.UserID)
+			s.occupants[evt.UserID] = Occupant{Name: name, Channel: s.ports.Channel}
+		case !now && was:
+			name = s.nameLocked(evt.UserID)
+			delete(s.occupants, evt.UserID)
+		}
+		channel := s.ports.Channel
+		s.mu.Unlock()
+		switch {
+		case now && !was:
+			s.publish(ctx, eventtype.DiscordVoiceJoined, name, channel)
+		case !now && was:
+			s.publish(ctx, eventtype.DiscordVoiceLeft, name, channel)
+		}
 	}
 }
 
@@ -222,18 +221,16 @@ func (s *Service) nameLocked(userID string) string {
 	return userID
 }
 
-// publish runs typ as a bus event with the occupant as details (B37);
-// it fails only if the event does not fit the catalog, which the shape
-// of the type already guarantees.
-func (s *Service) publish(typ event.Type, name, channel string) {
-	if s.publishCtx == nil {
-		return
-	}
+// publish runs typ as a bus event with the occupant as details (B37) on
+// the context of the connection it came from; it fails only if the event
+// does not fit the catalog, which the shape of the type already
+// guarantees.
+func (s *Service) publish(ctx context.Context, typ event.Type, name, channel string) {
 	env := event.New(event.Source{Kind: event.SourceIntegration, Name: "discord"}, typ, eventtype.Payload{
 		Details: eventtype.Details{DiscordVoice: &eventtype.DiscordVoice{Name: name, Channel: channel}},
 	})
-	if err := s.ports.Bus.Publish(s.publishCtx, env); err != nil {
-		s.ports.Logger.ErrorContext(s.publishCtx, "publishing the discord voice event failed", "type", typ, "error", err)
+	if err := s.ports.Bus.Publish(ctx, env); err != nil {
+		s.ports.Logger.ErrorContext(ctx, "publishing the discord voice event failed", "type", typ, "error", err)
 	}
 }
 
