@@ -51,7 +51,7 @@ func (s *Service) azure(ctx context.Context, sp Speech) (string, error) {
 	req.Header.Set("Content-Type", "application/ssml+xml")
 	req.Header.Set("Ocp-Apim-Subscription-Key", key)
 	req.Header.Set("X-Microsoft-OutputFormat", "audio-24khz-48kbitrate-mono-mp3")
-	res, err := s.client().Do(req)
+	res, err := s.client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("tts: azure: %w", err)
 	}
