@@ -557,9 +557,11 @@ Profil-Sektion `overlay`, Zustand zum Teil im Profil persistiert
 - `game_queue` (B36): eine Queue je Profil, persistiert in
   `overlay_widget_state` (fester Schlüssel). `join`/`leave`
   (Phase 8.3, Chatspiele) ändern sie und der Core veröffentlicht
-  `gamequeue.joined`/`gamequeue.left`/`gamequeue.position`
-  (Position ab 1); das Widget zeigt die Liste. Größe `max_size`
-  (Default 10).
+  `gamequeue.joined`/`gamequeue.left` (Position ab 1);
+  `gamequeue.position` ist bis Phase 8.3 reserviert (Review 347-14) —
+  Queue-Einträge tragen nur Anzeigennamen, ein Positions-Ereignis
+  könnte den betroffenen Nutzer nicht benennen. Das Widget zeigt die
+  Liste. Größe `max_size` (Default 10).
 - `discord_voice` (B37): listet die Besetzung eines konfigurierten
   Discord-Voice-Kanals (`discord-voice-channel`, nur zum Start ⟳).
   Der Discord-Token kommt **nur** aus der Umgebungsvariablen
