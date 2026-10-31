@@ -288,6 +288,13 @@ function clipEmbed(url: string): string {
   return m ? `https://clips.twitch.tv/embed?clip=${m[1]}&parent=${location.hostname}` : "";
 }
 
+// mediaSrc gives the relative /media/ paths the token of the page
+// (B5), so the media route of the overlay server answers them; the
+// other sources stay as they are (Review 345-4).
+function mediaSrc(src: string): string {
+  return src.startsWith("/media/") ? withToken(src) : src;
+}
+
 function renderContent(el: HTMLElement, entry: Entry): void {
   const data = entry.data as ItemData;
   const c = data.content ?? {};
@@ -304,7 +311,7 @@ function renderContent(el: HTMLElement, entry: Entry): void {
     case "image": {
       el.classList.add("sc-image");
       const img = document.createElement("img");
-      img.src = src;
+      img.src = mediaSrc(src);
       img.alt = "";
       if (c.width) img.style.width = `${c.width}px`;
       if (c.height) img.style.height = `${c.height}px`;
@@ -315,22 +322,28 @@ function renderContent(el: HTMLElement, entry: Entry): void {
     case "video": {
       el.classList.add("sc-video");
       const v = document.createElement("video");
-      v.src = src;
+      v.src = mediaSrc(src);
       v.autoplay = true;
       v.loop = Boolean(c.loop);
       if (c.start) v.currentTime = c.start;
       if (c.volume !== undefined) v.volume = Math.min(1, Math.max(0, c.volume / 100));
-      // The end of the playback tells the server (B14).
+      // The end of the playback tells the server (B14); an error ends
+      // the item as well, so a broken source does not stay (Review
+      // 345-4).
       v.addEventListener("ended", () => send("item.ended", { id: data.id }));
+      v.addEventListener("error", () => send("item.ended", { id: data.id }));
       el.appendChild(v);
       break;
     }
     case "audio": {
       const a = document.createElement("audio");
-      a.src = src;
+      a.src = mediaSrc(src);
       a.autoplay = true;
       if (c.volume !== undefined) a.volume = Math.min(1, Math.max(0, c.volume / 100));
+      // Like the video: an error ends the item as well, so a broken
+      // source does not stay (Review 345-4).
       a.addEventListener("ended", () => send("item.ended", { id: data.id }));
+      a.addEventListener("error", () => send("item.ended", { id: data.id }));
       el.appendChild(a);
       break;
     }
