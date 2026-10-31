@@ -123,6 +123,30 @@ func TestNormalizeCoversMonoAndResample(t *testing.T) {
 	}
 }
 
+// TestNormalizeResamplesPerChannel is the regression of the stereo
+// resample (Review 345-3): the input carries left = +1 and right = -1
+// at 48 kHz, and the old resample interpolated over the interleaved
+// array, so it mixed the channels. Per frame and per channel the left
+// stays positive, the right negative, and the length is the even
+// number of channels of the output frames.
+func TestNormalizeResamplesPerChannel(t *testing.T) {
+	samples := make([]int16, 2*4800)
+	for i := range samples {
+		if i%2 == 0 {
+			samples[i] = 32767
+		} else {
+			samples[i] = -32767
+		}
+	}
+	out := normalize(samples, 48000, 2)
+	// 4800 frames at 48 kHz become 4410 frames at 44100 Hz.
+	require.Len(t, out, 4410*2*4)
+	for i := 0; i < len(out); i += 8 {
+		assert.Greater(t, float64(floatAt(out, i)), 0.0, "the left channel stays positive")
+		assert.Less(t, float64(floatAt(out, i+4)), 0.0, "the right channel stays negative")
+	}
+}
+
 // fakeOverlay records the shown items and serves an end channel per
 // item.
 type fakeOverlay struct {
