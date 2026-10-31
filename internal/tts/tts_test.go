@@ -164,6 +164,16 @@ func TestAzureCoversSSMLAndKeyHandling(t *testing.T) {
 	assert.Contains(t, err.Error(), EnvAzureRegion)
 }
 
+// TestAzureSSMLEscapesTheLanguage is the regression of the xml:lang
+// (Review 345-7): the language is the voice name without the last
+// segment, and it is escaped like the rest of the document, so a voice
+// name with XML characters cannot break the SSML.
+func TestAzureSSMLEscapesTheLanguage(t *testing.T) {
+	ssml := azureSSML("en-US-A&B-CNeural", Speech{Text: "hi"})
+	assert.Contains(t, string(ssml), `xml:lang="en-US-A&amp;B"`)
+	assert.Contains(t, string(ssml), `name="en-US-A&amp;B-CNeural"`)
+}
+
 // TestPiperCoversTheProcessAndModel covers B41, ADR-0020 §3: the piper
 // provider runs the process with the model, the output file and the
 // mapping of rate and volume, and returns the written file; the missing
