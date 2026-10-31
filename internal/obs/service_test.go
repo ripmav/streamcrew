@@ -593,6 +593,30 @@ func TestRunPublishesEachChangeOnce(t *testing.T) {
 	require.NoError(t, <-done)
 }
 
+// TestRunReportsNotConnectedDuringAReconnect checks that a dropped
+// connection clears the active connection, so that an operation in the
+// window of the reconnect gets ErrNotConnected, not the dead client
+// (B55, Review 346-3); after the reconnect the operation runs again.
+func TestRunReportsNotConnectedDuringAReconnect(t *testing.T) {
+	t.Parallel()
+	fake := newFakeObs(t, "")
+	host, port := fake.addr()
+	s := New(Ports{Host: host, Port: port, Bus: event.NewBus(nil)})
+	s.reconnect = 500 * time.Millisecond
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() { done <- s.Run(ctx) }()
+	waitUntil(t, func() bool { return s.Connected() })
+	fake.drop()
+	waitUntil(t, func() bool { return !s.Connected() })
+	assert.ErrorIs(t, s.SetScene(ctx, "Cut"), ErrNotConnected, "the window of the reconnect")
+	waitUntil(t, func() bool { return fake.connsSeen() == 2 })
+	require.NoError(t, s.SetScene(ctx, "Cut"), "after the reconnect")
+	cancel()
+	require.NoError(t, <-done)
+}
+
 // TestActionsWithoutAConnection checks that an operation without an
 // active connection is a clear error, not a wait (B55).
 func TestActionsWithoutAConnection(t *testing.T) {

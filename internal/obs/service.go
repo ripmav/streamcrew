@@ -187,6 +187,10 @@ func (s *Service) session(ctx context.Context, c *client) bool {
 	// The reader ends when the connection drops or the context ends
 	// (its read fails on both).
 	<-c.done
+	// The connection is gone: clear it, so that an operation in the
+	// window until the (re)connection gets ErrNotConnected instead of
+	// the dead client (B55, Review 346-3).
+	s.setClient(nil)
 	select {
 	case <-ctx.Done():
 		// The core is shutting down; the process exit ends the
