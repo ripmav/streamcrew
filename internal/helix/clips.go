@@ -54,10 +54,18 @@ func (c *Client) ListClips(ctx context.Context, broadcasterID string) ([]Clip, e
 	return clips, nil
 }
 
-// LatestClip returns the newest clip of the channel (Helix GET /clips,
-// first=1), or nil if the channel has no clip.
+// LatestClip returns the newest clip of the channel of the last week
+// (Helix GET /clips with started_at), or nil if the channel has no clip
+// in the window. The API lists the clips of a broadcaster by view count,
+// so the newest is picked from created_at (Review 344-N1); a channel
+// with more than the 100 most-viewed clips of the week may miss its
+// newest one.
 func (c *Client) LatestClip(ctx context.Context, broadcasterID string) (*Clip, error) {
-	q := url.Values{"broadcaster_id": {broadcasterID}, "first": {"1"}}
+	q := url.Values{
+		"broadcaster_id": {broadcasterID},
+		"first":          {"100"},
+		"started_at":     {time.Now().AddDate(0, 0, -7).UTC().Format(time.RFC3339)},
+	}
 	req, err := c.request(ctx, "GET", "/clips", q, nil)
 	if err != nil {
 		return nil, err
@@ -68,10 +76,13 @@ func (c *Client) LatestClip(ctx context.Context, broadcasterID string) (*Clip, e
 	if err := c.http.DoJSON(ctx, req, &envelope); err != nil {
 		return nil, err
 	}
-	if len(envelope.Data) == 0 {
-		return nil, nil
+	var newest *Clip
+	for i := range envelope.Data {
+		if newest == nil || envelope.Data[i].CreatedAt.After(newest.CreatedAt) {
+			newest = &envelope.Data[i]
+		}
 	}
-	return &envelope.Data[0], nil
+	return newest, nil
 }
 
 // CreateClip makes a clip of the current stream (Helix POST /clips,

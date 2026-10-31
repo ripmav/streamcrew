@@ -313,10 +313,14 @@ deshalb mit 404. Pfade außerhalb der Wurzeln antworten ebenfalls 404
 `item` zeigt ein Item auf einem Endpunkt. Es gibt die Kinds `text`,
 `image`, `video`, `audio`, `html`, `youtube`, `clip` und `timer`;
 Position (simple/percent/pixels/random), Ebene und Ein-/Ausblend-
-Animation je Item, eine anzeigedauer (`duration`, leer = bis das Item
-weg ist) und die Item-Inhalte selbst. Ein Clip-Item nennt eine URL oder
-einen Nutzer — bei einem Nutzer zeigt das Item den neuesten Clip des
-Kanals. Ton- und Video-Items melden ihr Wiedergabe-Ende der Engine: In
+Animation je Item, eine Anzeigedauer (`duration`; leer = das Item
+verschwindet nach 10 s, Ton- und Video-Items laufen dagegen bis zum
+Wiedergabe-Ende, und ein Clip-Item nach einem Nutzer zeigt die Dauer
+des Clips) und die Item-Inhalte selbst. Ein Clip-Item nennt eine URL
+oder einen Nutzer — bei einem Nutzer zeigt das Item den neuesten Clip
+des Kanals aus der letzten Woche (Helix listet Clips nach Aufrufzahlen;
+ohne Clip im Fenster ist das ein Fehler). Ton- und Video-Items melden
+ihr Wiedergabe-Ende der Engine: In
 Begrüßungen halten sie damit den Medien-Abstand
 ([`command-engine.md`](spec/command-engine.md), B43) bis zum Ende des
 Items. Die Aktion ist statisch `visual_audio` — auch ein reines
