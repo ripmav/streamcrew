@@ -1253,6 +1253,59 @@ func TestWidgetPersistentTimer(t *testing.T) {
 	})
 }
 
+// TestAddToTimerDispatchesByKindCoversB29 covers B26, B29 and Review
+// 347-2: add_to_timer reaches the persistent timer through the same
+// operation as the timer, and a widget of another kind is a clear error.
+func TestAddToTimerDispatchesByKindCoversB29(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("t1", overlaywidgets.KindTimer, map[string]any{"duration": "2m"}),
+			widget("p1", overlaywidgets.KindPersistentTimer, map[string]any{"initial": "10m"}),
+			widget("g1", overlaywidgets.KindGoal, goalConfig()),
+		}})
+		defer f.stop()
+		// The persistent timer runs with a deadline in the future.
+		f.seedState("p1", fmt.Sprintf(`{"deadline_ms":%d,"paused":false,"completed":false,"was_visible":true}`, time.Now().Add(10*time.Minute).UnixMilli()))
+		f.attach(t)
+
+		lastMilli := func(t *testing.T, widgetID, key string) float64 {
+			t.Helper()
+			ups := f.updates(t, widgetID)
+			require.NotEmpty(t, ups)
+			var st map[string]any
+			require.NoError(t, json.Unmarshal([]byte(ups[len(ups)-1]), &st))
+			v, ok := st[key].(float64)
+			require.True(t, ok, "no %s in the state of %s", key, widgetID)
+			return v
+		}
+
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+
+		// add_to_timer on the persistent timer extends the deadline and
+		// publishes overlay.timer.adjusted (B29, B38).
+		base := lastMilli(t, "p1", "deadline")
+		require.NoError(t, f.svc.AddToTimer(f.ctx, "p1", time.Minute))
+		synctest.Wait()
+		assert.Equal(t, base+60000, lastMilli(t, "p1", "deadline"))
+		eff := f.effectsList()
+		last := eff[len(eff)-1]
+		assert.Equal(t, eventtype.OverlayTimerAdjusted, last.typ)
+		assert.Equal(t, &eventtype.OverlayTimer{AmountChanged: 60}, last.payload.Details.OverlayTimer)
+
+		// The operation of the timer widget is unaffected (B26): the
+		// fresh timer is paused and the negative amount shortens the
+		// frozen time.
+		require.NoError(t, f.svc.AddToTimer(f.ctx, "t1", -time.Minute))
+		synctest.Wait()
+		assert.Equal(t, float64((time.Minute).Milliseconds()), lastMilli(t, "t1", "pausedMs"))
+
+		// A widget of another kind is a clear error (B38).
+		assert.ErrorIs(t, f.svc.AddToTimer(f.ctx, "g1", time.Minute), overlaywidgets.ErrUnknownWidget)
+	})
+}
+
 // TestWidgetStreamBoss covers B30: the damage and the heal, the self-heal
 // of the boss, the forced damage, the event amounts with the user of the
 // event, and the new boss with the compounded health after a kill.

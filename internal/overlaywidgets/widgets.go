@@ -1290,19 +1290,33 @@ func (s *Service) UpdateTimer(ctx context.Context, widgetID string, d time.Durat
 	return nil
 }
 
-// AddToTimer adds d, which may be negative (B26, B38), to the remaining
-// time of the timer widget and pushes the new state.
+// AddToTimer adds d, which may be negative (B26, B29, B38), to the
+// remaining time of the timer widget and pushes the new state; the kind
+// of the widget decides between the timer and the persistent timer
+// (Review 347-2).
 func (s *Service) AddToTimer(ctx context.Context, widgetID string, d time.Duration) error {
-	w, err := s.widget(ctx, widgetID, KindTimer)
+	w, err := s.widgetByID(ctx, widgetID)
 	if err != nil {
 		return err
 	}
+	switch w.Kind {
+	case KindTimer:
+		return s.timerAdd(ctx, w, d)
+	case KindPersistentTimer:
+		return s.AddToPersistentTimer(ctx, widgetID, d)
+	default:
+		return fmt.Errorf("%w: the widget %q is a %s, not a timer", ErrUnknownWidget, widgetID, w.Kind)
+	}
+}
+
+// timerAdd adds d to the remaining time of the timer widget (B26).
+func (s *Service) timerAdd(ctx context.Context, w settings.OverlayWidget, d time.Duration) error {
 	cfg := s.timerConfig(ctx, w)
 	s.mu.Lock()
-	st := s.timers[widgetID]
+	st := s.timers[w.ID]
 	if st == nil {
 		st = &timerState{paused: true, pausedFor: cfg.duration}
-		s.timers[widgetID] = st
+		s.timers[w.ID] = st
 	}
 	if st.paused {
 		st.pausedFor += d
@@ -1816,9 +1830,6 @@ func (s *Service) chatConfig(ctx context.Context, w settings.OverlayWidget) *cha
 	return &c
 }
 
-// ---------- shared ----------
-
-// widget finds the widget in the section; it must be of the kind want.
 // ---------- poll (B34) ----------
 
 // SetPollState sets the state of the active vote (B34) and pushes it to
@@ -3324,23 +3335,32 @@ func weightedPick(probs []float64) int {
 	return len(probs) - 1
 }
 
-// widget returns the widget with the ID and the kind; an unknown ID or a
-// kind mismatch is a clear error for the action (B38).
-func (s *Service) widget(ctx context.Context, widgetID, want string) (settings.OverlayWidget, error) {
+// widgetByID returns the widget with the ID; an unknown ID is a clear
+// error for the action (B38).
+func (s *Service) widgetByID(ctx context.Context, widgetID string) (settings.OverlayWidget, error) {
 	sec := s.section(ctx)
 	if sec == nil {
 		return settings.OverlayWidget{}, errors.New("widgets: the overlay section is unknown")
 	}
 	for _, w := range sec.Widgets {
-		if w.ID != widgetID {
-			continue
+		if w.ID == widgetID {
+			return w, nil
 		}
-		if w.Kind != want {
-			return w, fmt.Errorf("%w: the widget %q is a %s, not a %s", ErrUnknownWidget, widgetID, w.Kind, want)
-		}
-		return w, nil
 	}
 	return settings.OverlayWidget{}, fmt.Errorf("%w: the widget %q is unknown", ErrUnknownWidget, widgetID)
+}
+
+// widget returns the widget with the ID and the kind; an unknown ID or a
+// kind mismatch is a clear error for the action (B38).
+func (s *Service) widget(ctx context.Context, widgetID, want string) (settings.OverlayWidget, error) {
+	w, err := s.widgetByID(ctx, widgetID)
+	if err != nil {
+		return settings.OverlayWidget{}, err
+	}
+	if w.Kind != want {
+		return w, fmt.Errorf("%w: the widget %q is a %s, not a %s", ErrUnknownWidget, widgetID, w.Kind, want)
+	}
+	return w, nil
 }
 
 // decodeConfig decodes the configuration document of a widget into out;
