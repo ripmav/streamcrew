@@ -123,13 +123,12 @@ func (a *App) newMedia(logger *slog.Logger) *media.Service {
 // §3): the file providers google, azure and piper render the speech
 // under the generated directory of the media directory, and the browser
 // provider speaks directly on the overlay (ttsBrowser). The keys of the
-// providers come from the environment at the call (ADR-0020 §2).
+// providers come from the core configuration (ADR-0019 §6) and are hot
+// (Code-ADR-0021, Nachtrag 2026-10-29).
 func (a *App) newTTS(cfg config.Config, logger *slog.Logger) (*ttspkg.Service, error) {
-	return ttspkg.New(ttspkg.Ports{
+	svc, err := ttspkg.New(ttspkg.Ports{
 		GeneratedDir: filepath.Join(a.mediaDir, "generated"),
 		PiperModel:   cfg.TTSPiperModel,
-		//nolint:forbidigo // the provider keys are read from the environment at the call (ADR-0020 §2), not core configuration
-		Env: os.Getenv,
 		Dialer: netguard.Dialer{
 			Protect:   cfg.Mode == config.ModeServer,
 			Allowlist: a.rights.Outbound,
@@ -137,4 +136,13 @@ func (a *App) newTTS(cfg config.Config, logger *slog.Logger) (*ttspkg.Service, e
 		Piper:  piperRun,
 		Logger: component(logger, "tts"),
 	})
+	if err != nil {
+		return nil, err
+	}
+	svc.SetKeys(ttspkg.Keys{
+		Google:      cfg.TTSGoogleKey,
+		Azure:       cfg.TTSAzureKey,
+		AzureRegion: cfg.TTSAzureRegion,
+	})
+	return svc, nil
 }

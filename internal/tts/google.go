@@ -19,9 +19,12 @@ const googleURL = "https://texttospeech.googleapis.com/v1/synthesize"
 // (B41, ADR-0020 §3). The key stays in the header, so it never appears
 // in the URL of an error (ADR-0020 §2).
 func (s *Service) google(ctx context.Context, sp Speech) (string, error) {
-	key := s.ports.Env(EnvGoogleKey)
+	// The key is read from the snapshot at the call, so a key set in the
+	// configuration applies to this request (Code-ADR-0021, Nachtrag
+	// 2026-10-29).
+	key := s.keys.Load().Google
 	if key == "" {
-		return "", fmt.Errorf("tts: the provider google needs the key in %s", EnvGoogleKey)
+		return "", errors.New("tts: the provider google needs the key in the setting tts-google-key")
 	}
 	if s.ports.Dialer == nil {
 		return "", errors.New("tts: the provider google needs a dialer (net:outbound)")

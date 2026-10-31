@@ -42,18 +42,18 @@ func (c *countingDialer) DialContext(ctx context.Context, network, address strin
 }
 
 // testService returns a service with the generated directory under
-// tmp, the env of the keys, and the endpoints of the httptest servers.
-func testService(t *testing.T, env map[string]string, google, azure string) (*Service, string) {
+// tmp, the keys, and the endpoints of the httptest servers.
+func testService(t *testing.T, keys Keys, google, azure string) (*Service, string) {
 	t.Helper()
 	svc, err := New(Ports{
 		GeneratedDir:   filepath.Join(t.TempDir(), "generated"),
-		Env:            func(k string) string { return env[k] },
 		Dialer:         loopbackDialer{},
 		GoogleEndpoint: google,
 		AzureBase:      func(string) string { return azure },
 		Now:            func() time.Time { return time.Unix(0, 123456789) },
 	})
 	require.NoError(t, err)
+	svc.SetKeys(keys)
 	return svc, svc.ports.GeneratedDir
 }
 
@@ -73,7 +73,7 @@ func TestGoogleCoversSynthesizeAndKeyHandling(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	svc, dir := testService(t, map[string]string{EnvGoogleKey: "secret-key"}, srv.URL, "")
+	svc, dir := testService(t, Keys{Google: "secret-key"}, srv.URL, "")
 	path, err := svc.Generate(context.Background(), Google, Speech{Text: "hello", Volume: 50, Rate: 1.5, Pitch: 1.5})
 	require.NoError(t, err)
 	assert.NotContains(t, gotURL, "secret-key", "the key must not appear in the URL")
@@ -95,10 +95,10 @@ func TestGoogleCoversSynthesizeAndKeyHandling(t *testing.T) {
 	assert.DirExists(t, dir)
 
 	// The missing key is a clear error.
-	none, _ := testService(t, map[string]string{}, srv.URL, "")
+	none, _ := testService(t, Keys{}, srv.URL, "")
 	_, err = none.Generate(context.Background(), Google, Speech{Text: "hi"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), EnvGoogleKey)
+	assert.Contains(t, err.Error(), "tts-google-key")
 }
 
 // TestGoogleCoversTheAPIError covers the answer of the google API that
@@ -109,7 +109,7 @@ func TestGoogleCoversTheAPIError(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":{"message":"bad text"}}`))
 	}))
 	defer srv.Close()
-	svc, _ := testService(t, map[string]string{EnvGoogleKey: "secret-key"}, srv.URL, "")
+	svc, _ := testService(t, Keys{Google: "secret-key"}, srv.URL, "")
 	_, err := svc.Generate(context.Background(), Google, Speech{Text: "hi"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bad text")
@@ -126,20 +126,47 @@ func TestGoogleReusesTheKeepAliveConnection(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	env := map[string]string{EnvGoogleKey: "secret-key"}
 	dialer := &countingDialer{}
 	svc, err := New(Ports{
 		GeneratedDir:   filepath.Join(t.TempDir(), "generated"),
-		Env:            func(k string) string { return env[k] },
 		Dialer:         dialer,
 		GoogleEndpoint: srv.URL,
 	})
 	require.NoError(t, err)
+	svc.SetKeys(Keys{Google: "secret-key"})
 	for range 2 {
 		_, err = svc.Generate(context.Background(), Google, Speech{Text: "hi"})
 		require.NoError(t, err)
 	}
 	assert.Equal(t, 1, dialer.dials, "the requests share the transport and the keep-alive connection")
+}
+
+// TestSetKeysAppliesToTheNextRequest is the regression of the key
+// handling (Review 345-X2): the service reads the keys of the core
+// configuration at the call, so a key set or cleared after the start
+// applies to the next request without a restart.
+func TestSetKeysAppliesToTheNextRequest(t *testing.T) {
+	var gotKey string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKey = r.Header.Get("x-goog-api-key")
+		_, _ = w.Write([]byte(`{"audioContent":"` + base64.StdEncoding.EncodeToString([]byte("wav-bytes")) + `"}`))
+	}))
+	defer srv.Close()
+
+	svc, _ := testService(t, Keys{}, srv.URL, "")
+	_, err := svc.Generate(context.Background(), Google, Speech{Text: "hi"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tts-google-key", "the missing key is a clear error")
+
+	svc.SetKeys(Keys{Google: "secret-key"})
+	_, err = svc.Generate(context.Background(), Google, Speech{Text: "hi"})
+	require.NoError(t, err)
+	assert.Equal(t, "secret-key", gotKey, "the key set after the start applies to the next request")
+
+	svc.SetKeys(Keys{})
+	_, err = svc.Generate(context.Background(), Google, Speech{Text: "hi"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tts-google-key", "a cleared key stops the provider again")
 }
 
 // TestAzureCoversSSMLAndKeyHandling covers B41, ADR-0020 §3: the azure
@@ -158,7 +185,7 @@ func TestAzureCoversSSMLAndKeyHandling(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	svc, dir := testService(t, map[string]string{EnvAzureKey: "secret-key", EnvAzureRegion: "westeurope"}, "", srv.URL)
+	svc, dir := testService(t, Keys{Azure: "secret-key", AzureRegion: "westeurope"}, "", srv.URL)
 	path, err := svc.Generate(context.Background(), Azure, Speech{
 		Text: "a <b> & \"c\"", Volume: 80, Rate: 1.2, Pitch: 0.9, Voice: "de-DE-KatjaNeural",
 	})
@@ -187,21 +214,21 @@ func TestAzureCoversSSMLAndKeyHandling(t *testing.T) {
 		_, _ = w.Write([]byte("wav-bytes"))
 	}))
 	defer srv2.Close()
-	svc2, _ := testService(t, map[string]string{EnvAzureKey: "secret-key", EnvAzureRegion: "westeurope"}, "", srv2.URL)
+	svc2, _ := testService(t, Keys{Azure: "secret-key", AzureRegion: "westeurope"}, "", srv2.URL)
 	_, err = svc2.Generate(context.Background(), Azure, Speech{Text: "hello"})
 	require.NoError(t, err)
 	assert.Contains(t, string(defaultSSML), `name="en-US-JennyNeural"`)
 	assert.Contains(t, string(defaultSSML), `xml:lang="en-US"`)
 
 	// The missing key and the missing region are clear errors.
-	noKey, _ := testService(t, map[string]string{EnvAzureRegion: "westeurope"}, "", srv.URL)
+	noKey, _ := testService(t, Keys{AzureRegion: "westeurope"}, "", srv.URL)
 	_, err = noKey.Generate(context.Background(), Azure, Speech{Text: "hi"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), EnvAzureKey)
-	noRegion, _ := testService(t, map[string]string{EnvAzureKey: "k"}, "", srv.URL)
+	assert.Contains(t, err.Error(), "tts-azure-key")
+	noRegion, _ := testService(t, Keys{Azure: "k"}, "", srv.URL)
 	_, err = noRegion.Generate(context.Background(), Azure, Speech{Text: "hi"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), EnvAzureRegion)
+	assert.Contains(t, err.Error(), "tts-azure-region")
 }
 
 // TestAzureSSMLEscapesTheLanguage is the regression of the xml:lang
@@ -221,7 +248,7 @@ func TestAzureSSMLEscapesTheLanguage(t *testing.T) {
 func TestPiperCoversTheProcessAndModel(t *testing.T) {
 	var args []string
 	var text string
-	svc, _ := testService(t, map[string]string{}, "", "")
+	svc, _ := testService(t, Keys{}, "", "")
 	svc.ports.PiperModel = "/models/de.pth"
 	svc.ports.Piper = func(_ context.Context, a []string, in string) error {
 		args = a
@@ -246,7 +273,7 @@ func TestPiperCoversTheProcessAndModel(t *testing.T) {
 	assert.Equal(t, "wav-bytes", string(raw))
 
 	// The missing model is a clear error.
-	none, _ := testService(t, map[string]string{}, "", "")
+	none, _ := testService(t, Keys{}, "", "")
 	none.ports.Piper = svc.ports.Piper
 	_, err = none.Generate(context.Background(), Piper, Speech{Text: "hi"})
 	require.Error(t, err)
@@ -257,7 +284,7 @@ func TestPiperCoversTheProcessAndModel(t *testing.T) {
 // provider generates no file, and the unknown provider is a clear
 // error.
 func TestGenerateCoversTheProviderNames(t *testing.T) {
-	svc, _ := testService(t, map[string]string{}, "", "")
+	svc, _ := testService(t, Keys{}, "", "")
 	_, err := svc.Generate(context.Background(), Browser, Speech{Text: "hi"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "overlay")
@@ -280,7 +307,7 @@ func TestNewCoversTheGeneratedDir(t *testing.T) {
 // timestamp collided), and the old generated files are swept from the
 // directory while the recent ones stay.
 func TestNewFileCoversTheNameAndTheSweep(t *testing.T) {
-	svc, dir := testService(t, map[string]string{}, "", "")
+	svc, dir := testService(t, Keys{}, "", "")
 	now := svc.ports.Now()
 
 	a, err := svc.newFile(dir, ".mp3")
