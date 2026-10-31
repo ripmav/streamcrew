@@ -4,10 +4,10 @@ package overlay
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"html"
 	"log/slog"
 	"net"
 	"net/http"
@@ -18,6 +18,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/ripmav/streamcrew/internal/capability"
+	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/overlay/web"
 	"github.com/ripmav/streamcrew/internal/supervisor"
 )
@@ -31,18 +32,24 @@ const (
 	shutdownTimeout   = 10 * time.Second
 )
 
+// TokenCheck validates the query parameter token against the API tokens
+// of the profile (B5, ADR-0013 §5): ok is true only for a stored token
+// that carries the overlay scope, so a strong token never needs to land
+// in an OBS URL. The app wires it to the apitoken store.
+type TokenCheck func(ctx context.Context, value string) bool
+
 // Config configures a Server (B1, B5).
 type Config struct {
 	// Listen is the TCP address, e.g. "127.0.0.1:8742". Port 0 selects
 	// a free port.
 	Listen string
-	// Token protects the endpoints: when set, the page, the WebSocket
-	// and the media URLs require the value as the query parameter
-	// token, otherwise they answer 401. Empty leaves the endpoints
-	// open (B5).
-	Token string
-	// Version is the version of the core, reported by hello (B4).
-	Version string
+	// Mode is the operating mode of the core; without a token the
+	// endpoints are only open in desktop and daemon mode with a
+	// loopback listen address (B5).
+	Mode config.Mode
+	// TokenCheck validates the query parameter token, nil means no
+	// token can open the endpoints.
+	TokenCheck TokenCheck
 	// Service is the overlay state the server presents; required.
 	Service *Service
 	// MediaDir is the media directory of the profile, served under
@@ -65,6 +72,9 @@ type Server struct {
 	cfg     Config
 	logger  *slog.Logger
 	handler http.Handler
+	// local allows token-less access: desktop or daemon mode with a
+	// loopback listen address (B5).
+	local bool
 
 	addrMu    sync.Mutex
 	addr      net.Addr
@@ -83,6 +93,8 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg:       cfg,
 		logger:    cfg.Logger,
 		listening: make(chan struct{}),
+		local: (cfg.Mode == config.ModeDesktop || cfg.Mode == config.ModeDaemon) &&
+			loopbackListen(cfg.Listen),
 	}
 	s.handler = s.buildMux()
 	return s, nil
@@ -164,14 +176,47 @@ func (s *Server) buildMux() *http.ServeMux {
 	return mux
 }
 
-// authorized checks the optional token (B5): without a set token the
-// endpoints are open; with one, the query parameter token must match.
-func (s *Server) authorized(r *http.Request) bool {
-	if s.cfg.Token == "" {
+// loopbackHost reports whether the host names a loopback address:
+// localhost or a loopback IP such as 127.0.0.1 or [::1], with any port.
+// Against the Host header, not the destination, it stops DNS-rebinding:
+// a foreign site whose name resolves to 127.0.0.1 keeps its own Host
+// header in the browser (B5, Review 341-7).
+func loopbackHost(host string) bool {
+	h, _, err := net.SplitHostPort(host)
+	if err != nil {
+		h = host
+	}
+	if h == "localhost" {
 		return true
 	}
-	token := r.URL.Query().Get("token")
-	return token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.cfg.Token)) == 1
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
+
+// loopbackListen reports whether the listen address binds a loopback
+// host; an unparseable address fails closed (B5).
+func loopbackListen(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	return loopbackHost(host)
+}
+
+// authorized checks the access to the endpoints (B5): a token in the
+// query parameter must be a stored token with the overlay scope,
+// otherwise the endpoints answer 401, an invalid or revoked token as
+// well. Without a token the access is only allowed in desktop and
+// daemon mode with a loopback listen address and a Host header that
+// names a loopback address. It returns the raw token value, so the
+// server can re-check it against a revocation on every send of an open
+// WebSocket.
+func (s *Server) authorized(r *http.Request) (token string, ok bool) {
+	token = r.URL.Query().Get("token")
+	if token != "" {
+		return token, s.cfg.TokenCheck != nil && s.cfg.TokenCheck(r.Context(), token)
+	}
+	return "", s.local && loopbackHost(r.Host)
 }
 
 // refuse answers 401 and logs a warning with the address, without the
@@ -202,8 +247,17 @@ OVERLAY_BUNDLE
 `
 
 // servePage serves the runtime of the named endpoint (B2, B3): the
-// embedded HTML with the endpoint ID and name injected. An unknown
-// endpoint answers 404 (B2).
+// embedded HTML with the endpoint ID and name injected, escaped for
+// the title and the inline script (Review 342-7). An unknown endpoint
+// answers 404 (B2).
+// scriptJSON returns the JSON of v with < escaped, so that it can be
+// inlined in a <script> block without breaking out of it (Review
+// 342-7); a string never fails to marshal.
+func scriptJSON(v any) string {
+	data, _ := json.Marshal(v)
+	return strings.ReplaceAll(string(data), "<", `\u003c`)
+}
+
 func (s *Server) servePage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	e, ok := s.cfg.Service.Endpoint(id)
@@ -211,13 +265,16 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	if !s.authorized(r) {
+	if _, ok := s.authorized(r); !ok {
 		s.refuse(r.Context(), w, r)
 		return
 	}
-	config := fmt.Sprintf(`{"id":%q,"name":%q}`, e.ID, e.Name)
+	// The ID and name come from the section and the URL; the title is
+	// HTML-escaped and the config JSON-escaped, so the name cannot
+	// break out of either (Review 342-7).
+	config := fmt.Sprintf(`{"id":%s,"name":%s}`, scriptJSON(e.ID), scriptJSON(e.Name))
 	page := strings.NewReplacer(
-		"OVERLAY_TITLE", e.Name,
+		"OVERLAY_TITLE", html.EscapeString(e.Name),
 		"OVERLAY_CONFIG", config,
 		"OVERLAY_BUNDLE", web.Bundle,
 	).Replace(indexHTML)
@@ -233,14 +290,17 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request) {
 const connOutQueue = 32
 
 // serveWS upgrades the WebSocket of the named endpoint and runs the
-// protocol with the runtime (B3, B4, B7, B14).
+// protocol with the runtime (B3, B4, B7, B14). A connection with a
+// token re-checks it on every send, so a revocation closes it on the
+// next message (B5).
 func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if _, ok := s.cfg.Service.Endpoint(id); !ok {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	if !s.authorized(r) {
+	token, ok := s.authorized(r)
+	if !ok {
 		s.refuse(r.Context(), w, r)
 		return
 	}
@@ -252,6 +312,13 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	out := make(chan []byte, connOutQueue)
 	send := func(msg Message) {
+		// A revoked token is re-checked on every send (B5): the
+		// connection closes and no further message is queued.
+		if token != "" && s.cfg.TokenCheck != nil && !s.cfg.TokenCheck(ctx, token) {
+			s.logger.WarnContext(ctx, "overlay: token revoked, closing the connection", "path", r.URL.Path)
+			_ = conn.Close(websocket.StatusPolicyViolation, "token revoked")
+			return
+		}
 		data := encode(msg)
 		select {
 		case out <- data:
@@ -264,8 +331,15 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close(websocket.StatusInternalError, err.Error())
 		return
 	}
-	go s.writeLoop(ctx, conn, out)
+	// The writer runs in its own goroutine; when the readLoop ends with
+	// the connection, the derived context ends with it, so the writer
+	// and its queue do not linger until the shutdown (Review 342-14).
+	writeCtx, cancelWrite := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Go(func() { s.writeLoop(writeCtx, conn, out) })
 	s.readLoop(ctx, conn, id, slot)
+	cancelWrite()
+	wg.Wait()
 }
 
 // writeLoop drains the send queue onto the connection until the context

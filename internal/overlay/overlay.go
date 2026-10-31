@@ -7,13 +7,13 @@
 package overlay
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
 	"slices"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -98,7 +98,13 @@ type Service struct {
 
 	mu        sync.Mutex
 	endpoints map[string]settings.OverlayEndpoint
-	widgets   map[string]settings.OverlayWidget
+	// endpointOrder is the order of the section's endpoints, for the
+	// stable listing; the default endpoint comes first (B2).
+	endpointOrder []string
+	widgets       map[string]settings.OverlayWidget
+	// widgetOrder is the order of the section's widgets, for the stable
+	// state sync (B4).
+	widgetOrder []string
 	// visible is the runtime visibility of a widget (B21); a widget
 	// not in the map shows its flag of the section.
 	visible map[string]bool
@@ -182,18 +188,24 @@ func (s *Service) reload(ctx context.Context) error {
 		return fmt.Errorf("overlay: load the section: %w", err)
 	}
 	endpoints := map[string]settings.OverlayEndpoint{settings.DefaultEndpointID: {ID: settings.DefaultEndpointID, Name: "Default"}}
+	endpointOrder := make([]string, 0, len(sec.Endpoints))
 	for _, e := range sec.Endpoints {
 		endpoints[e.ID] = e
+		endpointOrder = append(endpointOrder, e.ID)
 	}
 	widgets := make(map[string]settings.OverlayWidget, len(sec.Widgets))
+	widgetOrder := make([]string, 0, len(sec.Widgets))
 	for _, w := range sec.Widgets {
 		widgets[w.ID] = w
+		widgetOrder = append(widgetOrder, w.ID)
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.endpoints = endpoints
+	s.endpointOrder = endpointOrder
 	s.widgets = widgets
+	s.widgetOrder = widgetOrder
 	for id := range s.visible {
 		if _, ok := widgets[id]; !ok {
 			delete(s.visible, id)
@@ -244,7 +256,7 @@ func (s *Service) Endpoint(id string) (settings.OverlayEndpoint, bool) {
 }
 
 // Endpoints returns the endpoints in a stable order: default first, then
-// the endpoints of the section in their order.
+// the endpoints of the section in their order (Review 342-12).
 func (s *Service) Endpoints() []settings.OverlayEndpoint {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -252,15 +264,10 @@ func (s *Service) Endpoints() []settings.OverlayEndpoint {
 	if e, ok := s.endpoints[settings.DefaultEndpointID]; ok {
 		out = append(out, e)
 	}
-	ids := make([]string, 0, len(s.endpoints))
-	for id := range s.endpoints {
+	for _, id := range s.endpointOrder {
 		if id != settings.DefaultEndpointID {
-			ids = append(ids, id)
+			out = append(out, s.endpoints[id])
 		}
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		out = append(out, s.endpoints[id])
 	}
 	return out
 }
@@ -502,48 +509,69 @@ func (s *Service) UpdateWidget(ctx context.Context, widgetID string, state any) 
 // services from 7.2.
 func (s *Service) WidgetStates(ctx context.Context, endpoint string) []WidgetState {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.widgetStates(ctx, endpoint)
+	widgets := s.visibleWidgets(endpoint)
+	provider := s.stateProvider
+	s.mu.Unlock()
+	return s.syncStates(ctx, provider, widgets)
 }
 
 // Attach registers a connected runtime of the endpoint and sends it the
-// handshake: hello, state.widgets and the active items (B4, B7). send
+// handshake: hello, state.widgets and the active items (B4, B7). The
+// slot is registered before the snapshot, under the same lock hold, so
+// a broadcast in between reaches the runtime (Review 342-13). send
 // delivers the messages to the runtime, called by the service for every
 // broadcast and the handshake. It returns the slot; the server detaches
 // it again with Detach when the connection ends.
 func (s *Service) Attach(ctx context.Context, endpoint string, send func(msg Message)) (ClientSlot, error) {
-	if err := s.SyncState(ctx, endpoint, send); err != nil {
-		return ClientSlot{}, err
-	}
-	slot := ClientSlot{ID: fmt.Sprintf("slot-%d", s.nextSlot.Add(1)), Send: send}
 	s.mu.Lock()
+	e, ok := s.endpoints[endpoint]
+	if !ok {
+		s.mu.Unlock()
+		return ClientSlot{}, fmt.Errorf("overlay: the endpoint %q is unknown", endpoint)
+	}
 	if s.clients[endpoint] == nil {
 		s.clients[endpoint] = map[string]ClientSlot{}
 	}
+	slot := ClientSlot{ID: fmt.Sprintf("slot-%d", s.nextSlot.Add(1)), Send: send}
 	s.clients[endpoint][slot.ID] = slot
+	hello, widgets, items, provider := s.snapshot(e)
 	s.mu.Unlock()
+	states := s.syncStates(ctx, provider, widgets)
 	s.logger.InfoContext(ctx, "overlay client attached", "endpoint", endpoint, "slot", slot.ID)
+	for _, msg := range s.handshake(hello, states, items) {
+		send(msg)
+	}
 	return slot, nil
 }
 
 // SyncState sends the full state of the endpoint to send in the order
 // of B4: hello, state.widgets and the active items. The server calls it
 // on attach and on ready, so a message lost during the connection is
-// caught (B4, B7).
+// caught (B4, B7). The widget states are computed outside the service
+// lock, because the state provider does DB I/O (Review 344-12).
 func (s *Service) SyncState(ctx context.Context, endpoint string, send func(msg Message)) error {
-	e, ok := s.Endpoint(endpoint)
+	s.mu.Lock()
+	e, ok := s.endpoints[endpoint]
 	if !ok {
+		s.mu.Unlock()
 		return fmt.Errorf("overlay: the endpoint %q is unknown", endpoint)
 	}
-	s.mu.Lock()
-	hello := HelloData{Version: s.version, Endpoint: e.ID, Name: e.Name, Time: time.Now()}
-	widgets := s.widgetStates(ctx, endpoint)
-	items := s.activeItems(endpoint)
+	hello, widgets, items, provider := s.snapshot(e)
 	s.mu.Unlock()
-	for _, msg := range s.handshake(hello, widgets, items) {
+	states := s.syncStates(ctx, provider, widgets)
+	for _, msg := range s.handshake(hello, states, items) {
 		send(msg)
 	}
 	return nil
+}
+
+// snapshot is the state of the endpoint for the state sync (B4),
+// collected under one lock hold; the caller holds mu. The widget states
+// are computed outside the lock with syncStates, because the provider
+// does DB I/O (Review 344-12).
+func (s *Service) snapshot(e settings.OverlayEndpoint) (HelloData, []settings.OverlayWidget, []ItemData, func(ctx context.Context, w settings.OverlayWidget) any) {
+	hello := HelloData{Version: s.version, Endpoint: e.ID, Name: e.Name, Time: time.Now()}
+	return hello, s.visibleWidgets(e.ID), s.activeItems(e.ID), s.stateProvider
 }
 
 // handshake builds the messages of a (re)connect in the order of B4.
@@ -558,10 +586,13 @@ func (s *Service) handshake(hello HelloData, widgets []WidgetState, items []Item
 	return msgs
 }
 
-// widgetStates is WidgetStates without the lock; the caller holds mu.
-func (s *Service) widgetStates(ctx context.Context, endpoint string) []WidgetState {
-	var out []WidgetState
-	for _, w := range s.widgets {
+// visibleWidgets are the definitions of the visible widgets of the
+// endpoint in the order of the section, for the state sync (B4, B21,
+// Review 342-12); the caller holds mu.
+func (s *Service) visibleWidgets(endpoint string) []settings.OverlayWidget {
+	var out []settings.OverlayWidget
+	for _, id := range s.widgetOrder {
+		w := s.widgets[id]
 		ep := w.Endpoint
 		if ep == "" {
 			ep = settings.DefaultEndpointID
@@ -576,23 +607,36 @@ func (s *Service) widgetStates(ctx context.Context, endpoint string) []WidgetSta
 		if !visible {
 			continue
 		}
-		var state any
-		if s.stateProvider != nil {
-			state = s.stateProvider(ctx, w)
-		}
-		out = append(out, WidgetState{ID: w.ID, Kind: w.Kind, Name: w.Name, Position: w.Position, State: state})
+		out = append(out, w)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 
-// activeItems is ActiveItems without the lock; the caller holds mu.
+// syncStates fills the states of the widget definitions with the
+// provider (B20); a nil provider leaves the state empty. It runs
+// outside the service lock, because the provider does DB I/O
+// (Review 344-12).
+func (s *Service) syncStates(ctx context.Context, provider func(ctx context.Context, w settings.OverlayWidget) any, widgets []settings.OverlayWidget) []WidgetState {
+	out := make([]WidgetState, 0, len(widgets))
+	for _, w := range widgets {
+		var state any
+		if provider != nil {
+			state = provider(ctx, w)
+		}
+		out = append(out, WidgetState{ID: w.ID, Kind: w.Kind, Name: w.Name, Position: w.Position, State: state})
+	}
+	return out
+}
+
+// activeItems is ActiveItems without the lock; the caller holds mu. The
+// ID order is the order of the show, because the IDs are zero-padded
+// counters (B4).
 func (s *Service) activeItems(endpoint string) []ItemData {
 	items := make([]ItemData, 0, len(s.items[endpoint]))
 	for _, item := range s.items[endpoint] {
 		items = append(items, item.data)
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
+	slices.SortFunc(items, func(a, b ItemData) int { return cmp.Compare(a.ID, b.ID) })
 	return items
 }
 

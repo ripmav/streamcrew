@@ -6,9 +6,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	overlayaction "github.com/ripmav/streamcrew/internal/action/overlay"
+	"github.com/ripmav/streamcrew/internal/apitoken"
 	"github.com/ripmav/streamcrew/internal/config"
 	"github.com/ripmav/streamcrew/internal/discord"
 	"github.com/ripmav/streamcrew/internal/domain/platform"
@@ -32,7 +34,9 @@ func (a *App) overlaySection(ctx context.Context) (settings.Overlay, error) {
 // (roadmap 7.1, ADR-0019): the service keeps the endpoints, the active
 // items and the widget state; the server serves the embedded runtime
 // and the released media. The server runs under the supervisor without
-// the critical flag, so a failure does not stop the core.
+// the critical flag, so a failure does not stop the core. The endpoints
+// are protected by the API tokens of the profile with the overlay
+// scope (B5, ADR-0013 §5).
 func newOverlayServer(ctx context.Context, cfg config.Config, a *App, mediaDir string, logger *slog.Logger) (*overlay.Server, error) {
 	svc, err := overlay.New(ctx, overlay.Ports{
 		Section: a.overlaySection,
@@ -44,14 +48,25 @@ func newOverlayServer(ctx context.Context, cfg config.Config, a *App, mediaDir s
 	}
 	return overlay.NewServer(overlay.Config{
 		Listen:       cfg.OverlayListen,
-		Token:        cfg.OverlayToken,
-		Version:      a.version,
+		Mode:         cfg.Mode,
+		TokenCheck:   overlayTokenCheck(apitoken.New(a.store)),
 		Service:      svc,
 		MediaDir:     mediaDir,
 		Capabilities: a.rights,
 		Root:         a.rights.Root,
 		Logger:       logger,
 	})
+}
+
+// overlayTokenCheck validates the query parameter token of the overlay
+// endpoints against the API tokens of the profile (B5, ADR-0013 §5):
+// only a stored token that carries the overlay scope opens them, so a
+// strong token never needs to land in an OBS URL.
+func overlayTokenCheck(tokens *apitoken.Store) func(ctx context.Context, value string) bool {
+	return func(ctx context.Context, value string) bool {
+		tok, ok := tokens.Validate(ctx, value)
+		return ok && slices.Contains(tok.Scopes, apitoken.Overlay)
+	}
 }
 
 // newOverlayWidgets builds the widget service of the P1 widgets

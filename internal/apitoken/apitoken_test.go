@@ -246,7 +246,9 @@ func TestImportStoresATokenAsIs(t *testing.T) {
 	assert.Equal(t, tok, got)
 }
 
-// TestSatisfies covers the scope hierarchy.
+// TestSatisfies covers the scope hierarchy: read, control and admin
+// through the hierarchy, and the standalone overlay scope, which opens
+// only the overlay server and never the API (B5, S8).
 func TestSatisfies(t *testing.T) {
 	t.Parallel()
 	admin := Token{Scopes: []Scope{Admin}}
@@ -258,11 +260,17 @@ func TestSatisfies(t *testing.T) {
 	assert.True(t, admin.Satisfies(Read))
 	assert.True(t, admin.Satisfies(Control))
 	assert.True(t, admin.Satisfies(Admin))
+	assert.False(t, admin.Satisfies(Overlay), "admin does not carry the overlay scope")
 	assert.True(t, control.Satisfies(Read))
 	assert.False(t, control.Satisfies(Admin))
 	assert.True(t, read.Satisfies(Read))
 	assert.False(t, read.Satisfies(Control))
-	assert.True(t, overlay.Satisfies(Read), "overlay counts as read")
+	assert.False(t, read.Satisfies(Overlay), "read does not carry the overlay scope")
+	assert.False(t, overlay.Satisfies(Read), "overlay is not a read scope (S8)")
 	assert.False(t, overlay.Satisfies(Control))
+	assert.True(t, overlay.Satisfies(Overlay))
+	assert.True(t, Token{Scopes: []Scope{Read, Overlay}}.Satisfies(Overlay), "a token with the overlay scope opens the overlay server")
+	assert.True(t, Token{Scopes: []Scope{Read, Overlay}}.Satisfies(Read))
 	assert.False(t, none.Satisfies(Read))
+	assert.False(t, none.Satisfies(Overlay))
 }
