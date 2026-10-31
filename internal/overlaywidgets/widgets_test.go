@@ -1542,6 +1542,43 @@ func TestWidgetStreamBoss(t *testing.T) {
 		last = eff[len(eff)-1]
 		assert.Equal(t, eventtype.OverlayBossNew, last.typ)
 		assert.Equal(t, &eventtype.OverlayBoss{Health: 125}, last.payload.Details.OverlayBoss)
+
+		// Self-heal without a configured multiplier heals the full
+		// amount (default 1, Review 347-6). The section switches to the
+		// fresh boss widgets for these steps; the tick reloads it.
+		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("b2", overlaywidgets.KindStreamBoss, map[string]any{"base_health": 10}),
+			widget("b3", overlaywidgets.KindStreamBoss, map[string]any{"base_health": 10, "self_heal_multiplier": 0.0}),
+		}})
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		// The kill makes the feed user the boss of both widgets.
+		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b2", 10, false, ada))
+		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b3", 10, false, ada))
+		synctest.Wait()
+		// The boss damages himself without a multiplier: the full
+		// amount heals.
+		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b2", 10, false, bob))
+		synctest.Wait()
+		ups2 := f.updates(t, "b2")
+		require.NotEmpty(t, ups2)
+		var st2 map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ups2[len(ups2)-1]), &st2))
+		assert.Equal(t, float64(20), st2["health"])
+		eff = f.effectsList()
+		last = eff[len(eff)-1]
+		assert.Equal(t, eventtype.OverlayBossHeal, last.typ)
+		assert.Equal(t, bob, last.payload.User)
+		assert.Equal(t, &eventtype.OverlayBoss{Health: 20, Amount: 10}, last.payload.Details.OverlayBoss)
+
+		// A multiplier of 0 changes nothing: no event, no push
+		// (Review 347-6).
+		before := len(f.effectsList())
+		ups3 := len(f.updates(t, "b3"))
+		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b3", 10, false, bob))
+		synctest.Wait()
+		assert.Equal(t, before, len(f.effectsList()))
+		assert.Equal(t, ups3, len(f.updates(t, "b3")))
 	})
 }
 

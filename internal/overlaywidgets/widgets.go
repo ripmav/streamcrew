@@ -2592,6 +2592,10 @@ func (s *Service) StateForPersistentTimer(ctx context.Context, w settings.Overla
 
 // ---------- stream_boss (B30) ----------
 
+// streamBossSelfHealDefault is the self-heal multiplier when the
+// configuration names none (B30, Review 347-6).
+const streamBossSelfHealDefault = 1.0
+
 // streamBossConfig is the configuration of the stream boss.
 type streamBossConfig struct {
 	// BaseHealth is the health of a new boss.
@@ -2602,8 +2606,8 @@ type streamBossConfig struct {
 	// health.
 	OverkillBonusMultiplier float64 `json:"overkill_bonus_multiplier"`
 	// SelfHealMultiplier multiplies the healing when the boss damages
-	// itself.
-	SelfHealMultiplier float64 `json:"self_heal_multiplier"`
+	// itself; nil for the default of 1.
+	SelfHealMultiplier *float64 `json:"self_heal_multiplier"`
 	// CompoundPreviousHealth compounds the previous max health into the
 	// next boss; nil for the default of true.
 	CompoundPreviousHealth *bool `json:"compound_previous_health"`
@@ -2704,8 +2708,17 @@ func (s *Service) streamBossApply(ctx context.Context, w settings.OverlayWidget,
 	// The caller who is the boss heals, not damages, while self-heal is
 	// configured and the damage is not forced (B30).
 	if !force && !heal && u != nil && !u.ID.IsZero() && st.boss == userName(*u) {
-		amount = -int64(float64(amount) * cfg.SelfHealMultiplier)
+		multiplier := streamBossSelfHealDefault
+		if cfg.SelfHealMultiplier != nil {
+			multiplier = *cfg.SelfHealMultiplier
+		}
+		amount = -int64(float64(amount) * multiplier)
 		heal = true
+	}
+	if amount == 0 {
+		// No change, no event (Review 347-6).
+		s.mu.Unlock()
+		return
 	}
 	overkill := int64(0)
 	st.health -= amount // amount is negative for a heal: adds the health
