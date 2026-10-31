@@ -18,6 +18,7 @@ func main() {
 	result := api.Build(api.BuildOptions{
 		EntryPoints:       []string{"runtime/src/main.ts"},
 		Outfile:           "web/bundle.js",
+		Write:             true,
 		Bundle:            true,
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,

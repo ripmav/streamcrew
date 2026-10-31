@@ -5,12 +5,14 @@ package config_test
 import (
 	"errors"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ripmav/streamcrew/internal/config"
 )
@@ -29,6 +31,15 @@ type applyRec struct {
 	listenCfg atomic.Value // holds [3]string
 	timeout   atomic.Int64
 	timeoutMu sync.Mutex
+	ttsMu     sync.Mutex
+	ttsKeys   []config.TTSKeys
+}
+
+// tts returns the TTS keys the applies received.
+func (r *applyRec) tts() []config.TTSKeys {
+	r.ttsMu.Lock()
+	defer r.ttsMu.Unlock()
+	return slices.Clone(r.ttsKeys)
 }
 
 func (r *applyRec) funcs() *config.ApplyFuncs {
@@ -60,6 +71,11 @@ func (r *applyRec) funcs() *config.ApplyFuncs {
 		},
 		ShutdownTimeout: func(d time.Duration) {
 			r.timeout.Store(int64(d))
+		},
+		TTSKeys: func(k config.TTSKeys) {
+			r.ttsMu.Lock()
+			r.ttsKeys = append(r.ttsKeys, k)
+			r.ttsMu.Unlock()
 		},
 	}
 }
@@ -169,4 +185,43 @@ func TestWatcherRestartOnlySettings(t *testing.T) {
 func requireLen(t *testing.T, calls []config.LogConfig, n int) {
 	t.Helper()
 	assert.Len(t, calls, n)
+}
+
+// TestWatcherAppliesTheTTSKeys verifies the TTS provider keys are hot
+// (Code-ADR-0021, Nachtrag 2026-10-29): a new key in the file applies
+// without a restart, the log names the settings that changed, and no
+// value reaches the log; a removed key keeps the value the core runs
+// with.
+func TestWatcherAppliesTheTTSKeys(t *testing.T) {
+	clearEnv(t)
+	dataDir := t.TempDir()
+	rec := &applyRec{}
+	writeFile(t, filepath.Join(dataDir, "config.yaml"), "log_level: info\n")
+	watch(t, dataDir, nil, rec.funcs(), func(w *watched) {
+		w.tick()
+		assert.Empty(t, rec.tts(), "an unchanged file applies nothing")
+
+		w.write("log_level: info\ntts_google_key: google-secret\ntts_azure_key: azure-secret\ntts_azure_region: westeurope\n")
+		require.Len(t, rec.tts(), 1)
+		assert.Equal(t, "google-secret", rec.tts()[0].Google)
+		assert.Equal(t, "azure-secret", rec.tts()[0].Azure)
+		assert.Equal(t, "westeurope", rec.tts()[0].AzureRegion)
+		logs := w.logs.String()
+		assert.Contains(t, logs, "setting applied from the configuration file")
+		assert.Contains(t, logs, "setting=tts-keys")
+		assert.Contains(t, logs, "tts-google-key, tts-azure-key, tts-azure-region")
+		assert.NotContains(t, logs, "google-secret", "the values never reach the log")
+		assert.NotContains(t, logs, "azure-secret")
+
+		// A removed secret keeps the value the core runs with (the
+		// write-only resolution), while the region — a regular hot
+		// setting — returns to the default.
+		w.write("log_level: info\ntts_azure_region: westeurope\n")
+		require.Len(t, rec.tts(), 1, "missing secrets keep the current values")
+		w.write("log_level: info\n")
+		require.Len(t, rec.tts(), 2)
+		assert.Equal(t, "google-secret", rec.tts()[1].Google, "the secret keeps its value")
+		assert.Equal(t, "azure-secret", rec.tts()[1].Azure)
+		assert.Empty(t, rec.tts()[1].AzureRegion, "the region returns to the default")
+	})
 }

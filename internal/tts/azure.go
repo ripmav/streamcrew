@@ -14,9 +14,9 @@ import (
 )
 
 // defaultAzureVoice is the voice of the azure provider when the action
-// names none; the region of the endpoint still comes from
-// EnvAzureRegion.
-const defaultAzureVoice = "en-US-Neural"
+// names none; the region of the endpoint still comes from the setting
+// tts-azure-region.
+const defaultAzureVoice = "en-US-JennyNeural"
 
 // azureBase is the production endpoint of the Speech API for the region.
 func azureBase(region string) string {
@@ -27,13 +27,16 @@ func azureBase(region string) string {
 // ADR-0020 §3). The key stays in the header, so it never appears in the
 // URL of an error (ADR-0020 §2).
 func (s *Service) azure(ctx context.Context, sp Speech) (string, error) {
-	key := s.ports.Env(EnvAzureKey)
+	// The key and the region are read from the snapshot at the call, so
+	// values set in the configuration apply to this request
+	// (Code-ADR-0021, Nachtrag 2026-10-29).
+	key := s.keys.Load().Azure
 	if key == "" {
-		return "", fmt.Errorf("tts: the provider azure needs the key in %s", EnvAzureKey)
+		return "", errors.New("tts: the provider azure needs the key in the setting tts-azure-key")
 	}
-	region := s.ports.Env(EnvAzureRegion)
+	region := s.keys.Load().AzureRegion
 	if region == "" {
-		return "", fmt.Errorf("tts: the provider azure needs the region in %s", EnvAzureRegion)
+		return "", errors.New("tts: the provider azure needs the region in the setting tts-azure-region")
 	}
 	if s.ports.Dialer == nil {
 		return "", errors.New("tts: the provider azure needs a dialer (net:outbound)")
@@ -48,10 +51,12 @@ func (s *Service) azure(ctx context.Context, sp Speech) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("tts: azure: %w", err)
 	}
+	// The answer is a 16-bit PCM WAV (24 kHz mono): the local sink
+	// decodes WAV only (Review 345-11).
 	req.Header.Set("Content-Type", "application/ssml+xml")
 	req.Header.Set("Ocp-Apim-Subscription-Key", key)
-	req.Header.Set("X-Microsoft-OutputFormat", "audio-24khz-48kbitrate-mono-mp3")
-	res, err := s.client().Do(req)
+	req.Header.Set("X-Microsoft-OutputFormat", "riff-24khz-16bit-mono-pcm")
+	res, err := s.client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("tts: azure: %w", err)
 	}
@@ -64,23 +69,22 @@ func (s *Service) azure(ctx context.Context, sp Speech) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("tts: azure: the answer: %w", err)
 	}
-	return s.write(ctx, Azure, raw, ".mp3")
+	return s.write(ctx, Azure, raw, ".wav")
 }
 
 // azureSSML builds the SSML document of the request: the prosody maps
-// the volume 0 to 100, the rate and the pitch ratio 1 = normal to the
-// relative values of the API (±%).
+// the rate and the pitch ratio 1 = normal to the relative values of
+// the API (±%). The volume is no attribute: it is applied once, at the
+// sink that plays the file (Review 345-5).
 func azureSSML(voice string, sp Speech) []byte {
-	lang := voice
-	if i := strings.LastIndex(lang, "-"); i > 0 {
-		lang = lang[:i]
-	}
+	// The language is the voice name without the last segment, escaped
+	// like the rest of the document (Review 345-7).
+	lang, _, _ := strings.CutLast(voice, "-")
 	var b bytes.Buffer
-	b.WriteString(`<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="` + lang + `">`)
+	b.WriteString(`<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="` + xmlEscape(lang) + `">`)
 	b.WriteString(`<voice name="` + xmlEscape(voice) + `">`)
 	b.WriteString(`<prosody rate="` + percent((sp.Rate-1)*100) +
 		`" pitch="` + percent((sp.Pitch-1)*100) +
-		`" volume="` + percent((sp.Volume/100-1)*100) +
 		`">`)
 	b.WriteString(xmlEscape(sp.Text))
 	b.WriteString(`</prosody></voice></speak>`)
