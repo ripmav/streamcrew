@@ -35,21 +35,17 @@ func (m mediaFiles) File(file string) (string, error) {
 		return "", fmt.Errorf("the media directory is unavailable: %w", err)
 	}
 	defer root.Close()
-	f, err := root.Open(file)
+	// root.Stat resolves file inside the root (escaping paths and
+	// symlinks out of it are errors) without opening a handle (Review
+	// 345-9), and the sinks open the resolved path themselves.
+	info, err := root.Stat(file)
 	if err != nil {
-		return "", fmt.Errorf("the file %q is not under the media directory: %w", file, err)
-	}
-	info, err := f.Stat()
-	if err == nil {
-		_ = f.Close()
-	}
-	if err != nil {
-		return "", fmt.Errorf("the file %q is not readable: %w", file, err)
+		return "", fmt.Errorf("the file %q is not under the media directory or not readable: %w", file, err)
 	}
 	if info.IsDir() {
 		return "", fmt.Errorf("the file %q is a directory, not a file", file)
 	}
-	// root.Open accepted file, so it resolves under the media directory.
+	// root.Stat accepted file, so it resolves under the media directory.
 	return filepath.Join(m.a.mediaDir, filepath.Clean(file)), nil
 }
 
