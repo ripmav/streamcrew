@@ -2,10 +2,17 @@
 
 package config
 
+// SecretPlaceholder stands for a set write-only secret in the
+// configuration document (Code-ADR-0021, Nachtrag 2026-10-29, point 3):
+// the value itself never appears in the document.
+const SecretPlaceholder = "<set>"
+
 // FileView is the flat form of a Config with the keys of the configuration
 // file. "streamcrew config show" prints it, so its output can be used as a
 // configuration file. The overlay token is a credential and stays out,
-// like the bootstrap token.
+// like the bootstrap token; the TTS keys are write-only and show the
+// placeholder instead of their value (Code-ADR-0021, Nachtrag 2026-10-29,
+// point 3).
 type FileView struct {
 	DataDir           string            `yaml:"data_dir" json:"data_dir"`
 	Profile           string            `yaml:"profile,omitempty" json:"profile,omitempty"`
@@ -30,11 +37,14 @@ type FileView struct {
 	TLSKey            string            `yaml:"tls_key,omitempty" json:"tls_key,omitempty"`
 	TwitchEventSub    string            `yaml:"twitch_eventsub,omitempty" json:"twitch_eventsub,omitempty"`
 	TwitchIRC         string            `yaml:"twitch_irc,omitempty" json:"twitch_irc,omitempty"`
+	TTSGoogleKey      string            `yaml:"tts_google_key,omitempty" json:"tts_google_key,omitempty"`
+	TTSAzureKey       string            `yaml:"tts_azure_key,omitempty" json:"tts_azure_key,omitempty"`
+	TTSAzureRegion    string            `yaml:"tts_azure_region,omitempty" json:"tts_azure_region,omitempty"`
 }
 
 // View returns the configuration in the form of the configuration file.
 func (c *Config) View() FileView {
-	return FileView{
+	view := FileView{
 		DataDir:           c.DataDir,
 		Profile:           c.Profile,
 		Mode:              c.Mode,
@@ -55,5 +65,15 @@ func (c *Config) View() FileView {
 		OutboundAllow:     c.OutboundAllow,
 		TwitchEventSub:    c.Twitch.EventSub,
 		TwitchIRC:         c.Twitch.IRC,
+		TTSAzureRegion:    c.TTSAzureRegion,
 	}
+	// The write-only secrets show the placeholder, not their value
+	// (Code-ADR-0021, Nachtrag 2026-10-29, point 3).
+	if c.TTSGoogleKey != "" {
+		view.TTSGoogleKey = SecretPlaceholder
+	}
+	if c.TTSAzureKey != "" {
+		view.TTSAzureKey = SecretPlaceholder
+	}
+	return view
 }
