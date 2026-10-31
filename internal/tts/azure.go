@@ -72,12 +72,11 @@ func (s *Service) azure(ctx context.Context, sp Speech) (string, error) {
 // the API (±%). The volume is no attribute: it is applied once, at the
 // sink that plays the file (Review 345-5).
 func azureSSML(voice string, sp Speech) []byte {
-	lang := voice
-	if i := strings.LastIndex(lang, "-"); i > 0 {
-		lang = lang[:i]
-	}
+	// The language is the voice name without the last segment, escaped
+	// like the rest of the document (Review 345-7).
+	lang, _, _ := strings.CutLast(voice, "-")
 	var b bytes.Buffer
-	b.WriteString(`<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="` + lang + `">`)
+	b.WriteString(`<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="` + xmlEscape(lang) + `">`)
 	b.WriteString(`<voice name="` + xmlEscape(voice) + `">`)
 	b.WriteString(`<prosody rate="` + percent((sp.Rate-1)*100) +
 		`" pitch="` + percent((sp.Pitch-1)*100) +
