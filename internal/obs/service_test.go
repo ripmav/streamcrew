@@ -231,10 +231,6 @@ func (f *fakeObs) answer(ctx context.Context, conn *websocket.Conn, raw jsontext
 		data = f.itemList()
 	case "GetSceneItemSource":
 		data = f.itemSource(req.Data)
-	case "GetSceneItemTransform":
-		data = mustMarshal(map[string]any{"sceneItemTransform": map[string]any{
-			"positionX": 100.0, "positionY": 200.0,
-		}})
 	}
 	_ = f.write(ctx, conn, wire{Op: opResponse, D: mustMarshal(map[string]any{
 		"requestType":   req.Type,
@@ -631,22 +627,27 @@ func TestSetSource(t *testing.T) {
 	})
 	t.Run("the position", func(t *testing.T) {
 		fake := newFakeObs(t, "")
-		fake.addSource("cam")
+		id := fake.addSource("cam")
 		s := obsOn(t, fake)
+		x := 10.0
+		require.NoError(t, s.SetSource(t.Context(), Source{Source: "cam", X: &x}))
+		// The position is a partial transform: the request carries the
+		// changed coordinate only, and no Get request goes out (Review
+		// 346-2).
+		var got struct {
+			SceneName          string             `json:"sceneName"`
+			SceneItemID        int                `json:"sceneItemId"`
+			SceneItemTransform map[string]float64 `json:"sceneItemTransform"`
+		}
+		require.NoError(t, json.Unmarshal(fake.lastTransform(), &got))
+		assert.Equal(t, "Scene", got.SceneName)
+		assert.Equal(t, id, got.SceneItemID)
+		assert.Equal(t, map[string]float64{"positionX": 10.0}, got.SceneItemTransform, "only the position fields")
 		x, y := 10.0, 20.0
 		require.NoError(t, s.SetSource(t.Context(), Source{Source: "cam", X: &x, Y: &y}))
-		reqs := fake.requestsSeen()
-		assert.Contains(t, reqs, "GetSceneItemTransform", "the position keeps the rest of the transform")
-		assert.Contains(t, reqs, "SetSceneItemTransform")
-		var tr struct {
-			SceneItemTransform struct {
-				PositionX float64 `json:"positionX"`
-				PositionY float64 `json:"positionY"`
-			} `json:"sceneItemTransform"`
-		}
-		require.NoError(t, json.Unmarshal(fake.lastTransform(), &tr))
-		assert.Equal(t, 10.0, tr.SceneItemTransform.PositionX)
-		assert.Equal(t, 20.0, tr.SceneItemTransform.PositionY)
+		require.NoError(t, json.Unmarshal(fake.lastTransform(), &got))
+		assert.Equal(t, map[string]float64{"positionX": 10.0, "positionY": 20.0}, got.SceneItemTransform)
+		assert.NotContains(t, fake.requestsSeen(), "GetSceneItemTransform")
 	})
 	t.Run("a source without the scene is an error", func(t *testing.T) {
 		fake := newFakeObs(t, "")

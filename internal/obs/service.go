@@ -464,29 +464,21 @@ func (s *Service) SetSource(ctx context.Context, ch Source) error {
 	}
 	if ch.X != nil || ch.Y != nil {
 		// The position changes only the position; the rest of the
-		// transform (rotation, scale, bounds) stays as it is.
-		var tr struct {
-			SceneItemTransform *transform `json:"sceneItemTransform"`
-		}
-		if err := c.request(ctx, "GetSceneItemTransform", map[string]any{
-			"sceneName":   scene.SceneName,
-			"sceneItemId": id,
-		}, &tr); err != nil {
-			return fmt.Errorf("obs: the transform of the source %q: %w", ch.Source, err)
-		}
-		if tr.SceneItemTransform == nil {
-			return fmt.Errorf("obs: the source %q has no transform", ch.Source)
-		}
+		// transform (rotation, scale, bounds) stays as it is, so the
+		// request carries the position fields only. A full transform
+		// written back would be rejected by OBS for the default bounds
+		// (boundsWidth 0) (Review 346-2).
+		tr := map[string]any{}
 		if ch.X != nil {
-			tr.SceneItemTransform.PositionX = *ch.X
+			tr["positionX"] = *ch.X
 		}
 		if ch.Y != nil {
-			tr.SceneItemTransform.PositionY = *ch.Y
+			tr["positionY"] = *ch.Y
 		}
 		if err := c.request(ctx, "SetSceneItemTransform", map[string]any{
 			"sceneName":          scene.SceneName,
 			"sceneItemId":        id,
-			"sceneItemTransform": tr.SceneItemTransform,
+			"sceneItemTransform": tr,
 		}, nil); err != nil {
 			return fmt.Errorf("obs: the position of the source %q: %w", ch.Source, err)
 		}
