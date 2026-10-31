@@ -68,8 +68,9 @@ func (s *Service) azure(ctx context.Context, sp Speech) (string, error) {
 }
 
 // azureSSML builds the SSML document of the request: the prosody maps
-// the volume 0 to 100, the rate and the pitch ratio 1 = normal to the
-// relative values of the API (±%).
+// the rate and the pitch ratio 1 = normal to the relative values of
+// the API (±%). The volume is no attribute: it is applied once, at the
+// sink that plays the file (Review 345-5).
 func azureSSML(voice string, sp Speech) []byte {
 	lang := voice
 	if i := strings.LastIndex(lang, "-"); i > 0 {
@@ -80,7 +81,6 @@ func azureSSML(voice string, sp Speech) []byte {
 	b.WriteString(`<voice name="` + xmlEscape(voice) + `">`)
 	b.WriteString(`<prosody rate="` + percent((sp.Rate-1)*100) +
 		`" pitch="` + percent((sp.Pitch-1)*100) +
-		`" volume="` + percent((sp.Volume/100-1)*100) +
 		`">`)
 	b.WriteString(xmlEscape(sp.Text))
 	b.WriteString(`</prosody></voice></speak>`)

@@ -71,7 +71,8 @@ func TestGoogleCoversSynthesizeAndKeyHandling(t *testing.T) {
 	assert.Equal(t, "MP3", cfg["audioEncoding"])
 	assert.Equal(t, 1.5, cfg["speakingRate"])
 	assert.InDelta(t, 10, cfg["pitch"], 0.01, "the pitch ratio 1.5 is +10 Hz")
-	assert.InDelta(t, -6.02, cfg["volumeGainDb"], 0.1, "the volume 50 is about -6 dB")
+	assert.Nil(t, cfg["volumeGainDb"],
+		"the sink applies the volume, the provider renders with the gain of 1")
 
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -129,7 +130,8 @@ func TestAzureCoversSSMLAndKeyHandling(t *testing.T) {
 	assert.Contains(t, string(gotSSML), `name="de-DE-KatjaNeural"`)
 	assert.Contains(t, string(gotSSML), `rate="+20%"`)
 	assert.Contains(t, string(gotSSML), `pitch="-10%"`)
-	assert.Contains(t, string(gotSSML), `volume="-20%"`)
+	assert.NotContains(t, string(gotSSML), "volume=",
+		"the sink applies the volume, the provider renders with the gain of 1")
 	assert.Contains(t, string(gotSSML), "a &lt;b&gt; &amp; &#34;c&#34;")
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -174,7 +176,6 @@ func TestPiperCoversTheProcessAndModel(t *testing.T) {
 		"--model", "/models/de.pth",
 		"--output_file", path,
 		"--length-scale", "0.5000",
-		"--volume", "0.5000",
 	}, args)
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)

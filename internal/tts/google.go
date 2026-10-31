@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 )
 
@@ -27,13 +26,14 @@ func (s *Service) google(ctx context.Context, sp Speech) (string, error) {
 	if s.ports.Dialer == nil {
 		return "", errors.New("tts: the provider google needs a dialer (net:outbound)")
 	}
+	// The provider renders with the gain of 1: the volume is applied
+	// once, at the sink that plays the file (Review 345-5).
 	body := map[string]any{
 		"input": map[string]any{"text": sp.Text},
 		"audioConfig": map[string]any{
 			"audioEncoding": "MP3",
 			"speakingRate":  rateOr(sp.Rate),
 			"pitch":         googlePitch(sp.Pitch),
-			"volumeGainDb":  volumeDb(sp.Volume),
 		},
 	}
 	if sp.Voice != "" {
@@ -96,19 +96,6 @@ func googlePitch(pitch float64) float64 {
 		return 20
 	}
 	return p
-}
-
-// volumeDb maps the volume 0 to 100 to the dB gain of the google API;
-// 100 is 0 dB, 0 is the silence of -96 dB.
-func volumeDb(volume float64) float64 {
-	if volume <= 0 {
-		return -96
-	}
-	db := 20 * math.Log10(volume/100)
-	if db < -96 {
-		return -96
-	}
-	return db
 }
 
 // rateOr returns rate if it is positive, 1 otherwise.
