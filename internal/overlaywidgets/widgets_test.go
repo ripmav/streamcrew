@@ -1728,15 +1728,16 @@ func TestWidgetWheel(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		w1 := widget("w1", overlaywidgets.KindWheel, map[string]any{"equal_probability": true, "outcomes": []any{map[string]any{"name": "yes"}, map[string]any{"name": "no"}}})
-		w2 := widget("w2", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{
+		w2 := widget("w2", overlaywidgets.KindWheel, map[string]any{"equal_probability": false, "outcomes": []any{
 			map[string]any{"name": "yes", "probability": 100.0, "modifier": -10},
 			map[string]any{"name": "no", "probability": 0.0, "modifier": 10},
 		}})
-		w3 := widget("w3", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{
+		w3 := widget("w3", overlaywidgets.KindWheel, map[string]any{"equal_probability": false, "outcomes": []any{
 			map[string]any{"name": "yes", "probability": 100.0, "modifier": 10},
 			map[string]any{"name": "no", "probability": 0.0, "modifier": -10},
 		}})
-		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{w1, w2, w3}})
+		w4 := widget("w4", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{map[string]any{"name": "yes"}, map[string]any{"name": "no"}}})
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{w1, w2, w3, w4}})
 		defer f.stop()
 		f.attach(t)
 		ada := twitchUser(t, "ada")
@@ -1745,6 +1746,13 @@ func TestWidgetWheel(t *testing.T) {
 		// B4).
 		assert.JSONEq(t, `{"outcomes":[{"name":"yes","probability":100},{"name":"no","probability":0}]}`,
 			marshalState(t, f.svc.StateForSync(f.ctx, w2)))
+
+		// A wheel with only names is valid and uses equal chances: the
+		// flag defaults to true (Review 347-19).
+		assert.JSONEq(t, `{"outcomes":[{"name":"yes","probability":50},{"name":"no","probability":50}]}`,
+			marshalState(t, f.svc.StateForSync(f.ctx, w4)))
+		require.NoError(t, f.svc.SpinWheel(f.ctx, "w4", ada))
+		synctest.Wait()
 
 		// The spin sends the outcome to the runtime and publishes
 		// overlay.wheel.spun with the caller (B33).
@@ -1795,14 +1803,14 @@ func TestWidgetWheel(t *testing.T) {
 		// The configuration validation: the probabilities must sum to
 		// 100, and the modifiers to zero (B33).
 		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{
-			widget("wb", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{
+			widget("wb", overlaywidgets.KindWheel, map[string]any{"equal_probability": false, "outcomes": []any{
 				map[string]any{"name": "yes", "probability": 50.0},
 				map[string]any{"name": "no", "probability": 30.0},
 			}}),
 		}})
 		assert.ErrorIs(t, f.svc.SpinWheel(f.ctx, "wb", ada), overlaywidgets.ErrUnknownWidget)
 		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{
-			widget("wb", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{
+			widget("wb", overlaywidgets.KindWheel, map[string]any{"equal_probability": false, "outcomes": []any{
 				map[string]any{"name": "yes", "probability": 50.0, "modifier": 5},
 				map[string]any{"name": "no", "probability": 50.0, "modifier": 5},
 			}}),

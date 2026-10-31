@@ -513,8 +513,8 @@ Profil-Sektion `overlay`, Zustand zum Teil im Profil persistiert
   heilt er mit `self_heal_multiplier` (Default 1). Nach einem Kill
   würfelt der Core einen neuen Boss aus den letzten Feed-Nutzern; die
   neue Health ist `base_health` plus `kill_bonus_health` plus
-  Overkill mit `overkill_bonus_multiplier`, und `compound` (Default
-  an) bildet sie zum neuen Maximum. Ereignisse:
+  Overkill mit `overkill_bonus_multiplier`, und
+  `compound_previous_health` (Default an) bildet sie zum neuen Maximum. Ereignisse:
   `overlay.boss.damage`/`overlay.boss.heal` (Details `health`,
   `amount` — die vorzeichenbehaftete Health-Änderung) und
   `overlay.boss.new`.

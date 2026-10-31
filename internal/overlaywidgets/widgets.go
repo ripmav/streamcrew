@@ -2008,9 +2008,10 @@ func userName(u user.User) string {
 
 // wheelConfig is the configuration of the wheel widget.
 type wheelConfig struct {
-	// EqualProbability is true for equal chances for every outcome
-	// (default); otherwise the probabilities of the outcomes are used.
-	EqualProbability bool `json:"equal_probability"`
+	// EqualProbability is true for equal chances for every outcome; nil
+	// for the default of true. Otherwise the probabilities of the
+	// outcomes are used (Review 347-19).
+	EqualProbability *bool `json:"equal_probability"`
 	// Outcomes are the outcomes of the wheel, in order; at least one.
 	Outcomes []wheelOutcome `json:"outcomes"`
 }
@@ -2049,7 +2050,7 @@ func (s *Service) wheelConfig(ctx context.Context, w settings.OverlayWidget) *wh
 			return nil
 		}
 	}
-	if !c.EqualProbability {
+	if c.EqualProbability != nil && !*c.EqualProbability {
 		sum := 0.0
 		mod := 0
 		for _, o := range c.Outcomes {
@@ -2097,7 +2098,7 @@ func wheelOutcomes(cfg *wheelConfig, probs []float64) []map[string]any {
 // wheelInitialProbs are the probabilities before the first spin (B33).
 func (s *Service) wheelInitialProbs(cfg *wheelConfig) []float64 {
 	n := len(cfg.Outcomes)
-	if cfg.EqualProbability {
+	if cfg.EqualProbability == nil || *cfg.EqualProbability {
 		p := make([]float64, n)
 		for i := range p {
 			p[i] = 100.0 / float64(n)
