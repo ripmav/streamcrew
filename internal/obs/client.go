@@ -24,9 +24,9 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"uuid"
 
 	"github.com/coder/websocket"
-	"github.com/google/uuid"
 
 	"github.com/ripmav/streamcrew/internal/netguard"
 )
@@ -328,7 +328,7 @@ func (c *client) request(ctx context.Context, typ string, params any, out any) e
 		}
 		data = jsontext.Value(b)
 	}
-	id := uuid.NewString()
+	id := uuid.New().String()
 	ch := make(chan *responseMsg, 1)
 	c.mu.Lock()
 	select {
