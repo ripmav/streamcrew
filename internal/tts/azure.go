@@ -16,7 +16,7 @@ import (
 // defaultAzureVoice is the voice of the azure provider when the action
 // names none; the region of the endpoint still comes from
 // EnvAzureRegion.
-const defaultAzureVoice = "en-US-Neural"
+const defaultAzureVoice = "en-US-JennyNeural"
 
 // azureBase is the production endpoint of the Speech API for the region.
 func azureBase(region string) string {
