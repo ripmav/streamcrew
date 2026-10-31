@@ -11,7 +11,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"sort"
 
 	"github.com/ripmav/streamcrew/internal/capability"
 )
@@ -83,7 +82,7 @@ func (s *Service) Names() []string {
 			extra = append(extra, n)
 		}
 	}
-	sort.Strings(extra)
+	slices.Sort(extra)
 	return append(out, extra...)
 }
 
