@@ -670,16 +670,14 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 		return a, err
 	}
 	// The discord service (roadmap 7.5, spec overlays.md, B37, A3): the
-	// gateway connection for the discord_voice widget; the token is
-	// environment only (ADR-0019 §9), inactive without it or the
-	// channel.
+	// gateway connection for the discord_voice widget; the token and
+	// the channel are configuration (ADR-0019 §9, hot), inactive
+	// without both.
 	a.discord = discord.New(discord.Ports{
-		//nolint:forbidigo // the discord token is read from the environment at start (ADR-0019 §9), not core configuration
-		Token:   os.Getenv("STREAMCREW_DISCORD_TOKEN"),
-		Channel: cfg.DiscordVoiceChannel,
-		Bus:     a.bus,
-		Logger:  component(logger, "discord"),
+		Bus:    a.bus,
+		Logger: component(logger, "discord"),
 	})
+	a.discord.SetKeys(discord.Keys{Token: cfg.DiscordToken, Channel: cfg.DiscordVoiceChannel})
 	// The poll service (roadmap 7.5, spec overlays.md, B34): the state
 	// of the active poll or prediction, fed by the twitch action.
 	a.poll = poll.New()
@@ -780,6 +778,7 @@ func (a *App) hotApplies() *config.ApplyFuncs {
 			a.shutdownTimeout.Store(int64(d))
 		},
 		TTSKeys: a.applyTTSKeys,
+		Discord: a.applyDiscordKeys,
 	}
 }
 
@@ -805,6 +804,18 @@ func (a *App) applyTTSKeys(k config.TTSKeys) {
 	a.runtimeMu.Unlock()
 	if a.tts != nil {
 		a.tts.SetKeys(ttspkg.Keys{Google: k.Google, Azure: k.Azure, AzureRegion: k.AzureRegion})
+	}
+}
+
+// applyDiscordKeys swaps the credentials of the discord service
+// (ADR-0019 §9, Code-ADR-0021, Nachtrag 2026-10-29); the service
+// reconnects with the new keys, and the values never reach the log.
+func (a *App) applyDiscordKeys(k config.DiscordKeys) {
+	a.runtimeMu.Lock()
+	a.cfg.DiscordToken, a.cfg.DiscordVoiceChannel = k.Token, k.Channel
+	a.runtimeMu.Unlock()
+	if a.discord != nil {
+		a.discord.SetKeys(discord.Keys{Token: k.Token, Channel: k.Channel})
 	}
 }
 

@@ -20,19 +20,21 @@ import (
 // applyRec records the calls of the hot applies of the Watcher (roadmap
 // 6.5).
 type applyRec struct {
-	logCalls  []config.LogConfig
-	dryRun    atomic.Bool
-	dryCalls  []bool
-	dev       atomic.Bool
-	devCalls  []bool
-	corsCalls [][]string
-	listen    atomic.Bool
-	listenErr atomic.Bool
-	listenCfg atomic.Value // holds [3]string
-	timeout   atomic.Int64
-	timeoutMu sync.Mutex
-	ttsMu     sync.Mutex
-	ttsKeys   []config.TTSKeys
+	logCalls   []config.LogConfig
+	dryRun     atomic.Bool
+	dryCalls   []bool
+	dev        atomic.Bool
+	devCalls   []bool
+	corsCalls  [][]string
+	listen     atomic.Bool
+	listenErr  atomic.Bool
+	listenCfg  atomic.Value // holds [3]string
+	timeout    atomic.Int64
+	timeoutMu  sync.Mutex
+	ttsMu      sync.Mutex
+	ttsKeys    []config.TTSKeys
+	discordMu  sync.Mutex
+	discordKey []config.DiscordKeys
 }
 
 // tts returns the TTS keys the applies received.
@@ -40,6 +42,13 @@ func (r *applyRec) tts() []config.TTSKeys {
 	r.ttsMu.Lock()
 	defer r.ttsMu.Unlock()
 	return slices.Clone(r.ttsKeys)
+}
+
+// discord returns the discord keys the applies received.
+func (r *applyRec) discord() []config.DiscordKeys {
+	r.discordMu.Lock()
+	defer r.discordMu.Unlock()
+	return slices.Clone(r.discordKey)
 }
 
 func (r *applyRec) funcs() *config.ApplyFuncs {
@@ -76,6 +85,11 @@ func (r *applyRec) funcs() *config.ApplyFuncs {
 			r.ttsMu.Lock()
 			r.ttsKeys = append(r.ttsKeys, k)
 			r.ttsMu.Unlock()
+		},
+		Discord: func(k config.DiscordKeys) {
+			r.discordMu.Lock()
+			r.discordKey = append(r.discordKey, k)
+			r.discordMu.Unlock()
 		},
 	}
 }
@@ -223,5 +237,41 @@ func TestWatcherAppliesTheTTSKeys(t *testing.T) {
 		assert.Equal(t, "google-secret", rec.tts()[1].Google, "the secret keeps its value")
 		assert.Equal(t, "azure-secret", rec.tts()[1].Azure)
 		assert.Empty(t, rec.tts()[1].AzureRegion, "the region returns to the default")
+	})
+}
+
+// TestWatcherAppliesTheDiscordKeys verifies the discord credentials are
+// hot (Code-ADR-0021, Nachtrag 2026-10-29): a new key in the file
+// applies without a restart, the log names the settings that changed,
+// and no value reaches the log; a removed token keeps the value the
+// core runs with.
+func TestWatcherAppliesTheDiscordKeys(t *testing.T) {
+	clearEnv(t)
+	dataDir := t.TempDir()
+	rec := &applyRec{}
+	writeFile(t, filepath.Join(dataDir, "config.yaml"), "log_level: info\n")
+	watch(t, dataDir, nil, rec.funcs(), func(w *watched) {
+		w.tick()
+		assert.Empty(t, rec.discord(), "an unchanged file applies nothing")
+
+		w.write("log_level: info\ndiscord_token: discord-secret\ndiscord_voice_channel: chan1\n")
+		require.Len(t, rec.discord(), 1)
+		assert.Equal(t, "discord-secret", rec.discord()[0].Token)
+		assert.Equal(t, "chan1", rec.discord()[0].Channel)
+		logs := w.logs.String()
+		assert.Contains(t, logs, "setting applied from the configuration file")
+		assert.Contains(t, logs, "setting=discord")
+		assert.Contains(t, logs, "discord-token, discord-voice-channel")
+		assert.NotContains(t, logs, "discord-secret", "the values never reach the log")
+
+		// A removed token keeps the value the core runs with (the
+		// write-only resolution), while the channel — a regular hot
+		// setting — returns to the default.
+		w.write("log_level: info\ndiscord_voice_channel: chan1\n")
+		require.Len(t, rec.discord(), 1, "a missing token keeps the current value")
+		w.write("log_level: info\n")
+		require.Len(t, rec.discord(), 2)
+		assert.Equal(t, "discord-secret", rec.discord()[1].Token, "the token keeps its value")
+		assert.Empty(t, rec.discord()[1].Channel, "the channel returns to the default")
 	})
 }

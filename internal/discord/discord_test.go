@@ -33,32 +33,49 @@ const wait = 5 * time.Second
 
 // fakeGateway is the Discord gateway the tests point discordgo at: it
 // answers the protocol handshake and plays the packets the test pushes.
-// Every frame goes through one writer, because the socket does not
-// allow concurrent writes.
+// Every connection gets its own writer, because the socket does not
+// allow concurrent writes; the test pushes to the connection that is
+// live at the moment of the push.
 type fakeGateway struct {
 	// gateway is the URL of the /gateway endpoint of the fake REST API;
 	// the test points discordgo.EndpointGateway at it.
 	gateway string
 
 	mu         sync.Mutex
-	handshaken chan struct{}
-	onceHS     sync.Once
-	writeCh    chan []byte
+	live       *wsWriter
+	handshakes int
 	seq        int
+}
+
+// wsWriter is the single writer of one gateway socket.
+type wsWriter struct {
+	conn *websocket.Conn
+	ch   chan []byte
 }
 
 // newFakeGateway starts the fake REST API and the fake gateway socket.
 func newFakeGateway(t *testing.T) *fakeGateway {
 	t.Helper()
-	f := &fakeGateway{handshaken: make(chan struct{}), writeCh: make(chan []byte, 16)}
+	f := &fakeGateway{}
 	up := websocket.Upgrader{}
 	ws := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := up.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		// The single writer of the socket: the handshake answers of the
-		// read loop and the packets the test pushes share it.
+		writer := &wsWriter{conn: conn, ch: make(chan []byte, 16)}
+		f.mu.Lock()
+		f.live = writer
+		f.mu.Unlock()
+		defer func() {
+			f.mu.Lock()
+			if f.live == writer {
+				f.live = nil
+			}
+			f.mu.Unlock()
+		}()
+		// The single writer of the socket: the handshake answers of
+		// the read loop and the packets the test pushes share it.
 		go func() {
-			for frame := range f.writeCh {
+			for frame := range writer.ch {
 				if err := conn.WriteMessage(websocket.TextMessage, frame); err != nil {
 					return
 				}
@@ -87,7 +104,9 @@ func newFakeGateway(t *testing.T) *fakeGateway {
 					"op": 0, "s": 1, "t": "READY",
 					"d": map[string]any{"v": 10, "session_id": "ses", "user": map[string]any{"id": "me", "username": "bot"}},
 				})
-				f.onceHS.Do(func() { close(f.handshaken) })
+				f.mu.Lock()
+				f.handshakes++
+				f.mu.Unlock()
 			}
 		}
 	}))
@@ -101,13 +120,18 @@ func newFakeGateway(t *testing.T) *fakeGateway {
 	return f
 }
 
-// write offers one frame to the socket writer.
+// write offers one frame to the writer of the live connection.
 func (f *fakeGateway) write(frame map[string]any) {
 	data, err := json.Marshal(frame)
 	if err != nil {
 		panic(err)
 	}
-	f.writeCh <- data
+	f.mu.Lock()
+	w := f.live
+	f.mu.Unlock()
+	if w != nil {
+		w.ch <- data
+	}
 }
 
 // push plays one gateway event packet to the client.
@@ -120,18 +144,25 @@ func (f *fakeGateway) push(t *testing.T, name string, d any) {
 	f.write(map[string]any{"op": 0, "s": seq, "t": name, "d": d})
 }
 
-// waitForHandshake waits until the client has identified and the ready
-// packet has been played and consumed: the client reads the ready packet
-// in its handshake, so a packet pushed before it is consumed is lost;
-// the settle wait below leaves the loopback read the win.
-func (f *fakeGateway) waitForHandshake(t *testing.T) {
+// waitForHandshakes waits until the client has identified at least n
+// times and the ready packet has been played and consumed: the client
+// reads the ready packet in its handshake, so a packet pushed before it
+// is consumed is lost; the settle wait below leaves the loopback read
+// the win.
+func (f *fakeGateway) waitForHandshakes(t *testing.T, n int) {
 	t.Helper()
-	select {
-	case <-f.handshaken:
-	case <-time.After(wait):
-		t.Fatal("the gateway handshake did not arrive")
+	deadline := time.Now().Add(wait)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		done := f.handshakes >= n
+		f.mu.Unlock()
+		if done {
+			time.Sleep(100 * time.Millisecond)
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	time.Sleep(100 * time.Millisecond)
+	t.Fatalf("the gateway handshake %d did not arrive", n)
 }
 
 // recv takes the next event type of the channel or fails on the wait.
@@ -198,20 +229,18 @@ func TestVoiceChannel(t *testing.T) {
 
 	bus := event.NewBus(nil)
 	evt := eventsOf(t, bus)
-	svc := discord.New(discord.Ports{
-		Token:   "tok",
-		Channel: "chan1",
-		Bus:     bus,
-		Logger:  slog.New(slog.DiscardHandler),
-	})
-	require.True(t, svc.Active())
+	svc := discord.New(discord.Ports{Bus: bus, Logger: slog.New(slog.DiscardHandler)})
+	require.False(t, svc.Active(), "without keys the service is inactive")
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	done := make(chan error, 1)
 	go func() { done <- svc.Run(ctx) }()
 
-	fake.waitForHandshake(t)
+	// The keys activate the service without a restart.
+	svc.SetKeys(discord.Keys{Token: "tok", Channel: "chan1"})
+	require.True(t, svc.Active())
+	fake.waitForHandshakes(t, 1)
 	// The initial voice state of the channel: the occupant is seeded
 	// without an event.
 	fake.push(t, "GUILD_CREATE", map[string]any{
@@ -265,18 +294,14 @@ func TestOccupantsAreSorted(t *testing.T) {
 	discordgo.EndpointGateway = fake.gateway
 	t.Cleanup(func() { discordgo.EndpointGateway = oldGateway })
 
-	svc := discord.New(discord.Ports{
-		Token:   "tok",
-		Channel: "chan1",
-		Bus:     event.NewBus(nil),
-		Logger:  slog.New(slog.DiscardHandler),
-	})
+	svc := discord.New(discord.Ports{Bus: event.NewBus(nil), Logger: slog.New(slog.DiscardHandler)})
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	done := make(chan error, 1)
 	go func() { done <- svc.Run(ctx) }()
 
-	fake.waitForHandshake(t)
+	svc.SetKeys(discord.Keys{Token: "tok", Channel: "chan1"})
+	fake.waitForHandshakes(t, 1)
 	fake.push(t, "GUILD_CREATE", map[string]any{
 		"id": "g1",
 		"voice_states": []any{
@@ -294,14 +319,82 @@ func TestOccupantsAreSorted(t *testing.T) {
 }
 
 // TestInactiveWithoutToken covers the inactivity without a token or a
-// channel (B37): the service stays inactive and its run returns at once.
+// channel (B37): the run stays while the service is inactive and stops
+// with the context; the keys set while the run waits activate the
+// service without a restart (Code-ADR-0021, Nachtrag 2026-10-29).
 func TestInactiveWithoutToken(t *testing.T) {
-	t.Parallel()
-	svc := discord.New(discord.Ports{
-		Channel: "chan1",
-		Logger:  slog.New(slog.DiscardHandler),
-	})
+	// Not parallel like the other gateway tests: it redirects the
+	// package-global discordgo.EndpointGateway.
+	fake := newFakeGateway(t)
+	oldGateway := discordgo.EndpointGateway
+	discordgo.EndpointGateway = fake.gateway
+	t.Cleanup(func() { discordgo.EndpointGateway = oldGateway })
+
+	svc := discord.New(discord.Ports{Bus: event.NewBus(nil), Logger: slog.New(slog.DiscardHandler)})
 	assert.False(t, svc.Active())
-	require.NoError(t, svc.Run(t.Context()))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() { done <- svc.Run(ctx) }()
+	svc.SetKeys(discord.Keys{Token: "tok", Channel: "chan1"})
+	require.True(t, svc.Active())
+	fake.waitForHandshakes(t, 1)
+
+	cancel()
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(wait):
+		t.Fatal("the service did not stop")
+	}
 	assert.Empty(t, svc.Occupants())
+}
+
+// TestSetKeysReconnectsAndDeactivates covers the hot keys of review
+// 347-22: a new token reconnects the gateway with the new keys and
+// resets the occupants, an empty token deactivates the service and
+// clears the occupants — all without a restart. Not parallel like the
+// other gateway tests: it redirects the package-global
+// discordgo.EndpointGateway.
+func TestSetKeysReconnectsAndDeactivates(t *testing.T) {
+	fake := newFakeGateway(t)
+	oldGateway := discordgo.EndpointGateway
+	discordgo.EndpointGateway = fake.gateway
+	t.Cleanup(func() { discordgo.EndpointGateway = oldGateway })
+
+	svc := discord.New(discord.Ports{Bus: event.NewBus(nil), Logger: slog.New(slog.DiscardHandler)})
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() { done <- svc.Run(ctx) }()
+
+	// A token and a channel activate the service; the connection is
+	// up with one handshake.
+	svc.SetKeys(discord.Keys{Token: "tok1", Channel: "chan1"})
+	fake.waitForHandshakes(t, 1)
+	fake.push(t, "GUILD_CREATE", map[string]any{
+		"id":           "g1",
+		"voice_states": []any{voiceState("chan1", "u0", "pre")},
+	})
+	waitOccupants(t, svc, 1)
+
+	// A new token drops the connection and reconnects at once with the
+	// new keys; the new connection resets the occupants.
+	svc.SetKeys(discord.Keys{Token: "tok2", Channel: "chan1"})
+	fake.waitForHandshakes(t, 2)
+	assert.Empty(t, svc.Occupants(), "the new connection resets the occupants")
+
+	// An empty token deactivates the service and clears the occupants.
+	svc.SetKeys(discord.Keys{})
+	assert.False(t, svc.Active())
+	assert.Empty(t, svc.Occupants())
+
+	cancel()
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(wait):
+		t.Fatal("the service did not stop")
+	}
 }

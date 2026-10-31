@@ -232,6 +232,40 @@ func TestParseTTSKeys(t *testing.T) {
 	assert.False(t, file.FromFile("tts-azure-region"), "fixed by the flag")
 }
 
+// TestParseDiscordToken covers ADR-0019 §9: the discord bot token comes
+// from the flag, the environment variable derived by kong
+// (STREAMCREW_DISCORD_TOKEN), or the file, in this order of precedence;
+// set by flag or environment it is fixed for the watcher, and the voice
+// channel is a regular hot setting.
+func TestParseDiscordToken(t *testing.T) {
+	clearEnv(t)
+	dataDir := t.TempDir()
+	writeFile(t, filepath.Join(dataDir, config.ConfigFileName), "discord_token: file-token\ndiscord_voice_channel: file-channel\n")
+	t.Setenv("STREAMCREW_DISCORD_TOKEN", "env-token")
+	cfg, file := parse(t, config.Defaults{DataDir: dataDir}, "--discord-voice-channel=flag-channel")
+	require.NoError(t, file.Err())
+	assert.Equal(t, "env-token", cfg.DiscordToken, "environment over file")
+	assert.Equal(t, "flag-channel", cfg.DiscordVoiceChannel, "flag over file")
+	assert.False(t, file.FromFile("discord-token"), "fixed by the environment")
+	assert.False(t, file.FromFile("discord-voice-channel"), "fixed by the flag")
+}
+
+// TestViewMasksTheDiscordToken covers Code-ADR-0021, Nachtrag 2026-10-29,
+// point 3: the write-only token shows the placeholder in the document,
+// the channel shows its value, and an unset token stays out.
+func TestViewMasksTheDiscordToken(t *testing.T) {
+	t.Parallel()
+	cfg := config.Config{DiscordToken: "secret", DiscordVoiceChannel: "chan1"}
+	v := cfg.View()
+	assert.Equal(t, config.SecretPlaceholder, v.DiscordToken)
+	assert.Equal(t, "chan1", v.DiscordVoiceChannel)
+	out, err := yaml.Marshal(v)
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "discord_token: <set>")
+	assert.Contains(t, string(out), "discord_voice_channel: chan1")
+	assert.NotContains(t, string(out), "secret")
+}
+
 // TestViewMasksTheTTSKeys covers Code-ADR-0021, Nachtrag 2026-10-29,
 // point 3: the write-only secrets show the placeholder in the document,
 // the region shows its value, and an unset key stays out.
