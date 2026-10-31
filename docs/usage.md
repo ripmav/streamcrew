@@ -419,18 +419,21 @@ vom Ende der Aktion.
 - `browser` (Default): die Web Speech API der Overlay-Runtime spricht
   den Text in der Browserquelle — ohne Key und ohne Recht, nur mit dem
   Sink `overlay` (ein anderer Sink ist ein klarer Fehler).
-- `google`: REST-API, Key in der Umgebungsvariablen
-  `STREAMCREW_TTS_GOOGLE_KEY`, Recht `net:outbound`.
-- `azure`: REST-API, Key in `STREAMCREW_TTS_AZURE_KEY`, Region in
-  `STREAMCREW_TTS_AZURE_REGION`, Recht `net:outbound`.
+- `google`: REST-API, Key in `tts-google-key`, Recht `net:outbound`.
+- `azure`: REST-API, Key in `tts-azure-key`, Region in
+  `tts-azure-region`, Recht `net:outbound`.
 - `piper`: externer Prozess `piper`, Modell in `tts-piper-model`, Recht
   `host:process`. Die Tonhöhe (`pitch`) ignoriert piper (Shortcut,
   ADR-0020, offener Punkt).
 
 `voice`, `volume` (0–100), `rate` und `pitch` (0 oder 1 = normal)
-werden an den Provider durchgereicht. Die Cloud-Keys liest das Core zum
-Aufruf aus der Umgebung (ein gesetzter Key gilt ohne Neustart) und
-niemals in Logs; ohne gesetzten Key ist die Ausführung ein klarer
+werden an den Provider durchgereicht. Die Cloud-Keys sind Settings
+(`tts-google-key`, `tts-azure-key`, `tts-azure-region`), die ohne
+Neustart gelten (hot) und write-only sind: das Dokument zeigt `<set>`
+statt des Werts; die Werte erscheinen niemals in Logs. Kong leitet die
+Umgebungsvariablen `STREAMCREW_TTS_GOOGLE_KEY`, `STREAMCREW_TTS_AZURE_KEY`
+und `STREAMCREW_TTS_AZURE_REGION` über `DefaultEnvars` selbst ab
+(ADR-0019 §6). Ohne gesetzten Key ist die Ausführung ein klarer
 Fehler (B54). Die erzeugten Audiodateien landen unter
 `<media-dir>/generated/` und werden wie Sound-Dateien abgespielt
 (`sink` wie bei `sound`). `waitForFinish` ist standardmäßig aus.

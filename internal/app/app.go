@@ -779,6 +779,7 @@ func (a *App) hotApplies() *config.ApplyFuncs {
 		ShutdownTimeout: func(d time.Duration) {
 			a.shutdownTimeout.Store(int64(d))
 		},
+		TTSKeys: a.applyTTSKeys,
 	}
 }
 
@@ -793,6 +794,18 @@ func (a *App) applyLog(lc config.LogConfig) error {
 		return err
 	}
 	return a.dynLog.Update(lcfg)
+}
+
+// applyTTSKeys swaps the provider keys of the TTS service (ADR-0019 §6,
+// Code-ADR-0021, Nachtrag 2026-10-29); the requests read the new
+// snapshot at the call, and the values never reach the log.
+func (a *App) applyTTSKeys(k config.TTSKeys) {
+	a.runtimeMu.Lock()
+	a.cfg.TTSGoogleKey, a.cfg.TTSAzureKey, a.cfg.TTSAzureRegion = k.Google, k.Azure, k.AzureRegion
+	a.runtimeMu.Unlock()
+	if a.tts != nil {
+		a.tts.SetKeys(ttspkg.Keys{Google: k.Google, Azure: k.Azure, AzureRegion: k.AzureRegion})
+	}
 }
 
 // applyListen moves the HTTP server to the new address with the TLS

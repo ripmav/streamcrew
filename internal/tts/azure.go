@@ -14,8 +14,8 @@ import (
 )
 
 // defaultAzureVoice is the voice of the azure provider when the action
-// names none; the region of the endpoint still comes from
-// EnvAzureRegion.
+// names none; the region of the endpoint still comes from the setting
+// tts-azure-region.
 const defaultAzureVoice = "en-US-JennyNeural"
 
 // azureBase is the production endpoint of the Speech API for the region.
@@ -27,13 +27,16 @@ func azureBase(region string) string {
 // ADR-0020 §3). The key stays in the header, so it never appears in the
 // URL of an error (ADR-0020 §2).
 func (s *Service) azure(ctx context.Context, sp Speech) (string, error) {
-	key := s.ports.Env(EnvAzureKey)
+	// The key and the region are read from the snapshot at the call, so
+	// values set in the configuration apply to this request
+	// (Code-ADR-0021, Nachtrag 2026-10-29).
+	key := s.keys.Load().Azure
 	if key == "" {
-		return "", fmt.Errorf("tts: the provider azure needs the key in %s", EnvAzureKey)
+		return "", errors.New("tts: the provider azure needs the key in the setting tts-azure-key")
 	}
-	region := s.ports.Env(EnvAzureRegion)
+	region := s.keys.Load().AzureRegion
 	if region == "" {
-		return "", fmt.Errorf("tts: the provider azure needs the region in %s", EnvAzureRegion)
+		return "", errors.New("tts: the provider azure needs the region in the setting tts-azure-region")
 	}
 	if s.ports.Dialer == nil {
 		return "", errors.New("tts: the provider azure needs a dialer (net:outbound)")
