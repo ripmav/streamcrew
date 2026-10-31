@@ -11,8 +11,10 @@
 package discord
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -89,7 +91,8 @@ func (s *Service) Active() bool {
 }
 
 // Occupants returns the current occupants of the configured channel
-// (B37).
+// (B37), sorted by name, so that the widget list is stable between
+// pushes.
 func (s *Service) Occupants() []Occupant {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -97,6 +100,7 @@ func (s *Service) Occupants() []Occupant {
 	for _, o := range s.occupants {
 		out = append(out, o)
 	}
+	slices.SortFunc(out, func(a, b Occupant) int { return cmp.Compare(a.Name, b.Name) })
 	return out
 }
 

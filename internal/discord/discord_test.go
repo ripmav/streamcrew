@@ -189,7 +189,8 @@ func voiceState(channel, userID, name string) map[string]any {
 // initial state seeds without events, a join publishes joined, and a
 // move away or a leave publishes left (B37).
 func TestVoiceChannel(t *testing.T) {
-	t.Parallel()
+	// Not parallel: it redirects the package-global
+	// discordgo.EndpointGateway, and two tests cannot do that at once.
 	fake := newFakeGateway(t)
 	oldGateway := discordgo.EndpointGateway
 	discordgo.EndpointGateway = fake.gateway
@@ -252,6 +253,44 @@ func TestVoiceChannel(t *testing.T) {
 	case <-time.After(wait):
 		t.Fatal("the service did not stop")
 	}
+}
+
+// TestOccupantsAreSorted covers review 347-15: Occupants returns the
+// occupants sorted by name, not in map order, so the widget list is
+// stable between pushes. Not parallel like TestVoiceChannel: it
+// redirects the package-global discordgo.EndpointGateway.
+func TestOccupantsAreSorted(t *testing.T) {
+	fake := newFakeGateway(t)
+	oldGateway := discordgo.EndpointGateway
+	discordgo.EndpointGateway = fake.gateway
+	t.Cleanup(func() { discordgo.EndpointGateway = oldGateway })
+
+	svc := discord.New(discord.Ports{
+		Token:   "tok",
+		Channel: "chan1",
+		Bus:     event.NewBus(nil),
+		Logger:  slog.New(slog.DiscardHandler),
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() { done <- svc.Run(ctx) }()
+
+	fake.waitForHandshake(t)
+	fake.push(t, "GUILD_CREATE", map[string]any{
+		"id": "g1",
+		"voice_states": []any{
+			voiceState("chan1", "u1", "zed"),
+			voiceState("chan1", "u2", "alice"),
+			voiceState("chan1", "u3", "mike"),
+		},
+	})
+	occ := waitOccupants(t, svc, 3)
+	names := make([]string, 0, len(occ))
+	for _, o := range occ {
+		names = append(names, o.Name)
+	}
+	assert.Equal(t, []string{"alice", "mike", "zed"}, names, "the occupants are sorted by name")
 }
 
 // TestInactiveWithoutToken covers the inactivity without a token or a
