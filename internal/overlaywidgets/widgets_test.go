@@ -1479,7 +1479,8 @@ func TestWidgetStreamBoss(t *testing.T) {
 		assert.Equal(t, &eventtype.OverlayBoss{Health: 50, Amount: -50}, last.payload.Details.OverlayBoss)
 
 		// The kill rolls the new boss from the feed, with the compounded
-		// health (B30).
+		// health (B30); the killing blow publishes the damage with the
+		// boss at zero first (Review 347-7).
 		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b1", 50, false, ada))
 		synctest.Wait()
 		st = state(t)
@@ -1490,6 +1491,9 @@ func TestWidgetStreamBoss(t *testing.T) {
 		last = eff[len(eff)-1]
 		assert.Equal(t, eventtype.OverlayBossNew, last.typ)
 		assert.Equal(t, &eventtype.OverlayBoss{Health: 110}, last.payload.Details.OverlayBoss)
+		assert.Equal(t, eventtype.OverlayBossDamage, eff[len(eff)-2].typ)
+		assert.Equal(t, ada, eff[len(eff)-2].payload.User)
+		assert.Equal(t, &eventtype.OverlayBoss{Health: 0, Amount: -50}, eff[len(eff)-2].payload.Details.OverlayBoss)
 
 		// The boss who damages himself heals with the multiplier (B30).
 		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b1", 10, false, bob))

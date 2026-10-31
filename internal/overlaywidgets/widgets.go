@@ -2734,6 +2734,16 @@ func (s *Service) streamBossApply(ctx context.Context, w settings.OverlayWidget,
 	s.mu.Unlock()
 
 	if health <= 0 {
+		// The killing blow is a damage with the boss at zero (B30,
+		// Review 347-7).
+		s.publish(ctx, eventtype.OverlayBossDamage, eventtype.Payload{
+			Platform: platform.Twitch,
+			User:     u,
+			Details: eventtype.Details{OverlayBoss: &eventtype.OverlayBoss{
+				Health: 0,
+				Amount: changed,
+			}},
+		})
 		s.streamBossNew(ctx, w, cfg, boss, maxHealth, overkill, compounded)
 		s.pushBoss(ctx, w)
 		return
