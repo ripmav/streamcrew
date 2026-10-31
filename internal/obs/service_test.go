@@ -32,6 +32,7 @@ type fakeObs struct {
 	mu        sync.Mutex
 	wmu       sync.Mutex // serializes the writes of the fake
 	conns     int
+	sessions  int // the connections that finished
 	requests  []string
 	scene     string
 	stream    bool
@@ -73,6 +74,13 @@ func (f *fakeObs) connsSeen() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.conns
+}
+
+// sessionsSeen reports how many connections of the fake finished.
+func (f *fakeObs) sessionsSeen() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.sessions
 }
 
 // drop closes the connection of the client (B43: the reconnect).
@@ -122,6 +130,19 @@ func (f *fakeObs) sendEvent(typ string, data any) {
 	_ = f.write(context.Background(), ws, wire{Op: opEvent, D: mustMarshal(ev)})
 }
 
+// sendBadEvent pushes an OBS event whose data is not parseable into
+// the event (Review 346-6).
+func (f *fakeObs) sendBadEvent(typ string) {
+	f.mu.Lock()
+	ws := f.ws
+	f.mu.Unlock()
+	if ws == nil {
+		return
+	}
+	ev := map[string]any{"eventType": typ, "eventIntent": 0, "eventData": "not an object"}
+	_ = f.write(context.Background(), ws, wire{Op: opEvent, D: mustMarshal(ev)})
+}
+
 // handle runs one connection: the negotiation, then the requests and
 // the responses.
 func (f *fakeObs) handle(w http.ResponseWriter, r *http.Request) {
@@ -134,6 +155,9 @@ func (f *fakeObs) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "bye")
 	f.serveConn(r.Context(), conn)
+	f.mu.Lock()
+	f.sessions++
+	f.mu.Unlock()
 }
 
 // negotiate runs the Hello/Identify/Identified exchange of obs-websocket
@@ -231,10 +255,6 @@ func (f *fakeObs) answer(ctx context.Context, conn *websocket.Conn, raw jsontext
 		data = f.itemList()
 	case "GetSceneItemSource":
 		data = f.itemSource(req.Data)
-	case "GetSceneItemTransform":
-		data = mustMarshal(map[string]any{"sceneItemTransform": map[string]any{
-			"positionX": 100.0, "positionY": 200.0,
-		}})
 	}
 	_ = f.write(ctx, conn, wire{Op: opResponse, D: mustMarshal(map[string]any{
 		"requestType":   req.Type,
@@ -410,6 +430,38 @@ func TestRunGivesUpOnThePassword(t *testing.T) {
 	require.NoError(t, s.Run(ctx))
 	assert.False(t, s.Connected())
 	assert.Zero(t, fake.connsSeen(), "the connection never finished the negotiation")
+}
+
+// TestRunFailsTheDialOnASilentPeer checks that a peer that accepts the
+// connection but never speaks cannot block Run: the dial gives up with
+// the timeout, and the core gives up with it (Review 346-4).
+func TestRunFailsTheDialOnASilentPeer(t *testing.T) {
+	t.Parallel()
+	var lc net.ListenConfig
+	ln, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		<-t.Context().Done()
+		_ = conn.Close()
+	}()
+	host, p, _ := net.SplitHostPort(ln.Addr().String())
+	port, _ := strconv.Atoi(p)
+	s := New(Ports{Host: host, Port: port, Bus: event.NewBus(nil)})
+	s.dialTimeout = 200 * time.Millisecond
+	done := make(chan error, 1)
+	go func() { done <- s.Run(t.Context()) }()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run blocked on the silent peer")
+	}
+	assert.False(t, s.Connected())
 }
 
 // TestRunConnectsAndServes checks that the service connects to the OBS,
@@ -597,6 +649,78 @@ func TestRunPublishesEachChangeOnce(t *testing.T) {
 	require.NoError(t, <-done)
 }
 
+// TestRunReportsNotConnectedDuringAReconnect checks that a dropped
+// connection clears the active connection, so that an operation in the
+// window of the reconnect gets ErrNotConnected, not the dead client
+// (B55, Review 346-3); after the reconnect the operation runs again.
+func TestRunReportsNotConnectedDuringAReconnect(t *testing.T) {
+	t.Parallel()
+	fake := newFakeObs(t, "")
+	host, port := fake.addr()
+	s := New(Ports{Host: host, Port: port, Bus: event.NewBus(nil)})
+	s.reconnect = 500 * time.Millisecond
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() { done <- s.Run(ctx) }()
+	waitUntil(t, func() bool { return s.Connected() })
+	fake.drop()
+	waitUntil(t, func() bool { return !s.Connected() })
+	assert.ErrorIs(t, s.SetScene(ctx, "Cut"), ErrNotConnected, "the window of the reconnect")
+	// The service publishes the new client after the seed of the
+	// reconnect, so the condition is Connected again, not the
+	// negotiation seen by the fake.
+	waitUntil(t, func() bool { return s.Connected() })
+	require.Equal(t, 2, fake.connsSeen())
+	require.NoError(t, s.SetScene(ctx, "Cut"), "after the reconnect")
+	cancel()
+	require.NoError(t, <-done)
+}
+
+// TestRunClosesTheConnectionOnShutdown checks that the shutdown of the
+// core ends the OBS session: the client closes the connection, so that
+// the fake sees the session finish, and Run stops (Review 346-7).
+func TestRunClosesTheConnectionOnShutdown(t *testing.T) {
+	t.Parallel()
+	fake := newFakeObs(t, "")
+	host, port := fake.addr()
+	s := New(Ports{Host: host, Port: port, Bus: event.NewBus(nil)})
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() { done <- s.Run(ctx) }()
+	waitUntil(t, func() bool { return s.Connected() })
+	cancel()
+	require.NoError(t, <-done)
+	waitUntil(t, func() bool { return fake.sessionsSeen() == 1 })
+}
+
+// TestRunSkipsAnUnparseableEvent checks that an OBS event whose data
+// does not parse is dropped with a debug log, and the connection keeps
+// running (Review 346-6): a broken scene event publishes no scene
+// change with an empty name, and the next valid event still runs.
+func TestRunSkipsAnUnparseableEvent(t *testing.T) {
+	t.Parallel()
+	fake := newFakeObs(t, "")
+	host, port := fake.addr()
+	bus := event.NewBus(nil)
+	s := New(Ports{Host: host, Port: port, Bus: bus})
+	c := newCollector(t, bus)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() { done <- s.Run(ctx) }()
+	waitUntil(t, func() bool { return s.Connected() })
+	fake.sendBadEvent("CurrentProgramSceneChanged")
+	time.Sleep(100 * time.Millisecond)
+	assert.Zero(t, c.count(eventtype.ObsSceneChanged), "the broken event publishes nothing")
+	fake.sendEvent("CurrentProgramSceneChanged", map[string]any{"sceneName": "Cut"})
+	waitUntil(t, func() bool { return c.count(eventtype.ObsSceneChanged) == 1 })
+	assert.Equal(t, "Cut", c.payload(c.has(eventtype.ObsSceneChanged)).Details.ObsScene.Scene)
+	cancel()
+	require.NoError(t, <-done)
+}
+
 // TestActionsWithoutAConnection checks that an operation without an
 // active connection is a clear error, not a wait (B55).
 func TestActionsWithoutAConnection(t *testing.T) {
@@ -631,22 +755,27 @@ func TestSetSource(t *testing.T) {
 	})
 	t.Run("the position", func(t *testing.T) {
 		fake := newFakeObs(t, "")
-		fake.addSource("cam")
+		id := fake.addSource("cam")
 		s := obsOn(t, fake)
+		x := 10.0
+		require.NoError(t, s.SetSource(t.Context(), Source{Source: "cam", X: &x}))
+		// The position is a partial transform: the request carries the
+		// changed coordinate only, and no Get request goes out (Review
+		// 346-2).
+		var got struct {
+			SceneName          string             `json:"sceneName"`
+			SceneItemID        int                `json:"sceneItemId"`
+			SceneItemTransform map[string]float64 `json:"sceneItemTransform"`
+		}
+		require.NoError(t, json.Unmarshal(fake.lastTransform(), &got))
+		assert.Equal(t, "Scene", got.SceneName)
+		assert.Equal(t, id, got.SceneItemID)
+		assert.Equal(t, map[string]float64{"positionX": 10.0}, got.SceneItemTransform, "only the position fields")
 		x, y := 10.0, 20.0
 		require.NoError(t, s.SetSource(t.Context(), Source{Source: "cam", X: &x, Y: &y}))
-		reqs := fake.requestsSeen()
-		assert.Contains(t, reqs, "GetSceneItemTransform", "the position keeps the rest of the transform")
-		assert.Contains(t, reqs, "SetSceneItemTransform")
-		var tr struct {
-			SceneItemTransform struct {
-				PositionX float64 `json:"positionX"`
-				PositionY float64 `json:"positionY"`
-			} `json:"sceneItemTransform"`
-		}
-		require.NoError(t, json.Unmarshal(fake.lastTransform(), &tr))
-		assert.Equal(t, 10.0, tr.SceneItemTransform.PositionX)
-		assert.Equal(t, 20.0, tr.SceneItemTransform.PositionY)
+		require.NoError(t, json.Unmarshal(fake.lastTransform(), &got))
+		assert.Equal(t, map[string]float64{"positionX": 10.0, "positionY": 20.0}, got.SceneItemTransform)
+		assert.NotContains(t, fake.requestsSeen(), "GetSceneItemTransform")
 	})
 	t.Run("a source without the scene is an error", func(t *testing.T) {
 		fake := newFakeObs(t, "")
