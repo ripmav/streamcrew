@@ -168,30 +168,6 @@ type (
 	}
 )
 
-// transform is the SceneItemTransform of obs-websocket v5; a position
-// change changes only the position and carries the rest through.
-type transform struct {
-	Alignment       float64 `json:"alignment"`
-	BoundsAlignment float64 `json:"boundsAlignment"`
-	BoundsHeight    float64 `json:"boundsHeight"`
-	BoundsType      string  `json:"boundsType"`
-	BoundsWidth     float64 `json:"boundsWidth"`
-	CropToBounds    bool    `json:"cropToBounds"`
-	CropBottom      float64 `json:"cropBottom"`
-	CropLeft        float64 `json:"cropLeft"`
-	CropRight       float64 `json:"cropRight"`
-	CropTop         float64 `json:"cropTop"`
-	Height          float64 `json:"height"`
-	PositionX       float64 `json:"positionX"`
-	PositionY       float64 `json:"positionY"`
-	Rotation        float64 `json:"rotation"`
-	ScaleX          float64 `json:"scaleX"`
-	ScaleY          float64 `json:"scaleY"`
-	SourceHeight    float64 `json:"sourceHeight"`
-	SourceWidth     float64 `json:"sourceWidth"`
-	Width           float64 `json:"width"`
-}
-
 // client is one established connection to the OBS server: the reader of
 // the connection, the events for the consumer of the session, and the
 // requests on it.
