@@ -271,3 +271,32 @@ func TestNewCoversTheGeneratedDir(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "generated")
 }
+
+// TestNewFileCoversTheNameAndTheSweep is the regression of the file
+// names (Review 345-10): the name comes from os.CreateTemp, so two
+// calls in the same nanosecond get two names (the old name from the
+// timestamp collided), and the old generated files are swept from the
+// directory while the recent ones stay.
+func TestNewFileCoversTheNameAndTheSweep(t *testing.T) {
+	svc, dir := testService(t, map[string]string{}, "", "")
+	now := svc.ports.Now()
+
+	a, err := svc.newFile(dir, ".mp3")
+	require.NoError(t, err)
+	b, err := svc.newFile(dir, ".mp3")
+	require.NoError(t, err)
+	assert.NotEqual(t, a, b, "the names of two calls in the same instant must differ")
+
+	old := filepath.Join(dir, "tts-old.mp3")
+	age := now.Add(-24*time.Hour - time.Minute)
+	require.NoError(t, os.WriteFile(old, []byte("x"), 0o600))
+	require.NoError(t, os.Chtimes(old, age, age))
+	recent := filepath.Join(dir, "tts-recent.mp3")
+	recentTime := now.Add(-time.Hour)
+	require.NoError(t, os.WriteFile(recent, []byte("x"), 0o600))
+	require.NoError(t, os.Chtimes(recent, recentTime, recentTime))
+	_, err = svc.newFile(dir, ".mp3")
+	require.NoError(t, err)
+	assert.NoFileExists(t, old, "the file older than the age is swept")
+	assert.FileExists(t, recent, "the recent file stays")
+}
