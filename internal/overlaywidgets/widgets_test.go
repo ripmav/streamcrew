@@ -7,9 +7,12 @@
 package overlaywidgets_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -28,6 +31,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/emote"
+	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/overlay"
 	"github.com/ripmav/streamcrew/internal/overlaywidgets"
@@ -40,6 +44,24 @@ import (
 type effect struct {
 	typ     event.Type
 	payload eventtype.Payload
+}
+
+// lockedWriter is the race-safe buffer of the captured log output.
+type lockedWriter struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (w *lockedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.Write(p)
+}
+
+func (w *lockedWriter) string() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
 }
 
 // fixture wires the service with the real overlay service and the fakes of
@@ -61,12 +83,15 @@ type fixture struct {
 	msgs       []overlay.Message
 	effects    []effect
 	state      map[string][]byte
+	stateErr   error // when set, returned by the State port
 	feed       []feed.Event
 	streams    map[platform.Name]template.StreamState
 	sessions   map[platform.Name]feed.SessionStats
 	top        []user.Ranked
 	emoteList  []emote.Emote
 	discordOcc []discord.Occupant
+	cmdNames   []string
+	logOut     *lockedWriter
 }
 
 // newFixture returns the fixture with the section and starts the service;
@@ -82,6 +107,7 @@ func newFixture(t *testing.T, sec settings.Overlay) *fixture {
 	}
 	f.ctx, f.cancel = context.WithCancel(t.Context())
 	f.setSection(sec)
+	f.logOut = &lockedWriter{}
 	ov, err := overlay.New(f.ctx, overlay.Ports{Section: f.section})
 	require.NoError(t, err)
 	f.overlay = ov
@@ -101,6 +127,8 @@ func newFixture(t *testing.T, sec settings.Overlay) *fixture {
 		TopUsers:         f.topUsers,
 		Emotes:           f.emotes,
 		DiscordOccupants: f.discordOccupants,
+		Commands:         f.commands,
+		Logger:           slog.New(slog.NewTextHandler(f.logOut, nil)),
 	}, overlaywidgets.WithLabelTick(time.Second))
 	require.NoError(t, err)
 	ov.SetStateProvider(f.svc.StateForSync)
@@ -187,8 +215,23 @@ func (f *fixture) LatestFeed(_ context.Context, n int) ([]feed.Event, error) {
 func (f *fixture) OverlayWidgetState(_ context.Context, widgetID string) ([]byte, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.stateErr != nil {
+		return nil, false, f.stateErr
+	}
 	doc, ok := f.state[widgetID]
 	return doc, ok, nil
+}
+
+// failState makes the State port return err.
+func (f *fixture) failState(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.stateErr = err
+}
+
+// logText returns the captured log output.
+func (f *fixture) logText() string {
+	return f.logOut.string()
 }
 
 // SetOverlayWidgetState implements the State port.
@@ -240,6 +283,22 @@ func (f *fixture) discordOccupants(context.Context) []discord.Occupant {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.discordOcc
+}
+
+// commands implements the Commands port: it records the started command
+// names (B23).
+func (f *fixture) commands(_ context.Context, name string, _ engine.Params) error {
+	f.mu.Lock()
+	f.cmdNames = append(f.cmdNames, name)
+	f.mu.Unlock()
+	return nil
+}
+
+// commandsList returns the started command names so far.
+func (f *fixture) commandsList() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.cmdNames)
 }
 
 // attach connects the fake runtime of the default endpoint and records
@@ -441,6 +500,151 @@ func TestWidgetGoal(t *testing.T) {
 	})
 }
 
+// TestGoalCumulativeSegmentsCoversB25 covers B25: in the mode cumulative,
+// a segment completes at its own amount on top of the segments before it,
+// not on top of their sum (Review 344-4).
+func TestGoalCumulativeSegmentsCoversB25(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := map[string]any{"mode": "cumulative", "segments": []any{
+			map[string]any{"name": "s1", "amount": 10},
+			map[string]any{"name": "s2", "amount": 10},
+		}}
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("g1", overlaywidgets.KindGoal, cfg),
+		}})
+		defer f.stop()
+		f.attach(t)
+		ada := twitchUser(t, "ada")
+
+		// The first segment completes at its own amount.
+		require.NoError(t, f.svc.AddToGoal(f.ctx, "g1", 10, platform.Twitch, ada))
+		synctest.Wait()
+		eff := f.effectsList()
+		require.Len(t, eff, 1)
+		assert.Equal(t, eventtype.OverlayGoalSegmentCompleted, eff[0].typ)
+		assert.Equal(t, &eventtype.GoalSegment{SegmentName: "s1", Current: 10, NextSegmentName: "s2", NextSegmentAmount: 10, Remaining: 10}, eff[0].payload.Details.GoalSegment)
+
+		// The second segment completes after a total of 20, not after 30
+		// (Review 344-4).
+		require.NoError(t, f.svc.AddToGoal(f.ctx, "g1", 10, platform.Twitch, ada))
+		synctest.Wait()
+		eff = f.effectsList()
+		require.Len(t, eff, 2)
+		assert.Equal(t, eventtype.OverlayGoalSegmentCompleted, eff[1].typ)
+		assert.Equal(t, &eventtype.GoalSegment{SegmentName: "s2", Current: 20, NextSegmentName: "", NextSegmentAmount: 0, Remaining: 0}, eff[1].payload.Details.GoalSegment)
+		// The progress has crossed both segments.
+		assert.JSONEq(t, `{"current":0,"segment":2,"reset_at":"0001-01-01T00:00:00Z"}`, string(f.stateDoc(t)))
+	})
+}
+
+// TestGoalSegmentCommandsCoversB23 covers B23 and Review 341-12g: the
+// completed segment starts its own command, a segment without one starts
+// the goal's segment_completed command, never both; the
+// segment-completed event is published in both cases.
+func TestGoalSegmentCommandsCoversB23(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := map[string]any{
+			"segment_completed": "fallback",
+			"segments": []any{
+				map[string]any{"name": "s1", "amount": 100, "command": "segcmd"},
+				map[string]any{"name": "s2", "amount": 50},
+			},
+		}
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("g1", overlaywidgets.KindGoal, cfg),
+		}})
+		defer f.stop()
+		f.attach(t)
+		ada := twitchUser(t, "ada")
+
+		// s1 completes: its own command starts, not the fallback, and the
+		// segment event is published.
+		require.NoError(t, f.svc.AddToGoal(f.ctx, "g1", 100, platform.Twitch, ada))
+		synctest.Wait()
+		require.Equal(t, []string{"segcmd"}, f.commandsList())
+		eff := f.effectsList()
+		require.Len(t, eff, 1)
+		assert.Equal(t, eventtype.OverlayGoalSegmentCompleted, eff[0].typ)
+		assert.Equal(t, ada, eff[0].payload.User)
+
+		// s2 completes: without its own command, the fallback starts, and
+		// the segment event is published again.
+		require.NoError(t, f.svc.AddToGoal(f.ctx, "g1", 50, platform.Twitch, ada))
+		synctest.Wait()
+		require.Equal(t, []string{"segcmd", "fallback"}, f.commandsList())
+		eff = f.effectsList()
+		require.Len(t, eff, 2)
+		assert.Equal(t, eventtype.OverlayGoalSegmentCompleted, eff[1].typ)
+	})
+}
+
+// TestGoalConcurrentAccessCoversB25 covers B20, B25 and Review 344-8: the
+// bus goroutine and the actions share the goal state; 100 parallel
+// AddToGoal calls plus events grow the goal by exactly their sum.
+func TestGoalConcurrentAccessCoversB25(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := map[string]any{"segments": []any{
+			map[string]any{"name": "s1", "amount": 1000},
+		}}
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("g1", overlaywidgets.KindGoal, cfg),
+		}})
+		defer f.stop()
+		f.attach(t)
+		ada := twitchUser(t, "ada")
+		w := widget("g1", overlaywidgets.KindGoal, cfg)
+
+		var wg sync.WaitGroup
+		for range 100 {
+			wg.Go(func() {
+				if err := f.svc.AddToGoal(f.ctx, "g1", 1, platform.Twitch, ada); err != nil {
+					t.Errorf("AddToGoal: %v", err)
+				}
+				f.publish(t, eventtype.ChannelFollow, ada, eventtype.Details{})
+				f.svc.StateForGoal(f.ctx, w)
+			})
+		}
+		wg.Wait()
+		synctest.Wait() // the bus goroutine processed every event
+
+		// 100 operations plus 100 events: exactly 200 (Review 344-8).
+		assert.JSONEq(t, `{"current":200,"segment":0,"reset_at":"0001-01-01T00:00:00Z"}`, string(f.stateDoc(t)))
+	})
+}
+
+// TestGoalLoadErrorsCoversB20 covers B20 and Review 344-11: a state error
+// is wrapped and returned from AddToGoal, logged on the event path, and
+// leaves the service running.
+func TestGoalLoadErrorsCoversB20(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		boom := errors.New("the store is broken")
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("g1", overlaywidgets.KindGoal, goalConfig()),
+		}})
+		defer f.stop()
+		// The state fails before the attach, so the handshake does not
+		// warm the goal cache.
+		f.failState(boom)
+		f.attach(t)
+
+		// AddToGoal returns the wrapped error (Review 344-11).
+		err := f.svc.AddToGoal(f.ctx, "g1", 1, platform.Twitch, twitchUser(t, "ada"))
+		assert.ErrorIs(t, err, boom)
+		assert.Contains(t, err.Error(), "the goal state of g1")
+
+		// The event path logs the error and shows nothing (Review 344-11).
+		f.publish(t, eventtype.ChannelFollow, twitchUser(t, "ada"), eventtype.Details{})
+		synctest.Wait()
+		assert.Empty(t, f.updates(t, "g1"))
+		assert.Empty(t, f.effectsList())
+		assert.Contains(t, f.logText(), "the goal step failed")
+	})
+}
+
 // TestWidgetGoalReset covers B25: the automatic daily reset runs before
 // the step, in the time zone of the profile.
 func TestWidgetGoalReset(t *testing.T) {
@@ -565,6 +769,30 @@ func TestWidgetTimer(t *testing.T) {
 	})
 }
 
+// TestPauseTimerWithoutStateCoversB26 covers B26 and Review 344-10:
+// pause_timer on a timer widget without a running state starts the timer
+// with its configured duration; the first toggle is not lost.
+func TestPauseTimerWithoutStateCoversB26(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("t1", overlaywidgets.KindTimer, map[string]any{"duration": "2m"}),
+		}})
+		defer f.stop()
+		f.attach(t)
+
+		now := time.Now()
+		require.NoError(t, f.svc.PauseTimer(f.ctx, "t1"))
+		synctest.Wait()
+		ups := f.updates(t, "t1")
+		require.Len(t, ups, 1)
+		var st map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ups[0]), &st))
+		assert.Equal(t, false, st["paused"])
+		assert.Equal(t, float64(now.Add(2*time.Minute).UnixMilli()), st["deadline"])
+	})
+}
+
 // TestWidgetEventList covers B27: the dynamic entries show before the
 // feed entries, capped at the maximum.
 func TestWidgetEventList(t *testing.T) {
@@ -680,6 +908,89 @@ func TestWidgetChat(t *testing.T) {
 		ups = f.updates(t, "c1")
 		require.Len(t, ups, 5)
 		assert.JSONEq(t, `{"messages":[{"user":"bob","text":"yo","platform":"twitch"}]}`, ups[4])
+	})
+}
+
+// TestChatDelayedDeleteCoversB28 covers B28 and Review 344-9: a delete
+// discards the message while it still waits for its delay; it never
+// shows.
+func TestChatDelayedDeleteCoversB28(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("c1", overlaywidgets.KindChat, map[string]any{"delayMs": 5000}),
+		}})
+		defer f.stop()
+		f.attach(t)
+
+		f.publish(t, eventtype.ChatMessage, twitchUser(t, "ada"), eventtype.Details{Message: &eventtype.Message{ID: "m1", Text: "hi"}})
+		synctest.Sleep(time.Second) // the delete arrives before the delay runs out
+		f.publish(t, eventtype.ChatMessageDelete, nil, eventtype.Details{Message: &eventtype.Message{ID: "m1"}})
+		synctest.Sleep(6 * time.Second) // the delay would have run out
+		assert.Empty(t, f.updates(t, "c1"))
+	})
+}
+
+// TestChatDelayedModeratedCoversB28 covers B28 and Review 344-9: a
+// timeout discards the delayed messages of the user while they wait; they
+// never show, the other users' messages still do.
+func TestChatDelayedModeratedCoversB28(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("c1", overlaywidgets.KindChat, map[string]any{"delayMs": 5000}),
+		}})
+		defer f.stop()
+		f.attach(t)
+		ada := twitchUser(t, "ada")
+		bob := twitchUser(t, "bob")
+
+		f.publish(t, eventtype.ChatMessage, ada, eventtype.Details{Message: &eventtype.Message{ID: "m1", Text: "hi"}})
+		f.publish(t, eventtype.ChatMessage, bob, eventtype.Details{Message: &eventtype.Message{ID: "m2", Text: "yo"}})
+		synctest.Sleep(time.Second)
+		f.publish(t, eventtype.ChatUserTimeout, ada, eventtype.Details{})
+		synctest.Sleep(6 * time.Second)
+
+		ups := f.updates(t, "c1")
+		require.Len(t, ups, 1)
+		assert.JSONEq(t, `{"messages":[{"user":"bob","text":"yo","platform":"twitch"}]}`, ups[0])
+	})
+}
+
+// TestChatIdenticalRemovalCoversB28 covers B28 and Review 344-9: two
+// identical messages leave the widget by their own remove timer; the
+// first timer removes only the first message.
+func TestChatIdenticalRemovalCoversB28(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("c1", overlaywidgets.KindChat, map[string]any{"removeAfterMs": 5000}),
+		}})
+		defer f.stop()
+		f.attach(t)
+		ada := twitchUser(t, "ada")
+
+		f.publish(t, eventtype.ChatMessage, ada, eventtype.Details{Message: &eventtype.Message{ID: "m1", Text: "hi"}})
+		synctest.Sleep(time.Second) // the timers fire at different times
+		f.publish(t, eventtype.ChatMessage, ada, eventtype.Details{Message: &eventtype.Message{ID: "m2", Text: "hi"}})
+		synctest.Wait()
+		ups := f.updates(t, "c1")
+		require.Len(t, ups, 2)
+		assert.JSONEq(t, `{"messages":[{"user":"ada","text":"hi","platform":"twitch"}]}`, ups[0])
+		assert.JSONEq(t, `{"messages":[{"user":"ada","text":"hi","platform":"twitch"},{"user":"ada","text":"hi","platform":"twitch"}]}`, ups[1])
+
+		synctest.Sleep(4500 * time.Millisecond) // the first remove timer fires
+		synctest.Wait()
+		ups = f.updates(t, "c1")
+		require.Len(t, ups, 3)
+		// only the first message left: the timer removed its own
+		assert.JSONEq(t, `{"messages":[{"user":"ada","text":"hi","platform":"twitch"}]}`, ups[2])
+
+		synctest.Sleep(750 * time.Millisecond) // the second remove timer fires
+		synctest.Wait()
+		ups = f.updates(t, "c1")
+		require.Len(t, ups, 4)
+		assert.JSONEq(t, `{"messages":[]}`, ups[3])
 	})
 }
 
