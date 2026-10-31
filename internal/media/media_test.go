@@ -190,6 +190,22 @@ func TestOverlaySinkShowsAudioItemOnDefaultEndpoint(t *testing.T) {
 	// A file outside the media directory is a clear error.
 	_, err = sink.Play(context.Background(), "/other/hi.wav", 100)
 	require.Error(t, err)
+
+	// A file under the media directory whose name starts with ".." is
+	// still local (Review 345-15: the old prefix check rejected it), a
+	// path with a ".." element is not.
+	end, err = sink.Play(context.Background(), "/media/..intro.wav", 100)
+	require.NoError(t, err)
+	content = fake.items[1].Content.(map[string]any)
+	assert.Equal(t, "/media/media/..intro.wav", content["src"])
+	close(fake.ends[1])
+	select {
+	case <-end:
+	default:
+		t.Fatal("the end of the item is the end of the playback")
+	}
+	_, err = sink.Play(context.Background(), "/media/sub/../../evil.wav", 100)
+	require.Error(t, err)
 }
 
 // fakeSink is a sink that records its calls.
