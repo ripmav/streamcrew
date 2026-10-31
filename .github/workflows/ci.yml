@@ -98,6 +98,12 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # The variant with the tag localaudio (ADR-0020 §1, Review 345-12)
+      # must stay vetted as well: the build tag replaces the local sink
+      # and its tests, so the untagged vet cannot see them.
+      - name: go vet -tags localaudio
+        run: go vet -tags localaudio ./...
+
       # The generated database code must match the SQL (Code-ADR-0008). The
       # version is pinned like in internal/store/generate.go.
       - name: sqlc diff
@@ -128,6 +134,15 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.15.0
+
+      # The variant with the tag localaudio (ADR-0020 §1, Review 345-12)
+      # gets its own lint run: the tagged and the untagged variant
+      # replace each other, so one run cannot see both.
+      - name: golangci-lint -tags localaudio
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+          args: "--build-tags=localaudio ./..."
 
       - name: govulncheck
         run: |
@@ -186,6 +201,12 @@ jobs:
 
       - name: go test -race
         run: go test -race -shuffle=on ./...
+
+      # The tests of the variant with the tag localaudio (ADR-0020 §1,
+      # Review 345-12) run headless in the CI: the fake player stands
+      # in for the device, the real playback stays on the streaming PC.
+      - name: go test -race -tags localaudio
+        run: go test -race -shuffle=on -tags localaudio ./internal/media/...
 
       - name: Short fuzz runs
         env:
