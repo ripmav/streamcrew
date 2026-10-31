@@ -139,6 +139,20 @@ func TestAzureCoversSSMLAndKeyHandling(t *testing.T) {
 	assert.True(t, strings.HasSuffix(path, ".mp3"))
 	assert.DirExists(t, dir)
 
+	// Without a voice in the action the default voice is used, and it
+	// is a voice the API knows (Review 345-6).
+	var defaultSSML []byte
+	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defaultSSML, _ = io.ReadAll(r.Body)
+		_, _ = w.Write([]byte("mp3-bytes"))
+	}))
+	defer srv2.Close()
+	svc2, _ := testService(t, map[string]string{EnvAzureKey: "secret-key", EnvAzureRegion: "westeurope"}, "", srv2.URL)
+	_, err = svc2.Generate(context.Background(), Azure, Speech{Text: "hello"})
+	require.NoError(t, err)
+	assert.Contains(t, string(defaultSSML), `name="en-US-JennyNeural"`)
+	assert.Contains(t, string(defaultSSML), `xml:lang="en-US"`)
+
 	// The missing key and the missing region are clear errors.
 	noKey, _ := testService(t, map[string]string{EnvAzureRegion: "westeurope"}, "", srv.URL)
 	_, err = noKey.Generate(context.Background(), Azure, Speech{Text: "hi"})
