@@ -69,7 +69,7 @@ func (s *Service) google(ctx context.Context, sp Speech) (string, error) {
 // do runs req and decodes the JSON answer; an answer that is no success
 // is an error with its body, truncated.
 func (s *Service) do(req *http.Request, v any) error {
-	res, err := s.client().Do(req)
+	res, err := s.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("tts: %w", err)
 	}

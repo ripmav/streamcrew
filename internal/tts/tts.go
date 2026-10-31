@@ -130,6 +130,10 @@ type Ports struct {
 // and piper render the speech to a file under the generated directory.
 type Service struct {
 	ports Ports
+	// client is the one HTTP client of the service; the requests share
+	// its transport, so the keep-alive connections are reused (Review
+	// 345-8).
+	client *http.Client
 }
 
 // New returns a service of the providers; the keys and the endpoints
@@ -155,7 +159,16 @@ func New(p Ports) (*Service, error) {
 	if p.AzureBase == nil {
 		p.AzureBase = azureBase
 	}
-	return &Service{ports: p}, nil
+	client := &http.Client{Timeout: requestTimeout}
+	if p.Dialer != nil {
+		// Through the dialer of the core, so the server mode with its
+		// outbound allowlist applies (ADR-0013, point 4).
+		client.Transport = &http.Transport{
+			DialContext:         p.Dialer.DialContext,
+			TLSHandshakeTimeout: requestTimeout,
+		}
+	}
+	return &Service{ports: p, client: client}, nil
 }
 
 // Generate renders the speech of the provider to a file under the
@@ -173,18 +186,6 @@ func (s *Service) Generate(ctx context.Context, n Name, sp Speech) (string, erro
 		return "", errors.New("tts: the provider browser speaks on the overlay, it generates no file")
 	default:
 		return "", fmt.Errorf("tts: unknown provider %q", n)
-	}
-}
-
-// client returns an HTTP client through the dialer of the core, so the
-// server mode with its outbound allowlist applies (ADR-0013, point 4).
-func (s *Service) client() *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			DialContext:         s.ports.Dialer.DialContext,
-			TLSHandshakeTimeout: requestTimeout,
-		},
-		Timeout: requestTimeout,
 	}
 }
 

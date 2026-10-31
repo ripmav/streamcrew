@@ -29,6 +29,18 @@ func (loopbackDialer) DialContext(ctx context.Context, network, address string) 
 	return d.DialContext(ctx, network, address)
 }
 
+// countingDialer counts the connections it dials, for the keep-alive
+// regression (Review 345-8).
+type countingDialer struct {
+	dials int
+}
+
+func (c *countingDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	c.dials++
+	var d net.Dialer
+	return d.DialContext(ctx, network, address)
+}
+
 // testService returns a service with the generated directory under
 // tmp, the env of the keys, and the endpoints of the httptest servers.
 func testService(t *testing.T, env map[string]string, google, azure string) (*Service, string) {
@@ -101,6 +113,32 @@ func TestGoogleCoversTheAPIError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bad text")
 	assert.NotContains(t, err.Error(), "secret-key")
+}
+
+// TestGoogleReusesTheKeepAliveConnection is the regression of the HTTP
+// client (Review 345-8): one client in New, so the requests share its
+// transport and its keep-alive connections; the old code built a new
+// transport per request and dialed for every request.
+func TestGoogleReusesTheKeepAliveConnection(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"audioContent":"` + base64.StdEncoding.EncodeToString([]byte("mp3-bytes")) + `"}`))
+	}))
+	defer srv.Close()
+
+	env := map[string]string{EnvGoogleKey: "secret-key"}
+	dialer := &countingDialer{}
+	svc, err := New(Ports{
+		GeneratedDir:   filepath.Join(t.TempDir(), "generated"),
+		Env:            func(k string) string { return env[k] },
+		Dialer:         dialer,
+		GoogleEndpoint: srv.URL,
+	})
+	require.NoError(t, err)
+	for range 2 {
+		_, err = svc.Generate(context.Background(), Google, Speech{Text: "hi"})
+		require.NoError(t, err)
+	}
+	assert.Equal(t, 1, dialer.dials, "the requests share the transport and the keep-alive connection")
 }
 
 // TestAzureCoversSSMLAndKeyHandling covers B41, ADR-0020 §3: the azure
