@@ -522,7 +522,8 @@ Profil-Sektion `overlay`, Zustand zum Teil im Profil persistiert
   `chatters`, `new_followers`, `new_subscribers`, `resubscribers`,
   `gifted_subscriptions`, `all_subscriptions`, `raids`, `twitch_bits`
   plus eigene `custom_sections`. Gesperrte und gebannte Nutzer
-  verschwinden aus allen Sektionen, der Stream-Start leert sie.
+  verschwinden aus allen Sektionen — auch bei ausgeblendeten
+  End-Credits (Review 347-11) —, der Stream-Start leert sie.
   `add_to_credits` (Sektion in `data` plus `text`) ergänzt einen
   Eintrag, `play_credits` startet die Wiedergabe (die Runtime zeigt
   die Liste; eine Roll-Animation folgt).

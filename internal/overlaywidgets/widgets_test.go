@@ -1659,6 +1659,25 @@ func TestWidgetEndCredits(t *testing.T) {
 		assert.Empty(t, users(t, sec, "chatters"))
 		assert.Empty(t, users(t, sec, "raids"))
 
+		// A ban removes the user from a hidden end credits too: the
+		// removal is not limited to the visible widgets (Review 347-11).
+		// The section switches to the hidden widget; the tick reloads it.
+		hidden := widget("e1", overlaywidgets.KindEndCredits, map[string]any{"custom_sections": []string{"thanks"}})
+		hidden.Visible = false
+		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{hidden}})
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		f.publish(t, eventtype.ChatUserBan, bob, eventtype.Details{})
+		synctest.Wait()
+		sec = state(t)
+		assert.Empty(t, users(t, sec, "new_followers"))
+		// The widget shows again for the remaining steps.
+		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("e1", overlaywidgets.KindEndCredits, map[string]any{"custom_sections": []string{"thanks"}}),
+		}})
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+
 		// add_to_credits adds a custom entry, and a section it does not
 		// know is a clear error (B31, B38).
 		require.NoError(t, f.svc.AddToCredits(f.ctx, "e1", "thanks", "the crew"))

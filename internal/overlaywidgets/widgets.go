@@ -3079,7 +3079,9 @@ func (s *Service) endCreditsLoad(_ context.Context, widgetID string, cfg *endCre
 	return st
 }
 
-// endCreditsCollect collects the event into the visible end credits (B31).
+// endCreditsCollect collects the event into the end credits (B31); a ban
+// and a timeout remove the user from every end credits widget, the other
+// events only while the widget is visible (Review 347-11).
 func (s *Service) endCreditsCollect(ctx context.Context, env event.Envelope) {
 	sec := s.section(ctx)
 	if sec == nil {
@@ -3089,8 +3091,13 @@ func (s *Service) endCreditsCollect(ctx context.Context, env event.Envelope) {
 	if !ok {
 		return
 	}
+	removal := env.Type == eventtype.ChatUserBan || env.Type == eventtype.ChatUserTimeout
 	for _, w := range sec.Widgets {
-		if w.Kind != KindEndCredits || !s.visible(w) {
+		if w.Kind != KindEndCredits {
+			continue
+		}
+		visible := s.visible(w)
+		if !visible && !removal {
 			continue
 		}
 		cfg := s.endCreditsConfig(ctx, w)
@@ -3098,44 +3105,52 @@ func (s *Service) endCreditsCollect(ctx context.Context, env event.Envelope) {
 			continue
 		}
 		st := s.endCreditsLoad(ctx, w.ID, cfg)
-		s.endCreditsAdd(ctx, env.Type, st, payload)
-		s.pushCredits(ctx, w, st)
+		changed := s.endCreditsAdd(ctx, env.Type, st, payload)
+		if visible || changed {
+			s.pushCredits(ctx, w, st)
+		}
 	}
 }
 
 // endCreditsAdd adds the user of the event to the section it belongs to
-// (B31); a ban removes the user from every section.
-func (s *Service) endCreditsAdd(_ context.Context, typ event.Type, st *endCreditsState, p eventtype.Payload) {
+// (B31); a ban removes the user from every section. It reports whether
+// the collected data changed (Review 347-11).
+func (s *Service) endCreditsAdd(_ context.Context, typ event.Type, st *endCreditsState, p eventtype.Payload) bool {
 	switch typ {
 	case eventtype.ChatMessage:
-		s.endCreditsUser(st, "chatters", p.User)
+		return s.endCreditsUser(st, "chatters", p.User)
 	case eventtype.ChannelFollow:
-		s.endCreditsUser(st, "new_followers", p.User)
+		return s.endCreditsUser(st, "new_followers", p.User)
 	case eventtype.ChannelSubscribe:
-		s.endCreditsUser(st, "new_subscribers", p.User)
-		s.endCreditsUser(st, "all_subscriptions", p.User)
+		changed := s.endCreditsUser(st, "new_subscribers", p.User)
+		changed = s.endCreditsUser(st, "all_subscriptions", p.User) || changed
+		return changed
 	case eventtype.ChannelResubscribe:
-		s.endCreditsUser(st, "resubscribers", p.User)
-		s.endCreditsUser(st, "all_subscriptions", p.User)
+		changed := s.endCreditsUser(st, "resubscribers", p.User)
+		changed = s.endCreditsUser(st, "all_subscriptions", p.User) || changed
+		return changed
 	case eventtype.ChannelSubscriptionGift:
-		s.endCreditsUser(st, "gifted_subscriptions", p.User)
-		s.endCreditsUser(st, "all_subscriptions", p.Target)
+		changed := s.endCreditsUser(st, "gifted_subscriptions", p.User)
+		changed = s.endCreditsUser(st, "all_subscriptions", p.Target) || changed
+		return changed
 	case eventtype.ChannelSubscriptionMassGift:
-		s.endCreditsUser(st, "all_subscriptions", p.User)
+		return s.endCreditsUser(st, "all_subscriptions", p.User)
 	case eventtype.ChannelRaid:
-		s.endCreditsUser(st, "raids", p.User)
+		return s.endCreditsUser(st, "raids", p.User)
 	case eventtype.TwitchBitsCheer:
-		s.endCreditsUser(st, "twitch_bits", p.User)
+		return s.endCreditsUser(st, "twitch_bits", p.User)
 	case eventtype.ChatUserBan, eventtype.ChatUserTimeout:
-		s.endCreditsRemove(st, p.User)
+		return s.endCreditsRemove(st, p.User)
 	default:
+		return false
 	}
 }
 
-// endCreditsUser adds the user to the section, once (B31).
-func (s *Service) endCreditsUser(st *endCreditsState, section string, u *user.User) {
+// endCreditsUser adds the user to the section, once (B31); it reports
+// whether the section changed.
+func (s *Service) endCreditsUser(st *endCreditsState, section string, u *user.User) bool {
 	if u == nil || u.ID.IsZero() {
-		return
+		return false
 	}
 	name := userName(*u)
 	s.mu.Lock()
@@ -3143,19 +3158,22 @@ func (s *Service) endCreditsUser(st *endCreditsState, section string, u *user.Us
 	for _, e := range entries {
 		if e.User == name {
 			s.mu.Unlock()
-			return
+			return false
 		}
 	}
 	st.sections[section] = append(entries, endCreditsEntry{User: name})
 	s.mu.Unlock()
+	return true
 }
 
-// endCreditsRemove removes the user from every section (B31).
-func (s *Service) endCreditsRemove(st *endCreditsState, u *user.User) {
+// endCreditsRemove removes the user from every section (B31); it reports
+// whether a section changed.
+func (s *Service) endCreditsRemove(st *endCreditsState, u *user.User) bool {
 	if u == nil || u.ID.IsZero() {
-		return
+		return false
 	}
 	name := userName(*u)
+	changed := false
 	s.mu.Lock()
 	for section, entries := range st.sections {
 		next := entries[:0]
@@ -3164,9 +3182,13 @@ func (s *Service) endCreditsRemove(st *endCreditsState, u *user.User) {
 				next = append(next, e)
 			}
 		}
+		if len(next) != len(entries) {
+			changed = true
+		}
 		st.sections[section] = next
 	}
 	s.mu.Unlock()
+	return changed
 }
 
 // endCreditsClear clears the collected data of the visible end credits on
