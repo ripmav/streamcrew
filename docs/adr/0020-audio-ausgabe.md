@@ -46,7 +46,7 @@ Zusätzliche Eingangsgrößen:
 Siehe ADR-0019 §6. Zusammenfassung der Audio-Aspekte:
 
 - **`browser`** (Default): kein Key, kein `host:audio`; der Overlay-Client spricht via Web Speech API (B41).
-- **`google`/`azure`**: REST-APIs, server-seitig generiertes Audio wird unter `<data-dir>/<profil>/media/generated/` abgelegt und als `audio`-Item auf dem Default-Endpunkt gespielt (MIU-äquivalent, Q21, Q23).
+- **`google`/`azure`**: REST-APIs, server-seitig generiertes Audio (16-Bit-PCM-WAV, `LINEAR16` bzw. `riff-24khz-16bit-mono-pcm`, Review 345-11) wird unter `<data-dir>/<profil>/media/generated/` abgelegt und als `audio`-Item auf dem Default-Endpunkt gespielt (MIU-äquivalent, Q21, Q23).
 - **`piper`**: externer Prozess (`piper`-Binary), `host:process` erforderlich; erzeugt WAV lokal; wird als `audio`-Item gespielt (B41).
 
 ### 4. Medien-Audio

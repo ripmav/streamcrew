@@ -48,9 +48,11 @@ func (s *Service) azure(ctx context.Context, sp Speech) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("tts: azure: %w", err)
 	}
+	// The answer is a 16-bit PCM WAV (24 kHz mono): the local sink
+	// decodes WAV only (Review 345-11).
 	req.Header.Set("Content-Type", "application/ssml+xml")
 	req.Header.Set("Ocp-Apim-Subscription-Key", key)
-	req.Header.Set("X-Microsoft-OutputFormat", "audio-24khz-48kbitrate-mono-mp3")
+	req.Header.Set("X-Microsoft-OutputFormat", "riff-24khz-16bit-mono-pcm")
 	res, err := s.client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("tts: azure: %w", err)
@@ -64,7 +66,7 @@ func (s *Service) azure(ctx context.Context, sp Speech) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("tts: azure: the answer: %w", err)
 	}
-	return s.write(ctx, Azure, raw, ".mp3")
+	return s.write(ctx, Azure, raw, ".wav")
 }
 
 // azureSSML builds the SSML document of the request: the prosody maps

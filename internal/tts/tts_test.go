@@ -69,7 +69,7 @@ func TestGoogleCoversSynthesizeAndKeyHandling(t *testing.T) {
 		gotURL = r.URL.String()
 		gotKey = r.Header.Get("x-goog-api-key")
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-		_, _ = w.Write([]byte(`{"audioContent":"` + base64.StdEncoding.EncodeToString([]byte("mp3-bytes")) + `"}`))
+		_, _ = w.Write([]byte(`{"audioContent":"` + base64.StdEncoding.EncodeToString([]byte("wav-bytes")) + `"}`))
 	}))
 	defer srv.Close()
 
@@ -80,7 +80,8 @@ func TestGoogleCoversSynthesizeAndKeyHandling(t *testing.T) {
 	assert.Equal(t, "secret-key", gotKey)
 	assert.Equal(t, "hello", body["input"].(map[string]any)["text"])
 	cfg := body["audioConfig"].(map[string]any)
-	assert.Equal(t, "MP3", cfg["audioEncoding"])
+	assert.Equal(t, "LINEAR16", cfg["audioEncoding"],
+		"the local sink decodes WAV only, the answer is a 16-bit PCM WAV (Review 345-11)")
 	assert.Equal(t, 1.5, cfg["speakingRate"])
 	assert.InDelta(t, 10, cfg["pitch"], 0.01, "the pitch ratio 1.5 is +10 Hz")
 	assert.Nil(t, cfg["volumeGainDb"],
@@ -88,9 +89,9 @@ func TestGoogleCoversSynthesizeAndKeyHandling(t *testing.T) {
 
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
-	assert.Equal(t, "mp3-bytes", string(raw))
+	assert.Equal(t, "wav-bytes", string(raw))
 	assert.True(t, strings.HasPrefix(filepath.Base(path), "tts-"))
-	assert.True(t, strings.HasSuffix(filepath.Base(path), ".mp3"))
+	assert.True(t, strings.HasSuffix(filepath.Base(path), ".wav"))
 	assert.DirExists(t, dir)
 
 	// The missing key is a clear error.
@@ -121,7 +122,7 @@ func TestGoogleCoversTheAPIError(t *testing.T) {
 // transport per request and dialed for every request.
 func TestGoogleReusesTheKeepAliveConnection(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"audioContent":"` + base64.StdEncoding.EncodeToString([]byte("mp3-bytes")) + `"}`))
+		_, _ = w.Write([]byte(`{"audioContent":"` + base64.StdEncoding.EncodeToString([]byte("wav-bytes")) + `"}`))
 	}))
 	defer srv.Close()
 
@@ -153,7 +154,7 @@ func TestAzureCoversSSMLAndKeyHandling(t *testing.T) {
 		gotKey = r.Header.Get("Ocp-Apim-Subscription-Key")
 		gotFormat = r.Header.Get("X-Microsoft-OutputFormat")
 		gotSSML, _ = io.ReadAll(r.Body)
-		_, _ = w.Write([]byte("mp3-bytes"))
+		_, _ = w.Write([]byte("wav-bytes"))
 	}))
 	defer srv.Close()
 
@@ -163,7 +164,8 @@ func TestAzureCoversSSMLAndKeyHandling(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "secret-key", gotKey)
-	assert.Equal(t, "audio-24khz-48kbitrate-mono-mp3", gotFormat)
+	assert.Equal(t, "riff-24khz-16bit-mono-pcm", gotFormat,
+		"the local sink decodes WAV only (Review 345-11)")
 	assert.Contains(t, string(gotSSML), `xml:lang="de-DE"`)
 	assert.Contains(t, string(gotSSML), `name="de-DE-KatjaNeural"`)
 	assert.Contains(t, string(gotSSML), `rate="+20%"`)
@@ -173,8 +175,8 @@ func TestAzureCoversSSMLAndKeyHandling(t *testing.T) {
 	assert.Contains(t, string(gotSSML), "a &lt;b&gt; &amp; &#34;c&#34;")
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
-	assert.Equal(t, "mp3-bytes", string(raw))
-	assert.True(t, strings.HasSuffix(path, ".mp3"))
+	assert.Equal(t, "wav-bytes", string(raw))
+	assert.True(t, strings.HasSuffix(path, ".wav"))
 	assert.DirExists(t, dir)
 
 	// Without a voice in the action the default voice is used, and it
@@ -182,7 +184,7 @@ func TestAzureCoversSSMLAndKeyHandling(t *testing.T) {
 	var defaultSSML []byte
 	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defaultSSML, _ = io.ReadAll(r.Body)
-		_, _ = w.Write([]byte("mp3-bytes"))
+		_, _ = w.Write([]byte("wav-bytes"))
 	}))
 	defer srv2.Close()
 	svc2, _ := testService(t, map[string]string{EnvAzureKey: "secret-key", EnvAzureRegion: "westeurope"}, "", srv2.URL)
