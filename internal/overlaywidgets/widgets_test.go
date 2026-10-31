@@ -1306,6 +1306,131 @@ func TestAddToTimerDispatchesByKindCoversB29(t *testing.T) {
 	})
 }
 
+// TestPersistentTimerAdjustBeforeStartCoversB29 covers B29 and Review
+// 347-3: an adjustment before the first tick adds to the frozen initial
+// time; the fresh timer starts from the initial plus the amount, not
+// finished.
+func TestPersistentTimerAdjustBeforeStartCoversB29(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("p1", overlaywidgets.KindPersistentTimer, map[string]any{"initial": "10m"}),
+		}})
+		defer f.stop()
+		f.attach(t)
+		// The adjustment runs before the first tick.
+		require.NoError(t, f.svc.AddToPersistentTimer(f.ctx, "p1", time.Minute))
+		now := time.Now()
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		ups := f.updates(t, "p1")
+		require.NotEmpty(t, ups)
+		var st map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ups[len(ups)-1]), &st))
+		assert.Equal(t, false, st["completed"])
+		assert.Equal(t, false, st["paused"])
+		deadline, ok := st["deadline"].(float64)
+		require.True(t, ok, "no deadline in the state")
+		assert.GreaterOrEqual(t, deadline, float64(now.Add(11*time.Minute).UnixMilli()))
+		assert.LessOrEqual(t, deadline, float64(now.Add(11*time.Minute+5*time.Second).UnixMilli()))
+	})
+}
+
+// TestPersistentTimerCompletionResetCoversB29 covers B29 and Review
+// 347-4: a completed timer with reset_on_enable runs again when it is
+// shown again, and the completion event fires exactly once.
+func TestPersistentTimerCompletionResetCoversB29(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("p1", overlaywidgets.KindPersistentTimer, map[string]any{"initial": "10m", "reset_on_enable": true}),
+		}})
+		defer f.stop()
+		// The timer is running and has reached zero already.
+		f.seedState("p1", fmt.Sprintf(`{"deadline_ms":%d,"paused":false,"completed":false,"was_visible":true}`, time.Now().Add(-time.Minute).UnixMilli()))
+		f.attach(t)
+
+		completedCount := func() int {
+			t.Helper()
+			n := 0
+			for _, e := range f.effectsList() {
+				if e.typ == eventtype.OverlayTimerCompleted {
+					n++
+				}
+			}
+			return n
+		}
+
+		// The running timer reaches zero on the tick: one completion.
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		assert.Equal(t, 1, completedCount())
+
+		// Hidden, then shown again: the reset_on_enable timer runs
+		// again, and the completion fires no second time (Review 347-4).
+		sec := f.sectionNow()
+		sec.Widgets[0].Visible = false
+		f.setSection(sec)
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		sec = f.sectionNow()
+		sec.Widgets[0].Visible = true
+		f.setSection(sec)
+		now := time.Now()
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		assert.Equal(t, 1, completedCount())
+		ups := f.updates(t, "p1")
+		var st map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ups[len(ups)-1]), &st))
+		assert.Equal(t, false, st["completed"])
+		assert.Equal(t, false, st["paused"])
+		deadline, ok := st["deadline"].(float64)
+		require.True(t, ok, "no deadline in the state")
+		assert.GreaterOrEqual(t, deadline, float64(now.Add(10*time.Minute).UnixMilli()))
+		assert.LessOrEqual(t, deadline, float64(now.Add(10*time.Minute+5*time.Second).UnixMilli()))
+
+		// A second hide and show cycle: still one completion, still
+		// running.
+		sec = f.sectionNow()
+		sec.Widgets[0].Visible = false
+		f.setSection(sec)
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		sec = f.sectionNow()
+		sec.Widgets[0].Visible = true
+		f.setSection(sec)
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		assert.Equal(t, 1, completedCount())
+	})
+}
+
+// TestPersistentTimerShutdownResetCoversB29 covers B29 and Review
+// 347-16: when the service ends, the reset_on_enable timer is reset to
+// the initial duration in the profile, so the next session starts fresh.
+func TestPersistentTimerShutdownResetCoversB29(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("p1", overlaywidgets.KindPersistentTimer, map[string]any{"initial": "10m", "reset_on_enable": true}),
+		}})
+		f.attach(t)
+		// The timer runs.
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		var st map[string]any
+		require.NoError(t, json.Unmarshal(f.stateDocFor(t, "p1"), &st))
+		assert.Equal(t, false, st["paused"])
+		// The service ends: the state in the profile is reset.
+		f.stop()
+		require.NoError(t, json.Unmarshal(f.stateDocFor(t, "p1"), &st))
+		assert.Equal(t, true, st["paused"])
+		assert.Equal(t, false, st["completed"])
+		assert.Equal(t, float64((10 * time.Minute).Milliseconds()), st["remaining_ms"])
+	})
+}
+
 // TestWidgetStreamBoss covers B30: the damage and the heal, the self-heal
 // of the boss, the forced damage, the event amounts with the user of the
 // event, and the new boss with the compounded health after a kill.

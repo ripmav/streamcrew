@@ -367,6 +367,7 @@ func (s *Service) Run(ctx context.Context) error {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	defer s.stopChatTimers()
+	defer s.persistentTimerShutdown(ctx)
 	for {
 		select {
 		case env, ok := <-sub.C():
@@ -2206,8 +2207,10 @@ type persistentTimerDoc struct {
 }
 
 // persistentTimerLoad returns the running state of the persistent timer,
-// loaded from the profile on first use (B20).
-func (s *Service) persistentTimerLoad(ctx context.Context, widgetID string) (*persistentTimerState, error) {
+// loaded from the profile on first use (B20). A fresh state is paused
+// with the initial duration, so an adjustment before the first tick adds
+// to the frozen time instead of shifting a zero deadline (Review 347-3).
+func (s *Service) persistentTimerLoad(ctx context.Context, widgetID string, cfg *persistentTimerConfig) (*persistentTimerState, error) {
 	s.mu.Lock()
 	if st, ok := s.persistentTimers[widgetID]; ok {
 		s.mu.Unlock()
@@ -2218,7 +2221,7 @@ func (s *Service) persistentTimerLoad(ctx context.Context, widgetID string) (*pe
 	if err != nil {
 		return nil, err
 	}
-	st := &persistentTimerState{}
+	st := &persistentTimerState{paused: true, remaining: cfg.initial}
 	if found {
 		var d persistentTimerDoc
 		if err := json.Unmarshal(doc, &d); err != nil {
@@ -2330,7 +2333,7 @@ func (s *Service) AddToPersistentTimer(ctx context.Context, widgetID string, d t
 // persistentTimerAdjust changes the remaining time of the persistent timer
 // by d and publishes overlay.timer.adjusted (B29).
 func (s *Service) persistentTimerAdjust(ctx context.Context, w settings.OverlayWidget, cfg *persistentTimerConfig, d time.Duration, env event.Envelope) {
-	st, err := s.persistentTimerLoad(ctx, w.ID)
+	st, err := s.persistentTimerLoad(ctx, w.ID, cfg)
 	if err != nil {
 		return
 	}
@@ -2377,13 +2380,14 @@ func (s *Service) persistentTimerTick(ctx context.Context) {
 		if cfg == nil {
 			continue
 		}
-		st, err := s.persistentTimerLoad(ctx, w.ID)
+		st, err := s.persistentTimerLoad(ctx, w.ID, cfg)
 		if err != nil {
 			continue
 		}
 		visible := s.visible(w)
 		now := time.Now()
 		changed := false
+		completedNow := false
 		s.mu.Lock()
 		switch {
 		case !visible && st.wasVisible:
@@ -2397,20 +2401,24 @@ func (s *Service) persistentTimerTick(ctx context.Context) {
 			st.paused = true
 			changed = true
 		case visible && !st.wasVisible:
-			// The widget was shown: resume from the frozen time, or start
-			// from the initial while it is new or reset_on_enable (B29).
-			if cfg.ResetOnEnable || st.deadline.IsZero() {
-				st.deadline = now.Add(cfg.initial)
-			} else {
-				st.deadline = now.Add(st.remaining)
+			// The widget was shown: resume from the frozen time; a reset
+			// starts from the initial duration (B29). Review 347-4: only
+			// the reset clears the completion, so a completed timer stays
+			// completed.
+			if cfg.ResetOnEnable {
+				st.remaining = cfg.initial
+				st.completed = false
 			}
+			st.deadline = now.Add(st.remaining)
 			st.paused = false
 			changed = true
 		case visible && !st.paused && !st.completed && st.deadline.Before(now):
-			// The running timer reached zero (B29).
+			// The running timer reached zero (B29); only this branch
+			// fires the completion event (Review 347-4).
 			st.completed = true
 			st.remaining = 0
 			changed = true
+			completedNow = true
 		}
 		st.wasVisible = visible
 		s.mu.Unlock()
@@ -2420,9 +2428,40 @@ func (s *Service) persistentTimerTick(ctx context.Context) {
 		if visible || changed {
 			s.pushPersistentTimer(ctx, w, cfg, st)
 		}
-		if st.completed && changed && st.wasVisible {
+		if completedNow {
 			s.publish(ctx, eventtype.OverlayTimerCompleted, eventtype.Payload{Platform: platform.Twitch})
 		}
+	}
+}
+
+// persistentTimerShutdown applies reset_on_enable when the service ends
+// (B29, Review 347-16): the timers start fresh in the next session, so a
+// frozen remaining time does not survive the restart. The context of Run
+// is done by then, so the ports run without cancellation.
+func (s *Service) persistentTimerShutdown(ctx context.Context) {
+	ctx2 := context.WithoutCancel(ctx)
+	sec := s.section(ctx2)
+	if sec == nil {
+		return
+	}
+	for _, w := range sec.Widgets {
+		if w.Kind != KindPersistentTimer {
+			continue
+		}
+		cfg := s.persistentTimerConfig(ctx2, w)
+		if cfg == nil || !cfg.ResetOnEnable {
+			continue
+		}
+		st, err := s.persistentTimerLoad(ctx2, w.ID, cfg)
+		if err != nil {
+			continue
+		}
+		s.mu.Lock()
+		st.remaining = cfg.initial
+		st.paused = true
+		st.completed = false
+		s.mu.Unlock()
+		s.persistentTimerSave(ctx2, w.ID, st)
 	}
 }
 
@@ -2446,7 +2485,7 @@ func (s *Service) StateForPersistentTimer(ctx context.Context, w settings.Overla
 	if cfg == nil {
 		return nil
 	}
-	st, err := s.persistentTimerLoad(ctx, w.ID)
+	st, err := s.persistentTimerLoad(ctx, w.ID, cfg)
 	if err != nil {
 		return nil
 	}
