@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/ripmav/streamcrew/internal/capability"
 	"github.com/ripmav/streamcrew/internal/overlay"
@@ -52,7 +51,11 @@ func (s *OverlaySink) Required() capability.Capability { return "" }
 // the runtime can load it from the media route (B6, B47).
 func (s *OverlaySink) Play(ctx context.Context, file string, volume float64) (<-chan struct{}, error) {
 	rel, err := filepath.Rel(s.mediaDir, file)
-	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+	// IsLocal is true for a relative path without "." or ".." elements,
+	// so a file named ..intro.wav under the media directory stays
+	// accepted, and a path with a ".." element or an absolute path does
+	// not (Review 345-15).
+	if err != nil || !filepath.IsLocal(rel) {
 		return nil, errors.New("media: the overlay sink plays files under the media directory only")
 	}
 	// An audio item has no picture; the position is where it would show,
