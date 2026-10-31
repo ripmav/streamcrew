@@ -239,7 +239,9 @@ func (c *client) handshake(ctx context.Context) error {
 		return fmt.Errorf("the hello: expected the opcode %d, got %d", opHello, msg.Op)
 	}
 	var hello helloMsg
-	_ = json.Unmarshal(msg.D, &hello)
+	if err := json.Unmarshal(msg.D, &hello); err != nil {
+		return fmt.Errorf("the hello: %w", err)
+	}
 	var auth *string
 	if c.password != "" && hello.Authentication != nil {
 		secret := authSecret(c.password, hello.Authentication.Salt, hello.Authentication.Challenge)
@@ -281,7 +283,12 @@ func (c *client) readLoop(ctx context.Context) {
 		switch msg.Op {
 		case opEvent:
 			var ev eventMsg
-			_ = json.Unmarshal(msg.D, &ev)
+			if err := json.Unmarshal(msg.D, &ev); err != nil {
+				// the message is not a parseable event; it is dropped,
+				// the reader keeps running (Review 346-6)
+				c.logger.DebugContext(ctx, "the data of the OBS event is not parseable", "error", err)
+				continue
+			}
 			select {
 			case c.events <- &ev:
 			default:
@@ -291,7 +298,13 @@ func (c *client) readLoop(ctx context.Context) {
 			}
 		case opResponse:
 			var resp responseMsg
-			_ = json.Unmarshal(msg.D, &resp)
+			if err := json.Unmarshal(msg.D, &resp); err != nil {
+				// the message is not a parseable response; it is
+				// dropped, the waiter of the request times out (Review
+				// 346-6)
+				c.logger.DebugContext(ctx, "the data of the OBS response is not parseable", "error", err)
+				continue
+			}
 			c.mu.Lock()
 			ch := c.waiters[resp.ID]
 			delete(c.waiters, resp.ID)

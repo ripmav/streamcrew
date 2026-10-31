@@ -122,6 +122,19 @@ func (f *fakeObs) sendEvent(typ string, data any) {
 	_ = f.write(context.Background(), ws, wire{Op: opEvent, D: mustMarshal(ev)})
 }
 
+// sendBadEvent pushes an OBS event whose data is not parseable into
+// the event (Review 346-6).
+func (f *fakeObs) sendBadEvent(typ string) {
+	f.mu.Lock()
+	ws := f.ws
+	f.mu.Unlock()
+	if ws == nil {
+		return
+	}
+	ev := map[string]any{"eventType": typ, "eventIntent": 0, "eventData": "not an object"}
+	_ = f.write(context.Background(), ws, wire{Op: opEvent, D: mustMarshal(ev)})
+}
+
 // handle runs one connection: the negotiation, then the requests and
 // the responses.
 func (f *fakeObs) handle(w http.ResponseWriter, r *http.Request) {
@@ -645,6 +658,32 @@ func TestRunReportsNotConnectedDuringAReconnect(t *testing.T) {
 	assert.ErrorIs(t, s.SetScene(ctx, "Cut"), ErrNotConnected, "the window of the reconnect")
 	waitUntil(t, func() bool { return fake.connsSeen() == 2 })
 	require.NoError(t, s.SetScene(ctx, "Cut"), "after the reconnect")
+	cancel()
+	require.NoError(t, <-done)
+}
+
+// TestRunSkipsAnUnparseableEvent checks that an OBS event whose data
+// does not parse is dropped with a debug log, and the connection keeps
+// running (Review 346-6): a broken scene event publishes no scene
+// change with an empty name, and the next valid event still runs.
+func TestRunSkipsAnUnparseableEvent(t *testing.T) {
+	t.Parallel()
+	fake := newFakeObs(t, "")
+	host, port := fake.addr()
+	bus := event.NewBus(nil)
+	s := New(Ports{Host: host, Port: port, Bus: bus})
+	c := newCollector(t, bus)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() { done <- s.Run(ctx) }()
+	waitUntil(t, func() bool { return s.Connected() })
+	fake.sendBadEvent("CurrentProgramSceneChanged")
+	time.Sleep(100 * time.Millisecond)
+	assert.Zero(t, c.count(eventtype.ObsSceneChanged), "the broken event publishes nothing")
+	fake.sendEvent("CurrentProgramSceneChanged", map[string]any{"sceneName": "Cut"})
+	waitUntil(t, func() bool { return c.count(eventtype.ObsSceneChanged) == 1 })
+	assert.Equal(t, "Cut", c.payload(c.has(eventtype.ObsSceneChanged)).Details.ObsScene.Scene)
 	cancel()
 	require.NoError(t, <-done)
 }
