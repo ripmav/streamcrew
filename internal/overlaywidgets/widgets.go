@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MIT
 
-// Package overlaywidgets runs the P1 widgets of the overlay (roadmap 7.2,
-// spec overlays.md, B24-B28): label, goal, timer, event_list and chat.
+// Package overlaywidgets runs the widgets of the overlay (roadmap 7.2
+// and 7.5, spec overlays.md, B24-B37): label, goal, timer, event_list
+// and chat (7.2), and persistent_timer, stream_boss, end_credits,
+// leaderboard, wheel, poll, persistent_emote_effect, game_queue and
+// discord_voice (7.5).
 //
 // The service reads the widget definitions from the settings section
-// "overlay" on demand, keeps the mutable state of each kind (the goal in
-// the profile, B20), pushes the updates to the runtimes through the
-// overlay service, and publishes the effects of the widgets as bus events
-// (B23, A2). The kinds of 7.5 (persistent_timer, end_credits,
-// stream_boss, …) are not part of this service.
+// "overlay" on demand, keeps the mutable state of each kind (the goal,
+// the persistent timer and the game queue in the profile, B20), pushes
+// the updates to the runtimes through the overlay service, and
+// publishes the effects of the widgets as bus events (B23, A2).
 package overlaywidgets
 
 import (
