@@ -2,10 +2,12 @@
 
 // Package tts speaks text with the providers of the core (roadmap 7.3,
 // spec overlays.md, B41, ADR-0020 §3): google and azure are REST APIs
-// whose keys come from the environment and never appear in logs, and
-// piper is an external process that needs host:process. The browser
+// whose keys come from the core configuration and never appear in logs,
+// and piper is an external process that needs host:process. The browser
 // provider speaks on the overlay runtime and generates no file; the
 // core plays its text with the overlay service, not with this package.
+// The generated files of the file providers are swept from the
+// generated directory after 24 h (Review 345-10).
 package tts
 
 import (
@@ -19,6 +21,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,11 +34,11 @@ const (
 	// Browser is the Web Speech API of the overlay runtime; it speaks
 	// on the browser pane and needs no key and no capability (default).
 	Browser Name = "browser"
-	// Google is the Text-to-Speech REST API; the key is in
-	// EnvGoogleKey.
+	// Google is the Text-to-Speech REST API; the key is in the
+	// setting tts-google-key.
 	Google Name = "google"
 	// Azure is the Speech REST API; the key and the region are in
-	// EnvAzureKey and EnvAzureRegion.
+	// the settings tts-azure-key and tts-azure-region.
 	Azure Name = "azure"
 	// Piper is the external piper process; the model is in
 	// tts-piper-model, and it needs host:process.
@@ -54,17 +58,20 @@ func (n Name) IsFileProvider() bool {
 	return n == Google || n == Azure || n == Piper
 }
 
-// The environment variables of the provider keys (ADR-0020 §2): they are
-// read at the call, so a change of the environment applies without a
-// restart, and they never appear in logs.
-const (
-	// EnvGoogleKey is the API key of the google provider.
-	EnvGoogleKey = "STREAMCREW_TTS_GOOGLE_KEY"
-	// EnvAzureKey is the API key of the azure provider.
-	EnvAzureKey = "STREAMCREW_TTS_AZURE_KEY"
-	// EnvAzureRegion is the region of the azure provider.
-	EnvAzureRegion = "STREAMCREW_TTS_AZURE_REGION"
-)
+// generatedAge is the age at which the generated files are swept (Review
+// 345-10): far beyond any playback, so the generated directory stays
+// small.
+const generatedAge = 24 * time.Hour
+
+// Keys are the provider keys of the core configuration (ADR-0019 §6);
+// the requests read them at the call, so a key set or cleared in the
+// configuration applies to the next request without a restart
+// (Code-ADR-0021, Nachtrag 2026-10-29). They never appear in logs.
+type Keys struct {
+	Google      string
+	Azure       string
+	AzureRegion string
+}
 
 // requestTimeout is the time a provider request has, with reading the
 // answer (longer than a web request: a long text takes a while to
@@ -105,9 +112,6 @@ type Ports struct {
 	// PiperModel is the onnx model of the piper provider
 	// (tts-piper-model); empty if the provider is not configured.
 	PiperModel string
-	// Env reads the environment of the provider keys; os.Getenv in the
-	// production.
-	Env func(string) string
 	// Dialer connects to the REST endpoints of google and azure; nil if
 	// the providers are not configured.
 	Dialer Dialer
@@ -120,7 +124,7 @@ type Ports struct {
 	// Piper runs the piper process; nil if the provider is not
 	// configured.
 	Piper PiperRun
-	// Now returns the timestamp of the generated file names.
+	// Now returns the clock for the age check of the generated files.
 	Now func() time.Time
 	// Logger records the synthesis and its results.
 	Logger *slog.Logger
@@ -130,18 +134,22 @@ type Ports struct {
 // and piper render the speech to a file under the generated directory.
 type Service struct {
 	ports Ports
+	// client is the one HTTP client of the service; the requests share
+	// its transport, so the keep-alive connections are reused (Review
+	// 345-8).
+	client *http.Client
+	// keys is the snapshot of the provider keys the requests read; the
+	// hot apply swaps it, so a new key applies to the next request
+	// (Code-ADR-0021, Nachtrag 2026-10-29).
+	keys atomic.Pointer[Keys]
 }
 
-// New returns a service of the providers; the keys and the endpoints
-// are checked at the call, so a provider becomes available when its key
-// lands in the environment.
+// New returns a service of the providers without keys; the keys are
+// swapped with SetKeys from the core configuration, so a provider
+// becomes available when its key is set there (ADR-0019 §6).
 func New(p Ports) (*Service, error) {
 	if p.GeneratedDir == "" {
 		return nil, errors.New("tts: no generated directory")
-	}
-	if p.Env == nil {
-		//nolint:forbidigo // the provider keys are read from the environment at the call (ADR-0020 §2), not core configuration
-		p.Env = os.Getenv
 	}
 	if p.Now == nil {
 		p.Now = time.Now
@@ -155,7 +163,30 @@ func New(p Ports) (*Service, error) {
 	if p.AzureBase == nil {
 		p.AzureBase = azureBase
 	}
-	return &Service{ports: p}, nil
+	client := &http.Client{Timeout: requestTimeout}
+	if p.Dialer != nil {
+		// Through the dialer of the core, so the server mode with its
+		// outbound allowlist applies (ADR-0013, point 4).
+		client.Transport = &http.Transport{
+			DialContext:         p.Dialer.DialContext,
+			TLSHandshakeTimeout: requestTimeout,
+		}
+	}
+	s := &Service{ports: p, client: client}
+	s.keys.Store(&Keys{})
+	return s, nil
+}
+
+// SetKeys swaps the provider keys of the service (Code-ADR-0021,
+// Nachtrag 2026-10-29); the requests read the new snapshot at the call,
+// and the values never reach the log.
+func (s *Service) SetKeys(k Keys) {
+	s.keys.Store(&k)
+}
+
+// Keys returns the provider keys the requests read.
+func (s *Service) Keys() Keys {
+	return *s.keys.Load()
 }
 
 // Generate renders the speech of the provider to a file under the
@@ -176,25 +207,46 @@ func (s *Service) Generate(ctx context.Context, n Name, sp Speech) (string, erro
 	}
 }
 
-// client returns an HTTP client through the dialer of the core, so the
-// server mode with its outbound allowlist applies (ADR-0013, point 4).
-func (s *Service) client() *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			DialContext:         s.ports.Dialer.DialContext,
-			TLSHandshakeTimeout: requestTimeout,
-		},
-		Timeout: requestTimeout,
-	}
-}
-
 // newFile returns the name of the next generated file in dir with the
-// extension ext, and creates the directory if needed.
+// extension ext: the directory is created if needed, the old generated
+// files are swept, and the name comes from os.CreateTemp, so two calls
+// in the same nanosecond cannot collide (Review 345-10).
 func (s *Service) newFile(dir, ext string) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("tts: the generated directory: %w", err)
 	}
-	return filepath.Join(dir, fmt.Sprintf("tts-%d%s", s.ports.Now().UnixNano(), ext)), nil
+	s.sweep(dir)
+	f, err := os.CreateTemp(dir, "tts-*"+ext)
+	if err != nil {
+		return "", fmt.Errorf("tts: the generated file: %w", err)
+	}
+	path := f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("tts: the generated file: %w", err)
+	}
+	return path, nil
+}
+
+// sweep removes the old generated files of the service from dir; the
+// age is measured against the ports clock, and only the own files
+// (prefix tts-) are touched (Review 345-10).
+func (s *Service) sweep(dir string) {
+	cutoff := s.ports.Now().Add(-generatedAge)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), "tts-") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		_ = os.Remove(filepath.Join(dir, e.Name()))
+	}
 }
 
 // write stores the synthesized audio under the generated directory and

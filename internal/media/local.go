@@ -62,6 +62,16 @@ func (s *LocalSink) context() (*oto.Context, error) {
 	return c, nil
 }
 
+// otoPlayer is the oto player the local sink drives (ADR-0020 §1); the
+// production plays with *oto.Player, the tests without an audio device
+// fake it (Review 345-2).
+type otoPlayer interface {
+	SetVolume(volume float64)
+	Play()
+	PauseAndStopReading()
+	Close() error
+}
+
 // Play implements Sink. The file must be a 16-bit PCM WAV (decodeWAV);
 // it is normalized to the parameters of the context before it plays.
 func (s *LocalSink) Play(ctx context.Context, file string, volume float64) (<-chan struct{}, error) {
@@ -78,32 +88,28 @@ func (s *LocalSink) Play(ctx context.Context, file string, volume float64) (<-ch
 	if err != nil {
 		return nil, err
 	}
-	player := c.NewPlayer(bytes.NewReader(pcm))
-	player.SetVolume(volume / 100)
-	player.Play()
-	// The playback runs frames/(rate) seconds; the timer closes the
-	// player and the end channel. The player must stay reachable until
-	// then, or oto closes it mid-playback.
+	return playUntilDone(ctx, s.logger, file, c.NewPlayer(bytes.NewReader(pcm)), pcm, volume)
+}
+
+// playUntilDone plays pcm on the player and returns a channel that is
+// closed when the file is done (B46, ADR-0020 §1). The playback runs
+// until the file is done, not until the action: the action context ends
+// with the action, and the engine cancels it right after, so the player
+// is not stopped on it (Review 345-2). The player must stay reachable
+// until the timer closes it, or oto closes it mid-playback.
+func playUntilDone(ctx context.Context, logger *slog.Logger, file string, p otoPlayer, pcm []byte, volume float64) (<-chan struct{}, error) {
+	p.SetVolume(volume / 100)
+	p.Play()
 	frames := len(pcm) / 8 // two channels of 32 bits
 	dur := time.Duration(float64(frames) / float64(targetRate) * float64(time.Second))
 	end := make(chan struct{})
 	var once sync.Once
-	stop := func() {
+	time.AfterFunc(dur, func() {
 		once.Do(func() {
-			_ = player.Close()
+			_ = p.Close()
 			close(end)
 		})
-	}
-	time.AfterFunc(dur, stop)
-	go func() {
-		select {
-		case <-end:
-		case <-ctx.Done():
-			// The action ended before the playback (B46): stop the
-			// playback; the duration timer closes the player.
-			player.PauseAndStopReading()
-		}
-	}()
-	s.logger.DebugContext(ctx, "media: local playback started", "file", file, "duration", dur)
+	})
+	logger.DebugContext(ctx, "media: local playback started", "file", file, "duration", dur)
 	return end, nil
 }

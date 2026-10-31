@@ -30,15 +30,12 @@ func (s *Service) piper(ctx context.Context, sp Speech) (string, error) {
 	// shortcut: piper has no pitch flag; the pitch of the provider is
 	// ignored. Upgrade: a piper build with pitch control, or a post
 	// process.
-	volume := 1.0
-	if sp.Volume > 0 {
-		volume = sp.Volume / 100
-	}
+	// No --volume: the sink applies the volume, the provider renders
+	// with the gain of 1 (Review 345-5).
 	args := []string{
 		"--model", model,
 		"--output_file", out,
 		"--length-scale", fmt.Sprintf("%.4f", 1/rate),
-		"--volume", fmt.Sprintf("%.4f", volume),
 	}
 	if err := s.ports.Piper(ctx, args, sp.Text); err != nil {
 		return "", fmt.Errorf("tts: piper: %w", err)

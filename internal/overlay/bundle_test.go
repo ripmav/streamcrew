@@ -61,6 +61,22 @@ func TestBundleHTMLItemEnforcesTheCSP(t *testing.T) {
 		"the CSP policy of ADR-0019 section 4")
 }
 
+// TestBundleMediaItemsCarryTheToken is the regression of the media
+// items (Review 345-4, B5/B14): the src of the image, video and audio
+// items goes through withToken for the relative /media/ paths (like the
+// html rewrite), so the media route of the overlay server answers it,
+// and an error of the audio or video ends the item with item.ended, so
+// a broken source does not stay.
+func TestBundleMediaItemsCarryTheToken(t *testing.T) {
+	t.Parallel()
+	// The three occurrences are the html rewrite (src/href/poster and
+	// the two srcset branches); the fourth is the media items.
+	assert.Equal(t, 4, strings.Count(web.Bundle, `startsWith("/media/")`),
+		"the src of the image, video and audio items joins withToken")
+	assert.Equal(t, 2, strings.Count(web.Bundle, `addEventListener("error"`),
+		"an error of the video and the audio ends the item")
+}
+
 // TestBundleClipEmbedIsSafe is the regression test of the clip embed
 // (Review 344-6/344-7, B15): the embed URL carries the parent
 // parameter Twitch requires, the slug regex keeps dashes and

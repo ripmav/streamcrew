@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 )
 
@@ -20,20 +19,26 @@ const googleURL = "https://texttospeech.googleapis.com/v1/synthesize"
 // (B41, ADR-0020 §3). The key stays in the header, so it never appears
 // in the URL of an error (ADR-0020 §2).
 func (s *Service) google(ctx context.Context, sp Speech) (string, error) {
-	key := s.ports.Env(EnvGoogleKey)
+	// The key is read from the snapshot at the call, so a key set in the
+	// configuration applies to this request (Code-ADR-0021, Nachtrag
+	// 2026-10-29).
+	key := s.keys.Load().Google
 	if key == "" {
-		return "", fmt.Errorf("tts: the provider google needs the key in %s", EnvGoogleKey)
+		return "", errors.New("tts: the provider google needs the key in the setting tts-google-key")
 	}
 	if s.ports.Dialer == nil {
 		return "", errors.New("tts: the provider google needs a dialer (net:outbound)")
 	}
+	// The provider renders with the gain of 1: the volume is applied
+	// once, at the sink that plays the file (Review 345-5). The answer
+	// is a 16-bit PCM WAV (LINEAR16, 24 kHz mono): the local sink
+	// decodes WAV only (Review 345-11).
 	body := map[string]any{
 		"input": map[string]any{"text": sp.Text},
 		"audioConfig": map[string]any{
-			"audioEncoding": "MP3",
+			"audioEncoding": "LINEAR16",
 			"speakingRate":  rateOr(sp.Rate),
 			"pitch":         googlePitch(sp.Pitch),
-			"volumeGainDb":  volumeDb(sp.Volume),
 		},
 	}
 	if sp.Voice != "" {
@@ -63,13 +68,13 @@ func (s *Service) google(ctx context.Context, sp Speech) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("tts: google: the answer is no audio: %w", err)
 	}
-	return s.write(ctx, Google, raw, ".mp3")
+	return s.write(ctx, Google, raw, ".wav")
 }
 
 // do runs req and decodes the JSON answer; an answer that is no success
 // is an error with its body, truncated.
 func (s *Service) do(req *http.Request, v any) error {
-	res, err := s.client().Do(req)
+	res, err := s.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("tts: %w", err)
 	}
@@ -96,19 +101,6 @@ func googlePitch(pitch float64) float64 {
 		return 20
 	}
 	return p
-}
-
-// volumeDb maps the volume 0 to 100 to the dB gain of the google API;
-// 100 is 0 dB, 0 is the silence of -96 dB.
-func volumeDb(volume float64) float64 {
-	if volume <= 0 {
-		return -96
-	}
-	db := 20 * math.Log10(volume/100)
-	if db < -96 {
-		return -96
-	}
-	return db
 }
 
 // rateOr returns rate if it is positive, 1 otherwise.

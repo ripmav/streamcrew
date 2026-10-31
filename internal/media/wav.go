@@ -105,20 +105,27 @@ func normalize(samples []int16, rate, channels int) []byte {
 		for i, v := range f {
 			st[2*i], st[2*i+1] = v, v
 		}
-		f = st
+		f, channels = st, 2
 	}
 	if rate != targetRate {
-		out := make([]float32, int(int64(len(f))*targetRate/int64(rate)))
+		// The resample runs per frame and per channel: interpolating
+		// over the interleaved array would mix the channels (Review
+		// 345-3).
+		frames := len(f) / channels
+		outFrames := int(int64(frames) * targetRate / int64(rate))
+		out := make([]float32, outFrames*channels)
 		ratio := float64(rate) / float64(targetRate)
-		for i := range out {
+		for i := range outFrames {
 			pos := float64(i) * ratio
 			j := int(pos)
 			frac := float32(pos - float64(j))
-			b := f[j]
-			if j+1 < len(f) {
-				b = f[j+1]
+			k := j
+			if j+1 < frames {
+				k = j + 1
 			}
-			out[i] = f[j]*(1-frac) + b*frac
+			for c := range channels {
+				out[i*channels+c] = f[j*channels+c]*(1-frac) + f[k*channels+c]*frac
+			}
 		}
 		f = out
 	}
