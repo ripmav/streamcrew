@@ -150,8 +150,9 @@ type Widgets interface {
 	// UpdateTimer sets a new duration, or resets the timer widget to its
 	// configured duration (B26).
 	UpdateTimer(ctx context.Context, widgetID string, d time.Duration, reset bool) error
-	// AddToTimer adds the duration, which may be negative (B26, B38),
-	// to the remaining time of the timer widget.
+	// AddToTimer adds the duration, which may be negative, to the
+	// remaining time of the timer widget; the kind decides between the
+	// timer and the persistent timer (B26, B29, B38, Review 347-2).
 	AddToTimer(ctx context.Context, widgetID string, d time.Duration) error
 	// PauseTimer pauses the timer widget, or resumes it (B26, B38).
 	PauseTimer(ctx context.Context, widgetID string) error

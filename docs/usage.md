@@ -513,8 +513,8 @@ Profil-Sektion `overlay`, Zustand zum Teil im Profil persistiert
   heilt er mit `self_heal_multiplier` (Default 1). Nach einem Kill
   würfelt der Core einen neuen Boss aus den letzten Feed-Nutzern; die
   neue Health ist `base_health` plus `kill_bonus_health` plus
-  Overkill mit `overkill_bonus_multiplier`, und `compound` (Default
-  an) bildet sie zum neuen Maximum. Ereignisse:
+  Overkill mit `overkill_bonus_multiplier`, und
+  `compound_previous_health` (Default an) bildet sie zum neuen Maximum. Ereignisse:
   `overlay.boss.damage`/`overlay.boss.heal` (Details `health`,
   `amount` — die vorzeichenbehaftete Health-Änderung) und
   `overlay.boss.new`.
@@ -522,7 +522,8 @@ Profil-Sektion `overlay`, Zustand zum Teil im Profil persistiert
   `chatters`, `new_followers`, `new_subscribers`, `resubscribers`,
   `gifted_subscriptions`, `all_subscriptions`, `raids`, `twitch_bits`
   plus eigene `custom_sections`. Gesperrte und gebannte Nutzer
-  verschwinden aus allen Sektionen, der Stream-Start leert sie.
+  verschwinden aus allen Sektionen — auch bei ausgeblendeten
+  End-Credits (Review 347-11) —, der Stream-Start leert sie.
   `add_to_credits` (Sektion in `data` plus `text`) ergänzt einen
   Eintrag, `play_credits` startet die Wiedergabe (die Runtime zeigt
   die Liste; eine Roll-Animation folgt).
@@ -537,8 +538,8 @@ Profil-Sektion `overlay`, Zustand zum Teil im Profil persistiert
   Wahrscheinlichkeiten um die Modifier; mit positivem werden sie
   zurückgesetzt. `spin_wheel` würfelt serverseitig, die Runtime
   dreht (4 s) und der Core veröffentlicht `overlay.wheel.spun`
-  (Outcome, User) — das Outcome-Command läuft als Ereignis-Command
-  auf diesem Bus-Ereignis.
+  (Outcome, User) und startet das `command` des Outcomes bzw. ohne
+  Outcome-Command das `default_command` des Rads.
 - `poll` (B34): zeigt die aktive Twitch-Umfrage oder -Vorhersage
   live. Der Core erfasst die Umfragen und Vorhersagen, die die
   `twitch`-Aktion (Helix) erzeugt, und meldet ihren Status an die
@@ -551,14 +552,16 @@ Profil-Sektion `overlay`, Zustand zum Teil im Profil persistiert
   `combo_timeframe` Sekunden (Default 10) im Chat kommt
   (`ignore_duplicates` zählt pro Nachricht einmal). Die Codes löst
   der Core über den Emote-Katalog auf; unbekannte fallen weg. Effekte
-  `rain`, `burst`, `random`, Dauer `duration`, Anzahl pro Emote
-  `per_emote_shown`, Obergrenze `max_shown` (0 = keine).
+  `rain`, `burst`, `random`, Dauer `duration` (Default 5 s), Anzahl pro
+  Emote `per_emote_shown`, Obergrenze `max_shown` (0 = keine).
 - `game_queue` (B36): eine Queue je Profil, persistiert in
   `overlay_widget_state` (fester Schlüssel). `join`/`leave`
   (Phase 8.3, Chatspiele) ändern sie und der Core veröffentlicht
-  `gamequeue.joined`/`gamequeue.left`/`gamequeue.position`
-  (Position ab 1); das Widget zeigt die Liste. Größe `max_size`
-  (Default 10).
+  `gamequeue.joined`/`gamequeue.left` (Position ab 1);
+  `gamequeue.position` ist bis Phase 8.3 reserviert (Review 347-14) —
+  Queue-Einträge tragen nur Anzeigennamen, ein Positions-Ereignis
+  könnte den betroffenen Nutzer nicht benennen. Das Widget zeigt die
+  Liste. Größe `max_size` (Default 10).
 - `discord_voice` (B37): listet die Besetzung eines konfigurierten
   Discord-Voice-Kanals (`discord-voice-channel`, nur zum Start ⟳).
   Der Discord-Token kommt **nur** aus der Umgebungsvariablen
