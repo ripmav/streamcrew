@@ -32,6 +32,7 @@ type fakeObs struct {
 	mu        sync.Mutex
 	wmu       sync.Mutex // serializes the writes of the fake
 	conns     int
+	sessions  int // the connections that finished
 	requests  []string
 	scene     string
 	stream    bool
@@ -73,6 +74,13 @@ func (f *fakeObs) connsSeen() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.conns
+}
+
+// sessionsSeen reports how many connections of the fake finished.
+func (f *fakeObs) sessionsSeen() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.sessions
 }
 
 // drop closes the connection of the client (B43: the reconnect).
@@ -147,6 +155,9 @@ func (f *fakeObs) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "bye")
 	f.serveConn(r.Context(), conn)
+	f.mu.Lock()
+	f.sessions++
+	f.mu.Unlock()
 }
 
 // negotiate runs the Hello/Identify/Identified exchange of obs-websocket
@@ -656,10 +667,32 @@ func TestRunReportsNotConnectedDuringAReconnect(t *testing.T) {
 	fake.drop()
 	waitUntil(t, func() bool { return !s.Connected() })
 	assert.ErrorIs(t, s.SetScene(ctx, "Cut"), ErrNotConnected, "the window of the reconnect")
-	waitUntil(t, func() bool { return fake.connsSeen() == 2 })
+	// The service publishes the new client after the seed of the
+	// reconnect, so the condition is Connected again, not the
+	// negotiation seen by the fake.
+	waitUntil(t, func() bool { return s.Connected() })
+	require.Equal(t, 2, fake.connsSeen())
 	require.NoError(t, s.SetScene(ctx, "Cut"), "after the reconnect")
 	cancel()
 	require.NoError(t, <-done)
+}
+
+// TestRunClosesTheConnectionOnShutdown checks that the shutdown of the
+// core ends the OBS session: the client closes the connection, so that
+// the fake sees the session finish, and Run stops (Review 346-7).
+func TestRunClosesTheConnectionOnShutdown(t *testing.T) {
+	t.Parallel()
+	fake := newFakeObs(t, "")
+	host, port := fake.addr()
+	s := New(Ports{Host: host, Port: port, Bus: event.NewBus(nil)})
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() { done <- s.Run(ctx) }()
+	waitUntil(t, func() bool { return s.Connected() })
+	cancel()
+	require.NoError(t, <-done)
+	waitUntil(t, func() bool { return fake.sessionsSeen() == 1 })
 }
 
 // TestRunSkipsAnUnparseableEvent checks that an OBS event whose data
