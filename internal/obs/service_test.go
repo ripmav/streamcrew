@@ -408,6 +408,38 @@ func TestRunGivesUpOnThePassword(t *testing.T) {
 	assert.Zero(t, fake.connsSeen(), "the connection never finished the negotiation")
 }
 
+// TestRunFailsTheDialOnASilentPeer checks that a peer that accepts the
+// connection but never speaks cannot block Run: the dial gives up with
+// the timeout, and the core gives up with it (Review 346-4).
+func TestRunFailsTheDialOnASilentPeer(t *testing.T) {
+	t.Parallel()
+	var lc net.ListenConfig
+	ln, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		<-t.Context().Done()
+		_ = conn.Close()
+	}()
+	host, p, _ := net.SplitHostPort(ln.Addr().String())
+	port, _ := strconv.Atoi(p)
+	s := New(Ports{Host: host, Port: port, Bus: event.NewBus(nil)})
+	s.dialTimeout = 200 * time.Millisecond
+	done := make(chan error, 1)
+	go func() { done <- s.Run(t.Context()) }()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run blocked on the silent peer")
+	}
+	assert.False(t, s.Connected())
+}
+
 // TestRunConnectsAndServes checks that the service connects to the OBS,
 // seeds the state and runs the operations on it (B42), and clears the
 // connection at the end.

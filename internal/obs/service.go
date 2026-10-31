@@ -63,7 +63,8 @@ type Service struct {
 	recordActive bool
 	lastScene    string
 
-	reconnect time.Duration
+	reconnect   time.Duration
+	dialTimeout time.Duration
 }
 
 // New returns the service with its ports; the app runs it with the
@@ -72,7 +73,7 @@ func New(p Ports) *Service {
 	if p.Logger == nil {
 		p.Logger = slog.New(slog.DiscardHandler)
 	}
-	return &Service{ports: p, reconnect: Reconnect}
+	return &Service{ports: p, reconnect: Reconnect, dialTimeout: dialTimeout}
 }
 
 // Run connects to OBS and runs the connection until ctx ends (B43). A
@@ -127,7 +128,7 @@ func (s *Service) giveUp(ctx context.Context, err error) {
 
 // connect dials and identifies against the OBS server (B43).
 func (s *Service) connect(ctx context.Context) (*client, error) {
-	return dial(ctx, s.ports.Host, s.ports.Port, s.ports.Password, s.ports.Dialer, s.ports.Logger)
+	return dial(ctx, s.ports.Host, s.ports.Port, s.ports.Password, s.ports.Dialer, s.ports.Logger, s.dialTimeout)
 }
 
 // ready seeds the connection state with the current OBS state (B44:

@@ -52,6 +52,10 @@ const (
 	authFailedClose = 4009
 	// requestTimeout bounds a request without a response.
 	requestTimeout = 10 * time.Second
+	// dialTimeout bounds the dial and the handshake of the
+	// connection: a silent peer must not block the service (Review
+	// 346-4).
+	dialTimeout = 10 * time.Second
 )
 
 // The output states of obs-websocket v5 (protocol.md,
@@ -189,8 +193,11 @@ type client struct {
 
 // dial connects to the OBS server at host:port, runs the handshake, and
 // starts the reader (B43); a refused authentication is a close with the
-// code 4009, so the handshake fails with it.
-func dial(ctx context.Context, host string, port int, password string, guard netguard.Dialer, logger *slog.Logger) (*client, error) {
+// code 4009, so the handshake fails with it. The dial and the handshake
+// run with the timeout, so that a silent peer cannot block the
+// connection (Review 346-4); the reader keeps the context it was
+// given.
+func dial(ctx context.Context, host string, port int, password string, guard netguard.Dialer, logger *slog.Logger, timeout time.Duration) (*client, error) {
 	endpoint := net.JoinHostPort(host, strconv.Itoa(port))
 	opts := &websocket.DialOptions{
 		HTTPClient: &http.Client{
@@ -199,7 +206,9 @@ func dial(ctx context.Context, host string, port int, password string, guard net
 			},
 		},
 	}
-	conn, _, err := websocket.Dial(ctx, "ws://"+endpoint, opts) //nolint:bodyclose // the body is consumed by Dial
+	hctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	conn, _, err := websocket.Dial(hctx, "ws://"+endpoint, opts) //nolint:bodyclose // the body is consumed by Dial
 	if err != nil {
 		return nil, fmt.Errorf("obs %s: %w", endpoint, err)
 	}
@@ -211,7 +220,7 @@ func dial(ctx context.Context, host string, port int, password string, guard net
 		events:   make(chan *eventMsg, 100),
 		done:     make(chan struct{}),
 	}
-	if err := c.handshake(ctx); err != nil {
+	if err := c.handshake(hctx); err != nil {
 		_ = conn.CloseNow()
 		return nil, fmt.Errorf("obs %s: %w", endpoint, err)
 	}
