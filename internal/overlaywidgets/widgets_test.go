@@ -1865,6 +1865,52 @@ func TestRandSourceInjectionCoversB33(t *testing.T) {
 	})
 }
 
+// TestWheelOutcomeCommandsCoversB23 covers B23, B33 and Review 341-12w:
+// the landed outcome starts its command, an outcome without one starts
+// the wheel's default_command, never both; overlay.wheel.spun is
+// published in both cases.
+func TestWheelOutcomeCommandsCoversB23(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := map[string]any{
+			"equal_probability": false,
+			"default_command":   "cmd-default",
+			"outcomes": []any{
+				map[string]any{"name": "yes", "probability": 100.0, "modifier": -100, "command": "cmd-yes"},
+				map[string]any{"name": "no", "probability": 0.0, "modifier": 100},
+			},
+		}
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("w1", overlaywidgets.KindWheel, cfg),
+		}}, overlaywidgets.WithRand(fixedRand{float64: 0.5}))
+		defer f.stop()
+		f.attach(t)
+		ada := twitchUser(t, "ada")
+
+		// The first spin lands on "yes": its command starts, not the
+		// default, and the spin event is published (B23, A2).
+		require.NoError(t, f.svc.SpinWheel(f.ctx, "w1", ada))
+		synctest.Wait()
+		require.Equal(t, []string{"cmd-yes"}, f.commandsList())
+		eff := f.effectsList()
+		require.Len(t, eff, 1)
+		assert.Equal(t, eventtype.OverlayWheelSpun, eff[0].typ)
+		assert.Equal(t, ada, eff[0].payload.User)
+		assert.Equal(t, &eventtype.OverlayWheel{Outcome: "yes"}, eff[0].payload.Details.OverlayWheel)
+
+		// The modifier shift lands the second spin on "no": without its
+		// own command, the default starts, and the spin event is
+		// published again.
+		require.NoError(t, f.svc.SpinWheel(f.ctx, "w1", ada))
+		synctest.Wait()
+		require.Equal(t, []string{"cmd-yes", "cmd-default"}, f.commandsList())
+		eff = f.effectsList()
+		require.Len(t, eff, 2)
+		assert.Equal(t, eventtype.OverlayWheelSpun, eff[1].typ)
+		assert.Equal(t, &eventtype.OverlayWheel{Outcome: "no"}, eff[1].payload.Details.OverlayWheel)
+	})
+}
+
 // TestWidgetEmoteEffect covers B35: the combo count and the timeframe
 // trigger the effect, ignore_duplicates dedupes the message, and a code
 // without a known emote is dropped.

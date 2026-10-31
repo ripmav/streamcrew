@@ -537,8 +537,8 @@ Profil-Sektion `overlay`, Zustand zum Teil im Profil persistiert
   Wahrscheinlichkeiten um die Modifier; mit positivem werden sie
   zurückgesetzt. `spin_wheel` würfelt serverseitig, die Runtime
   dreht (4 s) und der Core veröffentlicht `overlay.wheel.spun`
-  (Outcome, User) — das Outcome-Command läuft als Ereignis-Command
-  auf diesem Bus-Ereignis.
+  (Outcome, User) und startet das `command` des Outcomes bzw. ohne
+  Outcome-Command das `default_command` des Rads.
 - `poll` (B34): zeigt die aktive Twitch-Umfrage oder -Vorhersage
   live. Der Core erfasst die Umfragen und Vorhersagen, die die
   `twitch`-Aktion (Helix) erzeugt, und meldet ihren Status an die

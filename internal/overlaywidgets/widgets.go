@@ -986,26 +986,40 @@ func (s *Service) startGoalCommand(ctx context.Context, w settings.OverlayWidget
 }
 
 // ReferencedCommands returns the command names referenced by the widgets
-// of s (B23): the commands of the goal segments and the
-// segment_completed fallback; the settings check rejects an unknown name
-// on save (Review 341-12g).
+// of s (B23): the commands of the goal segments with the
+// segment_completed fallback and the commands of the wheel outcomes with
+// the default_command fallback; the settings check rejects an unknown
+// name on save (Review 341-12g, 341-12w).
 func ReferencedCommands(s settings.Overlay) []string {
 	var out []string
 	for _, w := range s.Widgets {
-		if w.Kind != KindGoal {
-			continue
-		}
-		var c goalConfig
-		if err := decodeConfig(w.Config, &c); err != nil {
-			continue
-		}
-		for _, seg := range c.Segments {
-			if seg.Command != "" {
-				out = append(out, seg.Command)
+		switch w.Kind {
+		case KindGoal:
+			var c goalConfig
+			if err := decodeConfig(w.Config, &c); err != nil {
+				continue
 			}
-		}
-		if c.SegmentCompleted != "" {
-			out = append(out, c.SegmentCompleted)
+			for _, seg := range c.Segments {
+				if seg.Command != "" {
+					out = append(out, seg.Command)
+				}
+			}
+			if c.SegmentCompleted != "" {
+				out = append(out, c.SegmentCompleted)
+			}
+		case KindWheel:
+			var c wheelConfig
+			if err := decodeConfig(w.Config, &c); err != nil {
+				continue
+			}
+			for _, o := range c.Outcomes {
+				if o.Command != "" {
+					out = append(out, o.Command)
+				}
+			}
+			if c.DefaultCommand != "" {
+				out = append(out, c.DefaultCommand)
+			}
 		}
 	}
 	return out
@@ -2052,6 +2066,9 @@ type wheelConfig struct {
 	EqualProbability *bool `json:"equal_probability"`
 	// Outcomes are the outcomes of the wheel, in order; at least one.
 	Outcomes []wheelOutcome `json:"outcomes"`
+	// DefaultCommand is the command that runs when the landed outcome
+	// names none (B23, B33, Review 341-12w).
+	DefaultCommand string `json:"default_command"`
 }
 
 // wheelOutcome is one outcome of the wheel.
@@ -2064,6 +2081,9 @@ type wheelOutcome struct {
 	// Modifier is the whole percent points of the outcome; the sum of the
 	// modifiers is zero.
 	Modifier int `json:"modifier"`
+	// Command is the command that runs when the outcome is landed (B23,
+	// B33, Review 341-12w); empty for the wheel's default_command.
+	Command string `json:"command"`
 }
 
 // wheelState is the running state of the wheel widget (B33): the current
@@ -2191,12 +2211,30 @@ func (s *Service) SpinWheel(ctx context.Context, widgetID string, u *user.User) 
 			"duration": 4.0,
 		},
 	})
-	s.publish(ctx, eventtype.OverlayWheelSpun, eventtype.Payload{
+	p := eventtype.Payload{
 		Platform: platform.Twitch,
 		User:     u,
 		Details:  eventtype.Details{OverlayWheel: &eventtype.OverlayWheel{Outcome: outcome.Name}},
-	})
+	}
+	s.publish(ctx, eventtype.OverlayWheelSpun, p)
+	s.startWheelCommand(ctx, w, outcome, cfg, p)
 	return nil
+}
+
+// startWheelCommand starts the command of the landed outcome, or the
+// wheel's default_command if the outcome names none (B23, B33, Review
+// 341-12w); never both. A start error is logged.
+func (s *Service) startWheelCommand(ctx context.Context, w settings.OverlayWidget, outcome wheelOutcome, cfg *wheelConfig, p eventtype.Payload) {
+	name := outcome.Command
+	if name == "" {
+		name = cfg.DefaultCommand
+	}
+	if name == "" {
+		return
+	}
+	if err := s.ports.Commands(ctx, name, engine.Params{Platform: p.Platform, Channel: p.Channel, User: p.User, Target: p.Target}); err != nil {
+		s.logger.ErrorContext(ctx, "starting the wheel command failed", "widget", w.ID, "command", name, "error", err)
+	}
 }
 
 // StateForWheel returns the wheel for the state sync (B4): the outcomes
