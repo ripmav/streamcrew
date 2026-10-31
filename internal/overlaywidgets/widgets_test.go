@@ -1876,6 +1876,15 @@ func TestWidgetWheel(t *testing.T) {
 			}}),
 		}})
 		assert.ErrorIs(t, f.svc.SpinWheel(f.ctx, "wb", ada), overlaywidgets.ErrUnknownWidget)
+		// The modifier sum is validated with equal chances, too
+		// (Review 347-12).
+		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("wb", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{
+				map[string]any{"name": "yes", "modifier": 5},
+				map[string]any{"name": "no", "modifier": 5},
+			}}),
+		}})
+		assert.ErrorIs(t, f.svc.SpinWheel(f.ctx, "wb", ada), overlaywidgets.ErrUnknownWidget)
 	})
 }
 

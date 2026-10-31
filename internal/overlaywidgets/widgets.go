@@ -2110,23 +2110,27 @@ func (s *Service) wheelConfig(ctx context.Context, w settings.OverlayWidget) *wh
 	}
 	if c.EqualProbability != nil && !*c.EqualProbability {
 		sum := 0.0
-		mod := 0
 		for _, o := range c.Outcomes {
 			if o.Probability < 0 {
 				s.logger.ErrorContext(ctx, "a wheel probability is negative", "widget", w.ID)
 				return nil
 			}
 			sum += o.Probability
-			mod += o.Modifier
 		}
 		if math.Abs(sum-100) > 0.0001 {
 			s.logger.ErrorContext(ctx, "the wheel probabilities must sum to 100", "widget", w.ID, "sum", sum)
 			return nil
 		}
-		if mod != 0 {
-			s.logger.ErrorContext(ctx, "the wheel modifiers must sum to zero", "widget", w.ID, "sum", mod)
-			return nil
-		}
+	}
+	// The modifiers are applied while the chances are equal, too, so
+	// their sum is validated in every mode (Review 347-12).
+	mod := 0
+	for _, o := range c.Outcomes {
+		mod += o.Modifier
+	}
+	if mod != 0 {
+		s.logger.ErrorContext(ctx, "the wheel modifiers must sum to zero", "widget", w.ID, "sum", mod)
+		return nil
 	}
 	return &c
 }
