@@ -54,8 +54,9 @@ interface WidgetData {
 
 // render is the re-render of an element that runs every second: the
 // label kinds date and time (A5), the timer widget (B26) and the timer
-// item (B17). It is removed with the element.
-type Entry = { el: HTMLElement; data: any; render?: () => void };
+// item (B17). It is removed with the element. stale is set on hello
+// (resync, B4) until the server re-announces the entry.
+type Entry = { el: HTMLElement; data: any; render?: () => void; stale?: boolean };
 
 const cfg: OverlayConfig = window.__OVERLAY__;
 const send = (type: string, data?: any): void => {
@@ -109,17 +110,19 @@ document.head.appendChild(style);
 // ---------- positioning (B9) ----------
 
 // The nine named screen points of the model "simple": CSS for the
-// element that places it at the point.
+// element that places it at the point. The centering uses the CSS
+// property translate (not transform), so the show animations, which
+// animate transform with the fill mode both, cannot override it.
 const SIMPLE: Record<string, string> = {
   "top-left": "left:0; top:0;",
-  "top": "left:50%; top:0; transform:translateX(-50%);",
+  "top": "left:50%; top:0; translate:-50% 0;",
   "top-right": "right:0; top:0;",
-  "center-left": "left:0; top:50%; transform:translateY(-50%);",
-  "center": "left:50%; top:50%; transform:translate(-50%,-50%);",
-  "center-right": "right:0; top:50%; transform:translateY(-50%);",
-  "bottom-left": "left:0; bottom:0; transform:translateY(-100%);",
-  "bottom": "left:50%; bottom:0; transform:translate(-50%,-100%);",
-  "bottom-right": "right:0; bottom:0; transform:translateY(-100%);",
+  "center-left": "left:0; top:50%; translate:0 -50%;",
+  "center": "left:50%; top:50%; translate:-50% -50%;",
+  "center-right": "right:0; top:50%; translate:0 -50%;",
+  "bottom-left": "left:0; bottom:0;",
+  "bottom": "left:50%; bottom:0; translate:-50% 0;",
+  "bottom-right": "right:0; bottom:0;",
 };
 
 function place(el: HTMLElement, pos: Position, layer: number): void {
@@ -129,7 +132,8 @@ function place(el: HTMLElement, pos: Position, layer: number): void {
   s.right = "auto";
   s.top = "auto";
   s.bottom = "auto";
-  s.transform = "";
+  // transform stays the animations' property; positioning is translate.
+  s.translate = "";
   if (pos.model === "simple") {
     for (const decl of (SIMPLE[pos.point ?? "center"] ?? SIMPLE.center).split(";")) {
       const i = decl.indexOf(":");
@@ -194,6 +198,9 @@ function hideAnimation(el: HTMLElement, name: string | undefined, ms: number | u
 
 const items = new Map<string, Entry>();
 const widgets = new Map<string, Entry>();
+// During a resync (B4) the locally held items and widgets are stale
+// until the server re-announces them.
+let resyncPending = false;
 let serverTimeOffset = 0; // serverTime - localTime (B4, B26)
 
 // The batching of consecutive items (B8): an item shown within 500 ms
@@ -245,25 +252,22 @@ function parseGoDuration(text: string): number {
 }
 
 // formatTimer renders a timer into the format (B17): the tokens DD, HH,
-// MM and SS carry the cumulative value, hh, mm and ss the rest, each
-// padded to two digits. A count-down counts the rest of the duration, a
-// count-up the elapsed time; for a count-up both are the same.
+// MM and SS carry the cumulative value without modulo (90 min as MM:SS
+// is 90:00), hh, mm and ss the rest, each padded to two digits. A
+// count-down passes the rest for both, a count-up the elapsed time.
 function formatTimer(format: string, totalMs: number, restMs: number): string {
-  const parts = (ms: number): { d: number; h: number; m: number; s: number } => {
-    const t = Math.max(0, Math.floor(ms / 1000));
-    return { d: Math.floor(t / 86400), h: Math.floor((t % 86400) / 3600), m: Math.floor((t % 3600) / 60), s: t % 60 };
-  };
-  const cum = parts(totalMs);
-  const rest = parts(restMs);
+  const sec = (ms: number): number => Math.max(0, Math.floor(ms / 1000));
+  const t = sec(totalMs);
+  const r = sec(restMs);
   const pad = (n: number): string => String(n).padStart(2, "0");
   return format
-    .replace("DD", pad(cum.d))
-    .replace("HH", pad(cum.h))
-    .replace("MM", pad(cum.m))
-    .replace("SS", pad(cum.s))
-    .replace("hh", pad(rest.h))
-    .replace("mm", pad(rest.m))
-    .replace("ss", pad(rest.s));
+    .replace("DD", pad(Math.floor(t / 86400)))
+    .replace("HH", pad(Math.floor(t / 3600)))
+    .replace("MM", pad(Math.floor(t / 60)))
+    .replace("SS", pad(t % 60))
+    .replace("hh", pad(Math.floor(r / 3600)))
+    .replace("mm", pad(Math.floor((r % 3600) / 60)))
+    .replace("ss", pad(r % 60));
 }
 
 // ---------- item rendering (B11-B17) ----------
@@ -274,10 +278,14 @@ function youtubeId(url: string): string {
   return m ? m[1] : "";
 }
 
-// clipEmbed is the embed URL of a Twitch clip page (B15).
+// clipEmbed is the embed URL of a Twitch clip page (B15). Twitch
+// renders the embed only with the parent parameter, and the slug may
+// carry dashes and underscores. An URL that is no clip page has no
+// embed: the raw URL must not reach the iframe (it is a template that
+// can come from the chat, e.g. as javascript:).
 function clipEmbed(url: string): string {
-  const m = url.match(/clips\.twitch\.tv\/([A-Za-z0-9]+)/);
-  return m ? `https://clips.twitch.tv/embed?clip=${m[1]}` : url;
+  const m = url.match(/clips\.twitch\.tv\/([A-Za-z0-9_-]+)/);
+  return m ? `https://clips.twitch.tv/embed?clip=${m[1]}&parent=${location.hostname}` : "";
 }
 
 function renderContent(el: HTMLElement, entry: Entry): void {
@@ -328,13 +336,12 @@ function renderContent(el: HTMLElement, entry: Entry): void {
     }
     case "html": {
       el.classList.add("sc-html");
-      // Sandboxed without scripts and without same origin; the HTML may
-      // only reference relative /media/ paths and absolute https URLs
-      // (B12). The srcdoc base is the page URL, so relative paths
-      // resolve.
+      // Sandboxed without scripts and without same origin (B12); the
+      // HTML may only reference relative /media/ paths and absolute
+      // https URLs — htmlSrcdoc enforces both.
       const f = document.createElement("iframe");
       f.setAttribute("sandbox", "");
-      f.srcdoc = c.html ?? "";
+      f.srcdoc = htmlSrcdoc(c.html ?? "");
       if (c.width) f.style.width = `${c.width}px`;
       if (c.height) f.style.height = `${c.height}px`;
       el.appendChild(f);
@@ -355,10 +362,13 @@ function renderContent(el: HTMLElement, entry: Entry): void {
       break;
     }
     case "clip": {
-      // The clip page in a frame (B15).
+      // The clip page in a frame (B15); no valid clip URL renders
+      // nothing.
       el.classList.add("sc-clip");
+      const src = clipEmbed(c.url ?? "");
+      if (!src) break;
       const f = document.createElement("iframe");
-      f.src = clipEmbed(c.url ?? "");
+      f.src = src;
       f.allow = "autoplay";
       if (c.width) f.style.width = `${c.width}px`;
       if (c.height) f.style.height = `${c.height}px`;
@@ -382,7 +392,9 @@ function renderContent(el: HTMLElement, entry: Entry): void {
           span.textContent = formatTimer(c.format ?? "MM:SS", elapsed, elapsed);
         } else {
           const rest = startAt + totalMs - now;
-          span.textContent = formatTimer(c.format ?? "MM:SS", totalMs, rest);
+          // The count-down shows the rest; the cumulative tokens of a
+          // count-down are the rest as well (B17).
+          span.textContent = formatTimer(c.format ?? "MM:SS", rest, rest);
           if (rest <= 0 && !ended) {
             ended = true;
             perSecond.delete(entry.render!);
@@ -429,8 +441,23 @@ function renderContent(el: HTMLElement, entry: Entry): void {
   }
 }
 
+// The batched item start is delayed (B8). The ID is registered
+// synchronously in pending, so that a remove before the start cancels
+// the start, and a second show before the start cannot render the item
+// twice (B11).
+const pending = new Map<string, { entry: Entry; timer: ReturnType<typeof setTimeout> }>();
+
 function showItem(data: ItemData): void {
-  if (items.has(data.id)) return;
+  const existing = items.get(data.id);
+  if (existing) {
+    existing.stale = false;
+    return;
+  }
+  const pnd = pending.get(data.id);
+  if (pnd) {
+    pnd.entry.stale = false;
+    return;
+  }
   const el = document.createElement("div");
   el.className = "sc-item sc-kind-" + data.kind;
   const entry: Entry = { el, data };
@@ -440,15 +467,22 @@ function showItem(data: ItemData): void {
   const startAt = itemStartAt(now);
   lastItemStart = startAt;
   const start = (): void => {
+    pending.delete(data.id);
     document.body.appendChild(el);
     showAnimation(el, data.animation, data.animationDuration);
     items.set(data.id, entry);
   };
-  if (startAt > now) setTimeout(start, startAt - now);
+  if (startAt > now) pending.set(data.id, { entry, timer: setTimeout(start, startAt - now) });
   else start();
 }
 
 function removeItem(id: string): void {
+  const p = pending.get(id);
+  if (p) {
+    pending.delete(id);
+    clearTimeout(p.timer);
+    return;
+  }
   const entry = items.get(id);
   if (!entry) return;
   items.delete(id);
@@ -736,6 +770,7 @@ function renderWidget(el: HTMLElement, entry: Entry): void {
 
 function setWidget(data: WidgetData, visible: boolean): void {
   let entry = widgets.get(data.id);
+  if (entry) entry.stale = false;
   if (!entry) {
     const el = document.createElement("div");
     el.className = "sc-widget";
@@ -768,6 +803,45 @@ function speak(d: any): void {
   u.onerror = () => send("tts.ended", { seq: d.seq });
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
+}
+
+// htmlSrcdoc prepares the HTML of an html item for the srcdoc (B12,
+// ADR-0019 section 4): every URL starting with /media/ (src, href,
+// poster, srcset) gets the token of the page, and the CSP meta is
+// prepended, enforcing the relative /media/ and absolute https rule.
+function htmlSrcdoc(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const origin = location.origin;
+  for (const el of doc.querySelectorAll("*")) {
+    for (const attr of ["src", "href", "poster"]) {
+      const v = el.getAttribute(attr);
+      if (v && v.startsWith("/media/")) el.setAttribute(attr, withToken(v));
+    }
+    const srcset = el.getAttribute("srcset");
+    if (srcset)
+      el.setAttribute(
+        "srcset",
+        srcset
+          .split(",")
+          .map((part) => {
+            // The srcset part is "url descriptor"; only the url part
+            // gets the token.
+            const i = part.indexOf(" ");
+            if (i < 0) return part.startsWith("/media/") ? withToken(part) : part;
+            const url = part.slice(0, i);
+            return url.startsWith("/media/") ? withToken(url) + part.slice(i) : part;
+          })
+          .join(",")
+      );
+  }
+  const meta = doc.createElement("meta");
+  meta.setAttribute("http-equiv", "Content-Security-Policy");
+  meta.setAttribute(
+    "content",
+    `default-src 'none'; img-src ${origin} https:; media-src ${origin} https:; style-src 'unsafe-inline' ${origin} https:; font-src ${origin} https:`
+  );
+  doc.head.insertBefore(meta, doc.head.firstChild);
+  return doc.documentElement.outerHTML;
 }
 
 // ---------- connection (B3, B4, B7) ----------
@@ -819,9 +893,11 @@ function handle(msg: Message): void {
   switch (msg.type) {
     case "hello":
       serverTimeOffset = new Date(d.time ?? 0).getTime() - Date.now();
+      beginResync();
       break;
     case "state.widgets":
       for (const w of d.widgets ?? []) setWidget(w, true);
+      finishResync();
       break;
     case "item.show":
       showItem(d);
@@ -844,6 +920,49 @@ function handle(msg: Message): void {
     default:
       break;
   }
+}
+
+// beginResync marks everything the runtime holds as stale (B4): after
+// a disconnect the server re-sends the full state — hello,
+// state.widgets, then the active items as item.show. What is not
+// re-announced did not survive the disconnect and is removed.
+function beginResync(): void {
+  resyncPending = true;
+  for (const entry of items.values()) entry.stale = true;
+  for (const p of pending.values()) p.entry.stale = true;
+  for (const entry of widgets.values()) entry.stale = true;
+}
+
+// finishResync schedules the removal of the stale entries. The sweep
+// runs in a later task, so every item.show of the sync batch has
+// already marked its entry fresh.
+function finishResync(): void {
+  setTimeout(() => {
+    if (!resyncPending) return;
+    resyncPending = false;
+    for (const [id, p] of pending)
+      if (p.entry.stale) {
+        pending.delete(id);
+        clearTimeout(p.timer);
+      }
+    for (const [id, entry] of items)
+      if (entry.stale) {
+        items.delete(id);
+        drop(entry);
+      }
+    for (const [id, entry] of widgets)
+      if (entry.stale) {
+        widgets.delete(id);
+        drop(entry);
+      }
+  }, 0);
+}
+
+// drop removes an entry without the out animation: it is gone from
+// the server state, so there is nothing to fade out.
+function drop(entry: Entry): void {
+  if (entry.render) perSecond.delete(entry.render);
+  entry.el.remove();
 }
 
 // syncWidget applies a widget message to the runtime state; visible
