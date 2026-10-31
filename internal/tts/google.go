@@ -27,11 +27,13 @@ func (s *Service) google(ctx context.Context, sp Speech) (string, error) {
 		return "", errors.New("tts: the provider google needs a dialer (net:outbound)")
 	}
 	// The provider renders with the gain of 1: the volume is applied
-	// once, at the sink that plays the file (Review 345-5).
+	// once, at the sink that plays the file (Review 345-5). The answer
+	// is a 16-bit PCM WAV (LINEAR16, 24 kHz mono): the local sink
+	// decodes WAV only (Review 345-11).
 	body := map[string]any{
 		"input": map[string]any{"text": sp.Text},
 		"audioConfig": map[string]any{
-			"audioEncoding": "MP3",
+			"audioEncoding": "LINEAR16",
 			"speakingRate":  rateOr(sp.Rate),
 			"pitch":         googlePitch(sp.Pitch),
 		},
@@ -63,7 +65,7 @@ func (s *Service) google(ctx context.Context, sp Speech) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("tts: google: the answer is no audio: %w", err)
 	}
-	return s.write(ctx, Google, raw, ".mp3")
+	return s.write(ctx, Google, raw, ".wav")
 }
 
 // do runs req and decodes the JSON answer; an answer that is no success
