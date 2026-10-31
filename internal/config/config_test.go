@@ -212,6 +212,42 @@ func TestParseFileErrors(t *testing.T) {
 	}
 }
 
+// TestParseTTSKeys covers ADR-0019 §6: the TTS provider keys come from
+// the flag, the environment variable derived by kong, or the file, in this
+// order of precedence; set by flag or environment they are fixed for the
+// watcher.
+func TestParseTTSKeys(t *testing.T) {
+	clearEnv(t)
+	dataDir := t.TempDir()
+	writeFile(t, filepath.Join(dataDir, config.ConfigFileName), "tts_google_key: file-key\ntts_azure_region: file-region\n")
+	t.Setenv("STREAMCREW_TTS_GOOGLE_KEY", "env-key")
+	t.Setenv("STREAMCREW_TTS_AZURE_KEY", "env-azure")
+	cfg, file := parse(t, config.Defaults{DataDir: dataDir}, "--tts-azure-region=flag-region")
+	require.NoError(t, file.Err())
+	assert.Equal(t, "env-key", cfg.TTSGoogleKey, "environment over file")
+	assert.Equal(t, "env-azure", cfg.TTSAzureKey)
+	assert.Equal(t, "flag-region", cfg.TTSAzureRegion, "flag over environment")
+	assert.False(t, file.FromFile("tts-google-key"), "fixed by the environment")
+	assert.False(t, file.FromFile("tts-azure-key"), "fixed by the environment")
+	assert.False(t, file.FromFile("tts-azure-region"), "fixed by the flag")
+}
+
+// TestViewMasksTheTTSKeys covers Code-ADR-0021, Nachtrag 2026-10-29,
+// point 3: the write-only secrets show the placeholder in the document,
+// the region shows its value, and an unset key stays out.
+func TestViewMasksTheTTSKeys(t *testing.T) {
+	t.Parallel()
+	cfg := config.Config{TTSGoogleKey: "secret", TTSAzureRegion: "westeurope"}
+	v := cfg.View()
+	assert.Equal(t, config.SecretPlaceholder, v.TTSGoogleKey)
+	assert.Empty(t, v.TTSAzureKey)
+	assert.Equal(t, "westeurope", v.TTSAzureRegion)
+	out, err := yaml.Marshal(v)
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "tts_google_key: <set>")
+	assert.NotContains(t, string(out), "secret")
+}
+
 func TestViewRoundTrip(t *testing.T) {
 	clearEnv(t)
 	dataDir := t.TempDir()

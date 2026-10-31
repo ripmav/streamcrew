@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // ReloadInterval is how often Watcher compares the configuration file
@@ -26,9 +28,10 @@ const ReloadInterval = time.Second
 // Hot returns the settings whose changes in the configuration file apply
 // without a restart (roadmap 6.5): the rights of Code-ADR-0019 plus the
 // log settings, the dry run, the developer mode, the CORS allowlist, the
-// listen address with its TLS certificate, the mode and the shutdown
-// timeout. log-file is the exception: it applies only at start
-// (Code-ADR-0021, Nachtrag 2026-10-24, point 6).
+// listen address with its TLS certificate, the mode, the shutdown timeout
+// and the TTS provider keys (Code-ADR-0021, Nachtrag 2026-10-29).
+// log-file is the exception: it applies only at start (Code-ADR-0021,
+// Nachtrag 2026-10-24, point 6).
 func Hot() []string {
 	return []string{
 		"grant", "revoke", "file-root", "outbound-allow",
@@ -36,6 +39,7 @@ func Hot() []string {
 		"log-max-size", "log-max-files",
 		"dry-run", "dev", "cors-allow", "listen", "tls-cert", "tls-key",
 		"mode", "shutdown-timeout",
+		"tts-google-key", "tts-azure-key", "tts-azure-region",
 	}
 }
 
@@ -65,6 +69,10 @@ type ApplyFuncs struct {
 	Listen func(addr, tlsCert, tlsKey string) error
 	// ShutdownTimeout applies the shutdown timeout.
 	ShutdownTimeout func(time.Duration)
+	// TTSKeys swaps the provider keys of the TTS service (ADR-0019 §6,
+	// Code-ADR-0021, Nachtrag 2026-10-29); the values never reach the
+	// log, only the names of the settings that changed.
+	TTSKeys func(TTSKeys)
 }
 
 // Watcher reloads the settings from the configuration file without a
@@ -247,7 +255,32 @@ func (w *Watcher) applyHot(ctx context.Context, cfg Config) {
 		w.applies.ShutdownTimeout(cfg.ShutdownTimeout)
 		w.applied(ctx, "shutdown-timeout", cfg.ShutdownTimeout.String())
 	}
+	// The TTS provider keys are hot (Code-ADR-0021, Nachtrag 2026-10-29):
+	// the values never reach the log, only the names of the settings that
+	// changed.
+	if oldTTS := old.TTSKeys(); oldTTS != cfg.TTSKeys() {
+		if w.applies.TTSKeys != nil {
+			w.applies.TTSKeys(cfg.TTSKeys())
+		}
+		w.applied(ctx, "tts-keys", strings.Join(ttsKeysChanged(oldTTS, cfg.TTSKeys()), ", "))
+	}
 	w.current = cfg
+}
+
+// ttsKeysChanged returns the names of the TTS provider settings that
+// differ between old and next.
+func ttsKeysChanged(old, next TTSKeys) []string {
+	var out []string
+	if old.Google != next.Google {
+		out = append(out, "tts-google-key")
+	}
+	if old.Azure != next.Azure {
+		out = append(out, "tts-azure-key")
+	}
+	if old.AzureRegion != next.AzureRegion {
+		out = append(out, "tts-azure-region")
+	}
+	return out
 }
 
 // applied logs a hot setting that the Watcher applied.
@@ -286,12 +319,62 @@ func (w *Watcher) Update(ctx context.Context, data []byte) (applied, restart []s
 		return nil, nil, nil, fmt.Errorf("%w: %s; extend them in the configuration file",
 			ErrNarrowOnly, strings.Join(keys, ", "))
 	}
-	if err := writeFile(w.path, data); err != nil {
+	// The document stores the values the core runs with for the
+	// write-only secrets, so a written-back document with the placeholder
+	// never overwrites them (Code-ADR-0021, Nachtrag 2026-10-29, point
+	// 3).
+	stored = data
+	if rewritten, ok := withSecrets(data, cfg.TTSGoogleKey, cfg.TTSAzureKey); ok {
+		stored = rewritten
+	}
+	if err := writeFile(w.path, stored); err != nil {
 		return nil, nil, nil, fmt.Errorf("update configuration: %w", err)
 	}
 	applied = hotChanges(w.current, cfg)
 	w.logger.InfoContext(ctx, "configuration document updated", "file", w.path)
-	return applied, restart, data, nil
+	return applied, restart, stored, nil
+}
+
+// withSecrets rewrites the write-only secret keys of the document to the
+// values the core runs with: a placeholder (or a missing key with a set
+// value) becomes the current value, so a written-back document never
+// overwrites the secrets (Code-ADR-0021, Nachtrag 2026-10-29, point 3).
+// It returns the rewritten document and whether it differs from data.
+func withSecrets(data []byte, google, azure string) ([]byte, bool) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil ||
+		doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return data, false
+	}
+	m := doc.Content[0]
+	changed := false
+	set := func(key, value string) {
+		for i := 0; i+1 < len(m.Content); i += 2 {
+			if m.Content[i].Value == key {
+				if m.Content[i+1].Value != value {
+					m.Content[i+1].Value = value
+					changed = true
+				}
+				return
+			}
+		}
+		if value != "" {
+			m.Content = append(m.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value})
+			changed = true
+		}
+	}
+	set("tts_google_key", google)
+	set("tts_azure_key", azure)
+	if !changed {
+		return data, false
+	}
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return data, false
+	}
+	return out, true
 }
 
 // extendKeys returns the keys of next that extend the effective old
@@ -435,6 +518,15 @@ func hotChanges(old, next Config) []string {
 	}
 	if old.ShutdownTimeout != next.ShutdownTimeout {
 		out = append(out, "shutdown-timeout")
+	}
+	if old.TTSGoogleKey != next.TTSGoogleKey {
+		out = append(out, "tts-google-key")
+	}
+	if old.TTSAzureKey != next.TTSAzureKey {
+		out = append(out, "tts-azure-key")
+	}
+	if old.TTSAzureRegion != next.TTSAzureRegion {
+		out = append(out, "tts-azure-region")
 	}
 	return out
 }
@@ -612,6 +704,19 @@ func (w *Watcher) parse(data []byte) (Config, []string, error) {
 			} else if v != nil {
 				errs = append(errs, fmt.Errorf("%s: not a number", key))
 			}
+		case "tts_google_key", "tts_azure_key", "tts_azure_region":
+			if s, ok := v.(string); ok {
+				switch key {
+				case "tts_google_key":
+					cfg.TTSGoogleKey = s
+				case "tts_azure_key":
+					cfg.TTSAzureKey = s
+				default:
+					cfg.TTSAzureRegion = s
+				}
+			} else if v != nil {
+				errs = append(errs, fmt.Errorf("%s: not a text", key))
+			}
 		default:
 			// The key is allowed and fixed by flag or environment: it
 			// does not reach the core.
@@ -621,6 +726,12 @@ func (w *Watcher) parse(data []byte) (Config, []string, error) {
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, nil, err
 	}
+	// The write-only secrets resolve against the configuration the core
+	// runs with (Code-ADR-0021, Nachtrag 2026-10-29, point 3): a missing
+	// value or the placeholder keeps the current value, and an
+	// explicitly empty value clears the key.
+	cfg.TTSGoogleKey = w.resolveSecret("tts_google_key", w.current.TTSGoogleKey, values)
+	cfg.TTSAzureKey = w.resolveSecret("tts_azure_key", w.current.TTSAzureKey, values)
 	if err := cfg.Resolve(); err != nil {
 		return Config{}, nil, err
 	}
@@ -643,6 +754,23 @@ func (w *Watcher) parse(data []byte) (Config, []string, error) {
 // flagOf converts a configuration file key to the flag name.
 func flagOf(key string) string {
 	return strings.ReplaceAll(key, "_", "-")
+}
+
+// resolveSecret resolves the value of a write-only key (Code-ADR-0021,
+// Nachtrag 2026-10-29, point 3): a key fixed by flag or environment keeps
+// the value it started with; for the file keys, a missing value or the
+// placeholder keeps current, an explicitly empty value clears the key,
+// and any other text is the new value.
+func (w *Watcher) resolveSecret(key, current string, values map[string]any) string {
+	if !w.fromFile[flagOf(key)] {
+		return current
+	}
+	v, ok := values[key]
+	if !ok || v == nil || v == SecretPlaceholder {
+		return current
+	}
+	s, _ := v.(string)
+	return s
 }
 
 // parseMode converts a mode name to a Mode.

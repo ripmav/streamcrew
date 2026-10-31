@@ -72,15 +72,29 @@ type Config struct {
 	// TTSProvider is the provider the text_to_speech action speaks with
 	// by default (roadmap 7.3, ADR-0020 §3): the Web Speech API of the
 	// overlay (default, no key), the REST APIs of google and azure
-	// (keys in the environment STREAMCREW_TTS_GOOGLE_KEY,
+	// (keys in the configuration: tts-google-key, tts-azure-key and
+	// tts-azure-region, env STREAMCREW_TTS_GOOGLE_KEY,
 	// STREAMCREW_TTS_AZURE_KEY and STREAMCREW_TTS_AZURE_REGION) or the
 	// external piper process (capability host:process). Changes need a
 	// restart.
-	TTSProvider string `name:"tts-provider" enum:"browser,google,azure,piper" default:"browser" help:"The default provider of the text-to-speech action (roadmap 7.3): ${enum}. The providers google and azure read their keys from the environment. Changes need a restart."`
+	TTSProvider string `name:"tts-provider" enum:"browser,google,azure,piper" default:"browser" help:"The default provider of the text-to-speech action (roadmap 7.3): ${enum}. The providers google and azure take their keys from tts-google-key, tts-azure-key and tts-azure-region. Changes need a restart."`
 	// TTSPiperModel is the onnx model of the piper TTS provider
 	// (roadmap 7.3, ADR-0020 §3); needed only for the provider piper.
 	// Changes need a restart.
 	TTSPiperModel string `name:"tts-piper-model" type:"path" placeholder:"FILE" help:"The onnx model of the piper TTS provider (roadmap 7.3); needed only for the provider piper. Changes need a restart."`
+	// TTSGoogleKey is the API key of the google TTS provider (roadmap
+	// 7.3, ADR-0019 §6). The value is write-only: the configuration
+	// document shows the placeholder instead of it, and it never appears
+	// in logs (Code-ADR-0021, Nachtrag 2026-10-29). Changes apply
+	// without a restart.
+	TTSGoogleKey string `name:"tts-google-key" placeholder:"KEY" help:"The API key of the google TTS provider (roadmap 7.3). The value is write-only: the configuration document shows <set> instead. Changes apply without a restart."`
+	// TTSAzureKey is the API key of the azure TTS provider (roadmap 7.3,
+	// ADR-0019 §6); write-only like TTSGoogleKey.
+	TTSAzureKey string `name:"tts-azure-key" placeholder:"KEY" help:"The API key of the azure TTS provider (roadmap 7.3). The value is write-only: the configuration document shows <set> instead. Changes apply without a restart."`
+	// TTSAzureRegion is the region of the azure TTS provider (roadmap
+	// 7.3, ADR-0019 §6), e.g. westeurope. Changes apply without a
+	// restart.
+	TTSAzureRegion string `name:"tts-azure-region" placeholder:"REGION" help:"The region of the azure TTS provider (roadmap 7.3), e.g. westeurope. Changes apply without a restart."`
 
 	// ObsHost is the host of the OBS obs-websocket (roadmap 7.4, spec
 	// overlays.md, B43). Changes need a restart.
@@ -105,6 +119,20 @@ type Config struct {
 	Revoke        []string          `placeholder:"CAPABILITY" help:"Turn off a capability of the mode, e.g. net:outbound. Repeatable."`
 	FileRoot      map[string]string `name:"file-root" placeholder:"NAME=DIR" help:"Directory the file action may use under NAME, an absolute path outside the data directory. Repeatable."`
 	OutboundAllow []string          `name:"outbound-allow" placeholder:"TARGET" help:"Internal target that web requests may reach in server mode: an IP address, a network in CIDR notation or a host name. Repeatable."`
+}
+
+// TTSKeys are the provider keys of the TTS service (ADR-0019 §6); the
+// watcher swaps them when the configuration changes (Code-ADR-0021,
+// Nachtrag 2026-10-29).
+type TTSKeys struct {
+	Google      string
+	Azure       string
+	AzureRegion string
+}
+
+// TTSKeys returns the provider keys of the TTS service.
+func (c Config) TTSKeys() TTSKeys {
+	return TTSKeys{Google: c.TTSGoogleKey, Azure: c.TTSAzureKey, AzureRegion: c.TTSAzureRegion}
 }
 
 // LogConfig configures logging (Code-ADR-0003).
