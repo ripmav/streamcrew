@@ -96,7 +96,7 @@ type fixture struct {
 
 // newFixture returns the fixture with the section and starts the service;
 // it runs inside synctest.Test.
-func newFixture(t *testing.T, sec settings.Overlay) *fixture {
+func newFixture(t *testing.T, sec settings.Overlay, opts ...overlaywidgets.Option) *fixture {
 	t.Helper()
 	f := &fixture{
 		t:        t,
@@ -129,7 +129,7 @@ func newFixture(t *testing.T, sec settings.Overlay) *fixture {
 		DiscordOccupants: f.discordOccupants,
 		Commands:         f.commands,
 		Logger:           slog.New(slog.NewTextHandler(f.logOut, nil)),
-	}, overlaywidgets.WithLabelTick(time.Second))
+	}, append([]overlaywidgets.Option{overlaywidgets.WithLabelTick(time.Second)}, opts...)...)
 	require.NoError(t, err)
 	ov.SetStateProvider(f.svc.StateForSync)
 	f.runWG.Go(func() {
@@ -1816,6 +1816,52 @@ func TestWidgetWheel(t *testing.T) {
 			}}),
 		}})
 		assert.ErrorIs(t, f.svc.SpinWheel(f.ctx, "wb", ada), overlaywidgets.ErrUnknownWidget)
+	})
+}
+
+// fixedRand is a deterministic RandSource for the tests (Review 347-20).
+type fixedRand struct {
+	intN    int
+	float64 float64
+}
+
+func (r fixedRand) IntN(n int) int   { return r.intN % n }
+func (r fixedRand) Float64() float64 { return r.float64 }
+
+// TestRandSourceInjectionCoversB33 covers B30, B33 and Review 347-20:
+// the injected RandSource decides the draw of the wheel and the name of
+// the next boss.
+func TestRandSourceInjectionCoversB33(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		// Float64 0.75 lands a 50/50 wheel on index 1, IntN 1 on the
+		// second feed user.
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("w1", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{map[string]any{"name": "yes"}, map[string]any{"name": "no"}}}),
+			widget("b1", overlaywidgets.KindStreamBoss, map[string]any{"base_health": 10}),
+		}}, overlaywidgets.WithRand(fixedRand{intN: 1, float64: 0.75}))
+		defer f.stop()
+		f.attach(t)
+		f.setFeed([]feed.Event{
+			{Platform: platform.Twitch, Type: eventtype.ChannelFollow, Login: "ada", DisplayName: "ada", Time: time.Now()},
+			{Platform: platform.Twitch, Type: eventtype.ChannelFollow, Login: "bob", DisplayName: "bob", Time: time.Now()},
+		})
+		ada := twitchUser(t, "ada")
+
+		// The injected source decides the draw of the wheel (B33).
+		require.NoError(t, f.svc.SpinWheel(f.ctx, "w1", ada))
+		synctest.Wait()
+		eff := f.effectsList()
+		last := eff[len(eff)-1]
+		assert.Equal(t, eventtype.OverlayWheelSpun, last.typ)
+		assert.Equal(t, &eventtype.OverlayWheel{Outcome: "no"}, last.payload.Details.OverlayWheel)
+
+		// The injected source decides the name of the next boss (B30).
+		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b1", 15, false, ada))
+		synctest.Wait()
+		ups := f.updates(t, "b1")
+		require.Len(t, ups, 1)
+		assert.JSONEq(t, `{"boss":"bob","health":10,"max_health":10}`, ups[0])
 	})
 }
 

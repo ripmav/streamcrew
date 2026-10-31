@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"slices"
 	"strconv"
 	"sync"
@@ -168,6 +168,41 @@ func WithLabelTick(d time.Duration) Option {
 	}
 }
 
+// RandSource draws the random numbers of the widgets: the wheel spin
+// and the name of the next boss (B30, B33).
+type RandSource interface {
+	// IntN returns a pseudo-random number in [0, n).
+	IntN(n int) int
+	// Float64 returns a pseudo-random float64 in [0.0, 1.0).
+	Float64() float64
+}
+
+// defaultRand is the default RandSource on the math/rand/v2 package
+// functions (Review 347-20).
+type defaultRand struct{}
+
+func (defaultRand) IntN(n int) int {
+	//nolint:gosec // not a cryptographic source, but the random numbers of the widgets
+	return rand.IntN(n)
+}
+
+func (defaultRand) Float64() float64 {
+	//nolint:gosec // not a cryptographic source, but the random numbers of the widgets
+	return rand.Float64()
+}
+
+// WithRand sets the source of the random numbers of the widgets: the
+// wheel spin and the name of the next boss. The default is math/rand/v2.
+func WithRand(r RandSource) Option {
+	return func(s *Service) error {
+		if r == nil {
+			return errors.New("invalid option: nil rand source")
+		}
+		s.rng = r
+		return nil
+	}
+}
+
 // goalState is the mutable state of a goal widget, persisted in the
 // profile (B20).
 type goalState struct {
@@ -245,6 +280,8 @@ type Service struct {
 	ports   Ports
 	logger  *slog.Logger
 	tickDur time.Duration
+	// rng draws the random numbers of the widgets (Review 347-20).
+	rng RandSource
 
 	mu      sync.Mutex
 	started bool
@@ -310,6 +347,7 @@ func New(p Ports, opts ...Option) (*Service, error) {
 	s := &Service{
 		ports:            p,
 		logger:           slog.New(slog.DiscardHandler),
+		rng:              defaultRand{},
 		goals:            map[string]*goalState{},
 		timers:           map[string]*timerState{},
 		lists:            map[string][]listEntry{},
@@ -2125,7 +2163,7 @@ func (s *Service) SpinWheel(ctx context.Context, widgetID string, u *user.User) 
 		return fmt.Errorf("%w: the wheel widget has no valid configuration", ErrUnknownWidget)
 	}
 	probs := s.wheelProbs(w, cfg)
-	idx := weightedPick(probs)
+	idx := weightedPick(probs, s.rng)
 	outcome := cfg.Outcomes[idx]
 	// The modifier rule of the spin (B33): a negative modifier of the
 	// landed outcome shifts the probabilities by the modifiers, a positive
@@ -2670,8 +2708,7 @@ func (s *Service) streamBossNew(ctx context.Context, w settings.OverlayWidget, c
 	candidates := s.streamBossCandidates(ctx, dead)
 	next := ""
 	if len(candidates) > 0 {
-		//nolint:gosec // not a cryptographic source, but the random name of the next boss
-		next = candidates[rand.Intn(len(candidates))]
+		next = candidates[s.rng.IntN(len(candidates))]
 	}
 	base := cfg.BaseHealth
 	if compounded && prevMax > base {
@@ -3368,9 +3405,10 @@ func (s *Service) emoteImages(ctx context.Context) map[string]string {
 // state to sync, the effect is a one-shot push (B4, B35).
 func (s *Service) StateForEmoteEffect(_ context.Context, _ settings.OverlayWidget) any { return nil }
 
-// weightedPick draws an index with the weights of probs; a non-positive
-// weight never wins, and a zero total falls back to a uniform draw.
-func weightedPick(probs []float64) int {
+// weightedPick draws an index with the weights of probs from rng; a
+// non-positive weight never wins, and a zero total falls back to a
+// uniform draw.
+func weightedPick(probs []float64, rng RandSource) int {
 	total := 0.0
 	for _, p := range probs {
 		if p > 0 {
@@ -3378,11 +3416,9 @@ func weightedPick(probs []float64) int {
 		}
 	}
 	if total <= 0 {
-		//nolint:gosec // not a cryptographic source, but the spin draw of the wheel
-		return rand.Intn(len(probs))
+		return rng.IntN(len(probs))
 	}
-	//nolint:gosec // not a cryptographic source, but the spin draw of the wheel
-	r := rand.Float64() * total
+	r := rng.Float64() * total
 	acc := 0.0
 	for i, p := range probs {
 		if p <= 0 {
