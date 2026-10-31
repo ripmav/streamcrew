@@ -3269,7 +3269,9 @@ func (s *Service) emoteEffectMessage(ctx context.Context, env event.Envelope) {
 func (s *Service) emoteEffectCombo(ctx context.Context, w settings.OverlayWidget, cfg *emoteEffectConfig, codes []string) {
 	if cfg.IgnoreDuplicates {
 		seen := map[string]bool{}
-		next := codes[:0]
+		// A fresh slice, so the dedupe never writes into the shared
+		// emotes of the bus message (Review 347-5).
+		next := make([]string, 0, len(codes))
 		for _, c := range codes {
 			if !seen[c] {
 				seen[c] = true

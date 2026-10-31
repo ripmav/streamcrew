@@ -1881,6 +1881,43 @@ func TestWidgetEmoteEffect(t *testing.T) {
 	})
 }
 
+// TestEmoteEffectDedupKeepsMessageEmotesCoversB35 covers B35 and Review
+// 347-5: the dedupe of ignore_duplicates never writes into the emotes of
+// the bus message, which the payload shares with its sender.
+func TestEmoteEffectDedupKeepsMessageEmotesCoversB35(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("m1", overlaywidgets.KindEmoteEffect, map[string]any{"effect": "rain", "duration": "2s", "combo_count": 2, "ignore_duplicates": true}),
+		}})
+		defer f.stop()
+		f.attach(t)
+		f.mu.Lock()
+		f.emoteList = []emote.Emote{{ID: "1", Code: "Kappa", Image: "https://emotes/Kappa.png"}}
+		f.mu.Unlock()
+		ada := twitchUser(t, "ada")
+
+		// The message goes over the bus with a kept reference to its
+		// emotes; the dedupe runs on the shared payload.
+		emotes := []string{"Kappa", "Kappa", "Nope"}
+		env := event.New(event.Source{Kind: event.SourcePlatform, Name: string(platform.Twitch)},
+			eventtype.ChatMessage,
+			eventtype.Payload{Platform: platform.Twitch, User: ada, Details: eventtype.Details{Message: &eventtype.Message{Text: "x", Emotes: emotes}}})
+		require.NoError(t, f.bus.Publish(f.ctx, env))
+		// The second Kappa message completes the combo of the deduped
+		// first one, so the widget ran.
+		f.publish(t, eventtype.ChatMessage, ada, eventtype.Details{Message: &eventtype.Message{Text: "x", Emotes: []string{"Kappa"}}})
+		synctest.Wait()
+		ups := f.updates(t, "m1")
+		require.Len(t, ups, 1)
+		assert.JSONEq(t, `{"effect":"rain","duration_ms":2000,"code":"Kappa","image":"https://emotes/Kappa.png","per_emote_shown":1}`, ups[0])
+
+		// The emotes of the first message are still as published
+		// (Review 347-5).
+		assert.Equal(t, []string{"Kappa", "Kappa", "Nope"}, emotes)
+	})
+}
+
 // TestWidgetGameQueue covers B36: the join and the leave with the
 // positions, the duplicate and the full queue, and the persistence of the
 // queue of the profile.
