@@ -2337,8 +2337,11 @@ func (s *Service) persistentTimerLoad(ctx context.Context, widgetID string, cfg 
 	return st, nil
 }
 
-// persistentTimerSave stores the state of the persistent timer (B20).
+// persistentTimerSave stores the state of the persistent timer (B20);
+// the doc is snapshotted under the lock, as the tick and the actions
+// share the state (Review 347-13, like 344-8).
 func (s *Service) persistentTimerSave(ctx context.Context, widgetID string, st *persistentTimerState) {
+	s.mu.Lock()
 	d := persistentTimerDoc{
 		DeadlineMs:  st.deadline.UnixMilli(),
 		RemainingMs: st.remaining.Milliseconds(),
@@ -2346,6 +2349,7 @@ func (s *Service) persistentTimerSave(ctx context.Context, widgetID string, st *
 		Completed:   st.completed,
 		WasVisible:  st.wasVisible,
 	}
+	s.mu.Unlock()
 	doc, err := json.Marshal(d)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "storing the persistent timer state failed", "widget", widgetID, "error", err)
