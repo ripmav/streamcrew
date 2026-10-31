@@ -6,6 +6,8 @@
 // piper is an external process that needs host:process. The browser
 // provider speaks on the overlay runtime and generates no file; the
 // core plays its text with the overlay service, not with this package.
+// The generated files of the file providers are swept from the
+// generated directory after 24 h (Review 345-10).
 package tts
 
 import (
@@ -19,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -53,6 +56,11 @@ func (n Name) Valid() bool { return slices.Contains(All(), n) }
 func (n Name) IsFileProvider() bool {
 	return n == Google || n == Azure || n == Piper
 }
+
+// generatedAge is the age at which the generated files are swept (Review
+// 345-10): far beyond any playback, so the generated directory stays
+// small.
+const generatedAge = 24 * time.Hour
 
 // The environment variables of the provider keys (ADR-0020 §2): they are
 // read at the call, so a change of the environment applies without a
@@ -120,7 +128,7 @@ type Ports struct {
 	// Piper runs the piper process; nil if the provider is not
 	// configured.
 	Piper PiperRun
-	// Now returns the timestamp of the generated file names.
+	// Now returns the clock for the age check of the generated files.
 	Now func() time.Time
 	// Logger records the synthesis and its results.
 	Logger *slog.Logger
@@ -190,12 +198,45 @@ func (s *Service) Generate(ctx context.Context, n Name, sp Speech) (string, erro
 }
 
 // newFile returns the name of the next generated file in dir with the
-// extension ext, and creates the directory if needed.
+// extension ext: the directory is created if needed, the old generated
+// files are swept, and the name comes from os.CreateTemp, so two calls
+// in the same nanosecond cannot collide (Review 345-10).
 func (s *Service) newFile(dir, ext string) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("tts: the generated directory: %w", err)
 	}
-	return filepath.Join(dir, fmt.Sprintf("tts-%d%s", s.ports.Now().UnixNano(), ext)), nil
+	s.sweep(dir)
+	f, err := os.CreateTemp(dir, "tts-*"+ext)
+	if err != nil {
+		return "", fmt.Errorf("tts: the generated file: %w", err)
+	}
+	path := f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("tts: the generated file: %w", err)
+	}
+	return path, nil
+}
+
+// sweep removes the old generated files of the service from dir; the
+// age is measured against the ports clock, and only the own files
+// (prefix tts-) are touched (Review 345-10).
+func (s *Service) sweep(dir string) {
+	cutoff := s.ports.Now().Add(-generatedAge)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), "tts-") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		_ = os.Remove(filepath.Join(dir, e.Name()))
+	}
 }
 
 // write stores the synthesized audio under the generated directory and
