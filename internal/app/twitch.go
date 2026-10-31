@@ -270,17 +270,27 @@ func (o twitchOps) PollStatus(ctx context.Context, pollID string) (twitchaction.
 	if err != nil || poll == nil {
 		return twitchaction.PollStatus{Ended: false}, err
 	}
+	st := pollStatus(poll)
+	o.feedPoll(ctx, poll, st.Winner)
+	return st, nil
+}
+
+// pollStatus is the state of the poll (spec overlays.md, B34): the winner
+// is reported only once the poll is over; while it runs, the leading
+// choice is no winner.
+func pollStatus(p *helix.Poll) twitchaction.PollStatus {
+	ended := p.Status != helix.PollVoting
 	winner := ""
-	best := int64(-1)
-	for _, out := range poll.Outcomes {
-		if out.Votes > best {
-			best = out.Votes
-			winner = out.Choice
+	if ended {
+		best := int64(-1)
+		for _, out := range p.Outcomes {
+			if out.Votes > best {
+				best = out.Votes
+				winner = out.Choice
+			}
 		}
 	}
-	ended := poll.Status != helix.PollVoting
-	o.feedPoll(ctx, poll, winner)
-	return twitchaction.PollStatus{Ended: ended, Winner: winner}, nil
+	return twitchaction.PollStatus{Ended: ended, Winner: winner}
 }
 
 func (o twitchOps) CreatePrediction(ctx context.Context, in twitchaction.PredictionInput) (string, error) {

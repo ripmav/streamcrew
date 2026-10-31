@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.yaml.in/yaml/v3"
@@ -29,9 +30,9 @@ const ReloadInterval = time.Second
 // without a restart (roadmap 6.5): the rights of Code-ADR-0019 plus the
 // log settings, the dry run, the developer mode, the CORS allowlist, the
 // listen address with its TLS certificate, the mode, the shutdown timeout
-// and the TTS provider keys (Code-ADR-0021, Nachtrag 2026-10-29).
-// log-file is the exception: it applies only at start (Code-ADR-0021,
-// Nachtrag 2026-10-24, point 6).
+// and the integration keys of TTS and discord (Code-ADR-0021, Nachtrag
+// 2026-10-29). log-file is the exception: it applies only at start
+// (Code-ADR-0021, Nachtrag 2026-10-24, point 6).
 func Hot() []string {
 	return []string{
 		"grant", "revoke", "file-root", "outbound-allow",
@@ -40,6 +41,7 @@ func Hot() []string {
 		"dry-run", "dev", "cors-allow", "listen", "tls-cert", "tls-key",
 		"mode", "shutdown-timeout",
 		"tts-google-key", "tts-azure-key", "tts-azure-region",
+		"discord-token", "discord-voice-channel",
 	}
 }
 
@@ -73,6 +75,11 @@ type ApplyFuncs struct {
 	// Code-ADR-0021, Nachtrag 2026-10-29); the values never reach the
 	// log, only the names of the settings that changed.
 	TTSKeys func(TTSKeys)
+	// Discord swaps the credentials of the discord service (ADR-0019
+	// §9, Code-ADR-0021, Nachtrag 2026-10-29); the service reconnects
+	// with the new keys, and the values never reach the log, only the
+	// names of the settings that changed.
+	Discord func(DiscordKeys)
 }
 
 // Watcher reloads the settings from the configuration file without a
@@ -92,6 +99,11 @@ type Watcher struct {
 	applies  *ApplyFuncs
 	logger   *slog.Logger
 
+	// mu guards the state shared between the file comparison of the
+	// watcher loop and the document update of the api (roadmap 6.5.2):
+	// last and existed, the file content last seen, and current, the
+	// configuration the core runs with.
+	mu sync.Mutex
 	// last is the content last compared; existed reports whether there
 	// was a file.
 	last    []byte
@@ -157,19 +169,25 @@ func (w *Watcher) Run(ctx context.Context) error {
 // change.
 func (w *Watcher) check(ctx context.Context) {
 	data, err := os.ReadFile(filepath.Clean(w.path))
+	w.mu.Lock()
 	switch {
 	case errors.Is(err, fs.ErrNotExist) && !w.existed:
+		w.mu.Unlock()
 		return // still no file
 	case err != nil:
+		w.mu.Unlock()
 		// Some editors remove the file while saving; the settings stay.
 		w.report(ctx, err.Error())
 		return
 	case w.existed && bytes.Equal(data, w.last):
+		w.mu.Unlock()
 		return
 	}
 	w.last, w.existed = data, true
-
+	// parse reads current, which the document update of the api reads at
+	// the same time.
 	cfg, restart, err := w.parse(data)
+	w.mu.Unlock()
 	if err != nil {
 		w.report(ctx, err.Error())
 		return
@@ -201,10 +219,16 @@ func (w *Watcher) check(ctx context.Context) {
 // the problem.
 func (w *Watcher) applyHot(ctx context.Context, cfg Config) {
 	if w.applies == nil {
+		w.mu.Lock()
 		w.current = cfg
+		w.mu.Unlock()
 		return
 	}
+	// The hooks run without the lock, so that a long apply (the listen
+	// rebind) does not block the document update of the api.
+	w.mu.Lock()
 	old := w.current
+	w.mu.Unlock()
 	oldLog := old.Log
 	oldDryRun := old.DryRun
 	oldDev := old.Dev
@@ -264,7 +288,32 @@ func (w *Watcher) applyHot(ctx context.Context, cfg Config) {
 		}
 		w.applied(ctx, "tts-keys", strings.Join(ttsKeysChanged(oldTTS, cfg.TTSKeys()), ", "))
 	}
+	// The discord credentials are hot (Code-ADR-0021, Nachtrag
+	// 2026-10-29): the service reconnects with the new keys, and the
+	// values never reach the log, only the names of the settings that
+	// changed.
+	if oldDiscord := old.DiscordKeys(); oldDiscord != cfg.DiscordKeys() {
+		if w.applies.Discord != nil {
+			w.applies.Discord(cfg.DiscordKeys())
+		}
+		w.applied(ctx, "discord", strings.Join(discordKeysChanged(oldDiscord, cfg.DiscordKeys()), ", "))
+	}
+	w.mu.Lock()
 	w.current = cfg
+	w.mu.Unlock()
+}
+
+// discordKeysChanged returns the names of the discord settings that
+// differ between old and next.
+func discordKeysChanged(old, next DiscordKeys) []string {
+	var out []string
+	if old.Token != next.Token {
+		out = append(out, "discord-token")
+	}
+	if old.Channel != next.Channel {
+		out = append(out, "discord-voice-channel")
+	}
+	return out
 }
 
 // ttsKeysChanged returns the names of the TTS provider settings that
@@ -308,29 +357,38 @@ var ErrNarrowOnly = errors.New("the document extends the currently effective con
 // extends the currently effective configuration is rejected as a whole
 // (Code-ADR-0021, Nachtrag 2026-10-24); only the file itself may extend.
 func (w *Watcher) Update(ctx context.Context, data []byte) (applied, restart []string, stored []byte, err error) {
+	// parse and the narrowing check read the state the watcher loop
+	// writes; both run at the same time (roadmap 6.5.2).
+	w.mu.Lock()
 	cfg, restart, err := w.parse(data)
 	if err != nil {
+		w.mu.Unlock()
 		return nil, nil, nil, fmt.Errorf("update configuration: %w", err)
 	}
 	if w.existed && bytes.Equal(data, w.last) {
+		w.mu.Unlock()
 		return nil, restart, data, nil
 	}
 	if keys := extendKeys(w.current, cfg); len(keys) > 0 {
+		w.mu.Unlock()
 		return nil, nil, nil, fmt.Errorf("%w: %s; extend them in the configuration file",
 			ErrNarrowOnly, strings.Join(keys, ", "))
 	}
+	w.mu.Unlock()
 	// The document stores the values the core runs with for the
 	// write-only secrets, so a written-back document with the placeholder
 	// never overwrites them (Code-ADR-0021, Nachtrag 2026-10-29, point
 	// 3).
 	stored = data
-	if rewritten, ok := withSecrets(data, cfg.TTSGoogleKey, cfg.TTSAzureKey); ok {
+	if rewritten, ok := withSecrets(data, cfg.TTSGoogleKey, cfg.TTSAzureKey, cfg.DiscordToken); ok {
 		stored = rewritten
 	}
 	if err := writeFile(w.path, stored); err != nil {
 		return nil, nil, nil, fmt.Errorf("update configuration: %w", err)
 	}
+	w.mu.Lock()
 	applied = hotChanges(w.current, cfg)
+	w.mu.Unlock()
 	w.logger.InfoContext(ctx, "configuration document updated", "file", w.path)
 	return applied, restart, stored, nil
 }
@@ -340,7 +398,7 @@ func (w *Watcher) Update(ctx context.Context, data []byte) (applied, restart []s
 // value) becomes the current value, so a written-back document never
 // overwrites the secrets (Code-ADR-0021, Nachtrag 2026-10-29, point 3).
 // It returns the rewritten document and whether it differs from data.
-func withSecrets(data []byte, google, azure string) ([]byte, bool) {
+func withSecrets(data []byte, google, azure, discord string) ([]byte, bool) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil ||
 		doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
@@ -367,6 +425,7 @@ func withSecrets(data []byte, google, azure string) ([]byte, bool) {
 	}
 	set("tts_google_key", google)
 	set("tts_azure_key", azure)
+	set("discord_token", discord)
 	if !changed {
 		return data, false
 	}
@@ -528,6 +587,12 @@ func hotChanges(old, next Config) []string {
 	if old.TTSAzureRegion != next.TTSAzureRegion {
 		out = append(out, "tts-azure-region")
 	}
+	if old.DiscordToken != next.DiscordToken {
+		out = append(out, "discord-token")
+	}
+	if old.DiscordVoiceChannel != next.DiscordVoiceChannel {
+		out = append(out, "discord-voice-channel")
+	}
 	return out
 }
 
@@ -566,7 +631,8 @@ func (w *Watcher) report(ctx context.Context, problem string) {
 
 // parse returns the effective configuration the file describes — the base
 // the core started with, replaced by the file values of the settings the
-// file decides — and the settings that changed and need a restart.
+// file decides — and the settings that changed and need a restart. The
+// caller holds mu; parse reads current.
 func (w *Watcher) parse(data []byte) (Config, []string, error) {
 	values, err := parseFile(w.path, data, w.allowed)
 	if err != nil {
@@ -717,6 +783,17 @@ func (w *Watcher) parse(data []byte) (Config, []string, error) {
 			} else if v != nil {
 				errs = append(errs, fmt.Errorf("%s: not a text", key))
 			}
+		case "discord_token", "discord_voice_channel":
+			if s, ok := v.(string); ok {
+				switch key {
+				case "discord_token":
+					cfg.DiscordToken = s
+				default:
+					cfg.DiscordVoiceChannel = s
+				}
+			} else if v != nil {
+				errs = append(errs, fmt.Errorf("%s: not a text", key))
+			}
 		default:
 			// The key is allowed and fixed by flag or environment: it
 			// does not reach the core.
@@ -732,6 +809,7 @@ func (w *Watcher) parse(data []byte) (Config, []string, error) {
 	// explicitly empty value clears the key.
 	cfg.TTSGoogleKey = w.resolveSecret("tts_google_key", w.current.TTSGoogleKey, values)
 	cfg.TTSAzureKey = w.resolveSecret("tts_azure_key", w.current.TTSAzureKey, values)
+	cfg.DiscordToken = w.resolveSecret("discord_token", w.current.DiscordToken, values)
 	if err := cfg.Resolve(); err != nil {
 		return Config{}, nil, err
 	}

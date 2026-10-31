@@ -566,11 +566,16 @@ Profil-Sektion `overlay`, Zustand zum Teil im Profil persistiert
   könnte den betroffenen Nutzer nicht benennen. Das Widget zeigt die
   Liste. Größe `max_size` (Default 10).
 - `discord_voice` (B37): listet die Besetzung eines konfigurierten
-  Discord-Voice-Kanals (`discord-voice-channel`, nur zum Start ⟳).
-  Der Discord-Token kommt **nur** aus der Umgebungsvariablen
-  `STREAMCREW_DISCORD_TOKEN` (kein Config-Key, ADR-0019 §9); ohne
-  Token oder Kanal läuft der Service inaktiv (info-Log). Beim
-  Beitreten und Verlassen eines Nutzers veröffentlicht der Core
+  Discord-Voice-Kanals (`discord-voice-channel`); ohne Token oder
+  Kanal läuft der Service inaktiv (info-Log). Der Discord-Token kommt
+  aus dem Config-Key `discord-token`; kong leitet die
+  Umgebungsvariable `STREAMCREW_DISCORD_TOKEN` über `DefaultEnvars`
+  selbst ab (ADR-0019 §9). Token und Kanal gelten ohne Neustart
+  (hot): eine Änderung verbindet den Service neu, ein leerer Token
+  macht ihn inaktiv und leert die Besetzung. Der Token ist
+  write-only: das Dokument zeigt `<set>` statt des Werts, der Wert
+  erscheint niemals in Logs. Beim Beitreten und Verlassen eines
+  Nutzers veröffentlicht der Core
   `discord.voice.joined`/`discord.voice.left` (Name, Kanal) und
   aktualisiert die sichtbaren Widgets. **Beschränkung (A3):** der
   Core tritt dem Voice-Kanal nicht bei, daher erkennt er weder
