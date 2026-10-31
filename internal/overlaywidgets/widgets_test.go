@@ -1253,6 +1253,41 @@ func TestWidgetPersistentTimer(t *testing.T) {
 	})
 }
 
+// TestPersistentTimerConcurrentAccessCoversB29 covers B29 and Review
+// 347-13: the bus goroutine and the actions share the persistent timer
+// state; 100 parallel AddToPersistentTimer calls plus state syncs grow
+// the frozen time by exactly their sum without a data race.
+func TestPersistentTimerConcurrentAccessCoversB29(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := map[string]any{"initial": "10m"}
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("t1", overlaywidgets.KindPersistentTimer, cfg),
+		}})
+		defer f.stop()
+		f.attach(t)
+		w := widget("t1", overlaywidgets.KindPersistentTimer, cfg)
+
+		var wg sync.WaitGroup
+		for range 100 {
+			wg.Go(func() {
+				if err := f.svc.AddToPersistentTimer(f.ctx, "t1", time.Second); err != nil {
+					t.Errorf("AddToPersistentTimer: %v", err)
+				}
+				f.svc.StateForPersistentTimer(f.ctx, w)
+			})
+		}
+		wg.Wait()
+		synctest.Wait()
+
+		// 10m plus 100 seconds, still frozen (Review 347-13).
+		st, ok := f.svc.StateForPersistentTimer(f.ctx, w).(map[string]any)
+		require.True(t, ok, "the state is not a map")
+		assert.Equal(t, true, st["paused"])
+		assert.EqualValues(t, 700000, st["pausedMs"])
+	})
+}
+
 // TestAddToTimerDispatchesByKindCoversB29 covers B26, B29 and Review
 // 347-2: add_to_timer reaches the persistent timer through the same
 // operation as the timer, and a widget of another kind is a clear error.

@@ -2447,7 +2447,7 @@ func (s *Service) persistentTimerAdjust(ctx context.Context, w settings.OverlayW
 	}
 	s.mu.Unlock()
 	s.persistentTimerSave(ctx, w.ID, st)
-	s.pushPersistentTimer(ctx, w, cfg, st)
+	s.pushPersistentTimer(ctx, w, cfg)
 	user := (*user.User)(nil)
 	if p, ok := event.Payload[eventtype.Payload](env); ok {
 		user = p.User
@@ -2521,7 +2521,7 @@ func (s *Service) persistentTimerTick(ctx context.Context) {
 			s.persistentTimerSave(ctx, w.ID, st)
 		}
 		if visible || changed {
-			s.pushPersistentTimer(ctx, w, cfg, st)
+			s.pushPersistentTimer(ctx, w, cfg)
 		}
 		if completedNow {
 			s.publish(ctx, eventtype.OverlayTimerCompleted, eventtype.Payload{Platform: platform.Twitch})
@@ -2560,9 +2560,13 @@ func (s *Service) persistentTimerShutdown(ctx context.Context) {
 	}
 }
 
-// pushPersistentTimer pushes the state of the persistent timer (B22, B29).
-func (s *Service) pushPersistentTimer(ctx context.Context, w settings.OverlayWidget, cfg *persistentTimerConfig, st *persistentTimerState) {
-	state := map[string]any{
+// persistentTimerStateFor is the state of the persistent timer, snapshotted
+// under the lock, as the tick and the actions share the state (Review 347-13,
+// like 344-8).
+func (s *Service) persistentTimerStateFor(st *persistentTimerState, cfg *persistentTimerConfig) map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return map[string]any{
 		"deadline":  st.deadline.UnixMilli(),
 		"paused":    st.paused,
 		"pausedMs":  st.remaining.Milliseconds(),
@@ -2570,11 +2574,21 @@ func (s *Service) pushPersistentTimer(ctx context.Context, w settings.OverlayWid
 		"format":    cfg.Format,
 		"disabled":  st.completed && cfg.DisableOnCompletion,
 	}
-	s.push(ctx, w, state)
+}
+
+// pushPersistentTimer pushes the state of the persistent timer (B22, B29);
+// the snapshot is taken under the lock (Review 347-13).
+func (s *Service) pushPersistentTimer(ctx context.Context, w settings.OverlayWidget, cfg *persistentTimerConfig) {
+	st, err := s.persistentTimerLoad(ctx, w.ID, cfg)
+	if err != nil {
+		return
+	}
+	s.push(ctx, w, s.persistentTimerStateFor(st, cfg))
 }
 
 // StateForPersistentTimer returns the state of the persistent timer for
-// the state sync (B4, B20).
+// the state sync (B4, B20); the snapshot is taken under the lock
+// (Review 347-13).
 func (s *Service) StateForPersistentTimer(ctx context.Context, w settings.OverlayWidget) any {
 	cfg := s.persistentTimerConfig(ctx, w)
 	if cfg == nil {
@@ -2584,14 +2598,7 @@ func (s *Service) StateForPersistentTimer(ctx context.Context, w settings.Overla
 	if err != nil {
 		return nil
 	}
-	return map[string]any{
-		"deadline":  st.deadline.UnixMilli(),
-		"paused":    st.paused,
-		"pausedMs":  st.remaining.Milliseconds(),
-		"completed": st.completed,
-		"format":    cfg.Format,
-		"disabled":  st.completed && cfg.DisableOnCompletion,
-	}
+	return s.persistentTimerStateFor(st, cfg)
 }
 
 // ---------- stream_boss (B30) ----------
