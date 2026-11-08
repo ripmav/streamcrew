@@ -25,7 +25,7 @@
    - **Namenskonvention der Request-/Response-Typen:** Der Vertrag ist ein einziges Paket `streamcrew.v1alpha1` für alle Services (ADR-0010), deshalb würden die strikten je-Methode-Namen (`ListRequest` in mehreren Services) kollidieren. Stattdessen gibt es deskriptive, paket-eindeutige Namen (z. B. `ListCommandsRequest`, `ListUsersRequest`, `GetCounterRequest`); der Item-Typ des Server-Streams ist der aussagekräftige Typ `Event`. Die beiden Lint-Regeln `RPC_REQUEST_STANDARD_NAME` und `RPC_RESPONSE_STANDARD_NAME` werden in `buf.yaml` entsprechend ausgenommen (kommentiert).
 2. **`esbuild` für die Overlay-Runtime (Phase 7, vorweggenommen):**
    - Die TypeScript-Overlay-Runtime wird per `go generate` mit `github.com/evanw/esbuild/pkg/api` (MIT) gebündelt; kein Node.js. Das Bündel wird eingecheckt und per `go:embed` ausgeliefert (Plan §6.16).
-   - Gleiche Konvention wie buf/sqlc: gepinnte Version im `go:generate`-Aufruf, eingechecktes Artefakt, CI-Check, dass das eingecheckte Bündel zum TypeScript-Quellcode passt.
+   - Gleiche Konvention wie buf/sqlc: gepinnte Version (für esbuild in `go.mod`, für buf und die Plugins im `go:generate`-Aufruf), eingechecktes Artefakt, CI-Check, dass das eingecheckte Bündel zum TypeScript-Quellcode passt. esbuild wird nur vom Generator-Programm `internal/overlay/internal/bundlegen` importiert und landet nicht im Core-Binary.
 3. **Versionierung:**
    - Bis Core 1.0 gilt `v1alpha1`; ab `v1` blockiert `buf breaking` inkompatible Änderungen in der CI. Größere Brüche kommen als neues Paket (`v2`), parallel zum alten (ADR-0010).
 4. **Abhängigkeiten:** `connectrpc.com/connect` (MIT) und `google.golang.org/protobuf` (BSD-3-Clause) sind Laufzeitabhängigkeiten des generierten Codes und des Servers; beide stehen auf der Lizenz-Allowlist (Code-ADR-0001). `buf` und die Plugins sind Build-Werkzeuge und landen nicht in `go.mod`.
@@ -60,4 +60,4 @@
 - [x] CI: `buf lint` und Regenerierungs-Check (`buf generate` + `git diff --exit-code`) (Roadmap 6.1.1), erledigt 2026-10-16
 - [ ] Restliche Services von `v1alpha1` (Auth, Stream, Chat, Command, User, Counter, Settings, Backup) schreiben (Roadmap 6.1.2)
 - [ ] `buf breaking` ab `v1` in der CI aktivieren (Roadmap, ab Core 1.0)
-- [ ] esbuild-Generierung für die Overlay-Runtime (Roadmap Phase 7): seit 7.1 übergangsweise über die CLI (`go run …/cmd/esbuild@v0.28.2`); die Umstellung auf `pkg/api` nach §2 ist entschieden (ADR-0019 §2, 2026-10-29) und steht als 341-11c in [`review-stack-343-2026-10-28.md`](../../reviews/review-stack-343-2026-10-28.md)
+- [x] esbuild-Generierung für die Overlay-Runtime (Roadmap Phase 7): über die Go-API `pkg/api` statt der CLI (`internal/overlay/internal/bundlegen`, Review 341-11c), erledigt 2026-10-29
