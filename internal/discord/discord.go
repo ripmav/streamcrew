@@ -11,8 +11,10 @@
 package discord
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -34,15 +36,17 @@ type Occupant struct {
 	Channel string `json:"channel"`
 }
 
+// Keys are the credentials of the gateway connection (ADR-0019 §9):
+// the bot token and the voice channel to track; the watcher swaps them
+// when the configuration changes (Code-ADR-0021, Nachtrag 2026-10-29),
+// and the service reconnects with the new keys.
+type Keys struct {
+	Token   string
+	Channel string
+}
+
 // Ports are the dependencies of the service.
 type Ports struct {
-	// Token is the bot token from the environment
-	// STREAMCREW_DISCORD_TOKEN (ADR-0019 §9); without it the service is
-	// inactive.
-	Token string
-	// Channel is the ID of the voice channel to track
-	// (discord-voice-channel); without it the service is inactive.
-	Channel string
 	// Bus is where the service publishes its events (B37).
 	Bus *event.Bus
 	// Logger records the connection and the occupants.
@@ -54,6 +58,8 @@ type Service struct {
 	ports Ports
 
 	mu sync.Mutex
+	// keys are the credentials the service runs with (ADR-0019 §9).
+	keys Keys
 	// occupants are the current occupants of the configured channel by
 	// Discord user ID.
 	occupants map[string]Occupant
@@ -61,16 +67,20 @@ type Service struct {
 	// (re)connections, so that a voice state without a member still gets
 	// a name.
 	names map[string]string
-
-	// publishCtx is the context of the active connection for the
-	// publishes of the gateway handlers.
-	publishCtx context.Context
+	// sessionCancel cancels the active gateway connection, so that a
+	// changed key reconnects with the new keys (Code-ADR-0021, Nachtrag
+	// 2026-10-29); nil without an active connection.
+	sessionCancel context.CancelFunc
+	// rekeyC wakes the run loop from the inactive wait; one pending
+	// wake is enough (buffered, non-blocking send).
+	rekeyC chan struct{}
 
 	reconnect time.Duration
 }
 
-// New returns the service with its ports; the app runs it with the
-// supervisor (Code-ADR-0004).
+// New returns the service with its ports and without credentials, so it
+// starts inactive; the app runs it with the supervisor (Code-ADR-0004)
+// and sets the keys from the configuration.
 func New(p Ports) *Service {
 	if p.Logger == nil {
 		p.Logger = slog.New(slog.DiscardHandler)
@@ -79,17 +89,52 @@ func New(p Ports) *Service {
 		ports:     p,
 		occupants: map[string]Occupant{},
 		names:     map[string]string{},
+		rekeyC:    make(chan struct{}, 1),
 		reconnect: Reconnect,
 	}
 }
 
+// SetKeys swaps the credentials of the service (Code-ADR-0021, Nachtrag
+// 2026-10-29): the active connection drops and reconnects with the new
+// keys, and an empty key deactivates the service and clears the
+// occupants.
+func (s *Service) SetKeys(k Keys) {
+	s.mu.Lock()
+	changed := s.keys != k
+	s.keys = k
+	cancel := s.sessionCancel
+	if k.Token == "" || k.Channel == "" {
+		clear(s.occupants)
+	}
+	s.mu.Unlock()
+	if !changed {
+		return
+	}
+	if cancel != nil {
+		cancel()
+	}
+	select {
+	case s.rekeyC <- struct{}{}:
+	default: // a wake is already pending
+	}
+}
+
+// Keys returns the credentials the service runs with.
+func (s *Service) Keys() Keys {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.keys
+}
+
 // Active reports whether the service has a token and a channel (B37).
 func (s *Service) Active() bool {
-	return s.ports.Token != "" && s.ports.Channel != ""
+	k := s.Keys()
+	return k.Token != "" && k.Channel != ""
 }
 
 // Occupants returns the current occupants of the configured channel
-// (B37).
+// (B37), sorted by name, so that the widget list is stable between
+// pushes.
 func (s *Service) Occupants() []Occupant {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -97,20 +142,37 @@ func (s *Service) Occupants() []Occupant {
 	for _, o := range s.occupants {
 		out = append(out, o)
 	}
+	slices.SortFunc(out, func(a, b Occupant) int { return cmp.Compare(a.Name, b.Name) })
 	return out
 }
 
 // Run connects to the gateway and runs it until ctx ends (B37). Without
-// a token or a channel the service is inactive (info log).
+// a token or a channel the service stays inactive (info log); a key
+// change applies without a restart (Code-ADR-0021, Nachtrag 2026-10-29)
+// and reconnects at once.
 func (s *Service) Run(ctx context.Context) error {
-	if !s.Active() {
-		s.ports.Logger.InfoContext(ctx, "the discord token or the voice channel is not set, the discord_voice service is inactive")
-		return nil
-	}
+	inactiveLogged := false
 	for {
-		err := s.connect(ctx)
+		if !s.Active() {
+			if !inactiveLogged {
+				s.ports.Logger.InfoContext(ctx, "the discord token or the voice channel is not set, the discord_voice service is inactive")
+				inactiveLogged = true
+			}
+			// A wake means the keys may have changed; re-check at once.
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-s.rekeyC:
+			}
+			continue
+		}
+		inactiveLogged = false
+		rekeyed, err := s.connect(ctx)
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if rekeyed {
+			continue
 		}
 		s.ports.Logger.WarnContext(ctx, "the discord gateway connection dropped", "error", err)
 		select {
@@ -121,27 +183,42 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 }
 
-// connect opens the gateway connection and runs it until it drops or
-// ctx ends.
-func (s *Service) connect(ctx context.Context) error {
-	session, err := discordgo.New(s.ports.Token)
+// connect opens the gateway connection with the current keys and runs
+// it until it drops, the core context ends, or the keys change; it
+// reports whether a key change ended the connection.
+func (s *Service) connect(ctx context.Context) (rekeyed bool, err error) {
+	k := s.Keys()
+	session, err := discordgo.New(k.Token)
 	if err != nil {
-		return err
+		return false, err
 	}
 	// Plain JSON packets; the service needs only the voice states, so
 	// the intents stay minimal.
 	session.Identify.Compress = false
 	session.Identify.Intents = discordgo.IntentGuilds | discordgo.IntentGuildVoiceStates
+	// The session context ends with the connection, so that a key
+	// change cancels it; the publishes of the handlers run on it.
+	sctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	s.mu.Lock()
+	s.sessionCancel = cancel
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.sessionCancel = nil
+		s.mu.Unlock()
+	}()
 	session.AddHandler(s.onReady)
 	session.AddHandler(s.onGuildCreate)
-	session.AddHandler(s.onVoiceState)
-	s.publishCtx = ctx
+	session.AddHandler(s.onVoiceState(sctx))
 	if err := session.Open(); err != nil {
-		return err
+		return false, err
 	}
 	defer session.Close()
-	<-ctx.Done()
-	return ctx.Err()
+	<-sctx.Done()
+	// The session context ends with the core context; a live core
+	// context means the keys changed.
+	return ctx.Err() == nil, nil
 }
 
 // onReady resets the occupants at every (re)connection; the GUILD_CREATE
@@ -160,36 +237,40 @@ func (s *Service) onGuildCreate(_ *discordgo.Session, g *discordgo.GuildCreate) 
 	}
 }
 
-// onVoiceState applies one voice state update of the gateway (B37): a
-// join, a leave, or a move into or out of the configured channel.
-func (s *Service) onVoiceState(_ *discordgo.Session, evt *discordgo.VoiceStateUpdate) {
-	if evt.UserID == "" {
-		return
-	}
-	// The membership before the update; the seed below may add the
-	// occupant, so the join is the difference.
-	s.mu.Lock()
-	_, was := s.occupants[evt.UserID]
-	s.mu.Unlock()
-	s.seed(evt.VoiceState)
-	now := evt.ChannelID == s.ports.Channel
-	s.mu.Lock()
-	var name string
-	switch {
-	case now && !was:
-		name = s.nameLocked(evt.UserID)
-		s.occupants[evt.UserID] = Occupant{Name: name, Channel: s.ports.Channel}
-	case !now && was:
-		name = s.nameLocked(evt.UserID)
-		delete(s.occupants, evt.UserID)
-	}
-	channel := s.ports.Channel
-	s.mu.Unlock()
-	switch {
-	case now && !was:
-		s.publish(eventtype.DiscordVoiceJoined, name, channel)
-	case !now && was:
-		s.publish(eventtype.DiscordVoiceLeft, name, channel)
+// onVoiceState returns the handler that applies one voice state update
+// of the gateway (B37): a join, a leave, or a move into or out of the
+// configured channel. The events are published on the context of the
+// connection the handler belongs to.
+func (s *Service) onVoiceState(ctx context.Context) func(_ *discordgo.Session, evt *discordgo.VoiceStateUpdate) {
+	return func(_ *discordgo.Session, evt *discordgo.VoiceStateUpdate) {
+		if evt.UserID == "" {
+			return
+		}
+		// The membership before the update; the seed below may add the
+		// occupant, so the join is the difference.
+		s.mu.Lock()
+		_, was := s.occupants[evt.UserID]
+		channel := s.keys.Channel
+		s.mu.Unlock()
+		s.seed(evt.VoiceState)
+		now := evt.ChannelID == channel
+		s.mu.Lock()
+		var name string
+		switch {
+		case now && !was:
+			name = s.nameLocked(evt.UserID)
+			s.occupants[evt.UserID] = Occupant{Name: name, Channel: channel}
+		case !now && was:
+			name = s.nameLocked(evt.UserID)
+			delete(s.occupants, evt.UserID)
+		}
+		s.mu.Unlock()
+		switch {
+		case now && !was:
+			s.publish(ctx, eventtype.DiscordVoiceJoined, name, channel)
+		case !now && was:
+			s.publish(ctx, eventtype.DiscordVoiceLeft, name, channel)
+		}
 	}
 }
 
@@ -203,8 +284,8 @@ func (s *Service) seed(vs *discordgo.VoiceState) {
 	if name := memberName(vs.Member); name != "" {
 		s.names[vs.UserID] = name
 	}
-	if vs.ChannelID == s.ports.Channel {
-		s.occupants[vs.UserID] = Occupant{Name: s.nameLocked(vs.UserID), Channel: s.ports.Channel}
+	if vs.ChannelID == s.keys.Channel {
+		s.occupants[vs.UserID] = Occupant{Name: s.nameLocked(vs.UserID), Channel: s.keys.Channel}
 	}
 	s.mu.Unlock()
 }
@@ -218,18 +299,16 @@ func (s *Service) nameLocked(userID string) string {
 	return userID
 }
 
-// publish runs typ as a bus event with the occupant as details (B37);
-// it fails only if the event does not fit the catalog, which the shape
-// of the type already guarantees.
-func (s *Service) publish(typ event.Type, name, channel string) {
-	if s.publishCtx == nil {
-		return
-	}
+// publish runs typ as a bus event with the occupant as details (B37) on
+// the context of the connection it came from; it fails only if the event
+// does not fit the catalog, which the shape of the type already
+// guarantees.
+func (s *Service) publish(ctx context.Context, typ event.Type, name, channel string) {
 	env := event.New(event.Source{Kind: event.SourceIntegration, Name: "discord"}, typ, eventtype.Payload{
 		Details: eventtype.Details{DiscordVoice: &eventtype.DiscordVoice{Name: name, Channel: channel}},
 	})
-	if err := s.ports.Bus.Publish(s.publishCtx, env); err != nil {
-		s.ports.Logger.ErrorContext(s.publishCtx, "publishing the discord voice event failed", "type", typ, "error", err)
+	if err := s.ports.Bus.Publish(ctx, env); err != nil {
+		s.ports.Logger.ErrorContext(ctx, "publishing the discord voice event failed", "type", typ, "error", err)
 	}
 }
 

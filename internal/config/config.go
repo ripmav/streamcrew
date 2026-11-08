@@ -106,11 +106,20 @@ type Config struct {
 	// spec overlays.md, B43); empty for a connection without a password.
 	// Changes need a restart.
 	ObsPassword string `name:"obs-password" placeholder:"PASSWORD" help:"The password of the OBS obs-websocket (roadmap 7.4); empty for a connection without a password. Changes need a restart."`
+	// DiscordToken is the bot token of the discord_voice service
+	// (roadmap 7.5, spec overlays.md, B37, ADR-0019 §9); the
+	// environment variable STREAMCREW_DISCORD_TOKEN is derived by kong
+	// (Code-ADR-0005). The value is write-only: the configuration
+	// document shows the placeholder instead of it, and it never
+	// appears in logs (Code-ADR-0021, Nachtrag 2026-10-29). Changes
+	// apply without a restart; the service reconnects with the new
+	// keys, an empty token deactivates it.
+	DiscordToken string `name:"discord-token" placeholder:"TOKEN" help:"The bot token of the discord_voice service (roadmap 7.5); the environment variable STREAMCREW_DISCORD_TOKEN works as well. The value is write-only: the configuration document shows <set> instead. Changes apply without a restart; the service reconnects with the new keys."`
 	// DiscordVoiceChannel is the ID of the voice channel the
 	// discord_voice widget tracks (roadmap 7.5, spec overlays.md, B37);
-	// the token comes from the environment STREAMCREW_DISCORD_TOKEN.
-	// Changes need a restart.
-	DiscordVoiceChannel string `name:"discord-voice-channel" placeholder:"CHANNEL-ID" help:"The ID of the Discord voice channel the discord_voice widget tracks (roadmap 7.5); the token comes from the environment STREAMCREW_DISCORD_TOKEN. Empty for an inactive service. Changes need a restart."`
+	// empty for an inactive service. Changes apply without a restart;
+	// the service reconnects with the new keys.
+	DiscordVoiceChannel string `name:"discord-voice-channel" placeholder:"CHANNEL-ID" help:"The ID of the Discord voice channel the discord_voice widget tracks (roadmap 7.5); empty for an inactive service. Changes apply without a restart; the service reconnects with the new keys."`
 
 	// Grant, Revoke, FileRoot and OutboundAllow are the rights of
 	// Code-ADR-0019. Changes of them in the configuration file apply
@@ -133,6 +142,19 @@ type TTSKeys struct {
 // TTSKeys returns the provider keys of the TTS service.
 func (c Config) TTSKeys() TTSKeys {
 	return TTSKeys{Google: c.TTSGoogleKey, Azure: c.TTSAzureKey, AzureRegion: c.TTSAzureRegion}
+}
+
+// DiscordKeys are the credentials of the discord service (ADR-0019 §9);
+// the watcher swaps them when the configuration changes (Code-ADR-0021,
+// Nachtrag 2026-10-29).
+type DiscordKeys struct {
+	Token   string
+	Channel string
+}
+
+// DiscordKeys returns the credentials of the discord service.
+func (c Config) DiscordKeys() DiscordKeys {
+	return DiscordKeys{Token: c.DiscordToken, Channel: c.DiscordVoiceChannel}
 }
 
 // LogConfig configures logging (Code-ADR-0003).

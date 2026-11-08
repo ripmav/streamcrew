@@ -165,6 +165,69 @@ func TestConfigServiceTTSKeysAreWriteOnlyAndHot(t *testing.T) {
 	assert.NotContains(t, g.GetDocument(), "tts_google_key", "the cleared key is omitted")
 }
 
+// TestConfigServiceDiscordKeysAreWriteOnlyAndHot covers the discord
+// credentials through the running core (ADR-0019 §9, Code-ADR-0021,
+// Nachtrag 2026-10-29): the token is written to the file with 0600, Get
+// shows the placeholder instead of the value, a written-back document
+// with the placeholder keeps the token, and an explicitly empty value
+// clears it — all without a restart; the channel is a regular hot
+// setting.
+func TestConfigServiceDiscordKeysAreWriteOnlyAndHot(t *testing.T) {
+	t.Parallel()
+	a, path, token := hotCoreServer(t, &outPub{})
+	cfg := configClient(t, a, token)
+
+	// Without a token, the document has none.
+	g, err := cfg.Get(t.Context(), &v1alpha1.GetConfigRequest{})
+	require.NoError(t, err)
+	assert.NotContains(t, g.GetDocument(), "discord_token")
+	assert.Contains(t, g.GetHot(), "discord-token", "the token is a hot setting")
+	assert.Contains(t, g.GetHot(), "discord-voice-channel", "the channel is a hot setting")
+
+	// Set the token; the hot apply swaps the keys of the discord
+	// service on the next comparison (1 s). The channel stays unset, so
+	// the service stays inactive and no gateway connection is
+	// attempted.
+	u, err := cfg.Update(t.Context(), &v1alpha1.UpdateConfigRequest{
+		Document: "log_level: debug\ndiscord_token: discord-secret\n",
+	})
+	require.NoError(t, err)
+	assert.Contains(t, u.GetApplied(), "discord-token")
+	time.Sleep(2 * time.Second)
+
+	// The file holds the real token with mode 0600.
+	data, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(data), "discord-secret")
+	info, statErr := os.Stat(path)
+	require.NoError(t, statErr)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+
+	// Get shows the placeholder, never the secret.
+	g, err = cfg.Get(t.Context(), &v1alpha1.GetConfigRequest{})
+	require.NoError(t, err)
+	assert.Contains(t, g.GetDocument(), "discord_token: "+config.SecretPlaceholder)
+	assert.NotContains(t, g.GetDocument(), "discord-secret", "the secret is write-only")
+
+	// A written-back document with the placeholder keeps the token.
+	_, err = cfg.Update(t.Context(), &v1alpha1.UpdateConfigRequest{Document: g.GetDocument()})
+	require.NoError(t, err)
+	data, readErr = os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(data), "discord-secret")
+	assert.NotContains(t, string(data), config.SecretPlaceholder)
+
+	// An explicitly empty value clears the token.
+	_, err = cfg.Update(t.Context(), &v1alpha1.UpdateConfigRequest{
+		Document: "log_level: debug\ndiscord_token: \"\"\n",
+	})
+	require.NoError(t, err)
+	time.Sleep(2 * time.Second)
+	g, err = cfg.Get(t.Context(), &v1alpha1.GetConfigRequest{})
+	require.NoError(t, err)
+	assert.NotContains(t, g.GetDocument(), "discord_token", "the cleared key is omitted")
+}
+
 // TestConfigServiceReadOnlyInDaemonMode checks that the daemon mode serves
 // the document as read-only (roadmap 6.5.2).
 func TestConfigServiceReadOnlyInDaemonMode(t *testing.T) {
