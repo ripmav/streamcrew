@@ -50,7 +50,7 @@
 
 ### Phase 7 (Overlays) bzw. Web-Track
 
-- [ ] S8 – **Niedrig** – Scope `overlay` zählt als `read` und darf personenbezogene Daten und alle Command-Definitionen lesen.
+- [ ] S8 – **Niedrig** – Scope `overlay` zählt als `read` und darf personenbezogene Daten und alle Command-Definitionen lesen. *Seit 2026-10-29 Teil von 341-6c in [`review-stack-343-2026-10-28.md`](review-stack-343-2026-10-28.md) (WP2): Overlay-Tokens stehen in OBS-URLs, der Scope öffnet künftig nur den Overlay-Server.*
 - [ ] S9 – **Niedrig** – Eigener CORS/CSRF-Handler statt `http.CrossOriginProtection`; Same-Origin-POSTs werden bei leerer Allowlist mit 403 abgelehnt.
 
 ### Phase 11 (Härtung, API `v1`)

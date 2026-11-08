@@ -6,7 +6,7 @@
 | **Datum** | 2026-09-29 |
 | **Entscheidung durch** | Projektinhaber (ripmav) |
 | **Bezug** | [ADR-0003](0003-betriebsmodi.md), [ADR-0010](0010-api-protokoll.md), [ADR-0011](0011-keine-telemetrie.md), [ADR-0012](0012-persistenz.md); Plan §6.5, §6.9, §6.15, §13 (R10); Roadmap Phase 2.4, 6.2, 12 |
-| **Ergänzt durch** | [Code-ADR-0019](code/0019-host-rechte-in-der-startkonfiguration.md): Einstellungen zu Punkt 3 und 4 (`--grant`, `--revoke`, `--file-root`, `--outbound-allow`), ohne Neustart aus der Konfigurationsdatei nachgeladen; `host:input` ist bis zum Agent in keinem Modus an |
+| **Ergänzt durch** | [Code-ADR-0019](code/0019-host-rechte-in-der-startkonfiguration.md): Einstellungen zu Punkt 3 und 4 (`--grant`, `--revoke`, `--file-root`, `--outbound-allow`), ohne Neustart aus der Konfigurationsdatei nachgeladen; `host:input` ist bis zum Agent in keinem Modus an; [ADR-0019](0019-overlay-architektur.md) §1: Overlay-Endpunkte verlangen einen Token mit dem Scope `overlay` (Punkt 6), und dieser Scope öffnet nur den Overlay-Server, nicht die API (Punkt 5) |
 
 *Entwurf nach Roadmap Phase 2.4. Das endgültige Sicherheitsmodell mit Bedrohungsanalyse folgt in Phase 11 und bestätigt oder ersetzt dieses ADR.*
 

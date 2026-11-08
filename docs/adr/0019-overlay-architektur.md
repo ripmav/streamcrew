@@ -33,7 +33,14 @@ Entscheidende Eingangsgrößen:
 ### 1. Server
 
 - Der Overlay-Server ist ein zweiter `http.Server` neben dem API-Server (`internal/httpserver`), als eigene Supervisor-Runnable **ohne `critical`-Flag**: Ein Ausfall tötet die Streamcrew-App nicht, die Haupt-API bleibt erreichbar (B1).
-- Konfiguration: `overlay-listen` (Default `127.0.0.1:8742`; im Server-Modus `:8742`, damit OBS auf einem anderen Rechner per URL/Reverse-Proxy zugreifen kann) und `overlay-token` (leer = kein Token; gesetzt = Page, WebSocket und Medien-URLs verlangen den abgleichenden Wert als Query-Parameter `token`, sonst 401; Neustart erforderlich, B1, B5). Port 8741 ist bereits durch die Auth-Loopback-URL belegt.
+- Konfiguration: `overlay-listen` (Default `127.0.0.1:8742`; im Server-Modus `:8742`, damit OBS auf einem anderen Rechner per URL/Reverse-Proxy zugreifen kann; Neustart erforderlich, B1). Port 8741 ist bereits durch die Auth-Loopback-URL belegt.
+- **Zugriffsschutz** (B5; geändert 2026-10-29, Review 341-6): Die Overlay-Endpunkte nutzen die API-Tokens des Profils aus [ADR-0013](0013-sicherheitsmodell.md) §5, keinen eigenen Token in der Startkonfiguration (`overlay-token` entfällt).
+  - Page, WebSocket und Medien-URLs nehmen den Token als Query-Parameter `token`. Gültig ist nur ein Token mit dem Scope `overlay`. Andere Scopes (auch `admin`) öffnen den Overlay-Server nicht, damit kein starker Token in einer OBS-URL landet.
+  - **Der Scope `overlay` öffnet nur Overlay-Seite, WebSocket und Medien, nie die API.** Er ist kein `read`-Scope: Ein Token aus einer OBS-URL steht in Szenen-Exporten, Screenshots und beim Bildschirm-Teilen und darf deshalb weder personenbezogene Daten noch Command-Definitionen lesen (behebt S8 aus [`open-findings-2026-10-26.md`](../reviews/open-findings-2026-10-26.md)). Ein Token, der nur `overlay` trägt, bekommt von der API 403.
+  - Ohne Token ist der Zugriff nur erlaubt, wenn alles drei gilt: Desktop- oder Daemon-Modus, `overlay-listen` bindet ausschließlich Loopback, und der `Host`-Header der Anfrage nennt einen Loopback-Namen (`localhost`, `127.0.0.1`, `[::1]`, jeweils mit beliebigem Port). Sonst antwortet der Server ohne gültigen Token mit 401.
+  - **DNS-Rebinding** (Review 341-7): Die `Host`-Prüfung verhindert, dass eine fremde Website, deren Name auf `127.0.0.1` zeigt, im Browser des Streamers den Overlay-Zustand oder Dateien unter `/media/` (einschließlich der `file-root`-Wurzeln) liest. Die Origin-Prüfung des WebSockets allein hilft dagegen nicht, weil nach dem Rebinding Origin und Host übereinstimmen. Mit gültigem Token gilt die `Host`-Prüfung nicht, damit OBS auf einem anderen Rechner über einen beliebigen Namen zugreifen kann.
+  - Ein mitgeschickter, aber ungültiger oder widerrufener Token ergibt immer 401.
+  - Overlay-Tokens entstehen wie alle Tokens mit `streamcrew token create --scope overlay` bzw. über die Token-API; ein Widerruf wirkt sofort, auch für offene WebSockets.
 - Routen:
   - `GET /overlay/{id}` — eingebettete Overlay-Runtime (HTML+JS), `Cache-Control: no-store` (B3). `{id}` ist die Endpunkt-`id` aus den Overlay-Einstellungen; `default` existiert immer, unbekanntes `{id}` antwortet mit 404 (B2).
   - `GET /overlay/{id}/ws` — WebSocket-Upgrade, `coder/websocket` (B3), Token wie oben (B5).
@@ -42,7 +49,7 @@ Entscheidende Eingangsgrößen:
 
 ### 2. Web-Client (Runtime)
 
-- Neue TypeScript-Quellen in `internal/overlay/runtime/src/`, Bundle nach Code-ADR-0016: `go:generate` mit **gepinntem** `go run github.com/evanw/esbuild/cmd/esbuild@v0.28.2`, Checked-in-Artefakt in `internal/overlay/web/` (Singlefile, `--minify`, `--target=es2020` — der OBS-Browser ist modern genug), `go:embed` im Server, CI-Regen-Check per `git diff --exit-code`.
+- Neue TypeScript-Quellen in `internal/overlay/runtime/src/`, Bundle nach Code-ADR-0016 §2 über die Go-API `github.com/evanw/esbuild/pkg/api` (geändert 2026-10-29, Review 341-11; vorher die CLI per `go run …/cmd/esbuild@v0.28.2`): `go:generate` startet ein kleines Generator-Programm im Paket `internal/overlay`, das `api.Build` mit den Optionen Singlefile, Minify, `es2020` (der OBS-Browser ist modern genug) und `iife` aufruft. Die esbuild-Version ist über `go.mod` gepinnt und wird von Renovate aktualisiert; esbuild wird nur vom Generator importiert und landet nicht im Core-Binary. Checked-in-Artefakt in `internal/overlay/web/`, `go:embed` im Server, CI-Regen-Check per `git diff --exit-code`.
 - Eine Server-Route liefert den Bundle-Byte-String; pro `{id}` wird derselbe Bundle mit einer kleinen JSON-Injektion (`window.__OVERLAY__ = {id, endpointName}`) individualisiert.
 - **Kein Framework** (kein React/Vue): Vanilla TS + CSS; die Overlay-Runtime ist ein stateless Renderer für Server-Zustand, Komplexität bleibt minimal.
 
@@ -76,22 +83,25 @@ Client → Server:
 - Items sind serverseitig registrierte Objekte mit `itemId`, `kind` (`text|image|video|audio|html|youtube|clip|timer|emote_effect`), Inhalt, Ziel-Endpunkt, Position, Ebene, Dauer, Animation, `source` (Medienpfad oder Embed-URL) (B13).
 - **Positionen und Ebenen** (B9): `simple` (neun benannte Bildschirmpunkte: z. B. `top-left`, `top`, `center`), `percent` (`{x, y}` 0–100), `pixels` (`{x, y}`), `random` (Zufallspunkt im Pixel-Bereich, vom Server beim Zeigen gewürfelt). Ebenen sind ganze Zahlen; höhere liegen darüber.
 - **Animationen** (B10): `none|fade|slide-left|slide-right|slide-up|slide-down|pop`, eigene Dauer in Millisekunden (Default 300); die Animation läuft als CSS-Übergang in der Runtime.
-- **HTML-Items** (B12): in einem sandboxed iframe ohne Skript- und ohne same-origin-Zugriff; das HTML darf nur relative `/media/`- und absolute HTTPS-URLs referenzieren (Q2, Q6).
+- **HTML-Items** (B12): in einem sandboxed iframe (`srcdoc`) ohne Skript- und ohne same-origin-Zugriff; das HTML darf nur relative `/media/`- und absolute HTTPS-URLs referenzieren (Q2, Q6). Ergänzt 2026-10-29 (Review 341-9):
+  - **Medien mit Token:** Bevor die Runtime das HTML in `srcdoc` setzt, hängt sie an jede URL, die mit `/media/` beginnt (`src`, `href`, `poster`, `srcset`), den `token` der Seite an (derselbe Helper wie für WebSocket und Medien-Items). Ohne Token bleiben die URLs unverändert.
+  - **Durchsetzung per CSP:** Die Runtime stellt dem HTML ein `<meta http-equiv="Content-Security-Policy">` voran: `default-src 'none'; img-src <overlay-origin> https:; media-src <overlay-origin> https:; style-src 'unsafe-inline' <overlay-origin> https:; font-src <overlay-origin> https:`. `<overlay-origin>` ist der Origin der Overlay-Seite (der iframe hat einen opaken Origin, `'self'` würde nicht greifen). Skripte sind ohnehin durch die Sandbox gesperrt.
 - **YouTube/Clips** (B15): laden als Embeds in der Browserquelle (YouTube: Embed-Frame mit `youtube-nocookie.com`; Clip: Clip-Seite in einem Frame); brechen sie ohne Netz, bleibt das Overlay ansonsten funktionsfähig.
 - **Laufzeit** (B11): ein Item verschwindet nach seiner Dauer (Default 10 s); der Server sendet `item.remove` und streicht es aus dem aktiven Satz. Ton- und Video-Items ohne gesetzte Dauer laufen bis zur Wiedergabe (`item.ended`, B14), maximal bis zum Zeitlimit der Aktion (B46).
 
 ### 5. Widgets (B19–B23; Arten in 7.2/7.5)
 
 - **Definition** in den Einstellungen, neue Sektion `overlay`: `endpoints` (Liste, reservierte ID `default`, je Endpunkt `id` und `name`) und `widgets` (Liste: `id` eindeutig im Profil, `kind`, `name`, `endpoint` (Default `default`), `visible`, Position (B9), `config` JSON) (B2, B19).
-- **Laufzeit-Zustand** (mutable Daten wie Ziel-Fortschritt, Timer-Werte, Boss-HP, Rad-Status) in der Store-Tabelle `overlay_widget_state` (ein JSON-Dokument je Widget, Migration ab 0021); ein Neustart ändert nichts am Zustand (B20).
-- **Widget-„Commands"** des Originals werden zu **Bus-Ereignissen** mit Details, auf die Event-Commands reagieren (Abweichung A2): `overlay.goal.progress/segment_completed`, `overlay.timer.adjusted/completed`, `overlay.boss.damage/heal/new`, `overlay.wheel.spun`, `gamequeue.joined/left/position`, `discord.voice.joined/left` — alle in `eventtype.All()` und damit von Event-Commands aus auslösbar (B23).
+- **Laufzeit-Zustand** (mutable Daten wie Ziel-Fortschritt, Timer-Werte, Boss-HP, Rad-Status) in der Store-Tabelle `overlay_widget_state` (ein JSON-Dokument je Widget, Migration `0023_overlay_widget_state`); ein Neustart ändert nichts am Zustand (B20).
+- **Widget-Wirkungen** publizieren **Bus-Ereignisse** mit Details, auf die Event-Commands reagieren: `overlay.goal.progress/segment_completed`, `overlay.timer.adjusted/completed`, `overlay.boss.damage/heal/new`, `overlay.wheel.spun`, `gamequeue.joined/left/position`, `discord.voice.joined/left` — alle in `eventtype.All()` und damit von Event-Commands aus auslösbar (B23).
+- **Widget-Commands** (geändert 2026-10-29, Review 341-12): `goal` und `wheel` behalten zusätzlich die Widget-Commands des Originals (Segment-Command bzw. `segment_completed`, Outcome-Command bzw. `default_command`; B25, B33). Die Widget-`config` nennt sie per Command-Name; der Core startet sie über die Engine (`Engine.Start`) mit dem auslösenden Nutzer und den Ereignis-Details. Das Bus-Ereignis wird in jedem Fall publiziert, ein Widget-Command ersetzt es nicht (Abweichung A2).
 - Widget-Rendering ist client-seitig (TS-Module pro `kind`); der Server hält nur den Zustand und sendet `widget.*`-Meldungen (B21, B22).
 
 ### 6. TTS-Provider (B41)
 
 - Provider: `browser` (Default, Web Speech API im Overlay-Client, über `tts.speak`), `google`, `azure`, `piper` (externer Prozess, `host:process` erforderlich).
 - Server-seitige Provider schreiben die Audiodatei unter `<data-dir>/<profil>/media/generated/` und zeigen sie als `audio`-Item auf dem Default-Endpunkt — damit ist das MIU-Verhalten „TTS über den Streamer-PC" äquivalent (Q21).
-- API-Keys über Umgebungsvariablen (`STREAMCREW_TTS_GOOGLE_KEY`, `STREAMCREW_TTS_AZURE_KEY`/`_REGION`), nie in Logs; fehlender Key ist eine klare Fehlermeldung der Aktion (B54, Code-ADR-0005).
+- API-Keys als Schlüssel der Startkonfiguration über kong ([Code-ADR-0005](code/0005-konfiguration.md)): Flag, Konfigurationsdatei oder die Umgebungsvariable, die `kong.DefaultEnvars` mit dem Präfix `STREAMCREW` ableitet: `tts-google-key`, `tts-azure-key`, `tts-azure-region` (Env `STREAMCREW_TTS_GOOGLE_KEY`, `STREAMCREW_TTS_AZURE_KEY`, `STREAMCREW_TTS_AZURE_REGION`; geändert 2026-10-29, Review 345-X2). Kein Paket liest die Umgebung selbst (`os.Getenv`); die Werte erscheinen nie in Logs und nie im Klartext in der Config-API (write-only), lassen sich ohne Neustart ändern ([Code-ADR-0021, Nachtrag 2026-10-29](code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-29-integrations-schlüssel-sind-hot)), und ein fehlender Key ist eine klare Fehlermeldung der Aktion (B54).
 - Browser-Provider benötigt keinen Key; `tts.ended` ackt den Client.
 
 ### 7. OBS-Steuerung (B42–B44)
@@ -113,7 +123,7 @@ Client → Server:
 
 ### 9. Discord Reactive Voice (B37, P3)
 
-- Eigener Gateway-Bot (`discordgo`), **nicht** die Twitch-Verbindung: `discord-token` (Env `STREAMCREW_DISCORD_TOKEN`) + `discord-voice-channel` (Kanal-ID) in der Config; ohne Token bleibt der Dienst inaktiv (Info-Log).
+- Eigener Gateway-Bot (`discordgo`), **nicht** die Twitch-Verbindung: `discord-token` (Env `STREAMCREW_DISCORD_TOKEN`) + `discord-voice-channel` (Kanal-ID) als Schlüssel der Startkonfiguration über kong ([Code-ADR-0005](code/0005-konfiguration.md)): Flag, Konfigurationsdatei oder die Umgebungsvariable, die `kong.DefaultEnvars` mit dem Präfix `STREAMCREW` ableitet (geändert 2026-10-29, Review 345-X2: kein eigenes `os.Getenv`; der Token erscheint weder in Logs noch im Klartext in der Config-API; Token und Kanal lassen sich ohne Neustart ändern, der Dienst verbindet dann neu, [Code-ADR-0021, Nachtrag 2026-10-29](code/0021-on-the-fly-konfiguration.md#nachtrag-2026-10-29-integrations-schlüssel-sind-hot)); ohne Token bleibt der Dienst inaktiv (Info-Log).
 - Voice-Join/Leave wird über `VOICE_STATE_UPDATE` im Gateway erkannt (B37); daraus entstehen die Events `discord.voice.joined/left`.
 - **Keine Talking-Detection** (Abweichung A3): ohne Voice-Verbindung wird nicht erkannt, wer spricht.
 - Discord-Voice-Audio (eigene Bot-Voice) ist **out of scope** — die Roadmap verlangt nur Reaktivität auf Join/Leave + Belegung (Q20).
@@ -134,7 +144,7 @@ Client → Server:
 - **Contra:**
   - Zweiter `http.Server` = zweite Port-Konfiguration und ein zweiter Rebind-Pfad (akzeptabel, `internal/httpserver` liefert das Muster).
   - Die Overlay-Runtime ist ein neues TypeScript-Paket ohne UI-Framework; Widget-Rendering muss handgerollt werden (bewusster Trade-off gegen Framework-Overhead).
-  - Server-Modus hat keine Overlay-Medien ohne Reverse-Proxy (keine `host:fs`); `overlay-listen` = `:8742` + Doku-Notiz deckt den Fall.
+  - Im Server-Modus liefert der Overlay-Server keine Medien, solange `host:fs` nicht per `--grant` freigegeben ist ([Code-ADR-0019](code/0019-host-rechte-in-der-startkonfiguration.md)). Ein Reverse-Proxy ändert daran nichts; er betrifft nur den Zugriff von einem anderen Rechner, den `overlay-listen` = `:8742` plus Doku-Notiz abdeckt.
   - YouTube/Clip-Embeds brauchen im Browser-Pane Internet (B15); das ist inhärent und kein Bug.
 
 ## Abwägungen
@@ -147,6 +157,6 @@ Client → Server:
 
 ## Open Items
 
-- MP3-Decoding für den `local`-Audio-Sink (ADR-0020): Kandidat `github.com/dmarc/ito/mp3` — wird in 7.3 entschieden.
+- ~~MP3-Decoding für den `local`-Audio-Sink (ADR-0020): in 7.3 entscheiden.~~ Erledigt 2026-10-27: WAV-only, der damals genannte Kandidat existiert nicht ([ADR-0020, Nachtrag 2026-10-27](0020-audio-ausgabe.md#nachtrag-2026-10-27-umsetzung-73), Punkt 1).
 - Das OBS-Reconnect-Intervall (5 s) ist aus der MIU-Doku übernommen (Q25); Anpassbar über Config in späteren Phasen, falls nötig.
 - Browser-Pane-URL-Dokumentation (OBS-Einrichtung) gehört in `docs/usage.md`, mit der Umsetzung von 7.1.

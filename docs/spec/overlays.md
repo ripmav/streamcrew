@@ -35,21 +35,21 @@ anknüpfen (Phase 8).
 | B2 | Overlay-Endpunkte sind benannte Endpunkte im Profil (Settings-Sektion "overlay", Feld `endpoints`, je Endpunkt `id` und `name`). Die Id `default` existiert immer. Je Endpunkt gibt es genau eine URL der Form `http(s)://<host>:<port>/overlay/<id>`; unbekanntes `<id>` antwortet mit 404. | Q1 |
 | B3 | Die URL liefert die Overlay-Runtime (HTML+JS, eingebettet). Über `…/overlay/<id>/ws` verbindet sich die Runtime per WebSocket. Pakete sind JSON-Objekte `{type, data}` (ADR-0019). | Q1, Q5 |
 | B4 | Beim (Wieder-)Verbinden sendet der Server in dieser Reihenfolge: `hello` (Server-Version, Endpunkt, Serverzeit), `state.widgets` (alle sichtbaren Widgets des Endpunkts mit Zustand), dann die aktuell aktiven Items neu als `item.show`. Danach laufen nur noch Änderungen. | Q1, Q4 |
-| B5 | Ein optionaler Token schützt die Endpunkte: steht `overlay-token` in der Startkonfiguration, verlangen Page, WebSocket und Medien-URLs den abgleichen Wert als Query-Parameter `token`; abweichende oder fehlende Tokens antworten mit 401. Ohne gesetzten Token sind die Endpunkte offen. Die Endpunkte sind nur lesend. | Q1, Q5, Q6 |
+| B5 | Page, WebSocket und Medien-URLs nehmen einen API-Token des Profils mit dem Scope `overlay` als Query-Parameter `token` (ADR-0013 §5, ADR-0019 §1). Ohne Token sind die Endpunkte nur im Desktop- und Daemon-Modus bei reinem Loopback-Bind und mit einem `Host`-Header, der einen Loopback-Namen nennt, erreichbar (Schutz gegen DNS-Rebinding); sonst, bei einem Token ohne Scope `overlay` und bei einem ungültigen oder widerrufenen Token antworten sie mit 401. Der Scope `overlay` öffnet nur diese Endpunkte, nicht die API. Die Endpunkte sind nur lesend. | Q1, Q5, Q6 |
 | B6 | Medien (Bilder, Videos, Ton) werden nur aus freigegebenen Verzeichnissen ausgeliefert: dem Medien-Verzeichnis des Profils (`media`) und den freigegebenen Wurzeln (`file-root`). Die URL-Form ist `/media/<wurzel>/<pfad>`; die Lieferung nutzt `http.ServeContent` (Range-Requests) und korrekte MIME-Typen. Ohne das Recht `host:fs` (Server-Modus) liefert der Server keine Medien (404). | Q1, Q6 |
 | B7 | Die Runtime verbindet sich automatisch und wieder mit Backoff (1 s bis 30 s), wenn die Verbindung abreißt; nach der (Wieder-)Verbindung stellt sie sich mit `ready` vor und rendert den empfangenen Zustand. | Q1, Q4 |
 | B8 | Aufeinanderfolgende Items desselben Endpunkts, die sich zeitlich überlappen würden, blendet die Runtime versetzt ein (Batching): ein Item, das innerhalb von 500 ms nach dem Vorherigen gezeigt wird, startet 300 ms später als dieses. | Q5 |
 | B9 | Items und Widgets haben Position und Ebene: Positionen sind `simple` (neun Bildschirmpunkte), `percent` (x/y in Prozent), `pixels` (x/y in Pixeln) oder `random` (Zufallspunkt im Pixel-Bereich, vom Server beim Zeigen gewürfelt). Ebenen sind ganze Zahlen; höhere Zahlen liegen darüber. | Q2 |
 | B10 | Items haben Ein- und Ausblend-Animationen aus dem Satz `none`, `fade`, `slide-left`, `slide-right`, `slide-up`, `slide-down`, `pop` mit eigener Dauer (Millisekunden, Default 300). Die Animation läuft als CSS-Übergang in der Runtime. | Q2, Q5 |
 | B11 | Ein Item verschwindet nach seiner Laufzeit: der Server sendet `item.remove` nach der Dauer (Default 10 s) und streicht es aus dem aktiven Satz. Video- und Ton-Items ohne gesetzte Dauer laufen, bis die Wiedergabe endet (B14), maximal bis zum Zeitlimit der Aktion. | Q2 |
-| B12 | HTML-Items rendert die Runtime in einem sandboxed iframe ohne Skript- und ohne same-origin-Zugriff; das HTML darf nur relative `/media/`- und absolute HTTPS-URLs referenzieren. | Q2, Q6 |
+| B12 | HTML-Items rendert die Runtime in einem sandboxed iframe ohne Skript- und ohne same-origin-Zugriff; das HTML darf nur relative `/media/`- und absolute HTTPS-URLs referenzieren. Eine Content-Security-Policy im iframe setzt das durch, und relative `/media/`-URLs bekommen den `token` der Seite (B5, ADR-0019 §4). | Q2, Q6 |
 
 ### Items (7.2)
 
 | ID | Regel | Quellen |
 |---|---|---|
 | B13 | Item-Kinds: `text` (Text, optionaler Max-Width für Zeilenumbruch), `image` (Pfad oder URL, optionale Breite/Höhe, nur eine Angabe → proportionale Skalierung), `video` (Pfad oder URL, optionale Dauer, Startzeit in Sekunden, Lautstärke 0–100, Schleife), `audio` (Pfad oder URL, Dauer, Lautstärke), `html` (eigenes HTML), `youtube` (URL, Breite und Höhe zwingend, Startzeit, Lautstärke), `clip` (Twitch-Clip: URL oder letzter Clip eines Users), `timer` (Dauer, aufwärts oder abwärts zählen, Anzeigeformat), `emote_effect` (7.5). | Q2 |
-| B14 | Ton- und Video-Items melden ihr Wiedergabe-Ende: die Runtime sendet `item.ended`, wenn der Browser die Wiedergabe beendet hat. Die Core-Aktion meldet das Ende an die Engine mit `engine.Run.PlaybackEnds` (B43); ohne Meldung zählt die Engine vom Ende der Aktion. | Q2, Q7 |
+| B14 | Ton- und Video-Items melden ihr Wiedergabe-Ende: die Runtime sendet `item.ended`, wenn der Browser die Wiedergabe beendet hat. Die Core-Aktion meldet das Ende an die Engine mit `engine.Run.PlaybackEnds` ([`command-engine.md`](command-engine.md) B43); ohne Meldung zählt die Engine vom Ende der Aktion. | Q2, Q7 |
 | B15 | `youtube` und `clip` laden als Embeds in der Browserquelle (YouTube: Embed-Frame; Clip: Clip-Seite in einem Frame). Brechen sie ohne Netz, bleibt das Overlay ansonsten funktionsfähig. | Q2 |
 | B16 | Der Clip-Item zeigt die Dauer des Clips als Detail im Bus-Ereignis, falls ein Event-Command sie braucht (Analogon zu `$twitchclipduration`, [Interop]). | Q2 |
 | B17 | `timer` zählt als Item eine Dauer abwärts (Standard) oder aufwärts und zeigt das Format `DD`, `HH`, `hh`, `MM`, `mm`, `SS`, `ss` (kumuliert bzw. Rest, B28). | Q2, Q8 |
@@ -63,7 +63,7 @@ anknüpfen (Phase 8).
 | B20 | Der veränderliche Zustand eines Widgets (Fortschritt, Timer, Boss, Rad, Credits, Queue) speichert der Core im Profil (`overlay_widget_state`, ein JSON-Dokument je Widget). Ein Neustart ändert nichts am Zustand; ein Neuaufbau des Profils startet bei Default. | Q3, Q8, Q10 |
 | B21 | `widget.show`/`widget.hide` (Aktion oder Profil-Änderung) schalten ein Widget ein/aus. Ein ausgeblendetes Widget läuft nicht mit (kein Tracking, keine Ereignisse) und wird nicht gesendet. | Q3 |
 | B22 | `widget.update` ändert die Anzeige- und Zustandsdaten eines Widgets; die Runtime zeigt den neuen Zustand ohne Reload. | Q3 |
-| B23 | Statt der "Widget Commands" des Originals publiziert der Core für jede Widget-Wirkung ein Bus-Ereignis mit Details; Event-Commands reagieren darauf (Abweichung A2). | Q3, Q8, Q10–Q13 |
+| B23 | Für jede Widget-Wirkung publiziert der Core ein Bus-Ereignis mit Details; Event-Commands reagieren darauf. Zusätzlich kennen `goal` (B25) und `wheel` (B33) wie das Original eigene Widget-Commands: Die Widget-`config` nennt sie per Command-Name (wie die Kanalpunkte-Belohnungen), und der Core startet sie über die Engine mit dem auslösenden Nutzer und den Details des Ereignisses. Das Ereignis wird immer publiziert, auch wenn ein Widget-Command läuft (Abweichung A2). | Q3, Q8, Q10–Q13 |
 
 ### Widgets: Arten (7.2 P1, 7.5 P2)
 
@@ -122,7 +122,7 @@ anknüpfen (Phase 8).
 | ID | Original | streamcrew | Begründung |
 |---|---|---|---|
 | A1 | Widget- und Endpunkt-Editor in der Desktop-App | Kopflos definiert über die Settings-Sektion und (später) die API; Editoren kommen mit D5/W4 | Kein GUI-Pfad in der Phase 7; die Sektion ist der gleiche Datenpfad |
-| A2 | "Widget Commands" (Commands, die ein Widget direkt ausführt) | Bus-Ereignisse (`overlay.*`), auf die Event-Commands reagieren | Gleiches Verhalten über die bestehende Event-Command-Mechanik, ohne zweiten Trigger-Pfad |
+| A2 | "Widget Commands" (Commands, die ein Widget direkt ausführt) | Widget-Commands bleiben für `goal` und `wheel` (B25, B33); zusätzlich publiziert jede Widget-Wirkung ein Bus-Ereignis (`overlay.*`), auf das Event-Commands reagieren (B23). Für die übrigen Widgets gibt es nur die Ereignisse. | Entschieden 2026-10-29 (Review 341-12): Die Widget-Commands bleiben, weil sie zur Widget-Konfiguration gehören (je Segment bzw. Outcome ein Command) und sich als Event-Command nur mit Bedingungen auf die Details nachbauen ließen; die Ereignisse erlauben weitere Reaktionen ohne Änderung am Widget. |
 | A3 | Discord Reactive Voice reagiert auf Sprechaktivität im Voice-Kanal | Gateway-Bot ohne Voice-Verbindung: nur Kanal-Mitgliedschaft (join/leave) | Opus-Voice-Decoding ist außerhalb des P3-Umfangs; die Ereignisse und das Widget decken die sichtbare Basis ab |
 | A4 | `Run Widget Function` (JS-Funktion des Widgets aufrufen) | entfällt | Widgets tragen kein eigenes ausführbares JS (Sandbox, B12); die Operation gibt eine klare Fehlermeldung |
 | A5 | Label-Datum/Zeit wird pro Sekunde im Browser rendert, Label-Texte minutengleich neu ausgewertet | Label-Text wird serverseitig (30 s + Ereignis), Datum/Zeit clientseitig pro Sekunde | Weniger Draht-Verkehr; gleiche Anzeige |
@@ -139,14 +139,15 @@ anknüpfen (Phase 8).
 - [ ] B13–B18: jedes Item-Kind rendert; Ton-/Video-Items melden `item.ended`; YouTube/Clip als Embed
 - [ ] B19–B23: Widgets aus der Sektion erscheinen auf ihrem Endpunkt; `show`/`hide`/`update` wirken; der Zustand überlebt einen Neustart (persistent_timer, goal, boss, queue)
 - [ ] B24–B37: jedes Widget-Kind zeigt live aktuelle Daten (Feed, Chat, Sitzungsstatistik, Twitch-Polls); die Ereignis-Wirkungen publizieren die `overlay.*`/`gamequeue.*`/`discord.voice.*`-Ereignisse mit Details
-- [ ] B38–B42: die Actions `overlay`, `sound`, `text_to_speech`, `streaming_software` sind im Typkatalog mit Schema; `PlaybackEnds` erreicht die Engine (B43-Mindestabstand der Begrüßungen)
+- [ ] B38–B42: die Actions `overlay`, `sound`, `text_to_speech`, `streaming_software` sind im Typkatalog mit Schema; `PlaybackEnds` erreicht die Engine (Mindestabstand der Begrüßungen, [`command-engine.md`](command-engine.md) B43)
 - [ ] B43–B44: OBS-Verbindung mit Reconnect; alle `obs.*`-Ereignisse laufen als Bus-Ereignisse
 - [ ] M3-Exit: eine Browserquelle zeigt Alerts (Follow, Abo, Cheer) mit Bild, Ton und TTS; ein Ziel-Widget aktualisiert live; ein Command wechselt die OBS-Szene
 
 ## Offene Fragen
 
-- Lokale Audio-Dekodierung: MP3-Dekoder in reinem Go (Pfad in 7.3 entscheiden; WAV ist sicher); CGO-Freundlichkeit von oto unter Linux zu verifizieren.
-- Der Endpunkt-Token soll später (D5/W4) über die API erzeugen werden; bis dahin ist er Startkonfiguration.
+- ~~Lokale Audio-Dekodierung: MP3-Dekoder in reinem Go; CGO-Freundlichkeit von oto unter Linux.~~ Erledigt 2026-10-27: WAV-only, oto/v3 braucht kein cgo ([ADR-0020, Nachtrag](../adr/0020-audio-ausgabe.md#nachtrag-2026-10-27-umsetzung-73), Punkte 1 und 4).
+- Widget-Commands für `persistent_timer` und `stream_boss`: Das Original kennt sie (Q8, Q10); diese Spezifikation definiert sie noch nicht, bis dahin reagieren Event-Commands auf `overlay.timer.*` und `overlay.boss.*` (B23, A2).
+- ~~Der Endpunkt-Token soll später über die API erzeugt werden.~~ Entschieden 2026-10-29: Die Endpunkte nutzen API-Tokens mit dem Scope `overlay` (B5); sie entstehen über `streamcrew token create` und die Token-API.
 
 ## Quellen
 

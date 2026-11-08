@@ -19,7 +19,7 @@ Entscheidungsgrundlage: Arbeitsauftrag des Projektinhabers vom 2026-10-27 (auton
 | `engine.Run.PlaybackEnds` | Existiert (B43): die Aktion meldet das Ende der Wiedergabe, die Engine nutzt es für den Mindestabstand der Begrüßungen |
 | `internal/emote` | Emote-Kataloge (Twitch/BTTV/FFZ) mit Cache und Bild-URLs |
 | `internal/domain/feed` | Event-Feed je Profil (`LatestFeed`, 200 Einträge) mit den Typen Follow, Sub, Resub, Geschenk, Massengeschenk, Raid, Cheer |
-| `internal/store` | goose-Migrationen; letzte Tabelle `user_answer` (0020) |
+| `internal/store` | goose-Migrationen; zum Planungsstand die letzte `0022_api_tokens`, Phase 7 ergänzt `0023_overlay_widget_state` (korrigiert 2026-10-29, Review 341-10) |
 | `internal/capability` | `host:fs`, `host:process`, `host:audio`, `net:outbound`, `script` je Betriebsmodus |
 | `coder/websocket` | Bereits Abhängigkeit (EventSub) — wird für die Overlay-WS-Endpunkte wiederverwendet |
 | Build-Werkzeuge | esbuild-Konvention steht in Code-ADR-0016 (gepinnte Version per `go generate`, eingechecktes Bündel, CI-Check) |
@@ -56,15 +56,16 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
   sendet `hello`, `state.widgets` und die aktiven Items neu. Batching läuft in der Runtime
   (aufeinanderfolgende Items versetzt einblenden).
 - **Runtime** (ADR-0019): neu geschriebenes TypeScript in `internal/overlay/runtime/src`,
-  gebündelt per `go generate` mit esbuild (CLI per `go run …@v0.28.2`, Code-ADR-0016), eingecheckt
+  gebündelt per `go generate` mit esbuild (Go-API `pkg/api` über einen Generator, Code-ADR-0016 §2; bis 2026-10-29 die CLI per `go run …@v0.28.2`, Review 341-11), eingecheckt
   nach `internal/overlay/web`, per `go:embed` ausgeliefert. Kein Node.js.
 - **Widgets**: definiert in der Settings-Sektion "overlay" (je Widget `id`, `kind`, `endpoint`,
   Position, Konfiguration); der veränderliche Zustand (Goal-Fortschritt, Timer, Boss, Rad,
   Credits) liegt in der Store-Tabelle `overlay_widget_state` (JSON je Widget-ID).
-- **Widget-Commands des Originals** werden zu Ereignissen auf dem Bus (`overlay.goal.progress`,
-  `overlay.wheel.spun`, …), auf die Event-Commands reagieren (Abweichung A2 in der Spezifikation).
+- **Widget-Wirkungen** publizieren Ereignisse auf dem Bus (`overlay.goal.progress`,
+  `overlay.wheel.spun`, …), auf die Event-Commands reagieren. `goal` und `wheel` behalten
+  zusätzlich die Widget-Commands des Originals (Abweichung A2, geändert 2026-10-29, Review 341-12).
 - **Medien** (ADR-0020): Audio-Sinks `overlay` (Default, spielt in der Browserquelle) und
-  `local` (Build-Tag `localaudio`, `ebitengine/oto/v3`, Geräteauswahl); `agent` ist vorbereitet
+  `local` (Build-Tag `localaudio`, `ebitengine/oto/v3`, System-Standardgerät ohne Geräteauswahl); `agent` ist vorbereitet
   (Port), die Umsetzung mit Phase 9.6. TTS-Provider: `browser` (Web Speech API im Overlay,
   Default), `google`, `azure`, `piper` (externer Prozess).
 - **OBS** (7.4): `internal/obs` mit eigenem obs-websocket-v5-Client auf `github.com/coder/websocket` (Code-ADR-0015; die `goobs`-Kandidatin fällt an der Lizenz-Allowlist für `hashicorp/logutils` (MPL-2.0, Code-ADR-0001) weg);
@@ -120,7 +121,7 @@ Fehlt also komplett: Overlay-Server, Runtime, Items, Widgets, Medien (Audio/TTS)
 - [x] `internal/media`: Sink-Interface, `overlay`-Sink (Audio-Item auf dem Default-Endpunkt),
   `local`-Sink (Build-Tag `localaudio`, oto/v3; **Abweichung:** keine Geräteauswahl —
   oto/v3 kennt keine Geräte-API, System-Defaultgerät, ADR-0020 offener Punkt; **Abweichung:**
-  nur 16-Bit-PCM-WAV — der MP3-Kandidat `dmarc/ito/mp3` ist tot (404), ADR-0020 §1),
+  nur 16-Bit-PCM-WAV — der MP3-Kandidat existiert nicht (404), ADR-0020 §1),
   `agent`-Port vorbereitet (Stub bis 9.6)
 - [x] Sound-Action: Typ `sound` (file, volume, sink, waitForFinish), `VisualAudio`,
   `PlaybackEnds` (nur mit `waitForFinish` — ohne wartet die Aktion nicht, und die Engine
