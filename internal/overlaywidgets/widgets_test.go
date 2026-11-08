@@ -96,7 +96,7 @@ type fixture struct {
 
 // newFixture returns the fixture with the section and starts the service;
 // it runs inside synctest.Test.
-func newFixture(t *testing.T, sec settings.Overlay) *fixture {
+func newFixture(t *testing.T, sec settings.Overlay, opts ...overlaywidgets.Option) *fixture {
 	t.Helper()
 	f := &fixture{
 		t:        t,
@@ -129,7 +129,7 @@ func newFixture(t *testing.T, sec settings.Overlay) *fixture {
 		DiscordOccupants: f.discordOccupants,
 		Commands:         f.commands,
 		Logger:           slog.New(slog.NewTextHandler(f.logOut, nil)),
-	}, overlaywidgets.WithLabelTick(time.Second))
+	}, append([]overlaywidgets.Option{overlaywidgets.WithLabelTick(time.Second)}, opts...)...)
 	require.NoError(t, err)
 	ov.SetStateProvider(f.svc.StateForSync)
 	f.runWG.Go(func() {
@@ -1253,6 +1253,219 @@ func TestWidgetPersistentTimer(t *testing.T) {
 	})
 }
 
+// TestPersistentTimerConcurrentAccessCoversB29 covers B29 and Review
+// 347-13: the bus goroutine and the actions share the persistent timer
+// state; 100 parallel AddToPersistentTimer calls plus state syncs grow
+// the frozen time by exactly their sum without a data race.
+func TestPersistentTimerConcurrentAccessCoversB29(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := map[string]any{"initial": "10m"}
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("t1", overlaywidgets.KindPersistentTimer, cfg),
+		}})
+		defer f.stop()
+		f.attach(t)
+		w := widget("t1", overlaywidgets.KindPersistentTimer, cfg)
+
+		var wg sync.WaitGroup
+		for range 100 {
+			wg.Go(func() {
+				if err := f.svc.AddToPersistentTimer(f.ctx, "t1", time.Second); err != nil {
+					t.Errorf("AddToPersistentTimer: %v", err)
+				}
+				f.svc.StateForPersistentTimer(f.ctx, w)
+			})
+		}
+		wg.Wait()
+		synctest.Wait()
+
+		// 10m plus 100 seconds, still frozen (Review 347-13).
+		st, ok := f.svc.StateForPersistentTimer(f.ctx, w).(map[string]any)
+		require.True(t, ok, "the state is not a map")
+		assert.Equal(t, true, st["paused"])
+		assert.EqualValues(t, 700000, st["pausedMs"])
+	})
+}
+
+// TestAddToTimerDispatchesByKindCoversB29 covers B26, B29 and Review
+// 347-2: add_to_timer reaches the persistent timer through the same
+// operation as the timer, and a widget of another kind is a clear error.
+func TestAddToTimerDispatchesByKindCoversB29(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("t1", overlaywidgets.KindTimer, map[string]any{"duration": "2m"}),
+			widget("p1", overlaywidgets.KindPersistentTimer, map[string]any{"initial": "10m"}),
+			widget("g1", overlaywidgets.KindGoal, goalConfig()),
+		}})
+		defer f.stop()
+		// The persistent timer runs with a deadline in the future.
+		f.seedState("p1", fmt.Sprintf(`{"deadline_ms":%d,"paused":false,"completed":false,"was_visible":true}`, time.Now().Add(10*time.Minute).UnixMilli()))
+		f.attach(t)
+
+		lastMilli := func(t *testing.T, widgetID, key string) float64 {
+			t.Helper()
+			ups := f.updates(t, widgetID)
+			require.NotEmpty(t, ups)
+			var st map[string]any
+			require.NoError(t, json.Unmarshal([]byte(ups[len(ups)-1]), &st))
+			v, ok := st[key].(float64)
+			require.True(t, ok, "no %s in the state of %s", key, widgetID)
+			return v
+		}
+
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+
+		// add_to_timer on the persistent timer extends the deadline and
+		// publishes overlay.timer.adjusted (B29, B38).
+		base := lastMilli(t, "p1", "deadline")
+		require.NoError(t, f.svc.AddToTimer(f.ctx, "p1", time.Minute))
+		synctest.Wait()
+		assert.Equal(t, base+60000, lastMilli(t, "p1", "deadline"))
+		eff := f.effectsList()
+		last := eff[len(eff)-1]
+		assert.Equal(t, eventtype.OverlayTimerAdjusted, last.typ)
+		assert.Equal(t, &eventtype.OverlayTimer{AmountChanged: 60}, last.payload.Details.OverlayTimer)
+
+		// The operation of the timer widget is unaffected (B26): the
+		// fresh timer is paused and the negative amount shortens the
+		// frozen time.
+		require.NoError(t, f.svc.AddToTimer(f.ctx, "t1", -time.Minute))
+		synctest.Wait()
+		assert.Equal(t, float64((time.Minute).Milliseconds()), lastMilli(t, "t1", "pausedMs"))
+
+		// A widget of another kind is a clear error (B38).
+		assert.ErrorIs(t, f.svc.AddToTimer(f.ctx, "g1", time.Minute), overlaywidgets.ErrUnknownWidget)
+	})
+}
+
+// TestPersistentTimerAdjustBeforeStartCoversB29 covers B29 and Review
+// 347-3: an adjustment before the first tick adds to the frozen initial
+// time; the fresh timer starts from the initial plus the amount, not
+// finished.
+func TestPersistentTimerAdjustBeforeStartCoversB29(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("p1", overlaywidgets.KindPersistentTimer, map[string]any{"initial": "10m"}),
+		}})
+		defer f.stop()
+		f.attach(t)
+		// The adjustment runs before the first tick.
+		require.NoError(t, f.svc.AddToPersistentTimer(f.ctx, "p1", time.Minute))
+		now := time.Now()
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		ups := f.updates(t, "p1")
+		require.NotEmpty(t, ups)
+		var st map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ups[len(ups)-1]), &st))
+		assert.Equal(t, false, st["completed"])
+		assert.Equal(t, false, st["paused"])
+		deadline, ok := st["deadline"].(float64)
+		require.True(t, ok, "no deadline in the state")
+		assert.GreaterOrEqual(t, deadline, float64(now.Add(11*time.Minute).UnixMilli()))
+		assert.LessOrEqual(t, deadline, float64(now.Add(11*time.Minute+5*time.Second).UnixMilli()))
+	})
+}
+
+// TestPersistentTimerCompletionResetCoversB29 covers B29 and Review
+// 347-4: a completed timer with reset_on_enable runs again when it is
+// shown again, and the completion event fires exactly once.
+func TestPersistentTimerCompletionResetCoversB29(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("p1", overlaywidgets.KindPersistentTimer, map[string]any{"initial": "10m", "reset_on_enable": true}),
+		}})
+		defer f.stop()
+		// The timer is running and has reached zero already.
+		f.seedState("p1", fmt.Sprintf(`{"deadline_ms":%d,"paused":false,"completed":false,"was_visible":true}`, time.Now().Add(-time.Minute).UnixMilli()))
+		f.attach(t)
+
+		completedCount := func() int {
+			t.Helper()
+			n := 0
+			for _, e := range f.effectsList() {
+				if e.typ == eventtype.OverlayTimerCompleted {
+					n++
+				}
+			}
+			return n
+		}
+
+		// The running timer reaches zero on the tick: one completion.
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		assert.Equal(t, 1, completedCount())
+
+		// Hidden, then shown again: the reset_on_enable timer runs
+		// again, and the completion fires no second time (Review 347-4).
+		sec := f.sectionNow()
+		sec.Widgets[0].Visible = false
+		f.setSection(sec)
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		sec = f.sectionNow()
+		sec.Widgets[0].Visible = true
+		f.setSection(sec)
+		now := time.Now()
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		assert.Equal(t, 1, completedCount())
+		ups := f.updates(t, "p1")
+		var st map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ups[len(ups)-1]), &st))
+		assert.Equal(t, false, st["completed"])
+		assert.Equal(t, false, st["paused"])
+		deadline, ok := st["deadline"].(float64)
+		require.True(t, ok, "no deadline in the state")
+		assert.GreaterOrEqual(t, deadline, float64(now.Add(10*time.Minute).UnixMilli()))
+		assert.LessOrEqual(t, deadline, float64(now.Add(10*time.Minute+5*time.Second).UnixMilli()))
+
+		// A second hide and show cycle: still one completion, still
+		// running.
+		sec = f.sectionNow()
+		sec.Widgets[0].Visible = false
+		f.setSection(sec)
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		sec = f.sectionNow()
+		sec.Widgets[0].Visible = true
+		f.setSection(sec)
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		assert.Equal(t, 1, completedCount())
+	})
+}
+
+// TestPersistentTimerShutdownResetCoversB29 covers B29 and Review
+// 347-16: when the service ends, the reset_on_enable timer is reset to
+// the initial duration in the profile, so the next session starts fresh.
+func TestPersistentTimerShutdownResetCoversB29(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("p1", overlaywidgets.KindPersistentTimer, map[string]any{"initial": "10m", "reset_on_enable": true}),
+		}})
+		f.attach(t)
+		// The timer runs.
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		var st map[string]any
+		require.NoError(t, json.Unmarshal(f.stateDocFor(t, "p1"), &st))
+		assert.Equal(t, false, st["paused"])
+		// The service ends: the state in the profile is reset.
+		f.stop()
+		require.NoError(t, json.Unmarshal(f.stateDocFor(t, "p1"), &st))
+		assert.Equal(t, true, st["paused"])
+		assert.Equal(t, false, st["completed"])
+		assert.Equal(t, float64((10 * time.Minute).Milliseconds()), st["remaining_ms"])
+	})
+}
+
 // TestWidgetStreamBoss covers B30: the damage and the heal, the self-heal
 // of the boss, the forced damage, the event amounts with the user of the
 // event, and the new boss with the compounded health after a kill.
@@ -1301,7 +1514,8 @@ func TestWidgetStreamBoss(t *testing.T) {
 		assert.Equal(t, &eventtype.OverlayBoss{Health: 50, Amount: -50}, last.payload.Details.OverlayBoss)
 
 		// The kill rolls the new boss from the feed, with the compounded
-		// health (B30).
+		// health (B30); the killing blow publishes the damage with the
+		// boss at zero first (Review 347-7).
 		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b1", 50, false, ada))
 		synctest.Wait()
 		st = state(t)
@@ -1312,6 +1526,9 @@ func TestWidgetStreamBoss(t *testing.T) {
 		last = eff[len(eff)-1]
 		assert.Equal(t, eventtype.OverlayBossNew, last.typ)
 		assert.Equal(t, &eventtype.OverlayBoss{Health: 110}, last.payload.Details.OverlayBoss)
+		assert.Equal(t, eventtype.OverlayBossDamage, eff[len(eff)-2].typ)
+		assert.Equal(t, ada, eff[len(eff)-2].payload.User)
+		assert.Equal(t, &eventtype.OverlayBoss{Health: 0, Amount: -50}, eff[len(eff)-2].payload.Details.OverlayBoss)
 
 		// The boss who damages himself heals with the multiplier (B30).
 		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b1", 10, false, bob))
@@ -1364,6 +1581,43 @@ func TestWidgetStreamBoss(t *testing.T) {
 		last = eff[len(eff)-1]
 		assert.Equal(t, eventtype.OverlayBossNew, last.typ)
 		assert.Equal(t, &eventtype.OverlayBoss{Health: 125}, last.payload.Details.OverlayBoss)
+
+		// Self-heal without a configured multiplier heals the full
+		// amount (default 1, Review 347-6). The section switches to the
+		// fresh boss widgets for these steps; the tick reloads it.
+		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("b2", overlaywidgets.KindStreamBoss, map[string]any{"base_health": 10}),
+			widget("b3", overlaywidgets.KindStreamBoss, map[string]any{"base_health": 10, "self_heal_multiplier": 0.0}),
+		}})
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		// The kill makes the feed user the boss of both widgets.
+		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b2", 10, false, ada))
+		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b3", 10, false, ada))
+		synctest.Wait()
+		// The boss damages himself without a multiplier: the full
+		// amount heals.
+		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b2", 10, false, bob))
+		synctest.Wait()
+		ups2 := f.updates(t, "b2")
+		require.NotEmpty(t, ups2)
+		var st2 map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ups2[len(ups2)-1]), &st2))
+		assert.Equal(t, float64(20), st2["health"])
+		eff = f.effectsList()
+		last = eff[len(eff)-1]
+		assert.Equal(t, eventtype.OverlayBossHeal, last.typ)
+		assert.Equal(t, bob, last.payload.User)
+		assert.Equal(t, &eventtype.OverlayBoss{Health: 20, Amount: 10}, last.payload.Details.OverlayBoss)
+
+		// A multiplier of 0 changes nothing: no event, no push
+		// (Review 347-6).
+		before := len(f.effectsList())
+		ups3 := len(f.updates(t, "b3"))
+		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b3", 10, false, bob))
+		synctest.Wait()
+		assert.Equal(t, before, len(f.effectsList()))
+		assert.Equal(t, ups3, len(f.updates(t, "b3")))
 	})
 }
 
@@ -1439,6 +1693,25 @@ func TestWidgetEndCredits(t *testing.T) {
 		sec = state(t)
 		assert.Empty(t, users(t, sec, "chatters"))
 		assert.Empty(t, users(t, sec, "raids"))
+
+		// A ban removes the user from a hidden end credits too: the
+		// removal is not limited to the visible widgets (Review 347-11).
+		// The section switches to the hidden widget; the tick reloads it.
+		hidden := widget("e1", overlaywidgets.KindEndCredits, map[string]any{"custom_sections": []string{"thanks"}})
+		hidden.Visible = false
+		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{hidden}})
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		f.publish(t, eventtype.ChatUserBan, bob, eventtype.Details{})
+		synctest.Wait()
+		sec = state(t)
+		assert.Empty(t, users(t, sec, "new_followers"))
+		// The widget shows again for the remaining steps.
+		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("e1", overlaywidgets.KindEndCredits, map[string]any{"custom_sections": []string{"thanks"}}),
+		}})
+		synctest.Sleep(time.Second)
+		synctest.Wait()
 
 		// add_to_credits adds a custom entry, and a section it does not
 		// know is a clear error (B31, B38).
@@ -1550,15 +1823,16 @@ func TestWidgetWheel(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		w1 := widget("w1", overlaywidgets.KindWheel, map[string]any{"equal_probability": true, "outcomes": []any{map[string]any{"name": "yes"}, map[string]any{"name": "no"}}})
-		w2 := widget("w2", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{
+		w2 := widget("w2", overlaywidgets.KindWheel, map[string]any{"equal_probability": false, "outcomes": []any{
 			map[string]any{"name": "yes", "probability": 100.0, "modifier": -10},
 			map[string]any{"name": "no", "probability": 0.0, "modifier": 10},
 		}})
-		w3 := widget("w3", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{
+		w3 := widget("w3", overlaywidgets.KindWheel, map[string]any{"equal_probability": false, "outcomes": []any{
 			map[string]any{"name": "yes", "probability": 100.0, "modifier": 10},
 			map[string]any{"name": "no", "probability": 0.0, "modifier": -10},
 		}})
-		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{w1, w2, w3}})
+		w4 := widget("w4", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{map[string]any{"name": "yes"}, map[string]any{"name": "no"}}})
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{w1, w2, w3, w4}})
 		defer f.stop()
 		f.attach(t)
 		ada := twitchUser(t, "ada")
@@ -1567,6 +1841,13 @@ func TestWidgetWheel(t *testing.T) {
 		// B4).
 		assert.JSONEq(t, `{"outcomes":[{"name":"yes","probability":100},{"name":"no","probability":0}]}`,
 			marshalState(t, f.svc.StateForSync(f.ctx, w2)))
+
+		// A wheel with only names is valid and uses equal chances: the
+		// flag defaults to true (Review 347-19).
+		assert.JSONEq(t, `{"outcomes":[{"name":"yes","probability":50},{"name":"no","probability":50}]}`,
+			marshalState(t, f.svc.StateForSync(f.ctx, w4)))
+		require.NoError(t, f.svc.SpinWheel(f.ctx, "w4", ada))
+		synctest.Wait()
 
 		// The spin sends the outcome to the runtime and publishes
 		// overlay.wheel.spun with the caller (B33).
@@ -1578,6 +1859,10 @@ func TestWidgetWheel(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(ups[0]), &spin))
 		rot, ok := spin["spin"].(map[string]any)
 		require.True(t, ok, "no spin in the state")
+		// The push carries the outcomes, because the runtime replaces
+		// the state with it (Review 347-8).
+		assert.JSONEq(t, `[{"name":"yes","probability":50},{"name":"no","probability":50}]`,
+			marshalState(t, spin["outcomes"]))
 		idx, name := rot["index"].(float64), rot["name"].(string)
 		assert.InDelta(t, 4.0, rot["duration"], 0.001)
 		want := map[float64]string{0: "yes", 1: "no"}
@@ -1593,6 +1878,13 @@ func TestWidgetWheel(t *testing.T) {
 		// deterministic.
 		require.NoError(t, f.svc.SpinWheel(f.ctx, "w2", ada))
 		synctest.Wait()
+		ups2 := f.updates(t, "w2")
+		require.Len(t, ups2, 1)
+		var spin2 map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ups2[0]), &spin2))
+		// The push shows the shifted probabilities (Review 347-8).
+		assert.JSONEq(t, `[{"name":"yes","probability":90},{"name":"no","probability":10}]`,
+			marshalState(t, spin2["outcomes"]))
 		assert.JSONEq(t, `{"outcomes":[{"name":"yes","probability":90},{"name":"no","probability":10}]}`,
 			marshalState(t, f.svc.StateForSync(f.ctx, w2)))
 
@@ -1606,19 +1898,120 @@ func TestWidgetWheel(t *testing.T) {
 		// The configuration validation: the probabilities must sum to
 		// 100, and the modifiers to zero (B33).
 		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{
-			widget("wb", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{
+			widget("wb", overlaywidgets.KindWheel, map[string]any{"equal_probability": false, "outcomes": []any{
 				map[string]any{"name": "yes", "probability": 50.0},
 				map[string]any{"name": "no", "probability": 30.0},
 			}}),
 		}})
 		assert.ErrorIs(t, f.svc.SpinWheel(f.ctx, "wb", ada), overlaywidgets.ErrUnknownWidget)
 		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{
-			widget("wb", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{
+			widget("wb", overlaywidgets.KindWheel, map[string]any{"equal_probability": false, "outcomes": []any{
 				map[string]any{"name": "yes", "probability": 50.0, "modifier": 5},
 				map[string]any{"name": "no", "probability": 50.0, "modifier": 5},
 			}}),
 		}})
 		assert.ErrorIs(t, f.svc.SpinWheel(f.ctx, "wb", ada), overlaywidgets.ErrUnknownWidget)
+		// The modifier sum is validated with equal chances, too
+		// (Review 347-12).
+		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("wb", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{
+				map[string]any{"name": "yes", "modifier": 5},
+				map[string]any{"name": "no", "modifier": 5},
+			}}),
+		}})
+		assert.ErrorIs(t, f.svc.SpinWheel(f.ctx, "wb", ada), overlaywidgets.ErrUnknownWidget)
+	})
+}
+
+// fixedRand is a deterministic RandSource for the tests (Review 347-20).
+type fixedRand struct {
+	intN    int
+	float64 float64
+}
+
+func (r fixedRand) IntN(n int) int   { return r.intN % n }
+func (r fixedRand) Float64() float64 { return r.float64 }
+
+// TestRandSourceInjectionCoversB33 covers B30, B33 and Review 347-20:
+// the injected RandSource decides the draw of the wheel and the name of
+// the next boss.
+func TestRandSourceInjectionCoversB33(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		// Float64 0.75 lands a 50/50 wheel on index 1, IntN 1 on the
+		// second feed user.
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("w1", overlaywidgets.KindWheel, map[string]any{"outcomes": []any{map[string]any{"name": "yes"}, map[string]any{"name": "no"}}}),
+			widget("b1", overlaywidgets.KindStreamBoss, map[string]any{"base_health": 10}),
+		}}, overlaywidgets.WithRand(fixedRand{intN: 1, float64: 0.75}))
+		defer f.stop()
+		f.attach(t)
+		f.setFeed([]feed.Event{
+			{Platform: platform.Twitch, Type: eventtype.ChannelFollow, Login: "ada", DisplayName: "ada", Time: time.Now()},
+			{Platform: platform.Twitch, Type: eventtype.ChannelFollow, Login: "bob", DisplayName: "bob", Time: time.Now()},
+		})
+		ada := twitchUser(t, "ada")
+
+		// The injected source decides the draw of the wheel (B33).
+		require.NoError(t, f.svc.SpinWheel(f.ctx, "w1", ada))
+		synctest.Wait()
+		eff := f.effectsList()
+		last := eff[len(eff)-1]
+		assert.Equal(t, eventtype.OverlayWheelSpun, last.typ)
+		assert.Equal(t, &eventtype.OverlayWheel{Outcome: "no"}, last.payload.Details.OverlayWheel)
+
+		// The injected source decides the name of the next boss (B30).
+		require.NoError(t, f.svc.DamageStreamBoss(f.ctx, "b1", 15, false, ada))
+		synctest.Wait()
+		ups := f.updates(t, "b1")
+		require.Len(t, ups, 1)
+		assert.JSONEq(t, `{"boss":"bob","health":10,"max_health":10}`, ups[0])
+	})
+}
+
+// TestWheelOutcomeCommandsCoversB23 covers B23, B33 and Review 341-12w:
+// the landed outcome starts its command, an outcome without one starts
+// the wheel's default_command, never both; overlay.wheel.spun is
+// published in both cases.
+func TestWheelOutcomeCommandsCoversB23(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := map[string]any{
+			"equal_probability": false,
+			"default_command":   "cmd-default",
+			"outcomes": []any{
+				map[string]any{"name": "yes", "probability": 100.0, "modifier": -100, "command": "cmd-yes"},
+				map[string]any{"name": "no", "probability": 0.0, "modifier": 100},
+			},
+		}
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("w1", overlaywidgets.KindWheel, cfg),
+		}}, overlaywidgets.WithRand(fixedRand{float64: 0.5}))
+		defer f.stop()
+		f.attach(t)
+		ada := twitchUser(t, "ada")
+
+		// The first spin lands on "yes": its command starts, not the
+		// default, and the spin event is published (B23, A2).
+		require.NoError(t, f.svc.SpinWheel(f.ctx, "w1", ada))
+		synctest.Wait()
+		require.Equal(t, []string{"cmd-yes"}, f.commandsList())
+		eff := f.effectsList()
+		require.Len(t, eff, 1)
+		assert.Equal(t, eventtype.OverlayWheelSpun, eff[0].typ)
+		assert.Equal(t, ada, eff[0].payload.User)
+		assert.Equal(t, &eventtype.OverlayWheel{Outcome: "yes"}, eff[0].payload.Details.OverlayWheel)
+
+		// The modifier shift lands the second spin on "no": without its
+		// own command, the default starts, and the spin event is
+		// published again.
+		require.NoError(t, f.svc.SpinWheel(f.ctx, "w1", ada))
+		synctest.Wait()
+		require.Equal(t, []string{"cmd-yes", "cmd-default"}, f.commandsList())
+		eff = f.effectsList()
+		require.Len(t, eff, 2)
+		assert.Equal(t, eventtype.OverlayWheelSpun, eff[1].typ)
+		assert.Equal(t, &eventtype.OverlayWheel{Outcome: "no"}, eff[1].payload.Details.OverlayWheel)
 	})
 }
 
@@ -1700,6 +2093,58 @@ func TestWidgetEmoteEffect(t *testing.T) {
 		synctest.Wait()
 		ups = f.updates(t, "m4")
 		require.Len(t, ups, 1)
+
+		// A configuration without a duration gets the named default of
+		// 5 s (Review 347-10). The section switches to the fresh widget
+		// for this step; the tick reloads it in the overlay service.
+		f.setSection(settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("m5", overlaywidgets.KindEmoteEffect, map[string]any{"effect": "rain", "combo_count": 2}),
+		}})
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		msg("Kappa")
+		msg("Kappa")
+		synctest.Wait()
+		ups = f.updates(t, "m5")
+		require.Len(t, ups, 1)
+		assert.JSONEq(t, `{"effect":"rain","duration_ms":5000,"code":"Kappa","image":"https://emotes/Kappa.png","per_emote_shown":1}`, ups[0])
+	})
+}
+
+// TestEmoteEffectDedupKeepsMessageEmotesCoversB35 covers B35 and Review
+// 347-5: the dedupe of ignore_duplicates never writes into the emotes of
+// the bus message, which the payload shares with its sender.
+func TestEmoteEffectDedupKeepsMessageEmotesCoversB35(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, settings.Overlay{Widgets: []settings.OverlayWidget{
+			widget("m1", overlaywidgets.KindEmoteEffect, map[string]any{"effect": "rain", "duration": "2s", "combo_count": 2, "ignore_duplicates": true}),
+		}})
+		defer f.stop()
+		f.attach(t)
+		f.mu.Lock()
+		f.emoteList = []emote.Emote{{ID: "1", Code: "Kappa", Image: "https://emotes/Kappa.png"}}
+		f.mu.Unlock()
+		ada := twitchUser(t, "ada")
+
+		// The message goes over the bus with a kept reference to its
+		// emotes; the dedupe runs on the shared payload.
+		emotes := []string{"Kappa", "Kappa", "Nope"}
+		env := event.New(event.Source{Kind: event.SourcePlatform, Name: string(platform.Twitch)},
+			eventtype.ChatMessage,
+			eventtype.Payload{Platform: platform.Twitch, User: ada, Details: eventtype.Details{Message: &eventtype.Message{Text: "x", Emotes: emotes}}})
+		require.NoError(t, f.bus.Publish(f.ctx, env))
+		// The second Kappa message completes the combo of the deduped
+		// first one, so the widget ran.
+		f.publish(t, eventtype.ChatMessage, ada, eventtype.Details{Message: &eventtype.Message{Text: "x", Emotes: []string{"Kappa"}}})
+		synctest.Wait()
+		ups := f.updates(t, "m1")
+		require.Len(t, ups, 1)
+		assert.JSONEq(t, `{"effect":"rain","duration_ms":2000,"code":"Kappa","image":"https://emotes/Kappa.png","per_emote_shown":1}`, ups[0])
+
+		// The emotes of the first message are still as published
+		// (Review 347-5).
+		assert.Equal(t, []string{"Kappa", "Kappa", "Nope"}, emotes)
 	})
 }
 

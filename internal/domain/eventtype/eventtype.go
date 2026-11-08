@@ -72,8 +72,12 @@ const (
 // GameQueue, the queue of the profile (spec overlays.md, B36): the
 // entries run as bus events that event commands react to.
 const (
-	GameQueueJoined   event.Type = "gamequeue.joined"
-	GameQueueLeft     event.Type = "gamequeue.left"
+	GameQueueJoined event.Type = "gamequeue.joined"
+	GameQueueLeft   event.Type = "gamequeue.left"
+	// GameQueuePosition is reserved for Phase 8.3 (chat games) and
+	// published by nothing today (Review 347-14): the queue stores
+	// display names only, so a position event could not name the
+	// affected user.
 	GameQueuePosition event.Type = "gamequeue.position"
 )
 
