@@ -25,8 +25,10 @@ const LegacyFileName = "api-tokens.json"
 // Scope is one right of a token.
 type Scope string
 
-// Scopes, strongest last: admin covers control, control covers read, and
-// overlay is a read scope for overlay processes.
+// Scopes: read, control and admin form the hierarchy, strongest last
+// (admin covers control, control covers read). Overlay is a standalone
+// scope: it opens only the overlay server, never the API (B5, S8 of
+// open-findings-2026-10-26.md).
 const (
 	Read    Scope = "read"
 	Control Scope = "control"
@@ -68,14 +70,20 @@ type legacyToken struct {
 	SHA256    string    `json:"sha256"`
 }
 
-// rank is the hierarchy: control covers read, admin covers control, and
-// overlay counts as read.
+// rank is the hierarchy: control covers read, admin covers control. The
+// overlay scope is not in the hierarchy: it opens only the overlay
+// server, never the API (B5, S8), and must be carried explicitly.
 //
 //nolint:gochecknoglobals // the static hierarchy
-var rank = map[Scope]int{Read: 1, Overlay: 1, Control: 2, Admin: 3}
+var rank = map[Scope]int{Read: 1, Control: 2, Admin: 3}
 
-// Satisfies reports whether the token has scope through the hierarchy.
+// Satisfies reports whether the token has scope through the hierarchy;
+// the overlay scope is outside of it and must be carried explicitly
+// (B5, S8).
 func (t Token) Satisfies(scope Scope) bool {
+	if scope == Overlay {
+		return slices.Contains(t.Scopes, Overlay)
+	}
 	best := 0
 	for _, s := range t.Scopes {
 		if r := rank[s]; r > best {

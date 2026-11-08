@@ -25,7 +25,7 @@ type tokenCmd struct {
 
 type tokenCreateCmd struct {
 	Name   string   `arg:"" optional:"" help:"Name of the token. Default: cli-<timestamp>."`
-	Scopes []string `name:"scope" placeholder:"SCOPE" help:"Scope of the token: read, control, admin, overlay. Repeatable. Default: admin."`
+	Scopes []string `name:"scope" placeholder:"SCOPE" help:"Scope of the token: read, control, admin, overlay. The overlay scope opens only the overlay server (B5), never the API. Repeatable. Default: admin."`
 }
 
 // Run creates the token and prints its value, which is shown once.

@@ -721,11 +721,10 @@ func TestAPITokensProtectTheAPI(t *testing.T) {
 	_, err = admin.Create(ctx, &v1alpha1.CreateCounterRequest{Name: "hugs"})
 	require.NoError(t, err)
 
-	// An overlay token can read, but not control.
+	// An overlay token opens only the overlay server, never the API
+	// (S8): even a read endpoint denies it.
 	overlay := streamcrewv1alpha1connect.NewChatServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, base, connecthttp.WithReadMaxBytes(0)), withAuth(overlayValue)))
 	_, err = overlay.History(ctx, &v1alpha1.HistoryChatRequest{})
-	require.NoError(t, err)
-	_, err = overlay.Send(ctx, &v1alpha1.SendChatRequest{Text: "nope"})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 }

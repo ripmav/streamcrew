@@ -751,8 +751,8 @@ type Position struct {
 	Point string `json:"point,omitempty"`
 	// X and Y are the coordinates for the models percent (0 to 100) and
 	// pixels (0 or more), in that order.
-	X float64 `json:"x,omitempty"`
-	Y float64 `json:"y,omitempty"`
+	X float64 `json:"x,omitzero"`
+	Y float64 `json:"y,omitzero"`
 }
 
 // The position models (B9).

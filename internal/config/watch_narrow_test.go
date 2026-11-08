@@ -20,6 +20,7 @@ import (
 func narrowBase(t *testing.T, obs string) config.Config {
 	t.Helper()
 	cfg := base(t)
+	cfg.OverlayListen = "127.0.0.1:8742"
 	cfg.Dev = true
 	cfg.CorsAllow = []string{"http://a.example"}
 	cfg.TLSCert, cfg.TLSKey = "/cert.pem", "/key.pem"
@@ -36,6 +37,7 @@ func narrowBase(t *testing.T, obs string) config.Config {
 func narrowDoc(obs string) string {
 	return "mode: server\n" +
 		"listen: 127.0.0.1:8740\n" +
+		"overlay_listen: 127.0.0.1:8742\n" +
 		"dev: true\n" +
 		"cors_allow: [http://a.example]\n" +
 		"tls_cert: /cert.pem\n" +
@@ -75,6 +77,8 @@ func TestWatcherUpdateOnlyNarrows(t *testing.T) {
 		{"a new CORS origin extends", strings.Replace(narrowDoc(obs), "cors_allow: [http://a.example]\n", "cors_allow: [http://a.example, http://b.example]\n", 1), []string{"cors-allow"}},
 		{"an emptied CORS allowlist narrows", strings.Replace(narrowDoc(obs), "cors_allow: [http://a.example]\n", "cors_allow: []\n", 1), nil},
 		{"another port on the same host narrows", strings.Replace(narrowDoc(obs), "listen: 127.0.0.1:8740\n", "listen: 127.0.0.1:9000\n", 1), nil},
+		{"another overlay port on the same host narrows", strings.Replace(narrowDoc(obs), "overlay_listen: 127.0.0.1:8742\n", "overlay_listen: 127.0.0.1:9999\n", 1), nil},
+		{"a new overlay host extends", strings.Replace(narrowDoc(obs), "overlay_listen: 127.0.0.1:8742\n", "overlay_listen: 0.0.0.0:8742\n", 1), []string{"overlay-listen"}},
 		// dev is off: the developer mode requires a loopback address
 		// (Resolve), so a public bind comes without it.
 		{"a new host extends", strings.Replace(strings.Replace(narrowDoc(obs), "dev: true\n", "dev: false\n", 1), "listen: 127.0.0.1:8740\n", "listen: 0.0.0.0:8740\n", 1), []string{"listen"}},

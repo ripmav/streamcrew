@@ -395,16 +395,6 @@ func TestResolveOverlayListen(t *testing.T) {
 	}
 }
 
-func TestViewOmitsTheOverlayToken(t *testing.T) {
-	t.Parallel()
-	cfg := config.Config{OverlayListen: "127.0.0.1:8742", OverlayToken: "secret"}
-	out, err := yaml.Marshal(cfg.View())
-	require.NoError(t, err)
-	assert.NotContains(t, string(out), "secret", "the token is a credential")
-	assert.NotContains(t, string(out), "overlay_token")
-	assert.Contains(t, string(out), "overlay_listen")
-}
-
 func TestParseLevel(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"debug", "info", "warn", "error"} {

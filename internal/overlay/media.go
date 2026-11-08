@@ -23,7 +23,7 @@ const mediaRoot = "media"
 func (s *Server) serveMedia(w http.ResponseWriter, r *http.Request) {
 	// The token check comes before everything else: an unauthenticated
 	// request gets 401, whatever the core may serve (B5).
-	if !s.authorized(r) {
+	if _, ok := s.authorized(r); !ok {
 		s.refuse(r.Context(), w, r)
 		return
 	}
@@ -53,12 +53,14 @@ func (s *Server) serveMedia(w http.ResponseWriter, r *http.Request) {
 
 	// The root is opened per request: the released roots change at
 	// runtime (Code-ADR-0019), and a missing directory is a 404, not a
-	// failure of the server.
+	// failure of the server. Files opened from the root stay usable
+	// after it is closed, so the root itself goes on the stack.
 	root, err := os.OpenRoot(dir)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
+	defer root.Close()
 	// os.Root rejects absolute paths and every ".." that escapes the
 	// root, so a traversal stays a 404 (B47).
 	file, err := root.Open(path)

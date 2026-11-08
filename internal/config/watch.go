@@ -355,6 +355,12 @@ func extendKeys(old, next Config) []string {
 	if extendsListen(old.Listen, next.Listen) {
 		add("listen")
 	}
+	// The overlay listen is checked the same way: a bind beyond the old
+	// host extends (Code-ADR-0021, Nachtrag 2026-10-29, point 2). An
+	// unchanged (or both unset) value is no extension.
+	if next.OverlayListen != old.OverlayListen && extendsListen(old.OverlayListen, next.OverlayListen) {
+		add("overlay-listen")
+	}
 	// Removing TLS beyond loopback extends; swapping the certificate
 	// stays allowed.
 	if old.TLSCert != "" && next.TLSCert == "" && next.PublicInsecure() {
@@ -515,6 +521,12 @@ func (w *Watcher) parse(data []byte) (Config, []string, error) {
 		case "listen":
 			if s, ok := v.(string); ok {
 				cfg.Listen = s
+			} else if v != nil {
+				errs = append(errs, fmt.Errorf("%s: not a text", key))
+			}
+		case "overlay_listen":
+			if s, ok := v.(string); ok {
+				cfg.OverlayListen = s
 			} else if v != nil {
 				errs = append(errs, fmt.Errorf("%s: not a text", key))
 			}

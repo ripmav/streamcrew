@@ -24,9 +24,12 @@ func testLogger(t *testing.T) *slog.Logger {
 // base returns the configuration a watcher runs against.
 func base(t *testing.T) config.Config {
 	cfg := config.Config{
-		DataDir:         t.TempDir(),
-		Mode:            config.ModeServer,
-		Listen:          "127.0.0.1:8740",
+		DataDir: t.TempDir(),
+		Mode:    config.ModeServer,
+		Listen:  "127.0.0.1:8740",
+		// Set like the app's resolved configuration: parse fills the
+		// default on the document side, so both sides must match.
+		OverlayListen:   "127.0.0.1:8742",
 		ShutdownTimeout: 15 * time.Second,
 		ObsPort:         4455,
 		Stream:          config.StreamConfig{Buffer: 1024, CatchUp: 256},

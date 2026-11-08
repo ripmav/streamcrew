@@ -33,12 +33,9 @@ type Options struct {
 	Listen string
 	// OverlayListen is the address of the overlay server (roadmap 7.1);
 	// empty selects the default of the mode (loopback, except server
-	// mode). Changes need a restart.
+	// mode). Changes need a restart. The endpoints are protected by
+	// the API tokens of the profile with the overlay scope (B5).
 	OverlayListen string
-	// OverlayToken protects the overlay URLs: when set, the page, the
-	// WebSocket and the media URLs require the value as the query
-	// parameter token (roadmap 7.1). Empty leaves the endpoints open.
-	OverlayToken string
 	// Dev serves pprof under /debug/pprof/ and requires a loopback address.
 	Dev bool
 	// DryRun makes the platforms log what they would do instead of doing it.
@@ -146,7 +143,6 @@ func Run(ctx context.Context, opts Options) error {
 		Mode:            config.Mode(opts.Mode),
 		Listen:          opts.Listen,
 		OverlayListen:   opts.OverlayListen,
-		OverlayToken:    opts.OverlayToken,
 		Dev:             opts.Dev,
 		DryRun:          opts.DryRun,
 		CorsAllow:       opts.CorsAllow,

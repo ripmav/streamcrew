@@ -6,6 +6,7 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -405,4 +406,116 @@ func TestTTSSpeakEndsWithReload(t *testing.T) {
 	default:
 		t.Fatal("the speech of the removed endpoint must end")
 	}
+}
+
+// TestSyncStateDoesNotHoldTheLockDuringTheProvider covers Review 344-12:
+// the state provider does DB I/O, so the state sync must not hold the
+// service lock while it runs — a lock-taking call (Endpoint) has to
+// return while the provider is still blocked.
+func TestSyncStateDoesNotHoldTheLockDuringTheProvider(t *testing.T) {
+	svc := testService(t, settings.Overlay{
+		Widgets: []settings.OverlayWidget{{ID: "w1", Kind: "label", Name: "Label", Visible: true}},
+	})
+	called := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+	svc.SetStateProvider(func(context.Context, settings.OverlayWidget) any {
+		close(called)
+		<-release
+		return map[string]any{"text": "hi"}
+	})
+	go func() {
+		defer close(done)
+		_ = svc.SyncState(context.Background(), settings.DefaultEndpointID, func(overlay.Message) {})
+	}()
+	<-called // the provider is running
+	free := make(chan bool, 1)
+	go func() {
+		_, ok := svc.Endpoint(settings.DefaultEndpointID)
+		free <- ok
+	}()
+	select {
+	case ok := <-free:
+		assert.True(t, ok)
+	case <-time.After(2 * time.Second):
+		t.Fatal("the service lock is still held while the state provider runs")
+	}
+	close(release)
+	<-done
+}
+
+// TestAttachDoesNotLoseBroadcastsDuringTheHandshake covers Review
+// 342-13: the slot is registered before the handshake is sent, under
+// the same lock hold, so an item shown while the handshake is still in
+// flight reaches the runtime.
+func TestAttachDoesNotLoseBroadcastsDuringTheHandshake(t *testing.T) {
+	svc := testService(t, settings.Overlay{})
+	gate := make(chan struct{})
+	started := make(chan struct{})
+	var once sync.Once
+	var sends atomic.Int32
+	rec := &recorder{}
+	send := func(msg overlay.Message) {
+		sends.Add(1)
+		once.Do(func() { close(started) })
+		<-gate
+		rec.mu.Lock()
+		rec.list = append(rec.list, msg)
+		rec.mu.Unlock()
+	}
+	attachDone := make(chan struct{})
+	go func() {
+		defer close(attachDone)
+		_, _ = svc.Attach(context.Background(), settings.DefaultEndpointID, send)
+	}()
+	<-started // the handshake send has started
+	go func() {
+		_, _, _ = svc.ShowItem(context.Background(), settings.DefaultEndpointID, overlay.Item{
+			Kind:     "text",
+			Position: settings.Position{Model: settings.PositionSimple, Point: "top"},
+		})
+	}()
+	// The first send is the handshake's hello, which holds the gate;
+	// the second send is the broadcast of the item, which only reaches
+	// this client if the slot was registered before the snapshot.
+	require.Eventually(t, func() bool { return sends.Load() >= 2 }, 2*time.Second, 10*time.Millisecond,
+		"the broadcast of the item shown during the handshake never reached the runtime")
+	close(gate)
+	<-attachDone
+	require.Eventually(t, func() bool {
+		for _, m := range rec.all() {
+			if m.Type == overlay.TypeItemShow {
+				return true
+			}
+		}
+		return false
+	}, 2*time.Second, 10*time.Millisecond, "the runtime must receive the item.show")
+}
+
+// TestSectionOrderIsKeptForEndpointsAndWidgets covers Review 342-12:
+// the endpoints and the widgets of the state sync follow the order of
+// the section (default first for the endpoints), not the alphabetical
+// order of the IDs.
+func TestSectionOrderIsKeptForEndpointsAndWidgets(t *testing.T) {
+	sec := settings.Overlay{
+		Endpoints: []settings.OverlayEndpoint{
+			{ID: "zulu", Name: "Zulu"},
+			{ID: "alpha", Name: "Alpha"},
+		},
+		Widgets: []settings.OverlayWidget{
+			{ID: "z", Kind: "label", Name: "Z", Visible: true},
+			{ID: "a", Kind: "label", Name: "A", Visible: true},
+		},
+	}
+	svc := testService(t, sec)
+	eps := svc.Endpoints()
+	require.Len(t, eps, 3)
+	assert.Equal(t, settings.DefaultEndpointID, eps[0].ID)
+	assert.Equal(t, "zulu", eps[1].ID)
+	assert.Equal(t, "alpha", eps[2].ID)
+
+	states := svc.WidgetStates(context.Background(), settings.DefaultEndpointID)
+	require.Len(t, states, 2)
+	assert.Equal(t, "z", states[0].ID)
+	assert.Equal(t, "a", states[1].ID)
 }
