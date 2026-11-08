@@ -35,21 +35,17 @@ func (m mediaFiles) File(file string) (string, error) {
 		return "", fmt.Errorf("the media directory is unavailable: %w", err)
 	}
 	defer root.Close()
-	f, err := root.Open(file)
+	// root.Stat resolves file inside the root (escaping paths and
+	// symlinks out of it are errors) without opening a handle (Review
+	// 345-9), and the sinks open the resolved path themselves.
+	info, err := root.Stat(file)
 	if err != nil {
-		return "", fmt.Errorf("the file %q is not under the media directory: %w", file, err)
-	}
-	info, err := f.Stat()
-	if err == nil {
-		_ = f.Close()
-	}
-	if err != nil {
-		return "", fmt.Errorf("the file %q is not readable: %w", file, err)
+		return "", fmt.Errorf("the file %q is not under the media directory or not readable: %w", file, err)
 	}
 	if info.IsDir() {
 		return "", fmt.Errorf("the file %q is a directory, not a file", file)
 	}
-	// root.Open accepted file, so it resolves under the media directory.
+	// root.Stat accepted file, so it resolves under the media directory.
 	return filepath.Join(m.a.mediaDir, filepath.Clean(file)), nil
 }
 
@@ -127,13 +123,12 @@ func (a *App) newMedia(logger *slog.Logger) *media.Service {
 // §3): the file providers google, azure and piper render the speech
 // under the generated directory of the media directory, and the browser
 // provider speaks directly on the overlay (ttsBrowser). The keys of the
-// providers come from the environment at the call (ADR-0020 §2).
+// providers come from the core configuration (ADR-0019 §6) and are hot
+// (Code-ADR-0021, Nachtrag 2026-10-29).
 func (a *App) newTTS(cfg config.Config, logger *slog.Logger) (*ttspkg.Service, error) {
-	return ttspkg.New(ttspkg.Ports{
+	svc, err := ttspkg.New(ttspkg.Ports{
 		GeneratedDir: filepath.Join(a.mediaDir, "generated"),
 		PiperModel:   cfg.TTSPiperModel,
-		//nolint:forbidigo // the provider keys are read from the environment at the call (ADR-0020 §2), not core configuration
-		Env: os.Getenv,
 		Dialer: netguard.Dialer{
 			Protect:   cfg.Mode == config.ModeServer,
 			Allowlist: a.rights.Outbound,
@@ -141,4 +136,13 @@ func (a *App) newTTS(cfg config.Config, logger *slog.Logger) (*ttspkg.Service, e
 		Piper:  piperRun,
 		Logger: component(logger, "tts"),
 	})
+	if err != nil {
+		return nil, err
+	}
+	svc.SetKeys(ttspkg.Keys{
+		Google:      cfg.TTSGoogleKey,
+		Azure:       cfg.TTSAzureKey,
+		AzureRegion: cfg.TTSAzureRegion,
+	})
+	return svc, nil
 }

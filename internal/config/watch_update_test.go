@@ -109,6 +109,43 @@ func TestWatcherUpdateReportsRestartSettings(t *testing.T) {
 	assert.Equal(t, []string{"profile"}, restart)
 }
 
+// TestWatcherUpdateResolvesTheWriteOnlySecrets covers Code-ADR-0021,
+// Nachtrag 2026-10-29, point 3: a document with the placeholder keeps
+// the value the core runs with (and the file stores it, not the
+// placeholder), a new value replaces it, and an explicitly empty value
+// clears the key.
+func TestWatcherUpdateResolvesTheWriteOnlySecrets(t *testing.T) {
+	t.Parallel()
+	path, f := updateFile(t, "tts_google_key: start-key\n")
+	cfg := base(t)
+	cfg.TTSGoogleKey = "start-key"
+	w := config.NewWatcher(f, cfg, nil, nil, testLogger(t))
+
+	// The placeholder keeps the current value; the file stores it.
+	_, _, stored, err := w.Update(t.Context(), []byte("log_level: debug\ntts_google_key: "+config.SecretPlaceholder+"\n"))
+	require.NoError(t, err)
+	assert.Contains(t, string(stored), "tts_google_key: start-key")
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "tts_google_key: start-key")
+	assert.NotContains(t, string(data), config.SecretPlaceholder)
+
+	// A new value replaces it.
+	_, _, _, err = w.Update(t.Context(), []byte("tts_google_key: new-key\n"))
+	require.NoError(t, err)
+	data, err = os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "tts_google_key: new-key")
+
+	// An explicitly empty value clears it.
+	_, _, _, err = w.Update(t.Context(), []byte("tts_google_key: \"\"\n"))
+	require.NoError(t, err)
+	data, err = os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "tts_google_key")
+	assert.NotContains(t, string(data), "new-key")
+}
+
 // TestWatcherUpdateCreatesAMissingFile checks that Update creates the
 // file when it does not exist (roadmap 6.5.2).
 func TestWatcherUpdateCreatesAMissingFile(t *testing.T) {

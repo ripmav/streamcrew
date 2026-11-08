@@ -104,6 +104,67 @@ func TestConfigServiceRejectsAnExtendingDocument(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestConfigServiceTTSKeysAreWriteOnlyAndHot covers the TTS provider keys
+// through the running core (ADR-0019 §6, Code-ADR-0021, Nachtrag
+// 2026-10-29): the key is written to the file with 0600, Get shows the
+// placeholder instead of the value, a written-back document with the
+// placeholder keeps the key, and an explicitly empty value clears it —
+// all without a restart.
+func TestConfigServiceTTSKeysAreWriteOnlyAndHot(t *testing.T) {
+	t.Parallel()
+	a, path, token := hotCoreServer(t, &outPub{})
+	cfg := configClient(t, a, token)
+
+	// Without a key, the document has none.
+	g, err := cfg.Get(t.Context(), &v1alpha1.GetConfigRequest{})
+	require.NoError(t, err)
+	assert.NotContains(t, g.GetDocument(), "tts_google_key")
+	assert.Contains(t, g.GetHot(), "tts-google-key", "the key is a hot setting")
+
+	// Set the key and the region; the hot apply swaps the snapshot of
+	// the TTS service on the next comparison (1 s).
+	u, err := cfg.Update(t.Context(), &v1alpha1.UpdateConfigRequest{
+		Document: "log_level: debug\ntts_google_key: google-secret\ntts_azure_region: westeurope\n",
+	})
+	require.NoError(t, err)
+	assert.Contains(t, u.GetApplied(), "tts-google-key")
+	assert.Contains(t, u.GetApplied(), "tts-azure-region")
+	time.Sleep(2 * time.Second)
+
+	// The file holds the real key with mode 0600.
+	data, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(data), "google-secret")
+	info, statErr := os.Stat(path)
+	require.NoError(t, statErr)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+
+	// Get shows the placeholder and the region, never the secret.
+	g, err = cfg.Get(t.Context(), &v1alpha1.GetConfigRequest{})
+	require.NoError(t, err)
+	assert.Contains(t, g.GetDocument(), "tts_google_key: "+config.SecretPlaceholder)
+	assert.Contains(t, g.GetDocument(), "tts_azure_region: westeurope")
+	assert.NotContains(t, g.GetDocument(), "google-secret", "the secret is write-only")
+
+	// A written-back document with the placeholder keeps the key.
+	_, err = cfg.Update(t.Context(), &v1alpha1.UpdateConfigRequest{Document: g.GetDocument()})
+	require.NoError(t, err)
+	data, readErr = os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(data), "google-secret")
+	assert.NotContains(t, string(data), config.SecretPlaceholder)
+
+	// An explicitly empty value clears the key.
+	_, err = cfg.Update(t.Context(), &v1alpha1.UpdateConfigRequest{
+		Document: "log_level: debug\ntts_google_key: \"\"\n",
+	})
+	require.NoError(t, err)
+	time.Sleep(2 * time.Second)
+	g, err = cfg.Get(t.Context(), &v1alpha1.GetConfigRequest{})
+	require.NoError(t, err)
+	assert.NotContains(t, g.GetDocument(), "tts_google_key", "the cleared key is omitted")
+}
+
 // TestConfigServiceReadOnlyInDaemonMode checks that the daemon mode serves
 // the document as read-only (roadmap 6.5.2).
 func TestConfigServiceReadOnlyInDaemonMode(t *testing.T) {
