@@ -31,13 +31,21 @@ import (
 	"github.com/ripmav/streamcrew/internal/template"
 )
 
+// removedItem is a removal the fake overlay service recorded: the ID of
+// the item and whether the context of the call was canceled.
+type removedItem struct {
+	id       string
+	canceled bool
+}
+
 // fakeOverlay is a fake of the overlay service the action runs on: it
-// records the shown items and the widget operations and serves the end
-// channels of the items from ends.
+// records the shown items, the removals and the widget operations and
+// serves the end channels of the items from ends.
 type fakeOverlay struct {
 	mu      sync.Mutex
 	items   []overlay.Item
 	ends    []chan struct{}
+	removed []removedItem
 	visible map[string]bool
 	updated map[string]any
 	widgets map[string]settings.OverlayWidget
@@ -66,6 +74,15 @@ func (f *fakeOverlay) ShowItem(_ context.Context, _ string, item overlay.Item) (
 	id := fmt.Sprintf("item-%d", f.next)
 	f.next++
 	return id, end, nil
+}
+
+// RemoveItem implements the action/overlay service port; it records the
+// removal and whether the context of the call was canceled.
+func (f *fakeOverlay) RemoveItem(ctx context.Context, _, id string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.removed = append(f.removed, removedItem{id: id, canceled: ctx.Err() != nil})
+	return true
 }
 
 // SetVisible implements the action/overlay service port.
@@ -208,20 +225,42 @@ type fixture struct {
 	reg     *action.Registry
 	eng     *template.Engine
 	overlay *fakeOverlay
+	// real is the real overlay service the fixture runs on, nil while the
+	// fake serves (Review 344-5).
+	real    *overlay.Service
 	widgets *fakeWidgets
 	journal *actiontest.Journal
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
+	return newFixtureWith(t, newFakeOverlay())
+}
+
+// newRealFixture is newFixture with the real overlay service, so the item
+// timers of the service run (Review 344-5).
+func newRealFixture(t *testing.T) *fixture {
+	t.Helper()
+	svc, err := overlay.New(t.Context(), overlay.Ports{
+		Section: func(context.Context) (settings.Overlay, error) { return settings.Overlay{}, nil },
+		Version: "test",
+	})
+	require.NoError(t, err)
+	f := newFixtureWith(t, svc)
+	f.real = svc
+	return f
+}
+
+func newFixtureWith(t *testing.T, svc overlayaction.Service) *fixture {
+	t.Helper()
 	reg, _ := template.NewRegistry()
 	eng := template.New(reg)
-	fakeOverlay := newFakeOverlay()
+	fake, _ := svc.(*fakeOverlay)
 	fakeWidgets := &fakeWidgets{}
 	journal := &actiontest.Journal{}
 	ports := overlayaction.Ports{
 		Templates: eng,
-		Overlay:   fakeOverlay,
+		Overlay:   svc,
 		Widgets:   fakeWidgets,
 		Clips:     fakeClips{clip: overlayaction.Clip{URL: "https://clips.twitch.tv/Clip", Duration: 30 * time.Second}},
 		Emotes:    testEmotes,
@@ -232,7 +271,7 @@ func newFixture(t *testing.T) *fixture {
 	registry, err := action.NewRegistry(capability.Set{}, descs...)
 	require.NoError(t, err)
 	h := actiontest.NewHarness(t, registry)
-	return &fixture{h: h, reg: registry, eng: eng, overlay: fakeOverlay, widgets: fakeWidgets, journal: journal}
+	return &fixture{h: h, reg: registry, eng: eng, overlay: fake, widgets: fakeWidgets, journal: journal}
 }
 
 // ov makes an overlay action of kind with the fixture's ports.
@@ -510,6 +549,154 @@ func TestOverlayClipItem(t *testing.T) {
 		item := f.overlay.Item(t, 0)
 		assert.Equal(t, "clip", item.Kind)
 		assert.Equal(t, map[string]any{"url": "https://clips.twitch.tv/Clip", "duration": 30}, item.Content)
+	})
+}
+
+// TestOverlayClipItemRejectsForeignURLs covers Review 344-6s: a clip
+// URL that is not a Twitch clip page is a clear error of the action, so
+// a template rendered from the chat cannot reach the runtime.
+func TestOverlayClipItemRejectsForeignURLs(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		url  string
+		ok   bool
+	}{
+		{name: "javascript scheme", url: "javascript:alert(1)"},
+		{name: "foreign host", url: "https://evil.example"},
+		{name: "http clip page", url: "http://clips.twitch.tv/Foo-Bar_9"},
+		{name: "lookalike host", url: "https://clips.twitch.tv.evil.example/Foo"},
+		{name: "clips page without slug", url: "https://clips.twitch.tv/"},
+		{name: "channel page without clip", url: "https://www.twitch.tv/kanal"},
+		{name: "clip page without slug", url: "https://www.twitch.tv/kanal/clip"},
+		{name: "clips page", url: "https://clips.twitch.tv/Foo-Bar_9", ok: true},
+		{name: "www clip page", url: "https://www.twitch.tv/kanal/clip/Foo-Bar_9", ok: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				f := newFixture(t)
+				cmd := f.h.Command("clip",
+					f.ov(t, overlayaction.KindItem, func(a *overlayaction.Overlay) {
+						a.Item.Content = map[string]any{"kind": "clip", "url": tc.url}
+					}),
+				)
+				// The error policy aborts, so the failure of the action
+				// ends the instance (B71).
+				cmd.ErrorPolicy = command.ErrorAbort
+				f.h.Put(cmd)
+				in := f.h.Start(cmd, engine.Params{})
+				if tc.ok {
+					assert.Equal(t, engine.StateRunning, in.State)
+					require.NoError(t, f.h.Engine().Cancel(t.Context(), in.ID))
+					synctest.Wait()
+				} else {
+					assert.Equal(t, engine.StateFailed, in.State)
+				}
+			})
+		})
+	}
+}
+
+// TestOverlayItemWithoutADurationFallsAfterTheDefault covers B11 and
+// Review 344-5: an item without a duration shows for the default of
+// 10 s, a clip by user for the duration of the clip, and audio and video
+// run until item.ended (B14).
+func TestOverlayItemWithoutADurationFallsAfterTheDefault(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		f := newRealFixture(t)
+
+		// A text item without a duration falls after the default of 10 s.
+		cmd := f.h.Command("text",
+			f.ov(t, overlayaction.KindItem, func(a *overlayaction.Overlay) {
+				a.Item.Content = map[string]any{"kind": "text", "text": "hello"}
+			}),
+		)
+		in := f.h.Start(cmd, engine.Params{})
+		synctest.Sleep(9 * time.Second)
+		synctest.Wait()
+		assert.Equal(t, engine.StateRunning, f.h.Instance(in.ID).State)
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		assert.Equal(t, engine.StateCompleted, f.h.Instance(in.ID).State)
+		assert.Empty(t, f.real.ActiveItems(settings.DefaultEndpointID))
+
+		// A clip by user shows for the duration of the clip (30 s of the
+		// fake), not the default (Review 344-5).
+		cmd = f.h.Command("clip",
+			f.ov(t, overlayaction.KindItem, func(a *overlayaction.Overlay) {
+				a.Item.Content = map[string]any{"kind": "clip", "user": "streamer"}
+			}),
+		)
+		in = f.h.Start(cmd, engine.Params{})
+		synctest.Sleep(29 * time.Second)
+		synctest.Wait()
+		assert.Equal(t, engine.StateRunning, f.h.Instance(in.ID).State)
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		assert.Equal(t, engine.StateCompleted, f.h.Instance(in.ID).State)
+		assert.Empty(t, f.real.ActiveItems(settings.DefaultEndpointID))
+
+		// An audio item without a duration runs until item.ended (B14);
+		// the default does not apply to the playback.
+		cmd = f.h.Command("audio",
+			f.ov(t, overlayaction.KindItem, func(a *overlayaction.Overlay) {
+				a.Item.Content = map[string]any{"kind": "audio", "src": "/media/a.mp3"}
+			}),
+		)
+		in = f.h.Start(cmd, engine.Params{})
+		synctest.Sleep(10 * time.Second)
+		synctest.Wait()
+		assert.Equal(t, engine.StateRunning, f.h.Instance(in.ID).State)
+		items := f.real.ActiveItems(settings.DefaultEndpointID)
+		require.Len(t, items, 1)
+		require.True(t, f.real.ItemEnded(t.Context(), settings.DefaultEndpointID, items[0].ID))
+		synctest.Wait()
+		assert.Equal(t, engine.StateCompleted, f.h.Instance(in.ID).State)
+		assert.Empty(t, f.real.ActiveItems(settings.DefaultEndpointID))
+	})
+}
+
+// TestOverlayInterruptedActionRemovesItsItem covers Review 344-5: an
+// interrupted action removes its item from the active set, so a
+// reconnect does not resend it; the removal runs without the canceled
+// context of the action (context.WithoutCancel).
+func TestOverlayInterruptedActionRemovesItsItem(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		// The real service: the item leaves the active set.
+		f := newRealFixture(t)
+		cmd := f.h.Command("audio",
+			f.ov(t, overlayaction.KindItem, func(a *overlayaction.Overlay) {
+				a.Item.Content = map[string]any{"kind": "audio", "src": "/media/a.mp3"}
+			}),
+		)
+		in := f.h.Start(cmd, engine.Params{})
+		assert.Equal(t, engine.StateRunning, in.State)
+		items := f.real.ActiveItems(settings.DefaultEndpointID)
+		require.Len(t, items, 1)
+		require.NoError(t, f.h.Engine().Cancel(t.Context(), in.ID))
+		synctest.Wait()
+		assert.Equal(t, engine.StateCanceled, f.h.Instance(in.ID).State)
+		assert.Empty(t, f.real.ActiveItems(settings.DefaultEndpointID))
+
+		// The fake service: the removal arrives without a canceled
+		// context.
+		fake := newFixture(t)
+		cmd = fake.h.Command("audio",
+			fake.ov(t, overlayaction.KindItem, func(a *overlayaction.Overlay) {
+				a.Item.Content = map[string]any{"kind": "audio", "src": "/media/a.mp3"}
+			}),
+		)
+		in = fake.h.Start(cmd, engine.Params{})
+		require.NoError(t, fake.h.Engine().Cancel(t.Context(), in.ID))
+		synctest.Wait()
+		assert.Equal(t, engine.StateCanceled, fake.h.Instance(in.ID).State)
+		require.Len(t, fake.overlay.removed, 1)
+		assert.Equal(t, "item-0", fake.overlay.removed[0].id)
+		assert.False(t, fake.overlay.removed[0].canceled)
 	})
 }
 

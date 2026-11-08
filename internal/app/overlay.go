@@ -170,6 +170,11 @@ func (o overlayActionOps) ShowItem(ctx context.Context, endpoint string, item ov
 	return o.app.overlay.Service().ShowItem(ctx, endpoint, item)
 }
 
+// RemoveItem implements overlayaction.Service.
+func (o overlayActionOps) RemoveItem(ctx context.Context, endpoint, id string) (ok bool) {
+	return o.app.overlay.Service().RemoveItem(ctx, endpoint, id)
+}
+
 // SetVisible implements overlayaction.Service.
 func (o overlayActionOps) SetVisible(ctx context.Context, widgetID string, visible bool) error {
 	return o.app.overlay.Service().SetVisible(ctx, widgetID, visible)

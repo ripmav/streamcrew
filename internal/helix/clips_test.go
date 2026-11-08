@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,7 +15,9 @@ import (
 
 // TestClipsDecodeTheRealAPIShape covers ListClips and LatestClip: the
 // Helix API sends the duration as a JSON number (e.g. 29.9), not a
-// string.
+// string. LatestClip asks for the last week (started_at) and returns the
+// newest clip by created_at, not the most viewed one the API lists first
+// (Review 344-N1).
 func TestClipsDecodeTheRealAPIShape(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
@@ -24,7 +27,14 @@ func TestClipsDecodeTheRealAPIShape(t *testing.T) {
 			assert.Equal(t, "123", r.URL.Query().Get("broadcaster_id"))
 			calls++
 			if calls == 2 {
-				assert.Equal(t, "1", r.URL.Query().Get("first"))
+				assert.Equal(t, "100", r.URL.Query().Get("first"))
+				started, err := time.Parse(time.RFC3339, r.URL.Query().Get("started_at"))
+				require.NoError(t, err)
+				assert.WithinDuration(t, time.Now().AddDate(0, 0, -7), started, 2*time.Minute)
+				// Two clips in the order of the API: view count
+				// descending. The newest has fewer views.
+				_, _ = w.Write([]byte(`{"data":[{"id":"old","broadcaster_id":"123","broadcaster_name":"Channel","creator_id":"456","creator_name":"Clipper","title":"Old","url":"https://clips.twitch.tv/Old","view_count":1000,"created_at":"2024-01-01T00:00:00Z","duration":29.9},{"id":"new","broadcaster_id":"123","broadcaster_name":"Channel","creator_id":"456","creator_name":"Clipper","title":"New","url":"https://clips.twitch.tv/New","view_count":5,"created_at":"2024-01-02T00:00:00Z","duration":10.0}],"pagination":{}}`))
+				return
 			}
 			// A real Helix sample answer.
 			_, _ = w.Write([]byte(`{"data":[{"id":"dQw4w9WgXc","broadcaster_id":"123","broadcaster_name":"Channel","creator_id":"456","creator_name":"Clipper","game_name":"Game","title":"A Clip","url":"https://clips.twitch.tv/Foo-Bar_9","view_count":42,"created_at":"2024-01-01T00:00:00Z","duration":29.9}],"pagination":{}}`))
@@ -41,7 +51,7 @@ func TestClipsDecodeTheRealAPIShape(t *testing.T) {
 		latest, err := c.LatestClip(t.Context(), "123")
 		require.NoError(t, err)
 		require.NotNil(t, latest)
-		assert.Equal(t, 29.9, latest.Duration)
-		assert.Equal(t, "https://clips.twitch.tv/Foo-Bar_9", latest.URL)
+		assert.Equal(t, 10.0, latest.Duration)
+		assert.Equal(t, "https://clips.twitch.tv/New", latest.URL)
 	})
 }
