@@ -63,7 +63,8 @@ type Service struct {
 	recordActive bool
 	lastScene    string
 
-	reconnect time.Duration
+	reconnect   time.Duration
+	dialTimeout time.Duration
 }
 
 // New returns the service with its ports; the app runs it with the
@@ -72,7 +73,7 @@ func New(p Ports) *Service {
 	if p.Logger == nil {
 		p.Logger = slog.New(slog.DiscardHandler)
 	}
-	return &Service{ports: p, reconnect: Reconnect}
+	return &Service{ports: p, reconnect: Reconnect, dialTimeout: dialTimeout}
 }
 
 // Run connects to OBS and runs the connection until ctx ends (B43). A
@@ -127,7 +128,7 @@ func (s *Service) giveUp(ctx context.Context, err error) {
 
 // connect dials and identifies against the OBS server (B43).
 func (s *Service) connect(ctx context.Context) (*client, error) {
-	return dial(ctx, s.ports.Host, s.ports.Port, s.ports.Password, s.ports.Dialer, s.ports.Logger)
+	return dial(ctx, s.ports.Host, s.ports.Port, s.ports.Password, s.ports.Dialer, s.ports.Logger, s.dialTimeout)
 }
 
 // ready seeds the connection state with the current OBS state (B44:
@@ -177,23 +178,33 @@ func (s *Service) setClient(c *client) {
 
 // session runs the connection of client until it ends; it reports
 // whether the connection dropped, so that Run reconnects (B43). The
-// consumer of the events runs until the reader of the connection ends.
+// consumer of the events runs until the reader of the connection ends,
+// and the session waits for it.
 func (s *Service) session(ctx context.Context, c *client) bool {
-	go func() {
+	var wg sync.WaitGroup
+	wg.Go(func() {
 		for ev := range c.events {
 			s.handleEvent(ctx, c, ev)
 		}
-	}()
+	})
 	// The reader ends when the connection drops or the context ends
 	// (its read fails on both).
 	<-c.done
+	// The event channel closes with the reader; wait for the consumer,
+	// so that a handled event never outlives the session (Review
+	// 346-7).
+	wg.Wait()
+	// The connection is gone: clear it, so that an operation in the
+	// window until the (re)connection gets ErrNotConnected instead of
+	// the dead client (B55, Review 346-3).
+	s.setClient(nil)
+	// The connection is closed in both branches (Review 346-7).
+	c.close()
 	select {
 	case <-ctx.Done():
-		// The core is shutting down; the process exit ends the
-		// connection.
+		// The core is shutting down.
 		return false
 	default:
-		c.close()
 		return true
 	}
 }
@@ -204,7 +215,9 @@ func (s *Service) handleEvent(ctx context.Context, c *client, ev *eventMsg) {
 	switch ev.Type {
 	case "StreamStateChanged":
 		var d streamStateEvent
-		_ = json.Unmarshal(ev.Data, &d)
+		if !s.parse(ctx, ev, &d) {
+			return
+		}
 		s.stateChanged(ctx, d.OutputState, &s.streamActive, func(active bool) {
 			typ := eventtype.ObsStreamStopped
 			if active {
@@ -214,7 +227,9 @@ func (s *Service) handleEvent(ctx context.Context, c *client, ev *eventMsg) {
 		})
 	case "RecordStateChanged":
 		var d recordStateEvent
-		_ = json.Unmarshal(ev.Data, &d)
+		if !s.parse(ctx, ev, &d) {
+			return
+		}
 		s.stateChanged(ctx, d.OutputState, &s.recordActive, func(active bool) {
 			typ := eventtype.ObsRecordingStopped
 			if active {
@@ -230,13 +245,17 @@ func (s *Service) handleEvent(ctx context.Context, c *client, ev *eventMsg) {
 		})
 	case "ReplayBufferSaved":
 		var d replaySavedEvent
-		_ = json.Unmarshal(ev.Data, &d)
+		if !s.parse(ctx, ev, &d) {
+			return
+		}
 		s.publish(ctx, eventtype.ObsReplaySaved, eventtype.Payload{
 			Details: eventtype.Details{ObsFile: &eventtype.ObsFile{Path: d.SavedReplayPath}},
 		})
 	case "CurrentProgramSceneChanged":
 		var d sceneChangedEvent
-		_ = json.Unmarshal(ev.Data, &d)
+		if !s.parse(ctx, ev, &d) {
+			return
+		}
 		s.mu.Lock()
 		previous, current := s.lastScene, d.SceneName
 		s.lastScene = current
@@ -246,7 +265,9 @@ func (s *Service) handleEvent(ctx context.Context, c *client, ev *eventMsg) {
 		})
 	case "SceneTransitionStarted", "SceneTransitionEnded":
 		var d transitionEvent
-		_ = json.Unmarshal(ev.Data, &d)
+		if !s.parse(ctx, ev, &d) {
+			return
+		}
 		typ := eventtype.ObsTransitionStarted
 		if ev.Type == "SceneTransitionEnded" {
 			typ = eventtype.ObsTransitionEnded
@@ -256,11 +277,15 @@ func (s *Service) handleEvent(ctx context.Context, c *client, ev *eventMsg) {
 		})
 	case "SceneItemEnableStateChanged":
 		var d itemEnabledEvent
-		_ = json.Unmarshal(ev.Data, &d)
+		if !s.parse(ctx, ev, &d) {
+			return
+		}
 		s.sourceVisibility(ctx, c, d)
 	case "SourceFilterEnableStateChanged":
 		var d filterEnabledEvent
-		_ = json.Unmarshal(ev.Data, &d)
+		if !s.parse(ctx, ev, &d) {
+			return
+		}
 		s.publish(ctx, eventtype.ObsFilterVisibilityChanged, eventtype.Payload{
 			Details: eventtype.Details{ObsFilter: &eventtype.ObsFilter{
 				Source:  d.SourceName,
@@ -269,6 +294,16 @@ func (s *Service) handleEvent(ctx context.Context, c *client, ev *eventMsg) {
 			}},
 		})
 	}
+}
+
+// parse fills out with the data of the event; a data that is not
+// parseable is a debug log and a drop of the event (Review 346-6).
+func (s *Service) parse(ctx context.Context, ev *eventMsg, out any) bool {
+	if err := json.Unmarshal(ev.Data, out); err != nil {
+		s.ports.Logger.DebugContext(ctx, "the data of the OBS event is not parseable", "type", ev.Type, "error", err)
+		return false
+	}
+	return true
 }
 
 // stateChanged runs the state change of stream and record (B44): the
@@ -464,29 +499,21 @@ func (s *Service) SetSource(ctx context.Context, ch Source) error {
 	}
 	if ch.X != nil || ch.Y != nil {
 		// The position changes only the position; the rest of the
-		// transform (rotation, scale, bounds) stays as it is.
-		var tr struct {
-			SceneItemTransform *transform `json:"sceneItemTransform"`
-		}
-		if err := c.request(ctx, "GetSceneItemTransform", map[string]any{
-			"sceneName":   scene.SceneName,
-			"sceneItemId": id,
-		}, &tr); err != nil {
-			return fmt.Errorf("obs: the transform of the source %q: %w", ch.Source, err)
-		}
-		if tr.SceneItemTransform == nil {
-			return fmt.Errorf("obs: the source %q has no transform", ch.Source)
-		}
+		// transform (rotation, scale, bounds) stays as it is, so the
+		// request carries the position fields only. A full transform
+		// written back would be rejected by OBS for the default bounds
+		// (boundsWidth 0) (Review 346-2).
+		tr := map[string]any{}
 		if ch.X != nil {
-			tr.SceneItemTransform.PositionX = *ch.X
+			tr["positionX"] = *ch.X
 		}
 		if ch.Y != nil {
-			tr.SceneItemTransform.PositionY = *ch.Y
+			tr["positionY"] = *ch.Y
 		}
 		if err := c.request(ctx, "SetSceneItemTransform", map[string]any{
 			"sceneName":          scene.SceneName,
 			"sceneItemId":        id,
-			"sceneItemTransform": tr.SceneItemTransform,
+			"sceneItemTransform": tr,
 		}, nil); err != nil {
 			return fmt.Errorf("obs: the position of the source %q: %w", ch.Source, err)
 		}

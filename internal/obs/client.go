@@ -24,9 +24,9 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"uuid"
 
 	"github.com/coder/websocket"
-	"github.com/google/uuid"
 
 	"github.com/ripmav/streamcrew/internal/netguard"
 )
@@ -52,6 +52,10 @@ const (
 	authFailedClose = 4009
 	// requestTimeout bounds a request without a response.
 	requestTimeout = 10 * time.Second
+	// dialTimeout bounds the dial and the handshake of the
+	// connection: a silent peer must not block the service (Review
+	// 346-4).
+	dialTimeout = 10 * time.Second
 )
 
 // The output states of obs-websocket v5 (protocol.md,
@@ -168,30 +172,6 @@ type (
 	}
 )
 
-// transform is the SceneItemTransform of obs-websocket v5; a position
-// change changes only the position and carries the rest through.
-type transform struct {
-	Alignment       float64 `json:"alignment"`
-	BoundsAlignment float64 `json:"boundsAlignment"`
-	BoundsHeight    float64 `json:"boundsHeight"`
-	BoundsType      string  `json:"boundsType"`
-	BoundsWidth     float64 `json:"boundsWidth"`
-	CropToBounds    bool    `json:"cropToBounds"`
-	CropBottom      float64 `json:"cropBottom"`
-	CropLeft        float64 `json:"cropLeft"`
-	CropRight       float64 `json:"cropRight"`
-	CropTop         float64 `json:"cropTop"`
-	Height          float64 `json:"height"`
-	PositionX       float64 `json:"positionX"`
-	PositionY       float64 `json:"positionY"`
-	Rotation        float64 `json:"rotation"`
-	ScaleX          float64 `json:"scaleX"`
-	ScaleY          float64 `json:"scaleY"`
-	SourceHeight    float64 `json:"sourceHeight"`
-	SourceWidth     float64 `json:"sourceWidth"`
-	Width           float64 `json:"width"`
-}
-
 // client is one established connection to the OBS server: the reader of
 // the connection, the events for the consumer of the session, and the
 // requests on it.
@@ -213,8 +193,11 @@ type client struct {
 
 // dial connects to the OBS server at host:port, runs the handshake, and
 // starts the reader (B43); a refused authentication is a close with the
-// code 4009, so the handshake fails with it.
-func dial(ctx context.Context, host string, port int, password string, guard netguard.Dialer, logger *slog.Logger) (*client, error) {
+// code 4009, so the handshake fails with it. The dial and the handshake
+// run with the timeout, so that a silent peer cannot block the
+// connection (Review 346-4); the reader keeps the context it was
+// given.
+func dial(ctx context.Context, host string, port int, password string, guard netguard.Dialer, logger *slog.Logger, timeout time.Duration) (*client, error) {
 	endpoint := net.JoinHostPort(host, strconv.Itoa(port))
 	opts := &websocket.DialOptions{
 		HTTPClient: &http.Client{
@@ -223,7 +206,9 @@ func dial(ctx context.Context, host string, port int, password string, guard net
 			},
 		},
 	}
-	conn, _, err := websocket.Dial(ctx, "ws://"+endpoint, opts) //nolint:bodyclose // the body is consumed by Dial
+	hctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	conn, _, err := websocket.Dial(hctx, "ws://"+endpoint, opts) //nolint:bodyclose // the body is consumed by Dial
 	if err != nil {
 		return nil, fmt.Errorf("obs %s: %w", endpoint, err)
 	}
@@ -235,7 +220,7 @@ func dial(ctx context.Context, host string, port int, password string, guard net
 		events:   make(chan *eventMsg, 100),
 		done:     make(chan struct{}),
 	}
-	if err := c.handshake(ctx); err != nil {
+	if err := c.handshake(hctx); err != nil {
 		_ = conn.CloseNow()
 		return nil, fmt.Errorf("obs %s: %w", endpoint, err)
 	}
@@ -254,7 +239,9 @@ func (c *client) handshake(ctx context.Context) error {
 		return fmt.Errorf("the hello: expected the opcode %d, got %d", opHello, msg.Op)
 	}
 	var hello helloMsg
-	_ = json.Unmarshal(msg.D, &hello)
+	if err := json.Unmarshal(msg.D, &hello); err != nil {
+		return fmt.Errorf("the hello: %w", err)
+	}
 	var auth *string
 	if c.password != "" && hello.Authentication != nil {
 		secret := authSecret(c.password, hello.Authentication.Salt, hello.Authentication.Challenge)
@@ -296,7 +283,12 @@ func (c *client) readLoop(ctx context.Context) {
 		switch msg.Op {
 		case opEvent:
 			var ev eventMsg
-			_ = json.Unmarshal(msg.D, &ev)
+			if err := json.Unmarshal(msg.D, &ev); err != nil {
+				// the message is not a parseable event; it is dropped,
+				// the reader keeps running (Review 346-6)
+				c.logger.DebugContext(ctx, "the data of the OBS event is not parseable", "error", err)
+				continue
+			}
 			select {
 			case c.events <- &ev:
 			default:
@@ -306,7 +298,13 @@ func (c *client) readLoop(ctx context.Context) {
 			}
 		case opResponse:
 			var resp responseMsg
-			_ = json.Unmarshal(msg.D, &resp)
+			if err := json.Unmarshal(msg.D, &resp); err != nil {
+				// the message is not a parseable response; it is
+				// dropped, the waiter of the request times out (Review
+				// 346-6)
+				c.logger.DebugContext(ctx, "the data of the OBS response is not parseable", "error", err)
+				continue
+			}
 			c.mu.Lock()
 			ch := c.waiters[resp.ID]
 			delete(c.waiters, resp.ID)
@@ -330,7 +328,7 @@ func (c *client) request(ctx context.Context, typ string, params any, out any) e
 		}
 		data = jsontext.Value(b)
 	}
-	id := uuid.NewString()
+	id := uuid.New().String()
 	ch := make(chan *responseMsg, 1)
 	c.mu.Lock()
 	select {
