@@ -30,6 +30,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/emote"
+	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/event"
 	"github.com/ripmav/streamcrew/internal/overlay"
 	"github.com/ripmav/streamcrew/internal/poll"
@@ -141,6 +142,8 @@ type Ports struct {
 	// DiscordOccupants lists the current occupants of the configured
 	// Discord voice channel for the discord_voice widget (B37).
 	DiscordOccupants func(ctx context.Context) []discord.Occupant
+	// Commands starts a command by name for the goal widget (B23).
+	Commands func(ctx context.Context, name string, p engine.Params) error
 	// Logger logs the service; nil discards the output.
 	Logger *slog.Logger
 }
@@ -203,12 +206,24 @@ type listEntry struct {
 	Time int64 `json:"time"`
 }
 
+// chatPending is a message that shows after its delay (B28); the timer
+// is stopped when it is discarded or the service ends (Review 344-9,
+// 344-13).
+type chatPending struct {
+	msg   chatMsg
+	timer *time.Timer
+}
+
 // chatMsg is one shown message of a chat widget (B28).
 type chatMsg struct {
 	// ID is the platform's ID of the message, for the delete event;
 	// empty if the platform names none. It stays out of the runtime
 	// state.
 	ID string `json:"-"`
+	// Seq is the service's sequence number of the message; it
+	// identifies a message without a platform ID and stays out of the
+	// runtime state (Review 344-9).
+	Seq int64 `json:"-"`
 	// UserID is the core ID of the user; it stays out of the runtime
 	// state, which shows the name.
 	UserID string `json:"-"`
@@ -238,6 +253,16 @@ type Service struct {
 	lists map[string][]listEntry
 	// chats are the shown messages of the chat widgets by widget ID (B28).
 	chats map[string][]chatMsg
+	// chatSeq is the next sequence number of a chat message; it
+	// identifies a message without a platform ID (Review 344-9).
+	chatSeq int64
+	// chatPending are the delayed messages that have not shown yet, by
+	// widget ID (B28, Review 344-9).
+	chatPending map[string][]chatPending
+	// chatTimers are the running chat timers; the service stops them when
+	// it ends, so a callback never runs on the ended context (Review
+	// 344-13).
+	chatTimers []*time.Timer
 	// labelTexts is the last pushed label text by widget ID; an unchanged
 	// render pushes nothing (B24).
 	labelTexts map[string]string
@@ -275,7 +300,7 @@ func New(p Ports, opts ...Option) (*Service, error) {
 		return nil, errors.New("new widget service: missing port")
 	case p.StreamStates == nil || p.SessionStats == nil || p.Locale == nil:
 		return nil, errors.New("new widget service: missing port")
-	case p.TopUsers == nil || p.Emotes == nil || p.DiscordOccupants == nil:
+	case p.TopUsers == nil || p.Emotes == nil || p.DiscordOccupants == nil || p.Commands == nil:
 		return nil, errors.New("new widget service: missing port")
 	}
 	s := &Service{
@@ -285,6 +310,7 @@ func New(p Ports, opts ...Option) (*Service, error) {
 		timers:           map[string]*timerState{},
 		lists:            map[string][]listEntry{},
 		chats:            map[string][]chatMsg{},
+		chatPending:      map[string][]chatPending{},
 		labelTexts:       map[string]string{},
 		persistentTimers: map[string]*persistentTimerState{},
 		bosses:           map[string]*streamBossState{},
@@ -340,6 +366,7 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
+	defer s.stopChatTimers()
 	for {
 		select {
 		case env, ok := <-sub.C():
@@ -433,21 +460,53 @@ func (s *Service) push(ctx context.Context, w settings.OverlayWidget, state any)
 
 // ---------- label (B24, A5) ----------
 
+// LabelKind is the kind of the label widget (B24).
+type LabelKind string
+
+// The kinds of the label widget (B24); date and time the runtime renders
+// locally, text the core as a template.
+const (
+	// LabelKindText is the default kind: a template text.
+	LabelKindText LabelKind = "text"
+	// LabelKindDate renders the date in the runtime (B24, A5).
+	LabelKindDate LabelKind = "date"
+	// LabelKindTime renders the time in the runtime (B24, A5).
+	LabelKindTime LabelKind = "time"
+	// LabelKindViewerCount shows the viewer count of the platform.
+	LabelKindViewerCount LabelKind = "viewer_count"
+	// LabelKindChatterCount shows the chatter count of the platform.
+	LabelKindChatterCount LabelKind = "chatter_count"
+	// LabelKindLatestFollower shows the name of the latest follower.
+	LabelKindLatestFollower LabelKind = "latest_follower"
+	// LabelKindTotalFollowers shows the count of the followers.
+	LabelKindTotalFollowers LabelKind = "total_followers"
+	// LabelKindLatestSubscriber shows the name of the latest subscriber.
+	LabelKindLatestSubscriber LabelKind = "latest_subscriber"
+	// LabelKindTotalSubscribers shows the count of the subscribers.
+	LabelKindTotalSubscribers LabelKind = "total_subscribers"
+	// LabelKindLatestRaid shows the name of the latest raid.
+	LabelKindLatestRaid LabelKind = "latest_raid"
+)
+
+// labelValueKinds are the kinds the core renders from its sources (B24).
+//
+//nolint:gochecknoglobals // static table of value kinds
+var labelValueKinds = []LabelKind{
+	LabelKindViewerCount, LabelKindChatterCount, LabelKindLatestFollower,
+	LabelKindTotalFollowers, LabelKindLatestSubscriber, LabelKindTotalSubscribers, LabelKindLatestRaid,
+}
+
+// Valid reports whether k is a known label kind.
+func (k LabelKind) Valid() bool {
+	return k == LabelKindText || k == LabelKindDate || k == LabelKindTime || slices.Contains(labelValueKinds, k)
+}
+
 // labelConfig is the configuration of the label widget.
 type labelConfig struct {
 	// Type is the kind of the label; empty for text.
-	Type string `json:"type"`
+	Type LabelKind `json:"type"`
 	// Text is the template of the kind text.
 	Text string `json:"text"`
-}
-
-// The label kinds that the core renders (B24); date and time the runtime
-// renders locally.
-//
-//nolint:gochecknoglobals // static table of label kinds
-var labelValueKinds = []string{
-	"viewer_count", "chatter_count", "latest_follower",
-	"total_followers", "latest_subscriber", "total_subscribers", "latest_raid",
 }
 
 // refreshLabels re-renders the visible label widgets (B24).
@@ -482,7 +541,7 @@ func (s *Service) pushLabel(ctx context.Context, w settings.OverlayWidget, scope
 		return
 	}
 	switch {
-	case cfg.Type == "date" || cfg.Type == "time":
+	case cfg.Type == LabelKindDate || cfg.Type == LabelKindTime:
 		s.pushLabelState(ctx, w, s.dateTimeState(ctx, cfg.Type))
 	case slices.Contains(labelValueKinds, cfg.Type):
 		s.pushLabelText(ctx, w, s.labelValue(ctx, cfg.Type, scope))
@@ -499,7 +558,7 @@ func (s *Service) pushLabel(ctx context.Context, w settings.OverlayWidget, scope
 // dateTimeState is the state of the label kinds date and time (B24, A5):
 // the runtime renders them per second in the locale and the time zone of
 // the profile.
-func (s *Service) dateTimeState(ctx context.Context, kind string) map[string]any {
+func (s *Service) dateTimeState(ctx context.Context, kind LabelKind) map[string]any {
 	loc := template.LocaleUSEnglish
 	if l, err := s.ports.Locale(ctx); err == nil {
 		loc = l
@@ -508,7 +567,7 @@ func (s *Service) dateTimeState(ctx context.Context, kind string) map[string]any
 	if sc, err := s.ports.Scope(ctx); err == nil && sc.Location != nil {
 		zone = sc.Location.String()
 	}
-	st := map[string]any{"kind": kind, "locale": string(loc)}
+	st := map[string]any{"kind": string(kind), "locale": string(loc)}
 	// time.Local's name "Local" is not a zone the browser knows; without
 	// the key the browser takes its own time zone.
 	if zone != time.Local.String() {
@@ -546,23 +605,23 @@ func (s *Service) pushIfChanged(ctx context.Context, w settings.OverlayWidget, k
 
 // labelValue resolves the data kinds of the label (B24). A value the
 // source does not report has no text (template.md, B4).
-func (s *Service) labelValue(ctx context.Context, kind string, scope *template.Scope) string {
+func (s *Service) labelValue(ctx context.Context, kind LabelKind, scope *template.Scope) string {
 	switch kind {
-	case "viewer_count", "chatter_count", "total_followers":
+	case LabelKindViewerCount, LabelKindChatterCount, LabelKindTotalFollowers:
 		st, err := s.ports.StreamStates.StreamState(ctx, scope.Platform)
 		if err != nil {
 			return ""
 		}
 		switch kind {
-		case "viewer_count":
+		case LabelKindViewerCount:
 			if st.Viewers != nil {
 				return strconv.FormatInt(*st.Viewers, 10)
 			}
-		case "chatter_count":
+		case LabelKindChatterCount:
 			if st.Chatters != nil {
 				return strconv.FormatInt(*st.Chatters, 10)
 			}
-		default: // total_followers
+		default: // LabelKindTotalFollowers
 			if st.Followers != nil {
 				return strconv.FormatInt(*st.Followers, 10)
 			}
@@ -571,15 +630,15 @@ func (s *Service) labelValue(ctx context.Context, kind string, scope *template.S
 			return s.sessionCount(ctx, scope.Platform, func(st feed.SessionStats) int64 { return st.Followers })
 		}
 		return "" // the value of the kind is unknown
-	case "total_subscribers":
+	case LabelKindTotalSubscribers:
 		// shortcut: the platforms report no total subscribers; the
 		// session count until a source exists (Phase 9).
 		return s.sessionCount(ctx, scope.Platform, func(st feed.SessionStats) int64 { return st.Subscribers })
-	case "latest_follower":
+	case LabelKindLatestFollower:
 		return s.latestUser(ctx, eventtype.ChannelFollow)
-	case "latest_subscriber":
+	case LabelKindLatestSubscriber:
 		return s.latestUser(ctx, eventtype.ChannelSubscribe)
-	case "latest_raid":
+	case LabelKindLatestRaid:
 		return s.latestUser(ctx, eventtype.ChannelRaid)
 	default:
 		return ""
@@ -599,7 +658,7 @@ func (s *Service) sessionCount(ctx context.Context, p platform.Name, part func(f
 // latestUser returns the name of the most recent feed event of type, or
 // empty if the feed has none.
 func (s *Service) latestUser(ctx context.Context, typ event.Type) string {
-	events, err := s.ports.Feed.LatestFeed(ctx, 50)
+	events, err := s.ports.Feed.LatestFeed(ctx, labelFeedScan)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "reading the feed for the label failed", "error", err)
 		return ""
@@ -620,6 +679,10 @@ func feedName(ev feed.Event) string {
 	return ev.Login
 }
 
+// labelFeedScan is how many recent feed events the latest_* labels scan
+// for the user (B24).
+const labelFeedScan = 50
+
 // labelConfig decodes and checks the configuration of the label widget;
 // the defaults are the kind text and an empty template.
 func (s *Service) labelConfig(ctx context.Context, w settings.OverlayWidget) *labelConfig {
@@ -629,9 +692,9 @@ func (s *Service) labelConfig(ctx context.Context, w settings.OverlayWidget) *la
 		return nil
 	}
 	if c.Type == "" {
-		c.Type = "text"
+		c.Type = LabelKindText
 	}
-	if c.Type != "text" && c.Type != "date" && c.Type != "time" && !slices.Contains(labelValueKinds, c.Type) {
+	if !c.Type.Valid() {
 		s.logger.ErrorContext(ctx, "the label kind is unknown", "widget", w.ID, "kind", c.Type)
 		return nil
 	}
@@ -645,7 +708,7 @@ func (s *Service) StateForLabel(ctx context.Context, w settings.OverlayWidget) a
 	if cfg == nil {
 		return nil
 	}
-	if cfg.Type == "date" || cfg.Type == "time" {
+	if cfg.Type == LabelKindDate || cfg.Type == LabelKindTime {
 		return s.dateTimeState(ctx, cfg.Type)
 	}
 	s.mu.Lock()
@@ -659,14 +722,60 @@ func (s *Service) StateForLabel(ctx context.Context, w settings.OverlayWidget) a
 
 // ---------- goal (B25, B23, A2, B50) ----------
 
+// GoalMode is the mode of the goal widget (B25).
+type GoalMode string
+
+// The modes of the goal widget (B25); cumulative is the default.
+const (
+	// GoalModeCumulative is the default mode: the segments build on each
+	// other, the display carries the overall amount.
+	GoalModeCumulative GoalMode = "cumulative"
+	// GoalModeIndividual works on each segment on its own.
+	GoalModeIndividual GoalMode = "individual"
+)
+
+//
+//nolint:gochecknoglobals // static table of goal modes
+var goalModes = []GoalMode{GoalModeCumulative, GoalModeIndividual}
+
+// Valid reports whether m is a known goal mode.
+func (m GoalMode) Valid() bool {
+	return slices.Contains(goalModes, m)
+}
+
+// GoalReset is the automatic reset of the goal widget (B25).
+type GoalReset string
+
+// The automatic resets of the goal widget (B25).
+const (
+	// GoalResetDaily runs the reset at the start of each day in the
+	// time zone of the profile.
+	GoalResetDaily GoalReset = "daily"
+	// GoalResetMonthly runs the reset at the start of each month in the
+	// time zone of the profile.
+	GoalResetMonthly GoalReset = "monthly"
+)
+
+//
+//nolint:gochecknoglobals // static table of goal resets
+var goalResets = []GoalReset{GoalResetDaily, GoalResetMonthly}
+
+// Valid reports whether r is a known goal reset.
+func (r GoalReset) Valid() bool {
+	return slices.Contains(goalResets, r)
+}
+
 // goalConfig is the configuration of the goal widget.
 type goalConfig struct {
 	// Segments are the segments of the goal, in order; at least one.
 	Segments []goalSegment `json:"segments"`
 	// Mode is cumulative (default) or individual.
-	Mode string `json:"mode"`
+	Mode GoalMode `json:"mode"`
 	// Reset is the automatic reset: daily or monthly; empty for none.
-	Reset string `json:"reset"`
+	Reset GoalReset `json:"reset"`
+	// SegmentCompleted is the command to start when a segment completes
+	// without its own command (B23); empty for none.
+	SegmentCompleted string `json:"segment_completed"`
 }
 
 // goalSegment is one segment of the goal.
@@ -675,6 +784,9 @@ type goalSegment struct {
 	Name string `json:"name"`
 	// Amount is the amount of the segment; not negative.
 	Amount int64 `json:"amount"`
+	// Command is the command to start when the segment completes (B23);
+	// empty for the goal's segment_completed command.
+	Command string `json:"command"`
 }
 
 // goalProgress grows the visible goal widgets by the amount of the event
@@ -696,7 +808,9 @@ func (s *Service) goalProgress(ctx context.Context, env event.Envelope) {
 		if w.Kind != KindGoal || !s.visible(w) {
 			continue
 		}
-		s.goalStep(ctx, w, amount, payload)
+		if err := s.goalStep(ctx, w, amount, payload); err != nil {
+			s.logger.ErrorContext(ctx, "the goal step failed", "widget", w.ID, "error", err)
+		}
 	}
 }
 
@@ -718,24 +832,42 @@ func goalAmount(t event.Type, p eventtype.Payload) (int64, bool) {
 
 // goalStep adds amount to the goal of w, publishes the effects and pushes
 // the new state. The step is one of the event effects (B25, B50).
-func (s *Service) goalStep(ctx context.Context, w settings.OverlayWidget, amount int64, p eventtype.Payload) {
+//
+// Review 344-8: the load, the change and the save run under the lock, and
+// the push takes its snapshot under the lock, as the bus goroutine and
+// the actions share the state.
+func (s *Service) goalStep(ctx context.Context, w settings.OverlayWidget, amount int64, p eventtype.Payload) error {
 	cfg := s.goalConfig(ctx, w)
 	if cfg == nil {
-		return
+		return nil
 	}
-	st, err := s.goalLoad(ctx, w.ID)
+	s.mu.Lock()
+	st, err := s.goalLoadLocked(ctx, w.ID)
+	var completed []goalSegmentCompleted
+	var state map[string]any
+	prog := &eventtype.GoalProgress{Amount: amount}
+	if err == nil {
+		if s.goalResetDue(ctx, w, cfg, st) {
+			st.current, st.segment, st.resetAt = 0, 0, time.Now()
+		}
+		st.current += amount
+		if st.current < 0 {
+			st.current = 0 // B50: clamped to zero
+		}
+		completed = goalSegmentsCrossed(cfg, st)
+		s.goalSave(ctx, w.ID, st)
+		state = s.goalStateFor(cfg, st)
+		if len(completed) == 0 {
+			prog.Total = goalTotal(cfg, st)
+			prog.Current = goalReached(cfg, st)
+			prog.SegmentName = goalSegmentName(cfg, st)
+			prog.SegmentAmount = goalSegmentAmount(cfg, st)
+		}
+	}
+	s.mu.Unlock()
 	if err != nil {
-		return
+		return err
 	}
-	if s.goalResetDue(ctx, w, cfg, st) {
-		st.current, st.segment, st.resetAt = 0, 0, time.Now()
-	}
-	st.current += amount
-	if st.current < 0 {
-		st.current = 0 // B50: clamped to zero
-	}
-	completed := s.goalSegmentsCrossed(cfg, st)
-	s.goalSave(ctx, w.ID, st)
 	if len(completed) > 0 {
 		for _, c := range completed {
 			s.publish(ctx, eventtype.OverlayGoalSegmentCompleted, eventtype.Payload{
@@ -743,30 +875,26 @@ func (s *Service) goalStep(ctx context.Context, w settings.OverlayWidget, amount
 				User:     p.User,
 				Details:  eventtype.Details{GoalSegment: c.detail},
 			})
+			s.startGoalCommand(ctx, w, c.segment, cfg, p)
 		}
 	} else {
 		s.publish(ctx, eventtype.OverlayGoalProgress, eventtype.Payload{
 			Platform: p.Platform,
 			User:     p.User,
-			Details: eventtype.Details{GoalProgress: &eventtype.GoalProgress{
-				Total:         goalTotal(cfg, st),
-				Current:       goalReached(cfg, st),
-				Amount:        amount,
-				SegmentName:   goalSegmentName(cfg, st),
-				SegmentAmount: goalSegmentAmount(cfg, st),
-			}},
+			Details:  eventtype.Details{GoalProgress: prog},
 		})
 	}
-	s.push(ctx, w, s.goalStateFor(cfg, st))
+	s.push(ctx, w, state)
+	return nil
 }
 
 // goalSegmentsCrossed advances st over the segments its amount reached, in
 // the ascending direction only (B25, B50), and returns them with their
-// event details.
-func (s *Service) goalSegmentsCrossed(cfg *goalConfig, st *goalState) []goalSegmentCompleted {
+// event details; it is called under the lock.
+func goalSegmentsCrossed(cfg *goalConfig, st *goalState) []goalSegmentCompleted {
 	var out []goalSegmentCompleted
 	for st.segment < len(cfg.Segments) {
-		boundary := goalBoundary(cfg, st)
+		boundary := goalBoundary(st, cfg.Segments)
 		if st.current < boundary {
 			break
 		}
@@ -798,25 +926,60 @@ type goalSegmentCompleted struct {
 	detail  *eventtype.GoalSegment
 }
 
+// startGoalCommand starts the command of the completed segment, or the
+// goal's segment_completed command if the segment names none (B23,
+// Review 341-12g); never both. A start error is logged.
+func (s *Service) startGoalCommand(ctx context.Context, w settings.OverlayWidget, seg goalSegment, cfg *goalConfig, p eventtype.Payload) {
+	name := seg.Command
+	if name == "" {
+		name = cfg.SegmentCompleted
+	}
+	if name == "" {
+		return
+	}
+	if err := s.ports.Commands(ctx, name, engine.Params{Platform: p.Platform, Channel: p.Channel, User: p.User, Target: p.Target}); err != nil {
+		s.logger.ErrorContext(ctx, "starting the goal command failed", "widget", w.ID, "command", name, "error", err)
+	}
+}
+
+// ReferencedCommands returns the command names referenced by the widgets
+// of s (B23): the commands of the goal segments and the
+// segment_completed fallback; the settings check rejects an unknown name
+// on save (Review 341-12g).
+func ReferencedCommands(s settings.Overlay) []string {
+	var out []string
+	for _, w := range s.Widgets {
+		if w.Kind != KindGoal {
+			continue
+		}
+		var c goalConfig
+		if err := decodeConfig(w.Config, &c); err != nil {
+			continue
+		}
+		for _, seg := range c.Segments {
+			if seg.Command != "" {
+				out = append(out, seg.Command)
+			}
+		}
+		if c.SegmentCompleted != "" {
+			out = append(out, c.SegmentCompleted)
+		}
+	}
+	return out
+}
+
 // goalBoundary is the amount at which the segment of st completes (B25):
-// the sum of the segments so far for the kind cumulative, the amount of
-// the segment for the kind individual.
-func goalBoundary(cfg *goalConfig, st *goalState) int64 {
-	if cfg.Mode == "individual" {
-		return cfg.Segments[st.segment].Amount
-	}
-	var sum int64
-	for _, sg := range cfg.Segments[:st.segment+1] {
-		sum += sg.Amount
-	}
-	return sum
+// the amount of the segment in both modes, as the progress is relative to
+// the current segment after every crossing (Review 344-4).
+func goalBoundary(st *goalState, segs []goalSegment) int64 {
+	return segs[st.segment].Amount
 }
 
 // goalTotal is the overall amount the goal displays (B25): the sum of the
 // segments for the kind cumulative, the amount of the current segment for
 // the kind individual.
 func goalTotal(cfg *goalConfig, st *goalState) int64 {
-	if cfg.Mode == "individual" {
+	if cfg.Mode == GoalModeIndividual {
 		if st.segment < len(cfg.Segments) {
 			return cfg.Segments[st.segment].Amount
 		}
@@ -833,7 +996,7 @@ func goalTotal(cfg *goalConfig, st *goalState) int64 {
 // completed segments plus the amount of the current one for the kind
 // cumulative, the amount of the current segment for the kind individual.
 func goalReached(cfg *goalConfig, st *goalState) int64 {
-	if cfg.Mode == "individual" {
+	if cfg.Mode == GoalModeIndividual {
 		return st.current
 	}
 	var sum int64
@@ -847,7 +1010,7 @@ func goalReached(cfg *goalConfig, st *goalState) int64 {
 // the goal is reached or overshot.
 func goalRemaining(cfg *goalConfig, st *goalState) int64 {
 	var rest int64
-	if cfg.Mode == "individual" {
+	if cfg.Mode == GoalModeIndividual {
 		var sum int64
 		for _, sg := range cfg.Segments[st.segment:] {
 			sum += sg.Amount
@@ -884,11 +1047,7 @@ func goalSegmentAmount(cfg *goalConfig, st *goalState) int64 {
 // course (B25): the last reset must lie before the start of the current
 // day or month of the profile.
 func (s *Service) goalResetDue(ctx context.Context, w settings.OverlayWidget, cfg *goalConfig, st *goalState) bool {
-	switch cfg.Reset {
-	case "":
-		return false
-	case "daily", "monthly":
-	default:
+	if cfg.Reset == "" || !cfg.Reset.Valid() {
 		return false
 	}
 	scope, err := s.ports.Scope(ctx)
@@ -898,7 +1057,7 @@ func (s *Service) goalResetDue(ctx context.Context, w settings.OverlayWidget, cf
 	}
 	now := time.Now().In(scope.Location)
 	var start time.Time
-	if cfg.Reset == "daily" {
+	if cfg.Reset == GoalResetDaily {
 		start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, scope.Location)
 	} else {
 		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, scope.Location)
@@ -921,31 +1080,37 @@ func (s *Service) goalReset(ctx context.Context) {
 		if cfg == nil || cfg.Reset == "" {
 			continue
 		}
-		st, err := s.goalLoad(ctx, w.ID)
+		s.mu.Lock()
+		st, err := s.goalLoadLocked(ctx, w.ID)
+		var state map[string]any
+		ran := false
+		if err == nil && s.goalResetDue(ctx, w, cfg, st) {
+			st.current, st.segment, st.resetAt = 0, 0, time.Now()
+			s.goalSave(ctx, w.ID, st)
+			state = s.goalStateFor(cfg, st)
+			ran = true
+		}
+		s.mu.Unlock()
 		if err != nil {
+			s.logger.ErrorContext(ctx, "the goal reset failed", "widget", w.ID, "error", err)
 			continue
 		}
-		if !s.goalResetDue(ctx, w, cfg, st) {
+		if !ran {
 			continue
 		}
-		st.current, st.segment, st.resetAt = 0, 0, time.Now()
-		s.goalSave(ctx, w.ID, st)
-		s.push(ctx, w, s.goalStateFor(cfg, st))
+		s.push(ctx, w, state)
 	}
 }
 
-// goalLoad returns the running state of the goal, loaded from the profile
-// on first use (B20).
-func (s *Service) goalLoad(ctx context.Context, widgetID string) (*goalState, error) {
-	s.mu.Lock()
+// goalLoadLocked returns the running state of the goal, loaded from the
+// profile on first use (B20); s.mu is held (Review 344-8).
+func (s *Service) goalLoadLocked(ctx context.Context, widgetID string) (*goalState, error) {
 	if st, ok := s.goals[widgetID]; ok {
-		s.mu.Unlock()
 		return st, nil
 	}
-	s.mu.Unlock()
 	doc, found, err := s.ports.State.OverlayWidgetState(ctx, widgetID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("the goal state of %s: %w", widgetID, err)
 	}
 	st := &goalState{}
 	if found {
@@ -956,13 +1121,12 @@ func (s *Service) goalLoad(ctx context.Context, widgetID string) (*goalState, er
 			st.current, st.segment, st.resetAt = docGoal.Current, docGoal.Segment, docGoal.ResetAt
 		}
 	}
-	s.mu.Lock()
 	s.goals[widgetID] = st
-	s.mu.Unlock()
 	return st, nil
 }
 
-// goalSave stores the state of the goal in the profile (B20).
+// goalSave stores the state of the goal in the profile (B20); it is called
+// under the lock (Review 344-8).
 func (s *Service) goalSave(ctx context.Context, widgetID string, st *goalState) {
 	doc, err := json.Marshal(goalDoc{Current: st.current, Segment: st.segment, ResetAt: st.resetAt})
 	if err != nil {
@@ -979,7 +1143,7 @@ func (s *Service) goalSave(ctx context.Context, widgetID string, st *goalState) 
 func (s *Service) goalStateFor(cfg *goalConfig, st *goalState) map[string]any {
 	total := goalTotal(cfg, st)
 	current := goalReached(cfg, st)
-	if cfg.Mode != "individual" && current > total {
+	if cfg.Mode != GoalModeIndividual && current > total {
 		current = total
 	}
 	segments := make([]map[string]any, len(cfg.Segments))
@@ -1012,11 +1176,11 @@ func (s *Service) goalConfig(ctx context.Context, w settings.OverlayWidget) *goa
 			return nil
 		}
 	}
-	if c.Mode != "" && c.Mode != "cumulative" && c.Mode != "individual" {
+	if c.Mode != "" && !c.Mode.Valid() {
 		s.logger.ErrorContext(ctx, "the goal mode is unknown", "widget", w.ID, "mode", c.Mode)
 		return nil
 	}
-	if c.Reset != "" && c.Reset != "daily" && c.Reset != "monthly" {
+	if c.Reset != "" && !c.Reset.Valid() {
 		s.logger.ErrorContext(ctx, "the goal reset is unknown", "widget", w.ID, "reset", c.Reset)
 		return nil
 	}
@@ -1024,30 +1188,41 @@ func (s *Service) goalConfig(ctx context.Context, w settings.OverlayWidget) *goa
 }
 
 // AddToGoal adds amount, which may be negative (B25, B50), to the goal
-// widget and pushes the progress.
+// widget and pushes the progress; a state error is returned (Review
+// 344-11).
 func (s *Service) AddToGoal(ctx context.Context, widgetID string, amount int64, p platform.Name, u *user.User) error {
 	w, err := s.widget(ctx, widgetID, KindGoal)
 	if err != nil {
 		return err
 	}
-	s.goalStep(ctx, w, amount, eventtype.Payload{Platform: p, User: u})
-	return nil
+	return s.goalStep(ctx, w, amount, eventtype.Payload{Platform: p, User: u})
 }
 
-// StateForGoal returns the goal state for the state sync (B4, B20).
+// StateForGoal returns the goal state for the state sync (B4, B20); the
+// snapshot is taken under the lock (Review 344-8).
 func (s *Service) StateForGoal(ctx context.Context, w settings.OverlayWidget) any {
 	cfg := s.goalConfig(ctx, w)
 	if cfg == nil {
 		return nil
 	}
-	st, err := s.goalLoad(ctx, w.ID)
+	s.mu.Lock()
+	st, err := s.goalLoadLocked(ctx, w.ID)
+	var state any
+	if err == nil {
+		state = s.goalStateFor(cfg, st)
+	}
+	s.mu.Unlock()
 	if err != nil {
+		s.logger.ErrorContext(ctx, "reading the goal state failed", "widget", w.ID, "error", err)
 		return nil
 	}
-	return s.goalStateFor(cfg, st)
+	return state
 }
 
 // ---------- timer (B26) ----------
+
+// timerFormatDefault is the display format of the timer (B17, B26).
+const timerFormatDefault = "MM:SS"
 
 // timerConfig is the configuration of the timer widget.
 type timerConfig struct {
@@ -1086,7 +1261,7 @@ func (s *Service) startTimers(ctx context.Context) {
 			continue
 		}
 		s.mu.Unlock()
-		s.pushTimer(ctx, w, cfg, st)
+		s.pushTimer(ctx, w, cfg)
 	}
 }
 
@@ -1111,7 +1286,7 @@ func (s *Service) UpdateTimer(ctx context.Context, widgetID string, d time.Durat
 	s.mu.Lock()
 	s.timers[widgetID] = st
 	s.mu.Unlock()
-	s.pushTimer(ctx, w, cfg, st)
+	s.pushTimer(ctx, w, cfg)
 	return nil
 }
 
@@ -1138,7 +1313,7 @@ func (s *Service) AddToTimer(ctx context.Context, widgetID string, d time.Durati
 		st.deadline = st.deadline.Add(d)
 	}
 	s.mu.Unlock()
-	s.pushTimer(ctx, w, cfg, st)
+	s.pushTimer(ctx, w, cfg)
 	return nil
 }
 
@@ -1154,7 +1329,9 @@ func (s *Service) PauseTimer(ctx context.Context, widgetID string) error {
 	st := s.timers[widgetID]
 	switch {
 	case st == nil:
-		st = &timerState{paused: true, pausedFor: cfg.duration}
+		// Without a running state the toggle starts the timer (Review
+		// 344-10); the first toggle must not be lost.
+		st = &timerState{deadline: time.Now().Add(cfg.duration)}
 		s.timers[widgetID] = st
 	case st.paused:
 		st.deadline = time.Now().Add(st.pausedFor)
@@ -1164,18 +1341,23 @@ func (s *Service) PauseTimer(ctx context.Context, widgetID string) error {
 		st.paused = true
 	}
 	s.mu.Unlock()
-	s.pushTimer(ctx, w, cfg, st)
+	s.pushTimer(ctx, w, cfg)
 	return nil
 }
 
 // pushTimer pushes the state of the timer widget (B26); the runtime
-// renders it per second from the server time of hello.
-func (s *Service) pushTimer(ctx context.Context, w settings.OverlayWidget, cfg *timerConfig, st *timerState) {
-	s.push(ctx, w, s.timerStateFor(cfg, st))
+// renders it per second from the server time of hello. The snapshot is
+// taken under the lock (Review 344-8); the state of w must exist.
+func (s *Service) pushTimer(ctx context.Context, w settings.OverlayWidget, cfg *timerConfig) {
+	s.mu.Lock()
+	state := timerStateFor(cfg, s.timers[w.ID])
+	s.mu.Unlock()
+	s.push(ctx, w, state)
 }
 
-// timerStateFor is the runtime state of the timer widget.
-func (s *Service) timerStateFor(cfg *timerConfig, st *timerState) map[string]any {
+// timerStateFor is the runtime state of the timer widget; st must not be
+// nil.
+func timerStateFor(cfg *timerConfig, st *timerState) map[string]any {
 	return map[string]any{
 		"deadline": st.deadline.UnixMilli(),
 		"paused":   st.paused,
@@ -1184,16 +1366,18 @@ func (s *Service) timerStateFor(cfg *timerConfig, st *timerState) map[string]any
 	}
 }
 
-// StateForTimer returns the timer state for the state sync (B4, B26).
+// StateForTimer returns the timer state for the state sync (B4, B26); the
+// snapshot is taken under the lock (Review 344-8).
 func (s *Service) StateForTimer(ctx context.Context, w settings.OverlayWidget) any {
 	cfg := s.timerConfig(ctx, w)
 	s.mu.Lock()
 	st := s.timers[w.ID]
-	s.mu.Unlock()
 	if st == nil {
 		st = &timerState{paused: true, pausedFor: cfg.duration}
 	}
-	return s.timerStateFor(cfg, st)
+	state := timerStateFor(cfg, st)
+	s.mu.Unlock()
+	return state
 }
 
 // timerConfig decodes the configuration of the timer widget; the format
@@ -1202,23 +1386,26 @@ func (s *Service) timerConfig(ctx context.Context, w settings.OverlayWidget) *ti
 	var c timerConfig
 	if err := decodeConfig(w.Config, &c); err != nil {
 		s.logger.ErrorContext(ctx, "the timer configuration is unreadable", "widget", w.ID, "error", err)
-		return &timerConfig{Format: "MM:SS"}
+		return &timerConfig{Format: timerFormatDefault}
 	}
 	if c.Duration != "" {
 		d, err := time.ParseDuration(c.Duration)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "the timer duration is unknown", "widget", w.ID, "duration", c.Duration)
-			return &timerConfig{Format: "MM:SS"}
+			return &timerConfig{Format: timerFormatDefault}
 		}
 		c.duration = d
 	}
 	if c.Format == "" {
-		c.Format = "MM:SS"
+		c.Format = timerFormatDefault
 	}
 	return &c
 }
 
 // ---------- event_list (B27) ----------
+
+// listMaxDefault is the default maximum of the event list (B27).
+const listMaxDefault = 10
 
 // eventListConfig is the configuration of the event_list widget.
 type eventListConfig struct {
@@ -1331,16 +1518,16 @@ func (s *Service) listConfig(ctx context.Context, w settings.OverlayWidget) *eve
 	var c eventListConfig
 	if err := decodeConfig(w.Config, &c); err != nil {
 		s.logger.ErrorContext(ctx, "the event list configuration is unreadable", "widget", w.ID, "error", err)
-		return &eventListConfig{Max: 10}
+		return &eventListConfig{Max: listMaxDefault}
 	}
 	if c.Max < 1 {
-		c.Max = 10
+		c.Max = listMaxDefault
 	}
 	if len(c.Types) > 0 {
 		for _, typ := range c.Types {
 			if !slices.Contains(FeedTypes, event.Type(typ)) {
 				s.logger.ErrorContext(ctx, "the event list type is not a feed type", "widget", w.ID, "type", typ)
-				return &eventListConfig{Max: 10}
+				return &eventListConfig{Max: listMaxDefault}
 			}
 		}
 	}
@@ -1359,6 +1546,9 @@ func sortEntries(entries []listEntry) {
 
 // ---------- chat (B28) ----------
 
+// chatMaxDefault is the default maximum of the chat widget (B28).
+const chatMaxDefault = 20
+
 // chatConfig is the configuration of the chat widget.
 type chatConfig struct {
 	// Platforms are the platforms the widget shows; empty for all.
@@ -1373,7 +1563,8 @@ type chatConfig struct {
 }
 
 // chatMessage adds the message of a visible chat widget, after its delay
-// (B28).
+// (B28). A delete, ban or timeout discards the message while it waits
+// (Review 344-9).
 func (s *Service) chatMessage(ctx context.Context, env event.Envelope) {
 	payload, ok := event.Payload[eventtype.Payload](env)
 	if !ok || payload.Details.Message == nil || payload.User == nil {
@@ -1399,32 +1590,91 @@ func (s *Service) chatMessage(ctx context.Context, env event.Envelope) {
 			}
 		}
 		msg := chatMsg{ID: payload.Details.Message.ID, UserID: payload.User.ID.String(), User: userName, Text: payload.Details.Message.Text, Platform: string(payload.Platform)}
-		add := func() {
-			s.mu.Lock()
-			chats := append(slices.Clone(s.chats[w.ID]), msg)
-			if len(chats) > cfg.Max {
-				chats = chats[len(chats)-cfg.Max:]
-			}
-			s.chats[w.ID] = chats
-			s.mu.Unlock()
-			s.pushChat(ctx, w)
-			if cfg.RemoveAfterMs > 0 {
-				time.AfterFunc(time.Duration(cfg.RemoveAfterMs)*time.Millisecond, func() {
-					s.chatRemove(w.ID, msg)
-					s.pushChat(ctx, w)
-				})
-			}
-		}
+		s.mu.Lock()
+		s.chatSeq++
+		msg.Seq = s.chatSeq
+		s.mu.Unlock()
 		if cfg.DelayMs > 0 {
-			time.AfterFunc(time.Duration(cfg.DelayMs)*time.Millisecond, add)
+			timer := time.AfterFunc(time.Duration(cfg.DelayMs)*time.Millisecond, func() {
+				s.chatAddDue(ctx, w, msg, cfg)
+			})
+			s.mu.Lock()
+			s.chatPending[w.ID] = append(s.chatPending[w.ID], chatPending{msg: msg, timer: timer})
+			s.mu.Unlock()
+			s.trackChatTimer(timer)
 		} else {
-			add()
+			s.chatShow(ctx, w, msg, cfg)
 		}
 	}
 }
 
+// chatAddDue shows a delayed message, if it was not discarded while it
+// waited (B28, Review 344-9).
+func (s *Service) chatAddDue(ctx context.Context, w settings.OverlayWidget, msg chatMsg, cfg *chatConfig) {
+	s.mu.Lock()
+	pending := s.chatPending[w.ID]
+	kept := pending[:0]
+	found := false
+	for _, p := range pending {
+		if p.msg.Seq == msg.Seq {
+			found = true
+			continue
+		}
+		kept = append(kept, p)
+	}
+	s.chatPending[w.ID] = kept
+	s.mu.Unlock()
+	if !found {
+		return // discarded by a delete, ban or timeout
+	}
+	s.chatShow(ctx, w, msg, cfg)
+}
+
+// chatShow shows a message in the widget and schedules its removal (B28).
+func (s *Service) chatShow(ctx context.Context, w settings.OverlayWidget, msg chatMsg, cfg *chatConfig) {
+	s.mu.Lock()
+	chats := append(slices.Clone(s.chats[w.ID]), msg)
+	if len(chats) > cfg.Max {
+		chats = chats[len(chats)-cfg.Max:]
+	}
+	s.chats[w.ID] = chats
+	s.mu.Unlock()
+	s.pushChat(ctx, w)
+	if cfg.RemoveAfterMs > 0 {
+		timer := time.AfterFunc(time.Duration(cfg.RemoveAfterMs)*time.Millisecond, func() {
+			if s.chatRemove(w.ID, msg) {
+				s.pushChat(ctx, w)
+			}
+		})
+		s.trackChatTimer(timer)
+	}
+}
+
+// trackChatTimer remembers a chat timer; the service stops every
+// remembered timer when it ends (Review 344-13). The timers are never
+// removed from the list, one entry per delayed or timed message; the
+// list is freed with the service.
+func (s *Service) trackChatTimer(timer *time.Timer) {
+	s.mu.Lock()
+	s.chatTimers = append(s.chatTimers, timer)
+	s.mu.Unlock()
+}
+
+// stopChatTimers stops the running chat timers and drops the pending
+// messages when the service ends (Review 344-13).
+func (s *Service) stopChatTimers() {
+	s.mu.Lock()
+	for _, timer := range s.chatTimers {
+		timer.Stop()
+	}
+	s.chatTimers = nil
+	s.chatPending = map[string][]chatPending{}
+	s.mu.Unlock()
+}
+
 // chatDeleted removes the deleted message from the chat widgets (B28):
-// the delete event names the message by the platform's ID.
+// the delete event names the message by the platform's ID; it discards
+// the message while it still waits for its delay (Review 344-9).
 func (s *Service) chatDeleted(ctx context.Context, env event.Envelope) {
 	payload, ok := event.Payload[eventtype.Payload](env)
 	if !ok || payload.Details.Message == nil || payload.Details.Message.ID == "" {
@@ -1437,6 +1687,7 @@ func (s *Service) chatDeleted(ctx context.Context, env event.Envelope) {
 		return
 	}
 	changed := s.filterChats(func(m chatMsg) bool { return m.ID == msgID && m.Platform == plat })
+	s.discardChatPending(func(m chatMsg) bool { return m.ID == msgID && m.Platform == plat })
 	for _, w := range sec.Widgets {
 		if w.Kind == KindChat && changed[w.ID] {
 			s.pushChat(ctx, w)
@@ -1445,7 +1696,8 @@ func (s *Service) chatDeleted(ctx context.Context, env event.Envelope) {
 }
 
 // chatModerated removes the messages of the affected user from the chat
-// widgets (B28): a timed out or banned user leaves no trace.
+// widgets (B28): a timed out or banned user leaves no trace, the delayed
+// messages included (Review 344-9).
 func (s *Service) chatModerated(ctx context.Context, env event.Envelope) {
 	payload, ok := event.Payload[eventtype.Payload](env)
 	if !ok || payload.User == nil {
@@ -1457,6 +1709,7 @@ func (s *Service) chatModerated(ctx context.Context, env event.Envelope) {
 		return
 	}
 	changed := s.filterChats(func(m chatMsg) bool { return m.UserID == userID })
+	s.discardChatPending(func(m chatMsg) bool { return m.UserID == userID })
 	for _, w := range sec.Widgets {
 		if w.Kind == KindChat && changed[w.ID] {
 			s.pushChat(ctx, w)
@@ -1486,19 +1739,42 @@ func (s *Service) filterChats(keepOut func(chatMsg) bool) map[string]bool {
 	return changed
 }
 
-// chatRemove removes one message of the widget by its user and text.
-func (s *Service) chatRemove(widgetID string, msg chatMsg) {
+// discardChatPending drops the delayed messages matching keepOut before
+// they show (B28, Review 344-9).
+func (s *Service) discardChatPending(keepOut func(chatMsg) bool) {
+	s.mu.Lock()
+	for id, pending := range s.chatPending {
+		kept := pending[:0]
+		for _, p := range pending {
+			if keepOut(p.msg) {
+				p.timer.Stop()
+				continue
+			}
+			kept = append(kept, p)
+		}
+		s.chatPending[id] = kept
+	}
+	s.mu.Unlock()
+}
+
+// chatRemove removes the message of the widget by its sequence number and
+// reports whether it removed one (B28, Review 344-9): a remove timer must
+// not touch the identical message of another call.
+func (s *Service) chatRemove(widgetID string, msg chatMsg) bool {
 	s.mu.Lock()
 	chats := s.chats[widgetID]
 	kept := chats[:0]
+	removed := false
 	for _, m := range chats {
-		if m.UserID == msg.UserID && m.Text == msg.Text {
+		if m.Seq == msg.Seq {
+			removed = true
 			continue
 		}
 		kept = append(kept, m)
 	}
 	s.chats[widgetID] = kept
 	s.mu.Unlock()
+	return removed
 }
 
 // pushChat pushes the state of the chat widget (B28).
@@ -1528,14 +1804,14 @@ func (s *Service) chatConfig(ctx context.Context, w settings.OverlayWidget) *cha
 	var c chatConfig
 	if err := decodeConfig(w.Config, &c); err != nil {
 		s.logger.ErrorContext(ctx, "the chat configuration is unreadable", "widget", w.ID, "error", err)
-		return &chatConfig{Max: 20}
+		return &chatConfig{Max: chatMaxDefault}
 	}
 	if c.Max < 1 {
-		c.Max = 20
+		c.Max = chatMaxDefault
 	}
 	if c.DelayMs < 0 || c.RemoveAfterMs < 0 {
 		s.logger.ErrorContext(ctx, "the chat delays must be 0 or more", "widget", w.ID)
-		return &chatConfig{Max: 20}
+		return &chatConfig{Max: chatMaxDefault}
 	}
 	return &c
 }

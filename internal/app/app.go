@@ -552,6 +552,9 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (a *App, err er
 	if err != nil {
 		return a, err
 	}
+	// The goal widget references commands by name (B23): an unknown name
+	// is an error when the overlay section is saved (Review 341-12g).
+	a.settings.WithCheck(settings.Overlay{}, a.overlayCommandsCheck)
 	a.moderation, err = modsvc.New(modsvc.Ports{
 		Settings:   a.moderationSettings,
 		Strikes:    a.userSvc,

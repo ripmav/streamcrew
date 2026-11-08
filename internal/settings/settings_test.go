@@ -4,6 +4,7 @@ package settings_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -517,4 +518,35 @@ func TestTimeVersion1(t *testing.T) {
 	require.NoError(t, err)
 	_, err = settings.Load(t.Context(), svc, settings.DefaultTime())
 	require.Error(t, err, "version 1 always had the field")
+}
+
+// TestWithCheckCoversB23 covers Review 341-12g: the check registered
+// with WithCheck runs after the section's own validation on Save and
+// SetDocument, gets the section of the document, and a failing check
+// rejects it.
+func TestWithCheckCoversB23(t *testing.T) {
+	t.Parallel()
+	svc, _ := newService(t)
+	var sections []settings.Section
+	svc.WithCheck(settings.Overlay{}, func(_ context.Context, s settings.Section) error {
+		sections = append(sections, s)
+		return errors.New("check failed")
+	})
+
+	err := settings.Save(t.Context(), svc, settings.Overlay{})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "check failed")
+
+	doc, err := svc.DefaultDocument("overlay")
+	require.NoError(t, err)
+	err = svc.SetDocument(t.Context(), "overlay", doc)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, settings.ErrInvalid)
+	assert.ErrorContains(t, err, "check failed")
+
+	require.Len(t, sections, 2)
+	for _, s := range sections {
+		_, ok := s.(settings.Overlay)
+		assert.True(t, ok, "the check gets the section of the document")
+	}
 }

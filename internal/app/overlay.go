@@ -16,6 +16,7 @@ import (
 	"github.com/ripmav/streamcrew/internal/domain/platform"
 	"github.com/ripmav/streamcrew/internal/domain/user"
 	"github.com/ripmav/streamcrew/internal/emote"
+	"github.com/ripmav/streamcrew/internal/engine"
 	"github.com/ripmav/streamcrew/internal/i18n"
 	"github.com/ripmav/streamcrew/internal/overlay"
 	"github.com/ripmav/streamcrew/internal/overlaywidgets"
@@ -88,8 +89,44 @@ func (a *App) newOverlayWidgets(logger *slog.Logger) (*overlaywidgets.Service, e
 		TopUsers:         a.store.TopUsers,
 		Emotes:           a.homeEmotes,
 		DiscordOccupants: func(context.Context) []discord.Occupant { return a.discord.Occupants() },
+		Commands:         a.goalCommands,
 		Logger:           logger,
 	})
+}
+
+// goalCommands starts the command a goal widget references by name
+// (B23, Review 341-12g): the engine queues it by hand.
+func (a *App) goalCommands(ctx context.Context, name string, p engine.Params) error {
+	cmd, ok, err := a.commands.CommandByName(ctx, name)
+	if err != nil {
+		return fmt.Errorf("finding command %q: %w", name, err)
+	}
+	if !ok {
+		return fmt.Errorf("unknown command %q", name)
+	}
+	if _, err := a.engine.Start(ctx, cmd, p); err != nil {
+		return fmt.Errorf("starting command %q: %w", name, err)
+	}
+	return nil
+}
+
+// overlayCommandsCheck rejects the overlay section when a widget
+// references an unknown command (B23, Review 341-12g).
+func (a *App) overlayCommandsCheck(ctx context.Context, s settings.Section) error {
+	ov, ok := s.(settings.Overlay)
+	if !ok {
+		return nil
+	}
+	for _, name := range overlaywidgets.ReferencedCommands(ov) {
+		_, ok, err := a.commands.CommandByName(ctx, name)
+		if err != nil {
+			return fmt.Errorf("checking command %q: %w", name, err)
+		}
+		if !ok {
+			return fmt.Errorf("unknown command %q", name)
+		}
+	}
+	return nil
 }
 
 // widgetScope returns the template scope of the widget labels (B24): the

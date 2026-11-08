@@ -47,6 +47,9 @@ type Repository interface {
 type Service struct {
 	repo     Repository
 	registry *polydoc.Registry[Section]
+	// checks are the additional save checks by section, registered with
+	// WithCheck (Review 341-12g).
+	checks map[string]func(ctx context.Context, s Section) error
 }
 
 // New returns a service with all known sections registered.
@@ -107,6 +110,11 @@ func Save(ctx context.Context, svc *Service, s Section) error {
 	if err := s.validate(); err != nil {
 		return fmt.Errorf("settings %q: %w", s.DocType(), err)
 	}
+	if chk, ok := svc.checks[s.DocType()]; ok {
+		if err := chk(ctx, s); err != nil {
+			return fmt.Errorf("settings %q: %w", s.DocType(), err)
+		}
+	}
 	doc, err := svc.registry.Encode(s)
 	if err != nil {
 		return err
@@ -149,7 +157,23 @@ func (s *Service) SetDocument(ctx context.Context, section string, doc []byte) e
 	if v.DocType() != section {
 		return fmt.Errorf("%w: settings %q: the document has type %q", ErrInvalid, section, v.DocType())
 	}
+	if chk, ok := s.checks[section]; ok {
+		if err := chk(ctx, v); err != nil {
+			return fmt.Errorf("%w: settings %q: %w", ErrInvalid, section, err)
+		}
+	}
 	return s.repo.PutSettings(ctx, section, doc)
+}
+
+// WithCheck registers an additional check for the section of sample,
+// run after the section's own validation when the section is saved with
+// Save or SetDocument; a failing check rejects the document (Review
+// 341-12g).
+func (s *Service) WithCheck(sample Section, check func(ctx context.Context, s Section) error) {
+	if s.checks == nil {
+		s.checks = map[string]func(ctx context.Context, s Section) error{}
+	}
+	s.checks[sample.DocType()] = check
 }
 
 // defaultSection returns the defaults of the section, computed on the call so
