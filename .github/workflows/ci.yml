@@ -267,7 +267,7 @@ jobs:
       # The release configuration must stay valid (goreleaser v2, pinned
       # like the other build tools).
       - name: goreleaser check
-        run: go run github.com/goreleaser/goreleaser/v2@v2.19.0 check
+        run: go run github.com/goreleaser/goreleaser/v2@v2.20.2 check
 
       # In the same job to save a billed minute: build the image, run version
       # and serve, check /healthz and /readyz and a clean stop on SIGTERM.
