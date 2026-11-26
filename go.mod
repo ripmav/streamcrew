@@ -3,20 +3,20 @@ module github.com/ripmav/streamcrew
 go 1.27.4
 
 require (
-	charm.land/bubbletea/v2 v2.1.2
+	charm.land/bubbletea/v2 v2.2.0
 	charm.land/lipgloss/v2 v2.1.1
 	connectrpc.com/connect/v2 v2.0.2
 	github.com/alecthomas/kong v1.17.0
 	github.com/bwmarrin/discordgo v0.29.0
-	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20261118134922-ee8f5034ce23
+	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20261126095604-0c8f306be07e
 	github.com/cockroachdb/apd/v3 v3.2.3
 	github.com/coder/websocket v1.8.15
 	github.com/ebitengine/oto/v3 v3.5.1
 	github.com/evanw/esbuild v0.28.2
 	github.com/gorilla/websocket v1.5.3
-	github.com/pressly/goose/v3 v3.30.1
+	github.com/pressly/goose/v3 v3.30.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
-	github.com/sethvargo/go-retry v0.5.0
+	github.com/sethvargo/go-retry v0.7.0
 	github.com/sony/gobreaker/v2 v2.4.0
 	github.com/stretchr/testify v1.12.1
 	github.com/zalando/go-keyring v0.2.8
@@ -27,14 +27,14 @@ require (
 	golang.org/x/text v0.44.0
 	golang.org/x/time v0.16.0
 	google.golang.org/protobuf v1.36.12
-	modernc.org/sqlite v1.62.0
+	modernc.org/sqlite v1.63.0
 )
 
 require (
 	github.com/aymanbagabas/go-udiff v0.4.1 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20261008173134-6b8d4baf91b4 // indirect
-	github.com/charmbracelet/x/ansi v0.11.9 // indirect
+	github.com/charmbracelet/x/ansi v0.12.0 // indirect
 	github.com/charmbracelet/x/exp/golden v0.0.0-20251109135125-8916d276318f // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
